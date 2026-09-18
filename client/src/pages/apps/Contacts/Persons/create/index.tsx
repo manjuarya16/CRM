@@ -3,15 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 
-interface EmailItem {
-  label: "work" | "home" | "other";
-  value: string;
-}
-
-interface ContactItem {
-  label: "work" | "mobile" | "home" | "other";
-  value: string;
-}
+import { EmailItem, ContactItem, PersonFormData } from "@/interface";
 
 const CreatePersonPage: React.FC = () => {
   const navigate = useNavigate();

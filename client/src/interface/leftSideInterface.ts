@@ -1,3 +1,5 @@
+export type { ProfileMenuItem } from "./profileInterface";
+
 export interface LeftSideBarProps {
   isCondensed: boolean;
   isLight?: boolean;
@@ -13,12 +15,6 @@ export interface NotificationItem {
   bgColor?: string;
   createdAt: Date;
 }
-
-export type ProfileMenuItem = {
-  label: string;
-  icon: string;
-  redirectTo: string;
-};
 
 export interface NotificationDropDownProps {
   notifications: Array<NotificationItem>;

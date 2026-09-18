@@ -80,6 +80,12 @@ const MENU_ITEMS: MenuItemTypes[] = [
     icon: "mgc_settings_3_line",
     children: [
       {
+        key: "settings-overview",
+        label: "All Settings",
+        url: "/settings",
+        parentKey: "settings",
+      },
+      {
         key: "users",
         label: "Users",
         url: "/management/users",

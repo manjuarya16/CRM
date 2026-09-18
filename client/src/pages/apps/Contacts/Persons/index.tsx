@@ -3,29 +3,7 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 
-interface EmailItem {
-  label: "work" | "home" | "other";
-  value: string;
-}
-
-interface ContactItem {
-  label: "work" | "mobile" | "home" | "other";
-  value: string;
-}
-
-export interface IPerson {
-  id: number;
-  name: string;
-  emails: EmailItem[] | string;
-  contact_numbers: ContactItem[] | string;
-  organization_id?: number | null;
-  organization_name?: string | null;
-  job_title?: string | null;
-  user_id?: number | null;
-  sales_owner_name?: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
+import { IPerson, EmailItem, ContactItem } from "@/interface";
 
 const PersonsPage: React.FC = () => {
   const [persons, setPersons] = useState<IPerson[]>([]);

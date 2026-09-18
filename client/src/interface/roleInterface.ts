@@ -1,3 +1,12 @@
+export interface IRole {
+  id: number;
+  name: string;
+  description?: string | null;
+  permission_type?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Role {
   id: number;
   role_id: string;

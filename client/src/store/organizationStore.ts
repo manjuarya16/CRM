@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { API } from "@/config";
 import { handleErrorResponse } from "@/utils/swalAlert";
 
-import { OrganizationState } from "@/interface/organinizationInterfac";
+import { OrganizationState } from "@/interface/organizationInterface";
 
 const useOrganizationStore = create<OrganizationState>((set) => {
   const normalize = (r: any) => {

@@ -3,15 +3,7 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 
-export interface IOrganization {
-  id: number;
-  name: string;
-  address?: any;
-  user_id?: number | null;
-  person_count?: number;
-  created_at?: string;
-  updated_at?: string;
-}
+import { IOrganization } from "@/interface";
 
 const OrganizationsPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<IOrganization[]>([]);

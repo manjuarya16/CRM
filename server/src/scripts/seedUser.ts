@@ -1,27 +1,33 @@
 import bcrypt from 'bcrypt';
 import { env } from '@/config/env';
 import { pool } from '@/config/db';
-import { UserModel } from '@/models/user.model';
+import { UserService } from '@/services/user.service';
 import { logger } from '@/utils/logger';
 
 async function main(): Promise<void> {
-  await UserModel.createTableIfNotExists();
+  const passwordHash = await bcrypt.hash(env.SEED_ADMIN_PASSWORD, 10);
+  const existing = await UserService.findByEmail(env.SEED_ADMIN_EMAIL);
 
-  const existing = await UserModel.findByEmail(env.SEED_ADMIN_EMAIL);
   if (existing) {
-    logger.info(`Admin user already exists: ${env.SEED_ADMIN_EMAIL}`);
+    await pool.query(
+      `UPDATE users SET password = $1, status = true WHERE LOWER(email) = LOWER($2)`,
+      [passwordHash, env.SEED_ADMIN_EMAIL],
+    );
+    logger.info(`Updated admin user password for: ${env.SEED_ADMIN_EMAIL}`);
+    logger.info(`Login Email: ${env.SEED_ADMIN_EMAIL} | Password: ${env.SEED_ADMIN_PASSWORD}`);
     return;
   }
 
-  const passwordHash = await bcrypt.hash(env.SEED_ADMIN_PASSWORD, 10);
-  await UserModel.create({
+  await UserService.create({
     name: 'Admin',
     email: env.SEED_ADMIN_EMAIL,
     passwordHash,
-    role: 'admin',
+    roleId: 1,
+    status: true,
   });
 
   logger.info(`Created admin user: ${env.SEED_ADMIN_EMAIL}`);
+  logger.info(`Login Email: ${env.SEED_ADMIN_EMAIL} | Password: ${env.SEED_ADMIN_PASSWORD}`);
 }
 
 main()

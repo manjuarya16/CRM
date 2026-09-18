@@ -41,6 +41,7 @@ const EditOrganizationPage = React.lazy(
 const ProductsPage = React.lazy(() => import("../pages/apps/Products"));
 const ActivitiesPage = React.lazy(() => import("../pages/apps/Activities"));
 const MailPage = React.lazy(() => import("../pages/apps/Mail"));
+const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
 const RolesPage = React.lazy(() => import("../pages/apps/Settings/Roles"));
 const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
@@ -151,6 +152,12 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/products",
     name: "Products",
     element: <ProductsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/settings",
+    name: "Settings",
+    element: <SettingsHubPage />,
     route: PrivateRoute,
   },
   {
