@@ -21,21 +21,14 @@ const useOrganizationStore = create<OrganizationState>((set) => {
       id: merged.id ?? merged.org_id ?? null,
       org_id: merged.org_id ?? null,
       name: merged.name ?? null,
-      ngoType: merged.ngoType ?? merged.ngo_type ?? null,
-      registration_no: merged.registration_no ?? merged.registration_no ?? null,
+      registration_no: merged.registration_no ?? null,
       state: merged.state ?? merged.state_id ?? null,
       city: merged.city ?? merged.city_id ?? null,
-      date_of_establishment:
-        merged.date_of_establishment ?? merged.date_of_establishment ?? null,
-      ngo_objective:
-        merged.ngo_objective ?? merged.purpose ?? merged.purpose ?? null,
+      date_of_establishment: merged.date_of_establishment ?? null,
       website_url: merged.website_url ?? merged.website ?? null,
-      social_media_links:
-        merged.social_media_links ?? merged.social_media_links ?? null,
-      ngoCategory: merged.ngoCategory ?? merged.category_name ?? null,
+      social_media_links: merged.social_media_links ?? null,
       logo: merged.logo ?? merged.raw?.logo ?? merged.profile_img ?? null,
-      ngo_type: merged.ngo_type ?? merged.ngoType ?? null,
-      purpose: merged.purpose ?? merged.ngo_objective ?? null,
+      purpose: merged.purpose ?? null,
       email: merged.email ?? null,
       phone: merged.phone ?? null,
       address_master:

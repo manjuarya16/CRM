@@ -44,8 +44,7 @@ const useAppLogo = () => {
     logoDark: orgLogo,
     logoSm: orgLogo,
     orgName:
-      (userLoggedIn ? organization?.name : publicBranding.name) ??
-      "NGO Management System",
+      (userLoggedIn ? organization?.name : publicBranding.name) ?? "CRM",
   };
 };
 

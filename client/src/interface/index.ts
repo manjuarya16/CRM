@@ -11,3 +11,4 @@ export * from "./fileUploader";
 export * from "./leftSideInterface";
 export * from "./profileInterface";
 export * from "./commonInterface";
+export * from "./settingsSubmodulesInterface";

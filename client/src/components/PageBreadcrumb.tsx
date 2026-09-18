@@ -7,42 +7,30 @@ import type { PageTitleProps } from "@/interface/commonInterface";
 const routeMap: Record<string, string> = {
   // Top-level labels
   Dashboard: "/dashboard",
-  Apps: "/dashboard",
   Management: "/dashboard",
-  // Apps
-  Beneficiary: "/apps/beneficiary",
-  "Beneficiary Master": "/apps/beneficiary-master",
-  "Beneficiary Tracking": "/apps/beneficiary-tracking",
-  Department: "/management/departments",
-  "Department Management": "/management/departments",
+  // CRM Apps & Modules
+  Leads: "/leads",
+  Quotes: "/quotes",
+  Mail: "/mail",
+  Activities: "/activities",
+  Contacts: "/contacts/persons",
+  Persons: "/contacts/persons",
+  Organizations: "/contacts/organizations",
+  Products: "/products",
+  Settings: "/settings",
+  "All Settings": "/settings",
+  Groups: "/settings/groups",
+  Roles: "/settings/roles",
+  "Role Management": "/settings/roles",
   Users: "/management/users",
   "User Management": "/management/users",
-  Branch: "/apps/branch",
-  "Branch Management": "/management/branches",
-  "Role Management": "/management/roles",
-  Donations: "/apps/donations",
-  Donors: "/apps/donor",
-  Donor: "/apps/donor",
-  "Donations Master": "/apps/donations-master",
-  "Stock Management": "/apps/stock-management",
-  "Asset Management": "/apps/asset-management",
-  "Asset Master": "/apps/asset-master",
-  Projects: "/apps/projects",
-  "Projects Master": "/apps/projects-master",
-  "Project Execution": "/apps/project-execution",
-  Volunteers: "/apps/volunteers",
-  "Volunteer Tasks": "/apps/volunteer-tasks",
-  "Attendance Management": "/apps/attendance-management",
-  Tickets: "/apps/tickets",
-  "File Manager": "/apps/file-manager",
-  Calendar: "/apps/calendar",
-  Kanban: "/apps/kanban",
-  Organization: "/apps/organization/detail",
+  Pipelines: "/settings/pipelines",
+  Sources: "/settings/sources",
+  Types: "/settings/types",
+  Configuration: "/configuration",
+  "Help & Resources": "/help",
+  Help: "/help",
   Profile: "/profile",
-  "Access Management": "/management/access",
-  "Email Configuration": "/apps/email-configuration",
-  "SMTP Configuration": "/apps/smtp-configuration",
-  "Email Templates": "/apps/email-templates",
 };
 
 const PageBreadcrumb = ({
@@ -58,7 +46,7 @@ const PageBreadcrumb = ({
     if (userLoggedIn && !organization) getOrganization();
   }, []);
 
-  const orgName = organization?.name || "NGO Management";
+  const orgName = organization?.name || "CRM";
 
   const resolvedItems = (breadCrumbItems || []).map((item, idx) =>
     idx === 0 ? orgName || item : item,

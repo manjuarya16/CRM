@@ -41,6 +41,7 @@ export interface IRole {
   created_by?: number | null;
   created_at?: string;
   updated_at?: string;
+  user_count?: number;
 }
 
 export interface ICreateUserInput {

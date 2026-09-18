@@ -12,7 +12,7 @@ const Error404 = () => {
           <div className="flex flex-col justify-center text-center gap-6">
             <Link to="/" className="flex justify-center mx-auto">
               <span className="text-lg font-semibold text-primary">
-                NGO Management
+                CRM
               </span>
             </Link>
             <p className="text-3xl font-semibold text-primary">404!</p>

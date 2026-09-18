@@ -42,7 +42,13 @@ const ProductsPage = React.lazy(() => import("../pages/apps/Products"));
 const ActivitiesPage = React.lazy(() => import("../pages/apps/Activities"));
 const MailPage = React.lazy(() => import("../pages/apps/Mail"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
+const GroupsPage = React.lazy(() => import("../pages/apps/Settings/Groups"));
 const RolesPage = React.lazy(() => import("../pages/apps/Settings/Roles"));
+const PipelinesPage = React.lazy(
+  () => import("../pages/apps/Settings/Pipelines"),
+);
+const SourcesPage = React.lazy(() => import("../pages/apps/Settings/Sources"));
+const TypesPage = React.lazy(() => import("../pages/apps/Settings/Types"));
 const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
 );
@@ -161,9 +167,33 @@ const crmAppRoutes: RoutesProps[] = [
     route: PrivateRoute,
   },
   {
+    path: "/settings/groups",
+    name: "Groups",
+    element: <GroupsPage />,
+    route: PrivateRoute,
+  },
+  {
     path: "/settings/roles",
     name: "Roles",
     element: <RolesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/settings/pipelines",
+    name: "Pipelines",
+    element: <PipelinesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/settings/sources",
+    name: "Sources",
+    element: <SourcesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/settings/types",
+    name: "Types",
+    element: <TypesPage />,
     route: PrivateRoute,
   },
   {
