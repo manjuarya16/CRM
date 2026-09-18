@@ -1,7 +1,8 @@
 import passport from 'passport';
 import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { env } from '@/config/env';
-import { UserModel, toPublicUser } from '@/models/user.model';
+import { UserService } from '@/services/user.service';
+import { toPublicUser } from '@/interfaces';
 
 passport.use(
   new JwtStrategy(
@@ -11,7 +12,7 @@ passport.use(
     },
     async (payload: { sub: string }, done) => {
       try {
-        const user = await UserModel.findById(payload.sub);
+        const user = await UserService.findById(payload.sub);
         if (!user) return done(null, false);
         return done(null, toPublicUser(user));
       } catch (err) {

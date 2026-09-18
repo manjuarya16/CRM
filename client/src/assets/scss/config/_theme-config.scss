@@ -48,22 +48,22 @@
 // Light Menu
 html[data-menu-color="light"] {
     --tw-menu-bg:                               white;
-    --tw-menu-item-color:                       rgb(108, 117, 125);
-    --tw-menu-item-active-color:                rgb(30, 133, 255);
-    --tw-menu-item-active-bg:                   rgba(30, 133, 255, 0.1);
-    --tw-menu-item-hover-color:                 rgb(30, 133, 255);
-    --tw-menu-item-hover-bg:                    rgba(30, 133, 255, 0.1);
+    --tw-menu-item-color:                       #4b5563;
+    --tw-menu-item-active-color:                #ffffff;
+    --tw-menu-item-active-bg:                   #0088cc;
+    --tw-menu-item-hover-color:                 #111827;
+    --tw-menu-item-hover-bg:                    #f3f4f6;
 }
 
 // Dark Menu
 html[data-menu-color="dark"],
 html[data-mode="dark"][data-menu-color="light"] {
     --tw-menu-bg:                               theme(backgroundColor.gray.800);
-    --tw-menu-item-color:                       rgb(144, 151, 167);
-    --tw-menu-item-active-color:                rgb(200, 205, 220);
-    --tw-menu-item-active-bg:                   rgba(30, 133, 255, 0.1);
-    --tw-menu-item-hover-color:                 rgb(200, 205, 220);
-    --tw-menu-item-hover-bg:                    rgba(30, 133, 255, 0.1);
+    --tw-menu-item-color:                       #9ca3af;
+    --tw-menu-item-active-color:                #ffffff;
+    --tw-menu-item-active-bg:                   #0088cc;
+    --tw-menu-item-hover-color:                 #ffffff;
+    --tw-menu-item-hover-bg:                    rgba(0, 136, 204, 0.2);
 }
 
 // Brand Menu

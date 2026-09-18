@@ -27,11 +27,11 @@ const ProfileDropDown = ({
         <img
           src={profileImg}
           alt="user"
-          className="rounded-full h-10 w-10 object-cover"
+          className="rounded-full h-8 w-8 object-cover ring-2 ring-pink-500/20"
         />
       ) : (
-        <div className="rounded-full h-10 w-10 bg-primary flex items-center justify-center text-white font-semibold text-sm">
-          {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+        <div className="rounded-full h-8 w-8 bg-[#ec4899] hover:bg-[#db2777] transition-colors flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+          {user?.name ? user.name.charAt(0).toUpperCase() : "E"}
         </div>
       )}
     </div>

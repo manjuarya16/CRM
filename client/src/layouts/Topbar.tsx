@@ -198,10 +198,10 @@ const Topbar = () => {
 
   return (
     <>
-      <header className="app-header flex items-center px-4 gap-3">
+      <header className="app-header flex items-center px-4 gap-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16">
         <button
           id="button-toggle-menu"
-          className="nav-link p-2"
+          className="nav-link p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400"
           onClick={handleLeftMenuCallBack}
         >
           <span className="sr-only">Menu Toggle Button</span>
@@ -210,56 +210,44 @@ const Topbar = () => {
           </span>
         </button>
 
-        <Link to="/" className="logo-box">
-          <div className="logo-light">
-            {logoUrl ? (
-              <>
-                <img src={logoUrl} className="logo-lg h-6" alt="Logo" />
-                <img src={logoUrl} className="logo-sm" alt="Small logo" />
-              </>
-            ) : (
-              <span className="text-lg font-semibold">NGO Management</span>
-            )}
+        {/* Center: Mega Search and Quick Action */}
+        <div className="flex-1 max-w-2xl mx-auto flex items-center gap-3 px-4">
+          <div className="relative flex-1">
+            <i className="mgc_search_line absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+            <input
+              type="text"
+              placeholder="Mega Search"
+              className="w-full pl-10 pr-4 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-full text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 focus:border-[#0088cc] shadow-sm transition-all"
+            />
           </div>
+          <button
+            title="Quick Create"
+            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105"
+          >
+            <i className="mgc_add_line text-xl font-bold"></i>
+          </button>
+        </div>
 
-          <div className="logo-dark">
-            {logoUrl ? (
-              <>
-                <img src={logoUrl} className="logo-lg h-6" alt="Logo" />
-                <img src={logoUrl} className="logo-sm" alt="Small logo" />
-              </>
-            ) : (
-              <span className="text-lg font-semibold">NGO Management</span>
-            )}
-          </div>
-        </Link>
-
-        {/* <TopBarSearch /> */}
-
-        {/* <LanguageDropdown /> */}
-
-        <MaximizeScreen />
-
-        {/* <NotificationDropdown notifications={notifications} /> */}
-
-        {/* <div className="flex">
+        {/* Right side controls */}
+        <div className="flex items-center gap-3 ml-auto">
           <button
             id="light-dark-mode"
             type="button"
-            className="nav-link p-2"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             onClick={toggleDarkMode}
+            title="Toggle theme"
           >
             <span className="sr-only">Light/Dark Mode</span>
-            <span className="flex items-center justify-center h-6 w-6">
-              <i className="mgc_moon_line text-2xl"></i>
+            <span className="flex items-center justify-center h-5 w-5">
+              <i className="mgc_moon_line text-xl"></i>
             </span>
           </button>
-        </div> */}
 
-        <ProfileDropDown
-          profiliePic={profilePic as string}
-          menuItems={profileMenus}
-        />
+          <ProfileDropDown
+            profiliePic={profilePic as string}
+            menuItems={profileMenus}
+          />
+        </div>
       </header>
     </>
   );

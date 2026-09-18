@@ -128,26 +128,14 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
   return (
     <React.Fragment>
       <div className="app-menu">
-        <Link to="/" className="logo-box">
-          <div className="logo-light">
-            {logoUrl ? (
-              <>
-                <img src={logoUrl} className="logo-lg h-6" alt="Logo" />
-                <img src={logoUrl} className="logo-sm" alt="Small logo" />
-              </>
-            ) : (
-              <span className="text-lg font-semibold">NGO Management</span>
-            )}
-          </div>
-          <div className="logo-dark">
-            {logoUrl ? (
-              <>
-                <img src={logoUrl} className="logo-lg h-6" alt="Logo" />
-                <img src={logoUrl} className="logo-sm" alt="Small logo" />
-              </>
-            ) : (
-              <span className="text-lg font-semibold">NGO Management</span>
-            )}
+        <Link to="/" className="logo-box flex items-center gap-2.5 px-4">
+          <div className="flex items-center gap-2">
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+              <path d="M7 6L14 13L7 20L0 13L7 6Z" fill="#0284c7" />
+              <path d="M18 6L25 13L18 20L11 13L18 6Z" fill="#0088cc" />
+              <path d="M12.5 17.5L19.5 24.5L12.5 31.5L5.5 24.5L12.5 17.5Z" fill="#38bdf8" />
+            </svg>
+            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Krayin</span>
           </div>
         </Link>
 

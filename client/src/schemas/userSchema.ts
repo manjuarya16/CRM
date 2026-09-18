@@ -114,7 +114,7 @@ export const createUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Role is required" })
+        .number()
         .int()
         .positive({ message: "Role is required" }),
     ),
@@ -125,7 +125,7 @@ export const createUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Branch is required" })
+        .number()
         .int()
         .positive({ message: "Branch is required" }),
     ),
@@ -136,7 +136,7 @@ export const createUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Department is required" })
+        .number()
         .int()
         .positive({ message: "Department is required" }),
     ),
@@ -152,7 +152,7 @@ export const createUserSchema = z
     }, z.number().int().optional()),
 
     password: z
-      .string({ error: "Password is required" })
+      .string()
       .min(6, "Password must be at least 6 characters"),
 
     password_confirm: z.string().optional(),
@@ -188,7 +188,7 @@ export const updateUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Role is required" })
+        .number()
         .int()
         .positive({ message: "Role is required" }),
     ),
@@ -199,7 +199,7 @@ export const updateUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Branch is required" })
+        .number()
         .int()
         .positive({ message: "Branch is required" }),
     ),
@@ -210,7 +210,7 @@ export const updateUserSchema = z
         return Number(val);
       },
       z
-        .number({ error: "Department is required" })
+        .number()
         .int()
         .positive({ message: "Department is required" }),
     ),
@@ -270,10 +270,10 @@ export const resetPasswordSchema = z
   .object({
     email: z.string().email("Please enter a valid email address"),
     new_password: z
-      .string({ error: "New password is required" })
+      .string()
       .min(6, "Password must be at least 6 characters"),
     confirm_password: z
-      .string({ error: "Please confirm your password" })
+      .string()
       .min(1, "Please confirm your password"),
   })
   .refine((data) => data.new_password === data.confirm_password, {

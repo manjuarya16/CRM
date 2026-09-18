@@ -19,6 +19,34 @@ const UserCreateForm = React.lazy(() => import("../pages/apps/Users/create"));
 const UserEditForm = React.lazy(() => import("../pages/apps/Users/edit"));
 const UserViewForm = React.lazy(() => import("../pages/apps/Users/view"));
 
+// apps
+const QuotesPage = React.lazy(() => import("../pages/apps/Quotes"));
+const LeadsPage = React.lazy(() => import("../pages/apps/Leads"));
+const PersonsPage = React.lazy(() => import("../pages/apps/Contacts/Persons"));
+const CreatePersonPage = React.lazy(
+  () => import("../pages/apps/Contacts/Persons/create"),
+);
+const EditPersonPage = React.lazy(
+  () => import("../pages/apps/Contacts/Persons/edit"),
+);
+const OrganizationsPage = React.lazy(
+  () => import("../pages/apps/Contacts/Organizations"),
+);
+const CreateOrganizationPage = React.lazy(
+  () => import("../pages/apps/Contacts/Organizations/create"),
+);
+const EditOrganizationPage = React.lazy(
+  () => import("../pages/apps/Contacts/Organizations/edit"),
+);
+const ProductsPage = React.lazy(() => import("../pages/apps/Products"));
+const ActivitiesPage = React.lazy(() => import("../pages/apps/Activities"));
+const MailPage = React.lazy(() => import("../pages/apps/Mail"));
+const RolesPage = React.lazy(() => import("../pages/apps/Settings/Roles"));
+const ConfigurationPage = React.lazy(
+  () => import("../pages/apps/Configuration"),
+);
+const HelpPage = React.lazy(() => import("../pages/apps/Help"));
+
 // error pages
 const Error404 = React.lazy(() => import("../pages/error/Error404"));
 
@@ -57,6 +85,93 @@ const dashboardRoutes: RoutesProps = {
     },
   ],
 };
+
+const crmAppRoutes: RoutesProps[] = [
+  {
+    path: "/leads",
+    name: "Leads",
+    element: <LeadsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/quotes",
+    name: "Quotes",
+    element: <QuotesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/mail",
+    name: "Mail",
+    element: <MailPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/activities",
+    name: "Activities",
+    element: <ActivitiesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/persons",
+    name: "Persons",
+    element: <PersonsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/persons/create",
+    name: "Create Person",
+    element: <CreatePersonPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/persons/edit/:id",
+    name: "Edit Person",
+    element: <EditPersonPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/organizations",
+    name: "Organizations",
+    element: <OrganizationsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/organizations/create",
+    name: "Create Organization",
+    element: <CreateOrganizationPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/contacts/organizations/edit/:id",
+    name: "Edit Organization",
+    element: <EditOrganizationPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/products",
+    name: "Products",
+    element: <ProductsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/settings/roles",
+    name: "Roles",
+    element: <RolesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/configuration",
+    name: "Configuration",
+    element: <ConfigurationPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/help",
+    name: "Help & Resources",
+    element: <HelpPage />,
+    route: PrivateRoute,
+  },
+];
 
 const userManagementRoutes: RoutesProps = {
   path: "/management/users",
@@ -127,7 +242,11 @@ const flattenRoutes = (routes: RoutesProps[]) => {
 };
 
 // All routes
-const authProtectedRoutes = [dashboardRoutes, userManagementRoutes];
+const authProtectedRoutes = [
+  dashboardRoutes,
+  ...crmAppRoutes,
+  userManagementRoutes,
+];
 const publicRoutes = [...authRoutes, ...otherPublicRoutes];
 
 const authProtectedFlattenRoutes = flattenRoutes([...authProtectedRoutes]);

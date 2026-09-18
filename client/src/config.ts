@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3040/api";
+  (import.meta as any).env?.VITE_API_URL || "http://localhost:3040/api";
 
 export const SERVER_URL = API_URL.replace(/\/api$/, "");
 

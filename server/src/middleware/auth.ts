@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { passport } from '@/config/passport';
-import type { PublicUser } from '@/models/user.model';
+import type { PublicUser } from '@/interfaces';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -23,7 +23,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !req.user.role || !roles.includes(req.user.role)) {
       res.status(403).json({ message: 'Forbidden' });
       return;
     }

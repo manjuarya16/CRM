@@ -3,12 +3,14 @@ import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 
 export const redis = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: 1,
   lazyConnect: true,
+  enableOfflineQueue: false,
+  retryStrategy: () => null, // don't infinitely retry if local redis is not running
 });
 
-redis.on('error', (err) => {
-  logger.error({ err }, 'Redis connection error');
+redis.on('error', () => {
+  // Silent error when redis is unavailable
 });
 
 export async function connectRedis(): Promise<void> {
@@ -16,7 +18,7 @@ export async function connectRedis(): Promise<void> {
   try {
     await redis.connect();
     logger.info('Redis connection OK');
-  } catch (err) {
-    logger.warn({ err }, 'Redis connection failed (optional cache will be skipped)');
+  } catch (_err) {
+    logger.info('Redis is not running locally (optional cache skipped)');
   }
 }
