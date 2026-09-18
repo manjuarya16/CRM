@@ -1,77 +1,47 @@
 import { pool } from '@/config/db';
-import { IPipeline, IPipelineStage } from '@/interfaces/crm.interface';
-import { ApiError } from '@/middleware/errorHandler';
+import { IPipeline } from '@/interfaces/crm.interface';
+import { logger } from '@/utils/logger';
+
+const toNumberParam = (v: any): number | null => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 export class PipelineService {
+  // DB Function call: get_all_pipelines(p_search)
   public static async getAll(search?: string): Promise<IPipeline[]> {
-    let query = `
-      SELECT p.*, COALESCE(COUNT(l.id), 0)::int AS leads_count
-      FROM lead_pipelines p
-      LEFT JOIN leads l ON l.lead_pipeline_id = p.id
-    `;
-    const params: any[] = [];
-
-    if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      query += ` WHERE p.name ILIKE $${params.length}`;
-    }
-
-    query += `
-      GROUP BY p.id
-      ORDER BY p.is_default DESC, p.id ASC
-    `;
-
-    const { rows: pipelines } = await pool.query<IPipeline>(query, params);
-
-    if (pipelines.length > 0) {
-      const pipelineIds = pipelines.map((p) => p.id);
-      const { rows: stages } = await pool.query<IPipelineStage>(
-        `SELECT * FROM lead_pipeline_stages
-         WHERE lead_pipeline_id = ANY($1::int[])
-         ORDER BY sort_order ASC, id ASC`,
-        [pipelineIds]
+    try {
+      const searchTerm = search?.trim() || null;
+      const { rows } = await pool.query(
+        'SELECT get_all_pipelines($1) as result',
+        [searchTerm]
       );
-
-      const stageMap: Record<number, IPipelineStage[]> = {};
-      for (const s of stages) {
-        if (s.lead_pipeline_id) {
-          if (!stageMap[s.lead_pipeline_id]) stageMap[s.lead_pipeline_id] = [];
-          stageMap[s.lead_pipeline_id].push(s);
-        }
-      }
-
-      for (const p of pipelines) {
-        p.stages = stageMap[p.id] || [];
-      }
+      return rows[0]?.result || [];
+    } catch (error: any) {
+      logger.error({ error, search }, 'PipelineService.getAll failed');
+      throw error;
     }
-
-    return pipelines;
   }
 
+  // DB Function call: get_pipeline(p_id)
   public static async getById(id: number | string): Promise<IPipeline | null> {
-    const { rows } = await pool.query<IPipeline>(
-      `SELECT p.*, COALESCE(COUNT(l.id), 0)::int AS leads_count
-       FROM lead_pipelines p
-       LEFT JOIN leads l ON l.lead_pipeline_id = p.id
-       WHERE p.id = $1
-       GROUP BY p.id`,
-      [id]
-    );
+    try {
+      const pipelineId = toNumberParam(id);
+      if (!pipelineId) return null;
 
-    if (!rows[0]) return null;
-
-    const { rows: stages } = await pool.query<IPipelineStage>(
-      `SELECT * FROM lead_pipeline_stages
-       WHERE lead_pipeline_id = $1
-       ORDER BY sort_order ASC, id ASC`,
-      [id]
-    );
-
-    rows[0].stages = stages;
-    return rows[0];
+      const { rows } = await pool.query(
+        'SELECT get_pipeline($1) as result',
+        [pipelineId]
+      );
+      return rows[0]?.result || null;
+    } catch (error: any) {
+      logger.error({ error, id }, 'PipelineService.getById failed');
+      throw error;
+    }
   }
 
-  // Unified single function for both Add and Edit
+  // Unified single DB Function call for Add and Edit: save_pipeline(...)
   public static async save(
     data: {
       name: string;
@@ -81,127 +51,38 @@ export class PipelineService {
     },
     id?: number | string
   ): Promise<IPipeline> {
-    const client = await pool.connect();
     try {
-      await client.query('BEGIN');
-
+      const pipelineId = toNumberParam(id);
       const isDefault = Boolean(data.is_default);
       const rottenDays = Number.isFinite(data.rotten_days) ? Number(data.rotten_days) : 30;
+      const stagesJson = data.stages ? JSON.stringify(data.stages) : '[]';
 
-      let pipelineId: number;
+      const { rows } = await pool.query(
+        'SELECT save_pipeline($1, $2, $3, $4::jsonb, $5) as result',
+        [data.name.trim(), rottenDays, isDefault, stagesJson, pipelineId]
+      );
 
-      if (id) {
-        // Edit / Update
-        const existing = await client.query('SELECT * FROM lead_pipelines WHERE id = $1', [id]);
-        if (!existing.rows[0]) {
-          throw new ApiError(404, 'Pipeline not found');
-        }
-
-        pipelineId = Number(id);
-
-        if (isDefault) {
-          await client.query('UPDATE lead_pipelines SET is_default = false WHERE id != $1', [pipelineId]);
-        }
-
-        const name = data.name !== undefined ? data.name : existing.rows[0].name;
-
-        await client.query(
-          `UPDATE lead_pipelines
-           SET name = $1, is_default = $2, rotten_days = $3, updated_at = NOW()
-           WHERE id = $4`,
-          [name, isDefault, rottenDays, pipelineId]
-        );
-      } else {
-        // Add / Create
-        if (isDefault) {
-          await client.query('UPDATE lead_pipelines SET is_default = false');
-        }
-
-        const insertRes = await client.query<IPipeline>(
-          `INSERT INTO lead_pipelines (name, is_default, rotten_days, created_at, updated_at)
-           VALUES ($1, $2, $3, NOW(), NOW())
-           RETURNING *`,
-          [data.name, isDefault, rottenDays]
-        );
-        pipelineId = insertRes.rows[0].id;
-      }
-
-      // Synchronize stages if provided
-      if (Array.isArray(data.stages) && data.stages.length > 0) {
-        const keptStageIds: number[] = [];
-
-        for (let i = 0; i < data.stages.length; i++) {
-          const st = data.stages[i];
-          const sortOrder = typeof st.sort_order === 'number' ? st.sort_order : i + 1;
-          const prob = typeof st.probability === 'number' ? st.probability : 0;
-          const code = st.code || st.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-
-          if (st.id) {
-            // Update existing stage
-            await client.query(
-              `UPDATE lead_pipeline_stages
-               SET name = $1, code = $2, probability = $3, sort_order = $4
-               WHERE id = $5 AND lead_pipeline_id = $6`,
-              [st.name, code, prob, sortOrder, st.id, pipelineId]
-            );
-            keptStageIds.push(Number(st.id));
-          } else {
-            // Insert new stage
-            const stageInsert = await client.query(
-              `INSERT INTO lead_pipeline_stages (lead_pipeline_id, name, code, probability, sort_order)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id`,
-              [pipelineId, st.name, code, prob, sortOrder]
-            );
-            keptStageIds.push(stageInsert.rows[0].id);
-          }
-        }
-
-        // Delete removed stages (if no leads attached, or safely remove)
-        if (keptStageIds.length > 0) {
-          await client.query(
-            `DELETE FROM lead_pipeline_stages
-             WHERE lead_pipeline_id = $1 AND id NOT IN (${keptStageIds.join(',')})`,
-            [pipelineId]
-          );
-        }
-      }
-
-      await client.query('COMMIT');
-
-      const updated = await this.getById(pipelineId);
-      return updated!;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+      return rows[0]?.result;
+    } catch (error: any) {
+      logger.error({ error, data, id }, 'PipelineService.save failed');
+      throw error;
     }
   }
 
+  // DB Function call: delete_pipeline(p_id)
   public static async delete(id: number | string): Promise<boolean> {
-    const pipe = await this.getById(id);
-    if (!pipe) {
-      throw new ApiError(404, 'Pipeline not found');
-    }
-    if (pipe.is_default) {
-      throw new ApiError(400, 'Default pipeline cannot be deleted.');
-    }
+    try {
+      const pipelineId = toNumberParam(id);
+      if (!pipelineId) return false;
 
-    // Move any existing leads to default pipeline if exists
-    const defaultPipe = await pool.query('SELECT id FROM lead_pipelines WHERE is_default = true LIMIT 1');
-    if (defaultPipe.rows[0]) {
-      const defaultStage = await pool.query(
-        'SELECT id FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC LIMIT 1',
-        [defaultPipe.rows[0].id]
+      const { rows } = await pool.query(
+        'SELECT delete_pipeline($1) as result',
+        [pipelineId]
       );
-      await pool.query(
-        'UPDATE leads SET lead_pipeline_id = $1, lead_pipeline_stage_id = $2 WHERE lead_pipeline_id = $3',
-        [defaultPipe.rows[0].id, defaultStage.rows[0]?.id || null, id]
-      );
+      return Boolean(rows[0]?.result);
+    } catch (error: any) {
+      logger.error({ error, id }, 'PipelineService.delete failed');
+      throw error;
     }
-
-    const result = await pool.query('DELETE FROM lead_pipelines WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
   }
 }

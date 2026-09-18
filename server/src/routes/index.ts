@@ -11,6 +11,17 @@ import roleRoutes from '@/routes/role.routes';
 import pipelineRoutes from '@/routes/pipeline.routes';
 import sourceRoutes from '@/routes/source.routes';
 import typeRoutes from '@/routes/type.routes';
+import warehouseRoutes from '@/routes/warehouse.routes';
+import attributeRoutes from '@/routes/attribute.routes';
+import emailTemplateRoutes from '@/routes/emailTemplate.routes';
+import eventRoutes from '@/routes/event.routes';
+import campaignRoutes from '@/routes/campaign.routes';
+import webhookRoutes from '@/routes/webhook.routes';
+import workflowRoutes from '@/routes/workflow.routes';
+import webformRoutes from '@/routes/webform.routes';
+import dataTransferRoutes from '@/routes/dataTransfer.routes';
+import googleContactRoutes from '@/routes/googleContact.routes';
+import userRoutes from '@/routes/user.routes';
 
 const router = Router();
 
@@ -33,6 +44,8 @@ router.use('/activities', activityRoutes);
 router.use('/activity', activityRoutes);
 
 // Settings sub-modules
+router.use('/users', userRoutes);
+router.use('/user', userRoutes);
 router.use('/groups', groupRoutes);
 router.use('/group', groupRoutes);
 router.use('/roles', roleRoutes);
@@ -45,6 +58,26 @@ router.use('/lead-sources', sourceRoutes);
 router.use('/types', typeRoutes);
 router.use('/type', typeRoutes);
 router.use('/lead-types', typeRoutes);
+router.use('/warehouses', warehouseRoutes);
+router.use('/warehouse', warehouseRoutes);
+router.use('/attributes', attributeRoutes);
+router.use('/attribute', attributeRoutes);
+
+// New Krayin CRM Settings Modules
+router.use('/email-templates', emailTemplateRoutes);
+router.use('/email-template', emailTemplateRoutes);
+router.use('/events', eventRoutes);
+router.use('/event', eventRoutes);
+router.use('/campaigns', campaignRoutes);
+router.use('/campaign', campaignRoutes);
+router.use('/webhooks', webhookRoutes);
+router.use('/webhook', webhookRoutes);
+router.use('/workflows', workflowRoutes);
+router.use('/workflow', workflowRoutes);
+router.use('/web-forms', webformRoutes);
+router.use('/web-form', webformRoutes);
+router.use('/data-transfer', dataTransferRoutes);
+router.use('/google-contacts', googleContactRoutes);
 
 router.use('/', authRoutes);
 

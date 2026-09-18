@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { ISource } from "@/interface";
+import { sourceSchema } from "@/schemas";
+import { ZodError } from "zod";
 
 const SourcesPage: React.FC = () => {
   const [sources, setSources] = useState<ISource[]>([]);
@@ -53,16 +55,13 @@ const SourcesPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      Swal.fire("Error", "Source name is required", "error");
-      return;
-    }
 
-    setSaving(true);
     try {
+      const validated = sourceSchema.parse(formData);
+      setSaving(true);
       if (editingSource?.id) {
         // Edit / Update
-        await API.put(`/sources/${editingSource.id}`, formData);
+        await API.put(`/sources/${editingSource.id}`, validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -72,7 +71,7 @@ const SourcesPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/sources", formData);
+        await API.post("/sources", validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -84,6 +83,10 @@ const SourcesPage: React.FC = () => {
       setIsModalOpen(false);
       fetchSources();
     } catch (err: any) {
+      if (err instanceof ZodError) {
+        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        return;
+      }
       Swal.fire(
         "Error",
         err?.response?.data?.message || "Failed to save source",

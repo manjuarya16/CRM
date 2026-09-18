@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IGroup } from "@/interface";
+import { groupSchema } from "@/schemas";
+import { ZodError } from "zod";
 
 const GroupsPage: React.FC = () => {
   const [groups, setGroups] = useState<IGroup[]>([]);
@@ -55,16 +57,13 @@ const GroupsPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      Swal.fire("Error", "Group name is required", "error");
-      return;
-    }
 
-    setSaving(true);
     try {
+      const validated = groupSchema.parse(formData);
+      setSaving(true);
       if (editingGroup?.id) {
         // Edit / Update
-        await API.put(`/groups/${editingGroup.id}`, formData);
+        await API.put(`/groups/${editingGroup.id}`, validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -74,7 +73,7 @@ const GroupsPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/groups", formData);
+        await API.post("/groups", validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -86,6 +85,10 @@ const GroupsPage: React.FC = () => {
       setIsModalOpen(false);
       fetchGroups();
     } catch (err: any) {
+      if (err instanceof ZodError) {
+        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        return;
+      }
       Swal.fire(
         "Error",
         err?.response?.data?.message || "Failed to save group",

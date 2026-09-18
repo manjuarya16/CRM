@@ -1,23 +1,62 @@
 import { Router } from 'express';
-import { pool } from '@/config/db';
+import { ActivityService } from '@/services/activity.service';
+import { activitySchema } from '@/schemas/activity.schema';
+import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
 
 router.get('/', async (req, res, next) => {
   try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.max(1, Number(req.query.per_page) || 10);
-    const offset = (page - 1) * perPage;
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const perPage = req.query.per_page ? Number(req.query.per_page) : 10;
+    const search = req.query.search ? String(req.query.search) : undefined;
 
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM activities');
-    const total = parseInt(countRes.rows[0]?.count || '0', 10);
+    const result = await ActivityService.getAll({ page, perPage, search });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    const { rows } = await pool.query(
-      'SELECT * FROM activities ORDER BY id DESC LIMIT $1 OFFSET $2',
-      [perPage, offset]
-    );
+router.get('/:id', async (req, res, next) => {
+  try {
+    const activity = await ActivityService.getById(String(req.params.id));
+    if (!activity) {
+      throw new ApiError(404, 'Activity not found');
+    }
+    res.json({ success: true, data: activity });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    res.json({ success: true, data: rows, total });
+router.post('/', async (req, res, next) => {
+  try {
+    const validated = activitySchema.parse(req.body);
+    const activity = await ActivityService.save(validated);
+    res.status(201).json({ success: true, data: activity });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id', async (req, res, next) => {
+  try {
+    const validated = activitySchema.parse(req.body);
+    const activity = await ActivityService.save(validated, String(req.params.id));
+    res.json({ success: true, data: activity });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const deleted = await ActivityService.delete(String(req.params.id));
+    if (!deleted) {
+      throw new ApiError(404, 'Activity not found');
+    }
+    res.json({ success: true, message: 'Activity deleted successfully' });
   } catch (err) {
     next(err);
   }

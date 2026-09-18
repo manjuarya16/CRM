@@ -1,28 +1,17 @@
 import { Router } from 'express';
-import { pool } from '@/config/db';
+import { QuoteService } from '@/services/quote.service';
+import { quoteSchema } from '@/schemas/quote.schema';
+import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
 
 router.get('/', async (req, res, next) => {
   try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.max(1, Number(req.query.per_page) || 10);
-    const offset = (page - 1) * perPage;
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const perPage = req.query.per_page ? Number(req.query.per_page) : 10;
 
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM quotes');
-    const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-    const { rows } = await pool.query(
-      `SELECT q.*, u.name as sales_person_name, p.name as person_name 
-       FROM quotes q 
-       LEFT JOIN users u ON q.user_id = u.id 
-       LEFT JOIN persons p ON q.person_id = p.id 
-       ORDER BY q.id DESC 
-       LIMIT $1 OFFSET $2`,
-      [perPage, offset]
-    );
-
-    res.json({ success: true, data: rows, total });
+    const result = await QuoteService.getAll({ page, perPage });
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }
@@ -30,8 +19,43 @@ router.get('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM quotes WHERE id = $1', [req.params.id]);
-    res.json({ success: true, data: rows[0] || null });
+    const quote = await QuoteService.getById(String(req.params.id));
+    if (!quote) {
+      throw new ApiError(404, 'Quote not found');
+    }
+    res.json({ success: true, data: quote });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/', async (req, res, next) => {
+  try {
+    const validated = quoteSchema.parse(req.body);
+    const quote = await QuoteService.save(validated);
+    res.status(201).json({ success: true, data: quote });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id', async (req, res, next) => {
+  try {
+    const validated = quoteSchema.parse(req.body);
+    const quote = await QuoteService.save(validated, String(req.params.id));
+    res.json({ success: true, data: quote });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const deleted = await QuoteService.delete(String(req.params.id));
+    if (!deleted) {
+      throw new ApiError(404, 'Quote not found');
+    }
+    res.json({ success: true, message: 'Quote deleted successfully' });
   } catch (err) {
     next(err);
   }

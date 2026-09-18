@@ -9,6 +9,8 @@ export interface IUser {
   role_id?: number;
   role?: string;
   role_name?: string;
+  permission_type?: string;
+  permissions?: string[] | any;
   created_by?: number | null;
   remember_token?: string | null;
   image?: string | null;
@@ -20,6 +22,8 @@ export type User = IUser;
 
 export type PublicUser = Omit<IUser, 'password' | 'password_hash' | 'role'> & {
   role: string;
+  permission_type?: string;
+  permissions?: string[] | any;
 };
 
 export type IPublicUser = PublicUser;
@@ -29,6 +33,8 @@ export function toPublicUser(user: IUser): PublicUser {
   return {
     ...rest,
     role: user.role_name || user.role || 'user',
+    permission_type: user.permission_type || 'all',
+    permissions: user.permissions || [],
   };
 }
 

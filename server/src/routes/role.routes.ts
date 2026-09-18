@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { RoleService } from '@/services/role.service';
+import { roleSchema } from '@/schemas/role.schema';
 import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
+
+router.get('/permissions', (_req, res) => {
+  const permissions = RoleService.getPermissionsTree();
+  res.json({ success: true, data: permissions });
+});
 
 router.get('/', async (req, res, next) => {
   try {
@@ -28,7 +34,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const role = await RoleService.save(req.body);
+    const validated = roleSchema.parse(req.body);
+    const role = await RoleService.save(validated);
     res.status(201).json({ success: true, data: role });
   } catch (err) {
     next(err);
@@ -37,7 +44,8 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const role = await RoleService.save(req.body, String(req.params.id));
+    const validated = roleSchema.parse(req.body);
+    const role = await RoleService.save(validated, String(req.params.id));
     res.json({ success: true, data: role });
   } catch (err) {
     next(err);

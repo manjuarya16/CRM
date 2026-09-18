@@ -12,3 +12,6 @@ export * from "./leftSideInterface";
 export * from "./profileInterface";
 export * from "./commonInterface";
 export * from "./settingsSubmodulesInterface";
+export * from "./warehouseInterface";
+export * from "./attributeInterface";
+export * from "./automationInterfaces";
