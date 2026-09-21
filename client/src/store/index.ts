@@ -5,3 +5,8 @@ export { useBranchStore } from "./branchStore";
 export { useUserStore } from "./userStore";
 export { useRoleStore } from "./roleStore";
 export { useDepartmentStore } from "./departmentStore";
+export { useLeadStore } from "./leadStore";
+export { useProductStore } from "./productStore";
+export { useActivityStore } from "./activityStore";
+export { useQuoteStore } from "./quoteStore";
+

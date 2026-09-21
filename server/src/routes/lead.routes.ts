@@ -1,32 +1,63 @@
-import { Router } from 'express';
-import { pool } from '@/config/db';
+import { Router, Request, Response } from "express";
+import leadService from "@/services/leadService";
+import { requireAuth } from "@/middleware/auth";
 
 const router = Router();
 
-router.get('/', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.max(1, Number(req.query.per_page) || 10);
-    const offset = (page - 1) * perPage;
+router.get("/sources", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeadSources(req, res);
+});
 
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM leads');
-    const total = parseInt(countRes.rows[0]?.count || '0', 10);
+router.get("/types", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeadTypes(req, res);
+});
 
-    const { rows } = await pool.query(
-      `SELECT l.*, p.name as person_name, ls.name as source_name, lst.name as stage_name
-       FROM leads l
-       LEFT JOIN persons p ON l.person_id = p.id
-       LEFT JOIN lead_sources ls ON l.lead_source_id = ls.id
-       LEFT JOIN lead_stages lst ON l.lead_stage_id = lst.id
-       ORDER BY l.id DESC
-       LIMIT $1 OFFSET $2`,
-      [perPage, offset]
-    );
+router.get("/pipelines", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeadPipelines(req, res);
+});
 
-    res.json({ success: true, data: rows, total });
-  } catch (err) {
-    next(err);
-  }
+router.get("/stages", requireAuth, (req: Request, res: Response) => {
+  leadService.getPipelineStages(req, res);
+});
+
+router.get("/", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeads(req, res);
+});
+
+router.post("/create", requireAuth, (req: Request, res: Response) => {
+  leadService.createLead(req, res);
+});
+
+router.put("/update/:id", requireAuth, (req: Request, res: Response) => {
+  leadService.updateLead(req, res);
+});
+
+router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
+  leadService.deleteLead(req, res);
+});
+
+router.get("/:id/products", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeadProducts(req, res);
+});
+
+router.post("/:id/products", requireAuth, (req: Request, res: Response) => {
+  leadService.addLeadProduct(req, res);
+});
+
+router.delete("/products/:itemId", requireAuth, (req: Request, res: Response) => {
+  leadService.deleteLeadProduct(req, res);
+});
+
+router.put("/:id/stage", requireAuth, (req: Request, res: Response) => {
+  leadService.updateLeadStage(req, res);
+});
+
+router.get("/kanban", requireAuth, (req: Request, res: Response) => {
+  leadService.getKanbanLeads(req, res);
+});
+
+router.get("/:id", requireAuth, (req: Request, res: Response) => {
+  leadService.getLeadById(req, res);
 });
 
 export default router;

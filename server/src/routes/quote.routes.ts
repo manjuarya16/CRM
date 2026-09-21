@@ -1,40 +1,39 @@
-import { Router } from 'express';
-import { pool } from '@/config/db';
+import { Router, Request, Response } from "express";
+import quoteService from "@/services/quoteService";
+import { requireAuth } from "@/middleware/auth";
 
 const router = Router();
 
-router.get('/', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.max(1, Number(req.query.per_page) || 10);
-    const offset = (page - 1) * perPage;
-
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM quotes');
-    const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-    const { rows } = await pool.query(
-      `SELECT q.*, u.name as sales_person_name, p.name as person_name 
-       FROM quotes q 
-       LEFT JOIN users u ON q.user_id = u.id 
-       LEFT JOIN persons p ON q.person_id = p.id 
-       ORDER BY q.id DESC 
-       LIMIT $1 OFFSET $2`,
-      [perPage, offset]
-    );
-
-    res.json({ success: true, data: rows, total });
-  } catch (err) {
-    next(err);
-  }
+router.get("/", requireAuth, (req: Request, res: Response) => {
+  quoteService.getQuotes(req, res);
 });
 
-router.get('/:id', async (req, res, next) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM quotes WHERE id = $1', [req.params.id]);
-    res.json({ success: true, data: rows[0] || null });
-  } catch (err) {
-    next(err);
-  }
+router.post("/create", requireAuth, (req: Request, res: Response) => {
+  quoteService.createQuote(req, res);
+});
+
+router.put("/update/:id", requireAuth, (req: Request, res: Response) => {
+  quoteService.updateQuote(req, res);
+});
+
+router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
+  quoteService.deleteQuote(req, res);
+});
+
+router.get("/:id/items", requireAuth, (req: Request, res: Response) => {
+  quoteService.getQuoteItems(req, res);
+});
+
+router.post("/:id/items", requireAuth, (req: Request, res: Response) => {
+  quoteService.addQuoteItem(req, res);
+});
+
+router.delete("/items/:itemId", requireAuth, (req: Request, res: Response) => {
+  quoteService.deleteQuoteItem(req, res);
+});
+
+router.get("/:id", requireAuth, (req: Request, res: Response) => {
+  quoteService.getQuoteById(req, res);
 });
 
 export default router;

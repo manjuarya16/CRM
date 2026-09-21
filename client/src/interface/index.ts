@@ -12,3 +12,8 @@ export * from "./leftSideInterface";
 export * from "./profileInterface";
 export * from "./commonInterface";
 export * from "./settingsSubmodulesInterface";
+export * from "./leadInterface";
+export * from "./productInterface";
+export * from "./activityInterface";
+export * from "./quoteInterface";
+
