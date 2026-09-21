@@ -4,6 +4,8 @@ import type { PoolClient } from "pg";
 import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { ILeadCreateInput, ILeadUpdateInput } from "@/interfaces/leadInterface";
+import path from "path";
+import fs from "fs";
 
 const logger = pino();
 
@@ -82,12 +84,38 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       description,
       lead_value,
       user_id,
-      person_id,
+      person_id: rawPersonId,
+      person,           // { name, email, phone, organization_id } for new person
       lead_source_id,
       lead_type_id,
       lead_pipeline_id,
+      lead_pipeline_stage_id,
       expected_close_date,
-    }: ILeadCreateInput = req.body;
+      products,         // [{ product_id, quantity, price }]
+    } = req.body;
+
+    // Resolve person_id: use existing or create new person inline
+    let person_id = rawPersonId ? Number(rawPersonId) : null;
+
+    if (!person_id && person && person.name) {
+      const emailsJson = JSON.stringify(
+        person.email ? [{ label: "work", value: person.email }] : []
+      );
+      const phonesJson = JSON.stringify(
+        person.phone ? [{ label: "work", value: person.phone }] : []
+      );
+      const personRes = await connection.query(
+        `INSERT INTO persons (name, emails, contact_numbers, organization_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+        [
+          person.name,
+          emailsJson,
+          phonesJson,
+          person.organization_id ? Number(person.organization_id) : null,
+        ]
+      );
+      person_id = personRes.rows[0]?.id || null;
+    }
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
@@ -96,7 +124,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         description || null,
         lead_value || null,
         user_id || (req as any).user?.id || null,
-        person_id || null,
+        person_id,
         lead_source_id || null,
         lead_type_id || null,
         lead_pipeline_id || null,
@@ -104,10 +132,31 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const lead = result.rows[0];
+
+    // Optionally set stage
+    if (lead && lead_pipeline_stage_id) {
+      await connection.query(
+        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
+        [Number(lead_pipeline_stage_id), lead.id]
+      );
+    }
+
+    // Save products
+    if (lead && Array.isArray(products) && products.length > 0) {
+      for (const p of products) {
+        if (!p.product_id) continue;
+        await connection.query(
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
+          [lead.id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
+        );
+      }
+    }
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Lead created successfully",
-      data: result.rows[0],
+      data: lead,
     });
   } catch (error: any) {
     logger.error(error);
@@ -119,6 +168,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
+
 
 const updateLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -132,13 +182,37 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       status,
       lost_reason,
       user_id,
-      person_id,
+      person_id: rawPersonId,
+      person,
       lead_source_id,
       lead_type_id,
       lead_pipeline_id,
       lead_pipeline_stage_id,
       expected_close_date,
-    }: ILeadUpdateInput = req.body;
+      products,
+    } = req.body;
+
+    // Resolve person_id: use existing or create new person inline
+    let person_id = rawPersonId ? Number(rawPersonId) : null;
+    if (!person_id && person && person.name) {
+      const emailsJson = JSON.stringify(
+        person.email ? [{ label: "work", value: person.email }] : []
+      );
+      const phonesJson = JSON.stringify(
+        person.phone ? [{ label: "work", value: person.phone }] : []
+      );
+      const personRes = await connection.query(
+        `INSERT INTO persons (name, emails, contact_numbers, organization_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+        [
+          person.name,
+          emailsJson,
+          phonesJson,
+          person.organization_id ? Number(person.organization_id) : null,
+        ]
+      );
+      person_id = personRes.rows[0]?.id || null;
+    }
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
@@ -146,18 +220,38 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
         id,
         title ?? null,
         description ?? null,
-        lead_value ?? null,
-        status ?? null,
+        lead_value !== undefined && lead_value !== null ? Number(lead_value) : null,
+        status !== undefined ? Boolean(status) : null,
         lost_reason ?? null,
-        user_id ?? null,
-        person_id ?? null,
-        lead_source_id ?? null,
-        lead_type_id ?? null,
-        lead_pipeline_id ?? null,
-        lead_pipeline_stage_id ?? null,
-        expected_close_date ?? null,
+        user_id ? Number(user_id) : null,
+        person_id ? Number(person_id) : null,
+        lead_source_id ? Number(lead_source_id) : null,
+        lead_type_id ? Number(lead_type_id) : null,
+        lead_pipeline_id ? Number(lead_pipeline_id) : null,
+        lead_pipeline_stage_id ? Number(lead_pipeline_stage_id) : null,
+        expected_close_date || null,
       ]
     );
+
+    // If stage explicitly provided, ensure it updates directly on leads table
+    if (lead_pipeline_stage_id) {
+      await connection.query(
+        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
+        [Number(lead_pipeline_stage_id), id]
+      );
+    }
+
+    // Update products if array provided
+    if (Array.isArray(products)) {
+      await connection.query("DELETE FROM lead_products WHERE lead_id = $1", [id]);
+      for (const p of products) {
+        if (!p.product_id) continue;
+        await connection.query(
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
+          [id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
+        );
+      }
+    }
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
@@ -174,6 +268,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
+
 
 const deleteLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -346,6 +441,95 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+
+const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
+  let connection: PoolClient | undefined;
+  try {
+    connection = await pool.connect();
+
+    // multer puts the file at req.file
+    const file = (req as any).file;
+
+    if (!file) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "No file uploaded. Please provide a PDF or image file.",
+      });
+      return;
+    }
+
+    // Build a lead title from the filename (strip extension)
+    const fileBaseName = path.basename(file.originalname, path.extname(file.originalname))
+      .replace(/[_-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const leadTitle = fileBaseName || `Lead from ${new Date().toLocaleDateString()}`;
+
+    // Get default pipeline and its first stage
+    const pipelineRes = await connection.query(
+      "SELECT * FROM lead_pipelines WHERE is_default = TRUE ORDER BY id ASC LIMIT 1"
+    );
+    let pipelineId: number | null = null;
+    let stageId: number | null = null;
+
+    if (pipelineRes.rows.length > 0) {
+      pipelineId = pipelineRes.rows[0].id;
+      const stageRes = await connection.query(
+        "SELECT * FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC LIMIT 1",
+        [pipelineId]
+      );
+      if (stageRes.rows.length > 0) {
+        stageId = stageRes.rows[0].id;
+      }
+    }
+
+    // Create the lead
+    const leadResult = await connection.query(
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      [
+        leadTitle,
+        `Created from uploaded file: ${file.originalname}`,
+        null,
+        (req as any).user?.id || null,
+        null,
+        null,
+        null,
+        pipelineId,
+        null,
+      ]
+    );
+
+    const lead = leadResult.rows[0];
+
+    if (lead && stageId) {
+      await connection.query(
+        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
+        [stageId, lead.id]
+      );
+    }
+
+    // Clean up temp file
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    res.status(HttpStatusCodes.CREATED).json({
+      success: true,
+      message: `Lead "${leadTitle}" created successfully from uploaded file.`,
+      data: lead,
+    });
+  } catch (error: any) {
+    logger.error(error);
+    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    connection?.release();
+  }
+};
+
 export default {
   getLeads,
   getLeadById,
@@ -361,6 +545,7 @@ export default {
   deleteLeadProduct,
   updateLeadStage,
   getKanbanLeads,
+  createLeadByAI,
 };
 
 

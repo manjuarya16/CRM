@@ -10,10 +10,13 @@ export const useActivityStore = create<ActivityStore>((set, get) => ({
   error: null,
   selectedActivity: null,
 
-  fetchActivities: async (page = 1, limit = 10, search = "") => {
+  fetchActivities: async (page = 1, limit = 100, search = "", leadId?: number) => {
     set({ loading: true });
     try {
-      const response = await API.get(`/activities?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`);
+      const url = leadId
+        ? `/activities?page=${page}&limit=${limit}&lead_id=${leadId}&search=${encodeURIComponent(search)}`
+        : `/activities?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+      const response = await API.get(url);
       if (response.data?.success) {
         set({
           activities: response.data.data || [],
@@ -29,6 +32,7 @@ export const useActivityStore = create<ActivityStore>((set, get) => ({
       set({ loading: false });
     }
   },
+
 
   fetchActivityById: async (id: number) => {
     set({ loading: true });
