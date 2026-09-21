@@ -33,6 +33,18 @@ export interface IQuoteItem {
   total?: number;
 }
 
+export interface ITempQuoteItem {
+  id?: number;
+  product_id: number;
+  name: string;
+  sku: string;
+  quantity: number;
+  price: number;
+  discount_percent: number;
+  tax_percent: number;
+  total: number;
+}
+
 export interface QuoteStore {
   quotes: IQuote[];
   total: number;

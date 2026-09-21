@@ -149,3 +149,13 @@ export interface IContactExportBatch {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface IWebFormSubmission {
+  id: number;
+  web_form_id: number;
+  form_id?: string;
+  form_title?: string;
+  data: Record<string, any>;
+  ip_address?: string;
+  created_at?: string;
+}

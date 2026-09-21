@@ -3,17 +3,8 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
-import { IWebForm } from "@/interface";
+import { IWebForm, IWebFormSubmission } from "@/interface";
 import { WebFormPreview } from "./WebFormPreview";
-
-interface IWebFormSubmission {
-  id: number;
-  web_form_id: number;
-  form_id: string;
-  form_title: string;
-  data: Record<string, any>;
-  created_at: string;
-}
 
 const WebFormsPage: React.FC = () => {
   const [webForms, setWebForms] = useState<IWebForm[]>([]);

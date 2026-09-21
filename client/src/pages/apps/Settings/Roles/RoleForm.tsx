@@ -5,18 +5,7 @@ import Swal from "sweetalert2";
 import { ZodError } from "zod";
 import { roleSchema } from "@/schemas";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
-
-interface MatrixModule {
-  id: string;
-  name: string;
-  slug: string;
-  avatarChar: string;
-  avatarBg: string;
-  viewKey: string;
-  addKey: string;
-  updateKey: string;
-  deleteKey: string;
-}
+import { MatrixModule, RoleFormProps } from "@/interface";
 
 const MATRIX_MODULES: MatrixModule[] = [
   {
@@ -196,10 +185,6 @@ const MATRIX_MODULES: MatrixModule[] = [
     deleteKey: "settings.configuration.delete",
   },
 ];
-
-interface RoleFormProps {
-  mode: "create" | "edit";
-}
 
 export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const { id } = useParams<{ id: string }>();

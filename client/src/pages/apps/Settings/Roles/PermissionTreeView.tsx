@@ -4,21 +4,7 @@ import {
   IPermissionTreeNode,
   getNodeLeafKeys,
 } from "@/constants/permissions";
-
-interface PermissionTreeViewProps {
-  selectedKeys: string[];
-  onChange: (newKeys: string[]) => void;
-  disabled?: boolean;
-}
-
-interface TreeNodeItemProps {
-  node: IPermissionTreeNode;
-  level: number;
-  selectedKeys: string[];
-  onToggleKey: (key: string) => void;
-  onToggleNodeBranch: (node: IPermissionTreeNode) => void;
-  disabled?: boolean;
-}
+import { PermissionTreeViewProps, TreeNodeItemProps } from "@/interface";
 
 const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   node,
@@ -155,7 +141,7 @@ const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
       {/* Children Recursion */}
       {isParent && expanded && node.children && (
         <div className="border-l border-gray-100 dark:border-gray-800 ml-3 pl-1">
-          {node.children.map((child) => (
+          {node.children.map((child: any) => (
             <TreeNodeItem
               key={child.id}
               node={child}
