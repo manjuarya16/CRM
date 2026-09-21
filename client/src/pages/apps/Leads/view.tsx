@@ -24,8 +24,11 @@ const LeadViewPage: React.FC = () => {
   const [person, setPerson] = useState<any>(null);
   const [productsList, setProductsList] = useState<any[]>([]);
 
-  // Action Modals: Mail, File, Note, Activity
-  const [activeModal, setActiveModal] = useState<"mail" | "file" | "note" | "activity" | null>(null);
+  // Action Modals: Mail, File, Note, Activity, StageUpdate (Won/Lost)
+  const [activeModal, setActiveModal] = useState<"mail" | "file" | "note" | "activity" | "won_lost" | null>(null);
+  const [targetWonLostStage, setTargetWonLostStage] = useState<any>(null);
+
+  const [personsList, setPersonsList] = useState<any[]>([]);
 
   // Forms state for quick actions
   const [modalForm, setModalForm] = useState({
@@ -35,10 +38,24 @@ const LeadViewPage: React.FC = () => {
     email_to: "",
     email_subject: "",
     email_body: "",
+    won_value: "",
+    lost_reason: "",
+    closed_at: "",
+    schedule_from: "",
+    schedule_to: "",
+    location: "",
+    person_id: "",
   });
 
   // Add Product form
   const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "" });
+
+  useEffect(() => {
+    API.get("/persons?limit=100").then((res) => {
+      if (res.data?.data) setPersonsList(res.data.data);
+    }).catch(() => {});
+  }, []);
+
 
   useEffect(() => {
     if (leadId) {
@@ -57,8 +74,9 @@ const LeadViewPage: React.FC = () => {
       });
 
       fetchLeadProducts(leadId);
-      fetchActivities(1, 50, "");
+      fetchActivities(1, 100, "", leadId);
       fetchQuotes(1, 50, "");
+
 
       API.get("/products?limit=100").then((res) => {
         if (res.data?.data) setProductsList(res.data.data);
@@ -68,40 +86,42 @@ const LeadViewPage: React.FC = () => {
 
   // Lead Activities & Quotes filtered
   const leadActivities = activities.filter(
-    (a) => a.lead_id === leadId || (selectedLead?.person_id && a.person_id === selectedLead.person_id)
+    (a) => Number(a.lead_id) === leadId || (selectedLead?.person_id && Number(a.person_id) === Number(selectedLead.person_id))
   );
   const leadQuotes = quotes.filter(
-    (q) => q.lead_id === leadId || (selectedLead?.person_id && q.person_id === selectedLead.person_id)
+    (q) => Number(q.lead_id) === leadId || (selectedLead?.person_id && Number(q.person_id) === Number(selectedLead.person_id))
   );
 
-  const handleStageClick = async (stageId: number) => {
-    await updateLeadStage(leadId, stageId, true);
+
+  const handleStageClick = async (stage: any) => {
+    if (stage.code === "won" || stage.code === "lost") {
+      setTargetWonLostStage(stage);
+      setModalForm({
+        ...modalForm,
+        won_value: selectedLead?.lead_value ? String(selectedLead.lead_value) : "",
+        closed_at: new Date().toISOString().substring(0, 16),
+      });
+      setActiveModal("won_lost");
+      return;
+    }
+
+    await updateLeadStage(leadId, stage.id, true);
     fetchLeadById(leadId);
   };
 
-  const handleMarkLost = async () => {
-    const { value: reason } = await Swal.fire({
-      title: "Mark Lead as Lost",
-      input: "text",
-      inputLabel: "Reason for losing lead",
-      inputPlaceholder: "Enter lost reason...",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-    });
+  const handleWonLostSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetWonLostStage) return;
 
-    if (reason !== undefined) {
-      const currentStageId = selectedLead?.lead_pipeline_stage_id || (stages[0]?.id || 1);
-      await updateLeadStage(leadId, currentStageId, false, reason);
-      fetchLeadById(leadId);
-    }
-  };
-
-  const handleMarkWon = async () => {
-    const wonStage = stages.find((s) => s.code === "won") || stages[stages.length - 1];
-    if (wonStage) {
-      await updateLeadStage(leadId, wonStage.id, true);
-      fetchLeadById(leadId);
-    }
+    const isWon = targetWonLostStage.code === "won";
+    await updateLeadStage(
+      leadId,
+      targetWonLostStage.id,
+      isWon,
+      isWon ? undefined : modalForm.lost_reason
+    );
+    setActiveModal(null);
+    fetchLeadById(leadId);
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -119,8 +139,22 @@ const LeadViewPage: React.FC = () => {
     e.preventDefault();
     try {
       if (activeModal === "mail") {
-        Swal.fire("Success", "Email sent to contact", "success");
+        await addActivity({
+          title: modalForm.email_subject || "Email Sent",
+          type: "email",
+          comment: `To: ${modalForm.email_to}\n${modalForm.email_body}`,
+          lead_id: leadId,
+          person_id: selectedLead?.person_id,
+        });
+        Swal.fire("Success", "Email logged for lead", "success");
       } else if (activeModal === "file") {
+        await addActivity({
+          title: "File Attachment",
+          type: "file",
+          comment: "Attached file document to lead",
+          lead_id: leadId,
+          person_id: selectedLead?.person_id,
+        });
         Swal.fire("Success", "File attached to lead", "success");
       } else if (activeModal === "note") {
         await addActivity({
@@ -136,18 +170,22 @@ const LeadViewPage: React.FC = () => {
           title: modalForm.title,
           type: modalForm.type,
           comment: modalForm.comment,
+          schedule_from: modalForm.schedule_from || undefined,
+          schedule_to: modalForm.schedule_to || undefined,
+          location: modalForm.location || undefined,
           lead_id: leadId,
-          person_id: selectedLead?.person_id,
+          person_id: modalForm.person_id ? Number(modalForm.person_id) : selectedLead?.person_id,
         });
         Swal.fire("Success", "Activity logged", "success");
       }
       setActiveModal(null);
-      setModalForm({ title: "", comment: "", type: "call", email_to: "", email_subject: "", email_body: "" });
-      fetchActivities(1, 50, "");
+      setModalForm({ title: "", comment: "", type: "call", email_to: "", email_subject: "", email_body: "", won_value: "", lost_reason: "", closed_at: "", schedule_from: "", schedule_to: "", location: "", person_id: "" });
+      fetchActivities(1, 100, "", leadId);
     } catch (err: any) {
       Swal.fire("Error", err.message || "Failed to process action", "error");
     }
   };
+
 
   if (loading || !selectedLead) {
     return (
@@ -170,8 +208,27 @@ const LeadViewPage: React.FC = () => {
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Top Breadcrumb */}
-      <div className="text-xs text-gray-500">
-        <Link to="/dashboard" className="hover:underline">Dashboard</Link> / <Link to="/leads" className="hover:underline">Leads</Link> / #{selectedLead.id}
+      <div className="text-xs text-gray-500 flex items-center justify-between">
+        <div>
+          <Link to="/dashboard" className="hover:underline">Dashboard</Link> / <Link to="/leads" className="hover:underline">Leads</Link> / #{selectedLead.id}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/leads/edit/${selectedLead.id}`}
+            className="px-3 py-1 border rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-700"
+          >
+            Edit Lead
+          </Link>
+          <button
+            onClick={async () => {
+              const res = await Swal.fire({ title: "Delete Lead?", text: `Delete lead "${selectedLead.title}"?`, icon: "warning", showCancelButton: true, confirmButtonColor: "#d33" });
+              if (res.isConfirmed) { await deleteLead(leadId); navigate("/leads"); }
+            }}
+            className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-semibold border border-red-200"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       {/* Main 2-Column Layout matching Krayin Screenshot 2 */}
@@ -179,7 +236,7 @@ const LeadViewPage: React.FC = () => {
 
         {/* LEFT PANEL (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 space-y-5">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 p-5 space-y-5">
             {/* Title */}
             <div>
               <span className="text-xs font-semibold text-gray-400">Lead #{selectedLead.id}</span>
@@ -190,28 +247,28 @@ const LeadViewPage: React.FC = () => {
             <div className="grid grid-cols-4 gap-2 pt-1">
               <button
                 onClick={() => setActiveModal("mail")}
-                className="flex flex-col items-center justify-center p-2.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl hover:bg-emerald-200 transition-colors font-semibold text-xs gap-1 border border-emerald-200"
+                className="flex flex-col items-center justify-center p-3 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 rounded-xl hover:bg-emerald-200 transition-colors font-bold text-xs gap-1 border border-emerald-300 shadow-sm"
               >
                 <i className="mgc_mail_line text-lg"></i>
                 Mail
               </button>
               <button
                 onClick={() => setActiveModal("file")}
-                className="flex flex-col items-center justify-center p-2.5 bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 rounded-xl hover:bg-sky-200 transition-colors font-semibold text-xs gap-1 border border-sky-200"
+                className="flex flex-col items-center justify-center p-3 bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-300 rounded-xl hover:bg-sky-200 transition-colors font-bold text-xs gap-1 border border-sky-300 shadow-sm"
               >
                 <i className="mgc_attachment_line text-lg"></i>
                 File
               </button>
               <button
                 onClick={() => setActiveModal("note")}
-                className="flex flex-col items-center justify-center p-2.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-200 transition-colors font-semibold text-xs gap-1 border border-amber-200"
+                className="flex flex-col items-center justify-center p-3 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-xl hover:bg-amber-200 transition-colors font-bold text-xs gap-1 border border-amber-300 shadow-sm"
               >
                 <i className="mgc_file_text_line text-lg"></i>
                 Note
               </button>
               <button
                 onClick={() => setActiveModal("activity")}
-                className="flex flex-col items-center justify-center p-2.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-xl hover:bg-indigo-200 transition-colors font-semibold text-xs gap-1 border border-indigo-200"
+                className="flex flex-col items-center justify-center p-3 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 rounded-xl hover:bg-indigo-200 transition-colors font-bold text-xs gap-1 border border-indigo-300 shadow-sm"
               >
                 <i className="mgc_time_line text-lg"></i>
                 Activity
@@ -219,7 +276,7 @@ const LeadViewPage: React.FC = () => {
             </div>
 
             {/* About Lead Collapsible Section */}
-            <div className="border-t pt-4 space-y-3">
+            <div className="border-t border-gray-200 dark:border-gray-800 pt-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm">About Lead</h3>
                 <Link to={`/leads/edit/${selectedLead.id}`} className="text-gray-400 hover:text-[#0088cc]">
@@ -254,7 +311,7 @@ const LeadViewPage: React.FC = () => {
             </div>
 
             {/* About Persons Section */}
-            <div className="border-t pt-4 space-y-3">
+            <div className="border-t border-gray-200 dark:border-gray-800 pt-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm">About Persons</h3>
                 <Link to={`/leads/edit/${selectedLead.id}`} className="text-gray-400 hover:text-[#0088cc]">
@@ -263,8 +320,8 @@ const LeadViewPage: React.FC = () => {
               </div>
 
               {person ? (
-                <div className="flex items-start gap-3 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border">
-                  <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-bold flex items-center justify-center text-xs">
+                <div className="flex items-start gap-3 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                  <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-bold flex items-center justify-center text-xs shrink-0">
                     {person.name?.substring(0, 2).toUpperCase()}
                   </div>
                   <div className="space-y-0.5 text-xs">
@@ -284,37 +341,62 @@ const LeadViewPage: React.FC = () => {
 
         {/* RIGHT PANEL (8 cols) */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Stage Stepper Bar */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {stages.map((stage) => {
-                const isCurrent = stage.id === selectedLead.lead_pipeline_stage_id;
+          {/* Stage Stepper Bar (Chevron Ribbon style matching Krayin view/stages.blade.php) */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 p-2 overflow-hidden">
+            <div className="flex items-center w-full overflow-x-auto rounded-lg py-1 px-1">
+              {stages.map((stage, idx) => {
+                const currentStageSort = stages.find((s) => s.id === selectedLead.lead_pipeline_stage_id)?.sort_order || 0;
+                const stageSort = stage.sort_order || idx;
+                const isPassed = currentStageSort >= stageSort;
+                const isLost = !selectedLead.status;
+                const isFirst = idx === 0;
+
                 return (
                   <button
                     key={stage.id}
-                    onClick={() => handleStageClick(stage.id)}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                      isCurrent
-                        ? "bg-emerald-500 text-white shadow-sm"
-                        : "bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-200"
+                    onClick={() => handleStageClick(stage)}
+                    style={{
+                      clipPath: isFirst
+                        ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
+                        : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)"
+                    }}
+                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${
+                      isLost
+                        ? "bg-red-500 text-white"
+                        : isPassed
+                        ? "bg-[#10b981] text-white"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
                     }`}
                   >
                     {stage.name}
                   </button>
                 );
               })}
+
               <button
-                onClick={handleMarkLost}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-900 hover:bg-red-100 text-gray-600 dark:text-gray-300 hover:text-red-600 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
+                onClick={() => {
+                  setTargetWonLostStage(stages.find(s => s.code === "won") || stages[stages.length - 1]);
+                  setActiveModal("won_lost");
+                }}
+                style={{
+                  clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
+                }}
+                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${
+                  !selectedLead.status
+                    ? "bg-red-500 text-white"
+                    : selectedLead.status && selectedLead.stage_name?.toLowerCase() === "won"
+                    ? "bg-[#10b981] text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                }`}
               >
-                Won/Lost ∨
+                Won/Lost ▾
               </button>
             </div>
           </div>
 
-          {/* Sub-Tabs Filter Navigation */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="flex items-center gap-1 border-b overflow-x-auto px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
+          {/* Sub-Tabs Filter Navigation Bar */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 overflow-hidden">
+            <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
               {(["all", "planned", "notes", "calls", "meetings", "lunches", "files", "emails", "changelogs", "description", "products", "quotes"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -337,8 +419,8 @@ const LeadViewPage: React.FC = () => {
               {(activeTab === "all" || activeTab === "changelogs") && (
                 <div className="space-y-3">
                   {changelogs.map((item) => (
-                    <div key={item.id} className="p-4 bg-gray-50/70 dark:bg-gray-900/40 rounded-xl border border-gray-200/80 dark:border-gray-700/80 flex items-start gap-3">
-                      <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                    <div key={item.id} className="p-4 bg-gray-50/80 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-3">
+                      <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
                         <i className="mgc_settings_line text-base"></i>
                       </div>
                       <div className="space-y-0.5">
@@ -350,24 +432,75 @@ const LeadViewPage: React.FC = () => {
                 </div>
               )}
 
-              {/* NOTES / CALLS / MEETINGS / PLANNED */}
-              {(activeTab === "notes" || activeTab === "calls" || activeTab === "meetings" || activeTab === "planned") && (
+              {/* ACTIVITIES TABS: PLANNED, NOTES, CALLS, MEETINGS, LUNCHES, FILES, EMAILS */}
+              {["planned", "notes", "calls", "meetings", "lunches", "files", "emails"].includes(activeTab) && (
                 <div className="space-y-3">
-                  {leadActivities.filter(a => activeTab === "planned" || a.type === activeTab.replace(/s$/, "")).map((act) => (
-                    <div key={act.id} className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border flex items-start justify-between">
-                      <div>
-                        <span className="text-xs font-bold capitalize bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{act.type}</span>
-                        <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100 mt-1">{act.title}</h4>
-                        {act.comment && <p className="text-xs text-gray-600 mt-1">{act.comment}</p>}
+                  {(() => {
+                    const filtered = leadActivities.filter((a) => {
+                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(a.type) && !a.is_done;
+                      if (activeTab === "notes") return a.type === "note";
+                      if (activeTab === "calls") return a.type === "call";
+                      if (activeTab === "meetings") return a.type === "meeting";
+                      if (activeTab === "lunches") return a.type === "lunch";
+                      if (activeTab === "files") return a.type === "file";
+                      if (activeTab === "emails") return a.type === "email" || a.type === "mail";
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-10 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 capitalize">
+                            No {activeTab} logged for this lead yet.
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Use the quick action buttons (Mail, File, Note, Activity) on the left panel to add data.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((act) => (
+                      <div key={act.id} className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded">
+                              {act.type}
+                            </span>
+                            {act.created_at && (
+                              <span className="text-[11px] text-gray-400">
+                                {new Date(act.created_at).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100">{act.title}</h4>
+                          {act.comment && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{act.comment}</p>}
+                        </div>
+
+                        {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
+                        {["call", "meeting", "lunch"].includes(act.type) && (
+                          <button
+                            onClick={async () => {
+                              await updateActivity(act.id, { is_done: !act.is_done });
+                              fetchActivities(1, 100, "", leadId);
+                            }}
+                            title="Click to toggle Done/Pending"
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                              act.is_done
+                                ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
+                                : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
+                            }`}
+                          >
+                            {act.is_done ? "Done ✓" : "Pending ⏳"}
+                          </button>
+                        )}
                       </div>
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${act.is_done ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                        {act.is_done ? "Done" : "Pending"}
-                      </span>
-                    </div>
-                  ))}
-                  {leadActivities.length === 0 && <p className="text-xs text-gray-400 py-6 text-center">No records in this tab.</p>}
+                    ));
+
+                  })()}
                 </div>
               )}
+
 
               {/* PRODUCTS TAB */}
               {activeTab === "products" && (
@@ -475,86 +608,226 @@ const LeadViewPage: React.FC = () => {
         </div>
       </div>
 
-      {/* QUICK ACTION MODALS (Mail / File / Note / Activity) */}
+      {/* QUICK ACTION & WON/LOST MODALS */}
       {activeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border max-w-md w-full p-6 space-y-4">
-            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 capitalize">
-              {activeModal === "mail" ? "Compose Mail" : activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
-            </h3>
-            <form onSubmit={handleQuickActionSubmit} className="space-y-3">
-              {activeModal === "mail" && (
-                <>
-                  <input
-                    type="email"
-                    required
-                    placeholder="To Email"
-                    value={modalForm.email_to}
-                    onChange={(e) => setModalForm({ ...modalForm, email_to: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Subject"
-                    value={modalForm.email_subject}
-                    onChange={(e) => setModalForm({ ...modalForm, email_subject: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
-                  />
-                  <textarea
-                    rows={4}
-                    placeholder="Message..."
-                    value={modalForm.email_body}
-                    onChange={(e) => setModalForm({ ...modalForm, email_body: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
-                  />
-                </>
-              )}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6 space-y-4">
 
-              {activeModal === "file" && (
-                <input type="file" required className="w-full text-xs text-gray-600" />
-              )}
-
-              {(activeModal === "note" || activeModal === "activity") && (
-                <>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Title"
-                    value={modalForm.title}
-                    onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
-                  />
-                  {activeModal === "activity" && (
-                    <select
-                      value={modalForm.type}
-                      onChange={(e) => setModalForm({ ...modalForm, type: e.target.value })}
-                      className="w-full px-3 py-1.5 border rounded text-xs capitalize"
-                    >
-                      <option value="call">Call</option>
-                      <option value="meeting">Meeting</option>
-                      <option value="lunch">Lunch</option>
-                    </select>
+            {/* WON/LOST STAGE MODAL */}
+            {activeModal === "won_lost" ? (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">
+                  {targetWonLostStage?.code === "won" ? "Mark Lead as Won" : "Mark Lead as Lost"}
+                </h3>
+                <form onSubmit={handleWonLostSubmit} className="space-y-4">
+                  {targetWonLostStage?.code === "won" ? (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Won Value ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={modalForm.won_value}
+                        onChange={(e) => setModalForm({ ...modalForm, won_value: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded text-xs"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Lost Reason *</label>
+                      <textarea
+                        required
+                        rows={3}
+                        placeholder="Why was this lead lost?"
+                        value={modalForm.lost_reason}
+                        onChange={(e) => setModalForm({ ...modalForm, lost_reason: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded text-xs"
+                      />
+                    </div>
                   )}
-                  <textarea
-                    rows={3}
-                    placeholder="Notes..."
-                    value={modalForm.comment}
-                    onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
-                  />
-                </>
-              )}
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 border rounded text-xs font-semibold">
-                  Cancel
-                </button>
-                <button type="submit" className="px-4 py-1.5 bg-[#0088cc] text-white rounded text-xs font-bold">
-                  Submit
-                </button>
-              </div>
-            </form>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Closed At Date & Time</label>
+                    <input
+                      type="datetime-local"
+                      value={modalForm.closed_at}
+                      onChange={(e) => setModalForm({ ...modalForm, closed_at: e.target.value })}
+                      className="w-full px-3 py-1.5 border rounded text-xs"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 border rounded text-xs font-semibold">
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className={`px-4 py-1.5 text-white rounded text-xs font-bold ${
+                        targetWonLostStage?.code === "won" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
+                      }`}
+                    >
+                      Save & Update Stage
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 capitalize">
+                  {activeModal === "mail" ? "Compose Mail" : activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
+                </h3>
+                <form onSubmit={handleQuickActionSubmit} className="space-y-3">
+                  {activeModal === "mail" && (
+                    <>
+                      <input
+                        type="email"
+                        required
+                        placeholder="To Email"
+                        value={modalForm.email_to}
+                        onChange={(e) => setModalForm({ ...modalForm, email_to: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded text-xs"
+                      />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Subject"
+                        value={modalForm.email_subject}
+                        onChange={(e) => setModalForm({ ...modalForm, email_subject: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded text-xs"
+                      />
+                      <textarea
+                        rows={4}
+                        placeholder="Message..."
+                        value={modalForm.email_body}
+                        onChange={(e) => setModalForm({ ...modalForm, email_body: e.target.value })}
+                        className="w-full px-3 py-1.5 border rounded text-xs"
+                      />
+                    </>
+                  )}
+
+                  {activeModal === "file" && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1">Select File *</label>
+                        <input type="file" required className="w-full text-xs text-gray-600 border p-2 rounded" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1">Comment / Description</label>
+                        <input
+                          type="text"
+                          placeholder="File description..."
+                          value={modalForm.comment}
+                          onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
+                          className="w-full px-3 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {(activeModal === "note" || activeModal === "activity") && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1">Title *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Title"
+                          value={modalForm.title}
+                          onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
+                          className="w-full px-3 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+
+                      {activeModal === "activity" && (
+                        <>
+                          <div>
+                            <label className="block text-xs font-semibold mb-1">Participants / Contact Person</label>
+                            <select
+                              value={modalForm.person_id}
+                              onChange={(e) => setModalForm({ ...modalForm, person_id: e.target.value })}
+                              className="w-full px-3 py-1.5 border rounded text-xs"
+                            >
+                              <option value="">Select Participant</option>
+                              {personsList.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-semibold mb-1">Activity Type</label>
+                              <select
+                                value={modalForm.type}
+                                onChange={(e) => setModalForm({ ...modalForm, type: e.target.value })}
+                                className="w-full px-3 py-1.5 border rounded text-xs capitalize"
+                              >
+                                <option value="call">Call</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="lunch">Lunch</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1">Location</label>
+                              <input
+                                type="text"
+                                placeholder="Meeting room / link"
+                                value={modalForm.location || ""}
+                                onChange={(e) => setModalForm({ ...modalForm, location: e.target.value })}
+                                className="w-full px-3 py-1.5 border rounded text-xs"
+                              />
+                            </div>
+                          </div>
+
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-semibold mb-1">Schedule From</label>
+                              <input
+                                type="datetime-local"
+                                value={modalForm.schedule_from || ""}
+                                onChange={(e) => setModalForm({ ...modalForm, schedule_from: e.target.value })}
+                                className="w-full px-3 py-1.5 border rounded text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1">Schedule To</label>
+                              <input
+                                type="datetime-local"
+                                value={modalForm.schedule_to || ""}
+                                onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
+                                className="w-full px-3 py-1.5 border rounded text-xs"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-semibold mb-1">Notes / Comment</label>
+                        <textarea
+                          rows={3}
+                          placeholder="Details..."
+                          value={modalForm.comment}
+                          onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
+                          className="w-full px-3 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+                    </>
+                  )}
+
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 border rounded text-xs font-semibold">
+                      Cancel
+                    </button>
+                    <button type="submit" className="px-4 py-1.5 bg-[#0088cc] text-white rounded text-xs font-bold">
+                      Submit
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+
           </div>
         </div>
       )}

@@ -13,12 +13,15 @@ const getActivities = async (req: Request, res: Response): Promise<void> => {
     connection = await pool.connect();
     const search = String(req.query.search || "");
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.max(1, Number(req.query.limit || req.query.per_page) || 10);
+    const limit = Math.max(1, Number(req.query.limit || req.query.per_page) || 100);
+    const leadId = req.query.lead_id ? Number(req.query.lead_id) : null;
+    const personId = req.query.person_id ? Number(req.query.person_id) : null;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_all_activities($1, $2, $3)",
-      [search, page, limit]
+      "SELECT * FROM public.fn_get_all_activities($1, $2, $3, $4, $5)",
+      [search, page, limit, leadId, personId]
     );
+
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
 

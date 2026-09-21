@@ -21,7 +21,7 @@ export interface ActivityStore {
   loading: boolean;
   error: string | null;
   selectedActivity: IActivity | null;
-  fetchActivities: (page?: number, limit?: number, search?: string) => Promise<void>;
+  fetchActivities: (page?: number, limit?: number, search?: string, leadId?: number) => Promise<void>;
   fetchActivityById: (id: number) => Promise<IActivity | null>;
   addActivity: (data: any) => Promise<any>;
   updateActivity: (id: number, data: any) => Promise<any>;

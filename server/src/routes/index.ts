@@ -11,6 +11,7 @@ import roleRoutes from '@/routes/role.routes';
 import pipelineRoutes from '@/routes/pipeline.routes';
 import sourceRoutes from '@/routes/source.routes';
 import typeRoutes from '@/routes/type.routes';
+import configRoutes from '@/routes/config.routes';
 
 const router = Router();
 
@@ -32,7 +33,12 @@ router.use('/product', productRoutes);
 router.use('/activities', activityRoutes);
 router.use('/activity', activityRoutes);
 
+// Configuration
+router.use('/configuration', configRoutes);
+router.use('/configurations', configRoutes);
+
 // Settings sub-modules
+
 router.use('/groups', groupRoutes);
 router.use('/group', groupRoutes);
 router.use('/roles', roleRoutes);
