@@ -1,26 +1,27 @@
-import { Router } from 'express';
-import { pool } from '@/config/db';
+import { Router, Request, Response } from "express";
+import productService from "@/services/productService";
+import { requireAuth } from "@/middleware/auth";
 
 const router = Router();
 
-router.get('/', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.max(1, Number(req.query.per_page) || 10);
-    const offset = (page - 1) * perPage;
+router.get("/", requireAuth, (req: Request, res: Response) => {
+  productService.getProducts(req, res);
+});
 
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM products');
-    const total = parseInt(countRes.rows[0]?.count || '0', 10);
+router.post("/create", requireAuth, (req: Request, res: Response) => {
+  productService.createProduct(req, res);
+});
 
-    const { rows } = await pool.query(
-      'SELECT * FROM products ORDER BY id DESC LIMIT $1 OFFSET $2',
-      [perPage, offset]
-    );
+router.put("/update/:id", requireAuth, (req: Request, res: Response) => {
+  productService.updateProduct(req, res);
+});
 
-    res.json({ success: true, data: rows, total });
-  } catch (err) {
-    next(err);
-  }
+router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
+  productService.deleteProduct(req, res);
+});
+
+router.get("/:id", requireAuth, (req: Request, res: Response) => {
+  productService.getProductById(req, res);
 });
 
 export default router;

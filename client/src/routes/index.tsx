@@ -21,7 +21,12 @@ const UserViewForm = React.lazy(() => import("../pages/apps/Users/view"));
 
 // apps
 const QuotesPage = React.lazy(() => import("../pages/apps/Quotes"));
+const CreateQuotePage = React.lazy(() => import("../pages/apps/Quotes/create"));
+const EditQuotePage = React.lazy(() => import("../pages/apps/Quotes/edit"));
 const LeadsPage = React.lazy(() => import("../pages/apps/Leads"));
+const CreateLeadPage = React.lazy(() => import("../pages/apps/Leads/create"));
+const EditLeadPage = React.lazy(() => import("../pages/apps/Leads/edit"));
+const ViewLeadPage = React.lazy(() => import("../pages/apps/Leads/view"));
 const PersonsPage = React.lazy(() => import("../pages/apps/Contacts/Persons"));
 const CreatePersonPage = React.lazy(
   () => import("../pages/apps/Contacts/Persons/create"),
@@ -39,7 +44,12 @@ const EditOrganizationPage = React.lazy(
   () => import("../pages/apps/Contacts/Organizations/edit"),
 );
 const ProductsPage = React.lazy(() => import("../pages/apps/Products"));
+const CreateProductPage = React.lazy(() => import("../pages/apps/Products/create"));
+const EditProductPage = React.lazy(() => import("../pages/apps/Products/edit"));
 const ActivitiesPage = React.lazy(() => import("../pages/apps/Activities"));
+const CreateActivityPage = React.lazy(() => import("../pages/apps/Activities/create"));
+const EditActivityPage = React.lazy(() => import("../pages/apps/Activities/edit"));
+
 const MailPage = React.lazy(() => import("../pages/apps/Mail"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
 const GroupsPage = React.lazy(() => import("../pages/apps/Settings/Groups"));
@@ -101,9 +111,39 @@ const crmAppRoutes: RoutesProps[] = [
     route: PrivateRoute,
   },
   {
+    path: "/leads/create",
+    name: "Create Lead",
+    element: <CreateLeadPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/leads/edit/:id",
+    name: "Edit Lead",
+    element: <EditLeadPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/leads/view/:id",
+    name: "View Lead",
+    element: <ViewLeadPage />,
+    route: PrivateRoute,
+  },
+  {
     path: "/quotes",
     name: "Quotes",
     element: <QuotesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/quotes/create",
+    name: "Create Quote",
+    element: <CreateQuotePage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/quotes/edit/:id",
+    name: "Edit Quote",
+    element: <EditQuotePage />,
     route: PrivateRoute,
   },
   {
@@ -116,6 +156,18 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/activities",
     name: "Activities",
     element: <ActivitiesPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/activities/create",
+    name: "Create Activity",
+    element: <CreateActivityPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/activities/edit/:id",
+    name: "Edit Activity",
+    element: <EditActivityPage />,
     route: PrivateRoute,
   },
   {
@@ -158,6 +210,18 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/products",
     name: "Products",
     element: <ProductsPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/products/create",
+    name: "Create Product",
+    element: <CreateProductPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/products/edit/:id",
+    name: "Edit Product",
+    element: <EditProductPage />,
     route: PrivateRoute,
   },
   {
