@@ -26,7 +26,7 @@ const SETTINGS_SECTIONS: SettingCategory[] = [
         title: "Users",
         description: "Add, edit or delete users from CRM",
         icon: "mgc_contacts_line",
-        url: "/management/users",
+        url: "/settings/users",
       },
     ],
   },

@@ -3,8 +3,11 @@ export interface IRole {
   name: string;
   description?: string | null;
   permission_type?: string | null;
+  permissions?: any;
+  created_by?: number | null;
   created_at?: string;
   updated_at?: string;
+  user_count?: number;
 }
 
 export interface Role {
