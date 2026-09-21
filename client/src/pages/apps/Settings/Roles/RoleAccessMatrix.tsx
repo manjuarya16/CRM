@@ -1,20 +1,8 @@
 import React, { useState, useEffect } from "react";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { IRole } from "@/interface";
+import { IRole, MatrixModule } from "@/interface";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
-
-interface MatrixModule {
-  id: string;
-  name: string;
-  slug: string;
-  avatarChar: string;
-  avatarBg: string;
-  viewKey: string;
-  addKey: string;
-  updateKey: string;
-  deleteKey: string;
-}
 
 const MATRIX_MODULES: MatrixModule[] = [
   {

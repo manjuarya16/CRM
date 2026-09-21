@@ -22,6 +22,21 @@ export interface User {
   address_line1?: string;
 }
 
+export interface IUserData {
+  id: number;
+  name: string;
+  email: string;
+  status: boolean;
+  view_permission: "global" | "group" | "individual" | string;
+  role_id: number;
+  role_name?: string;
+  image?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  groups?: Array<{ id: number; name: string }>;
+  group_ids?: number[];
+}
+
 export interface UserFormDataAdd {
   name: string;
   email: string;

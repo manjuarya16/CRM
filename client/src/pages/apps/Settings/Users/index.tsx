@@ -2,24 +2,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { IRole, IGroup } from "@/interface";
+import { IRole, IGroup, IUserData } from "@/interface";
 import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
-
-export interface IUserData {
-  id: number;
-  name: string;
-  email: string;
-  status: boolean;
-  view_permission: "global" | "group" | "individual" | string;
-  role_id: number;
-  role_name?: string;
-  image?: string | null;
-  created_at?: string;
-  updated_at?: string;
-  groups?: Array<{ id: number; name: string }>;
-  group_ids?: number[];
-}
 
 const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<IUserData[]>([]);

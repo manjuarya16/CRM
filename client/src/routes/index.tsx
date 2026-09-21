@@ -163,6 +163,7 @@ export interface RoutesProps {
   name: string;
   element?: RouteProps["element"];
   exact?: boolean;
+  route?: any;
 }
 
 // public routes

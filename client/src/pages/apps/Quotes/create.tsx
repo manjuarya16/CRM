@@ -3,17 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
-
-export interface ITempQuoteItem {
-  product_id: number;
-  sku: string;
-  name: string;
-  quantity: number;
-  price: number;
-  discount_percent: number;
-  tax_percent: number;
-  total: number;
-}
+import { ITempQuoteItem } from "@/interface";
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();

@@ -68,3 +68,34 @@ export interface FlatRole extends Role {
   __isLast: boolean;
   __lastChild: boolean[];
 }
+
+export interface MatrixModule {
+  id: string;
+  name: string;
+  slug: string;
+  avatarChar: string;
+  avatarBg: string;
+  viewKey: string;
+  addKey: string;
+  updateKey: string;
+  deleteKey: string;
+}
+
+export interface RoleFormProps {
+  mode: "create" | "edit";
+}
+
+export interface PermissionTreeViewProps {
+  selectedKeys: string[];
+  onChange: (newKeys: string[]) => void;
+  disabled?: boolean;
+}
+
+export interface TreeNodeItemProps {
+  node: any;
+  level: number;
+  selectedKeys: string[];
+  onToggleKey: (key: string) => void;
+  onToggleNodeBranch: (node: any) => void;
+  disabled?: boolean;
+}
