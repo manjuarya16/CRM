@@ -4,6 +4,10 @@ export interface UserData {
   email: string;
   profile_img?: string;
   role_id?: number;
+  role?: string;
+  role_name?: string;
+  permission_type?: string;
+  permissions?: string[] | any;
   organization_id?: number;
   branch_id?: number;
 }

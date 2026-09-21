@@ -12,11 +12,23 @@ router.post("/create", requireAuth, (req: Request, res: Response) => {
   quoteService.createQuote(req, res);
 });
 
+router.post("/", requireAuth, (req: Request, res: Response) => {
+  quoteService.createQuote(req, res);
+});
+
 router.put("/update/:id", requireAuth, (req: Request, res: Response) => {
   quoteService.updateQuote(req, res);
 });
 
+router.put("/:id", requireAuth, (req: Request, res: Response) => {
+  quoteService.updateQuote(req, res);
+});
+
 router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
+  quoteService.deleteQuote(req, res);
+});
+
+router.delete("/:id", requireAuth, (req: Request, res: Response) => {
   quoteService.deleteQuote(req, res);
 });
 

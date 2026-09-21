@@ -17,3 +17,6 @@ export * from "./productInterface";
 export * from "./activityInterface";
 export * from "./quoteInterface";
 
+export * from "./warehouseInterface";
+export * from "./attributeInterface";
+export * from "./automationInterfaces";

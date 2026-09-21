@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IPipeline, IPipelineStage } from "@/interface";
+import { pipelineSchema } from "@/schemas";
+import { ZodError } from "zod";
 
 const DEFAULT_STAGES: IPipelineStage[] = [
   { name: "New", probability: 0, sort_order: 1 },
@@ -118,21 +120,13 @@ const PipelinesPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      Swal.fire("Error", "Pipeline name is required", "error");
-      return;
-    }
 
-    if (!formData.stages || formData.stages.length === 0) {
-      Swal.fire("Error", "Please add at least one stage", "error");
-      return;
-    }
-
-    setSaving(true);
     try {
+      const validated = pipelineSchema.parse(formData);
+      setSaving(true);
       if (editingPipeline?.id) {
         // Edit / Update
-        await API.put(`/pipelines/${editingPipeline.id}`, formData);
+        await API.put(`/pipelines/${editingPipeline.id}`, validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -142,7 +136,7 @@ const PipelinesPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/pipelines", formData);
+        await API.post("/pipelines", validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -154,6 +148,10 @@ const PipelinesPage: React.FC = () => {
       setIsModalOpen(false);
       fetchPipelines();
     } catch (err: any) {
+      if (err instanceof ZodError) {
+        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        return;
+      }
       Swal.fire(
         "Error",
         err?.response?.data?.message || "Failed to save pipeline",

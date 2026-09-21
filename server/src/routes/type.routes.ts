@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TypeService } from '@/services/type.service';
+import { typeSchema } from '@/schemas/type.schema';
 import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
@@ -28,7 +29,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const type = await TypeService.save(req.body);
+    const validated = typeSchema.parse(req.body);
+    const type = await TypeService.save(validated);
     res.status(201).json({ success: true, data: type });
   } catch (err) {
     next(err);
@@ -37,7 +39,8 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const type = await TypeService.save(req.body, String(req.params.id));
+    const validated = typeSchema.parse(req.body);
+    const type = await TypeService.save(validated, String(req.params.id));
     res.json({ success: true, data: type });
   } catch (err) {
     next(err);

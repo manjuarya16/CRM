@@ -52,63 +52,139 @@ const EditActivityPage = React.lazy(() => import("../pages/apps/Activities/edit"
 
 const MailPage = React.lazy(() => import("../pages/apps/Mail"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
+const UsersPage = React.lazy(() => import("../pages/apps/Settings/Users"));
 const GroupsPage = React.lazy(() => import("../pages/apps/Settings/Groups"));
 const RolesPage = React.lazy(() => import("../pages/apps/Settings/Roles"));
+const CreateRolePage = React.lazy(
+  () => import("../pages/apps/Settings/Roles/create"),
+);
+const EditRolePage = React.lazy(
+  () => import("../pages/apps/Settings/Roles/edit"),
+);
 const PipelinesPage = React.lazy(
   () => import("../pages/apps/Settings/Pipelines"),
 );
 const SourcesPage = React.lazy(() => import("../pages/apps/Settings/Sources"));
 const TypesPage = React.lazy(() => import("../pages/apps/Settings/Types"));
+const WarehousesPage = React.lazy(
+  () => import("../pages/apps/Settings/Warehouses"),
+);
+const CreateWarehousePage = React.lazy(
+  () => import("../pages/apps/Settings/Warehouses/create"),
+);
+const EditWarehousePage = React.lazy(
+  () => import("../pages/apps/Settings/Warehouses/edit"),
+);
+const AttributesPage = React.lazy(
+  () => import("../pages/apps/Settings/Attributes"),
+);
+const CreateAttributePage = React.lazy(
+  () => import("../pages/apps/Settings/Attributes/create"),
+);
+const EditAttributePage = React.lazy(
+  () => import("../pages/apps/Settings/Attributes/edit"),
+);
+
+// 8 New Krayin CRM Settings Modules
+const EmailTemplatesPage = React.lazy(
+  () => import("../pages/apps/Settings/EmailTemplates"),
+);
+const CreateEmailTemplatePage = React.lazy(
+  () => import("../pages/apps/Settings/EmailTemplates/create"),
+);
+const EditEmailTemplatePage = React.lazy(
+  () => import("../pages/apps/Settings/EmailTemplates/edit"),
+);
+
+const EventsPage = React.lazy(
+  () => import("../pages/apps/Settings/Events"),
+);
+const CreateEventPage = React.lazy(
+  () => import("../pages/apps/Settings/Events/create"),
+);
+const EditEventPage = React.lazy(
+  () => import("../pages/apps/Settings/Events/edit"),
+);
+
+const CampaignsPage = React.lazy(
+  () => import("../pages/apps/Settings/Campaigns"),
+);
+const CreateCampaignPage = React.lazy(
+  () => import("../pages/apps/Settings/Campaigns/create"),
+);
+const EditCampaignPage = React.lazy(
+  () => import("../pages/apps/Settings/Campaigns/edit"),
+);
+
+const WebhooksPage = React.lazy(
+  () => import("../pages/apps/Settings/Webhooks"),
+);
+const CreateWebhookPage = React.lazy(
+  () => import("../pages/apps/Settings/Webhooks/create"),
+);
+const EditWebhookPage = React.lazy(
+  () => import("../pages/apps/Settings/Webhooks/edit"),
+);
+
+const WorkflowsPage = React.lazy(
+  () => import("../pages/apps/Settings/Workflows"),
+);
+const CreateWorkflowPage = React.lazy(
+  () => import("../pages/apps/Settings/Workflows/create"),
+);
+const EditWorkflowPage = React.lazy(
+  () => import("../pages/apps/Settings/Workflows/edit"),
+);
+
+const WebFormsPage = React.lazy(
+  () => import("../pages/apps/Settings/WebForms"),
+);
+const CreateWebFormPage = React.lazy(
+  () => import("../pages/apps/Settings/WebForms/create"),
+);
+const EditWebFormPage = React.lazy(
+  () => import("../pages/apps/Settings/WebForms/edit"),
+);
+
+const DataTransferPage = React.lazy(
+  () => import("../pages/apps/Settings/DataTransfer"),
+);
+const GoogleContactsPage = React.lazy(
+  () => import("../pages/apps/Settings/GoogleContacts"),
+);
+
 const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
 );
 const HelpPage = React.lazy(() => import("../pages/apps/Help"));
 
-// error pages
-const Error404 = React.lazy(() => import("../pages/error/Error404"));
-
 export interface RoutesProps {
   path: RouteProps["path"];
-  name?: string;
+  name: string;
   element?: RouteProps["element"];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  route?: any;
   exact?: boolean;
-  icon?: string;
-  header?: string;
-  roles?: string[];
-  moduleKey?: string;
-  children?: RoutesProps[];
 }
 
-// dashboards
-const dashboardRoutes: RoutesProps = {
-  path: "/home",
-  name: "Dashboards",
-  icon: "home",
-  header: "Navigation",
-  children: [
-    {
-      path: "/",
-      name: "Root",
-      element: <Navigate to="/dashboard" />,
-      route: PrivateRoute,
-    },
-    {
-      path: "/dashboard",
-      name: "Dashboard",
-      element: <Dashboard />,
-      route: PrivateRoute,
-    },
-  ],
-};
-
-const crmAppRoutes: RoutesProps[] = [
+// public routes
+const publicRoutes: RoutesProps[] = [
   {
-    path: "/leads",
-    name: "Leads",
-    element: <LeadsPage />,
-    route: PrivateRoute,
+    path: "/auth/login",
+    name: "Login",
+    element: <Login />,
+  },
+];
+
+// auth protected routes
+const authProtectedRoutes: RoutesProps[] = [
+  {
+    path: "/",
+    name: "Root",
+    element: <Navigate to="/dashboard" />,
+  },
+  {
+    path: "/dashboard",
+    name: "Dashboard",
+    element: <Dashboard />,
   },
   {
     path: "/leads/create",
@@ -132,7 +208,6 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/quotes",
     name: "Quotes",
     element: <QuotesPage />,
-    route: PrivateRoute,
   },
   {
     path: "/quotes/create",
@@ -174,43 +249,46 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/contacts/persons",
     name: "Persons",
     element: <PersonsPage />,
-    route: PrivateRoute,
   },
   {
     path: "/contacts/persons/create",
     name: "Create Person",
     element: <CreatePersonPage />,
-    route: PrivateRoute,
   },
   {
-    path: "/contacts/persons/edit/:id",
+    path: "/contacts/persons/:id/edit",
     name: "Edit Person",
     element: <EditPersonPage />,
-    route: PrivateRoute,
   },
   {
     path: "/contacts/organizations",
     name: "Organizations",
     element: <OrganizationsPage />,
-    route: PrivateRoute,
   },
   {
     path: "/contacts/organizations/create",
     name: "Create Organization",
     element: <CreateOrganizationPage />,
-    route: PrivateRoute,
   },
   {
-    path: "/contacts/organizations/edit/:id",
+    path: "/contacts/organizations/:id/edit",
     name: "Edit Organization",
     element: <EditOrganizationPage />,
-    route: PrivateRoute,
   },
   {
     path: "/products",
     name: "Products",
     element: <ProductsPage />,
-    route: PrivateRoute,
+  },
+  {
+    path: "/activities",
+    name: "Activities",
+    element: <ActivitiesPage />,
+  },
+  {
+    path: "/mail",
+    name: "Mail",
+    element: <MailPage />,
   },
   {
     path: "/products/create",
@@ -228,133 +306,229 @@ const crmAppRoutes: RoutesProps[] = [
     path: "/settings",
     name: "Settings",
     element: <SettingsHubPage />,
-    route: PrivateRoute,
+  },
+  {
+    path: "/settings/users",
+    name: "Settings Users",
+    element: <UsersPage />,
   },
   {
     path: "/settings/groups",
-    name: "Groups",
+    name: "Settings Groups",
     element: <GroupsPage />,
-    route: PrivateRoute,
   },
   {
     path: "/settings/roles",
-    name: "Roles",
+    name: "Settings Roles",
     element: <RolesPage />,
-    route: PrivateRoute,
+  },
+  {
+    path: "/settings/roles/create",
+    name: "Create Role",
+    element: <CreateRolePage />,
+  },
+  {
+    path: "/settings/roles/:id/edit",
+    name: "Edit Role",
+    element: <EditRolePage />,
   },
   {
     path: "/settings/pipelines",
-    name: "Pipelines",
+    name: "Settings Pipelines",
     element: <PipelinesPage />,
-    route: PrivateRoute,
   },
   {
     path: "/settings/sources",
-    name: "Sources",
+    name: "Settings Sources",
     element: <SourcesPage />,
-    route: PrivateRoute,
   },
   {
     path: "/settings/types",
-    name: "Types",
+    name: "Settings Types",
     element: <TypesPage />,
-    route: PrivateRoute,
+  },
+  {
+    path: "/settings/warehouses",
+    name: "Settings Warehouses",
+    element: <WarehousesPage />,
+  },
+  {
+    path: "/settings/warehouses/create",
+    name: "Create Warehouse",
+    element: <CreateWarehousePage />,
+  },
+  {
+    path: "/settings/warehouses/:id/edit",
+    name: "Edit Warehouse",
+    element: <EditWarehousePage />,
+  },
+  {
+    path: "/settings/attributes",
+    name: "Settings Attributes",
+    element: <AttributesPage />,
+  },
+  {
+    path: "/settings/attributes/create",
+    name: "Create Attribute",
+    element: <CreateAttributePage />,
+  },
+  {
+    path: "/settings/attributes/:id/edit",
+    name: "Edit Attribute",
+    element: <EditAttributePage />,
+  },
+
+  // 8 New Krayin CRM Settings Modules Routes
+  {
+    path: "/settings/email-templates",
+    name: "Settings Email Templates",
+    element: <EmailTemplatesPage />,
+  },
+  {
+    path: "/settings/email-templates/create",
+    name: "Create Email Template",
+    element: <CreateEmailTemplatePage />,
+  },
+  {
+    path: "/settings/email-templates/:id/edit",
+    name: "Edit Email Template",
+    element: <EditEmailTemplatePage />,
+  },
+  {
+    path: "/settings/events",
+    name: "Settings Events",
+    element: <EventsPage />,
+  },
+  {
+    path: "/settings/events/create",
+    name: "Create Event",
+    element: <CreateEventPage />,
+  },
+  {
+    path: "/settings/events/:id/edit",
+    name: "Edit Event",
+    element: <EditEventPage />,
+  },
+  {
+    path: "/settings/campaigns",
+    name: "Settings Campaigns",
+    element: <CampaignsPage />,
+  },
+  {
+    path: "/settings/campaigns/create",
+    name: "Create Campaign",
+    element: <CreateCampaignPage />,
+  },
+  {
+    path: "/settings/campaigns/:id/edit",
+    name: "Edit Campaign",
+    element: <EditCampaignPage />,
+  },
+  {
+    path: "/settings/webhooks",
+    name: "Settings Webhooks",
+    element: <WebhooksPage />,
+  },
+  {
+    path: "/settings/webhooks/create",
+    name: "Create Webhook",
+    element: <CreateWebhookPage />,
+  },
+  {
+    path: "/settings/webhooks/:id/edit",
+    name: "Edit Webhook",
+    element: <EditWebhookPage />,
+  },
+  {
+    path: "/settings/workflows",
+    name: "Settings Workflows",
+    element: <WorkflowsPage />,
+  },
+  {
+    path: "/settings/workflows/create",
+    name: "Create Workflow",
+    element: <CreateWorkflowPage />,
+  },
+  {
+    path: "/settings/workflows/:id/edit",
+    name: "Edit Workflow",
+    element: <EditWorkflowPage />,
+  },
+  {
+    path: "/settings/web-forms",
+    name: "Settings Web Forms",
+    element: <WebFormsPage />,
+  },
+  {
+    path: "/settings/web-forms/create",
+    name: "Create Web Form",
+    element: <CreateWebFormPage />,
+  },
+  {
+    path: "/settings/web-forms/:id/edit",
+    name: "Edit Web Form",
+    element: <EditWebFormPage />,
+  },
+  {
+    path: "/settings/data-transfer",
+    name: "Settings Data Transfer",
+    element: <DataTransferPage />,
+  },
+  {
+    path: "/settings/google-contacts",
+    name: "Settings Google Contacts",
+    element: <GoogleContactsPage />,
+  },
+
+  {
+    path: "/users",
+    name: "Users",
+    element: <UserManagement />,
+  },
+  {
+    path: "/users/create",
+    name: "Create User",
+    element: <UserCreateForm />,
+  },
+  {
+    path: "/users/edit/:id",
+    name: "Edit User",
+    element: <UserEditForm />,
+  },
+  {
+    path: "/users/view/:id",
+    name: "View User",
+    element: <UserViewForm />,
   },
   {
     path: "/configuration",
     name: "Configuration",
     element: <ConfigurationPage />,
-    route: PrivateRoute,
   },
   {
     path: "/help",
-    name: "Help & Resources",
+    name: "Help",
     element: <HelpPage />,
-    route: PrivateRoute,
   },
 ];
 
-const userManagementRoutes: RoutesProps = {
-  path: "/management/users",
-  name: "User Management",
-  route: PrivateRoute,
-  roles: ["Admin"],
-  icon: "users",
-  moduleKey: "users",
-  element: <UserManagement />,
-  header: "Management",
-  children: [
-    {
-      path: "/management/users/create",
-      name: "Create User",
-      element: <UserCreateForm />,
-      route: PrivateRoute,
-      roles: ["Admin"],
-    },
-    {
-      path: "/management/users/edit/:id",
-      name: "Edit User",
-      element: <UserEditForm />,
-      route: PrivateRoute,
-      roles: ["Admin"],
-    },
-    {
-      path: "/management/users/view/:id",
-      name: "View User",
-      element: <UserViewForm />,
-      route: PrivateRoute,
-      roles: ["Admin"],
-    },
-  ],
-};
+export interface FlattenRouteProps extends RoutesProps {
+  children?: FlattenRouteProps[];
+}
 
-// auth
-const authRoutes: RoutesProps[] = [
-  {
-    path: "/auth/login",
-    name: "Login",
-    element: <Login />,
-    route: Route,
-  },
-];
-
-// public routes
-const otherPublicRoutes = [
-  {
-    path: "*",
-    name: "Error - 404",
-    element: <Error404 />,
-    route: Route,
-  },
-];
-
-// flatten the list of all nested routes
-const flattenRoutes = (routes: RoutesProps[]) => {
-  let flatRoutes: RoutesProps[] = [];
-
+const flattenRoutes = (routes: any[]) => {
+  let flatRoutes: any[] = [];
   routes = routes || [];
-  routes.forEach((item: RoutesProps) => {
+  routes.forEach((item: any) => {
     flatRoutes.push(item);
-    if (typeof item.children !== "undefined") {
+    if (typeof item.children !== 'undefined') {
       flatRoutes = [...flatRoutes, ...flattenRoutes(item.children)];
     }
   });
   return flatRoutes;
 };
 
-// All routes
-const authProtectedRoutes = [
-  dashboardRoutes,
-  ...crmAppRoutes,
-  userManagementRoutes,
-];
-const publicRoutes = [...authRoutes, ...otherPublicRoutes];
+const authProtectedFlattenRoutes = flattenRoutes(authProtectedRoutes);
+const publicProtectedFlattenRoutes = flattenRoutes(publicRoutes);
 
-const authProtectedFlattenRoutes = flattenRoutes([...authProtectedRoutes]);
-const publicProtectedFlattenRoutes = flattenRoutes([...publicRoutes]);
-export {
-  publicRoutes,
-  authProtectedRoutes,
-  authProtectedFlattenRoutes,
-  publicProtectedFlattenRoutes,
-};
+export { authProtectedRoutes, publicRoutes, authProtectedFlattenRoutes, publicProtectedFlattenRoutes };

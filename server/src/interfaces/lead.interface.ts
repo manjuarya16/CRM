@@ -3,7 +3,7 @@ export interface ILead {
   title: string;
   description?: string | null;
   lead_value?: number | null;
-  status?: boolean | null;
+  status?: boolean | number | null;
   lost_reason?: string | null;
   closed_at?: string | null;
   user_id?: number | null;

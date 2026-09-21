@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IType } from "@/interface";
+import { typeSchema } from "@/schemas";
+import { ZodError } from "zod";
 
 const TypesPage: React.FC = () => {
   const [types, setTypes] = useState<IType[]>([]);
@@ -53,16 +55,13 @@ const TypesPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      Swal.fire("Error", "Type name is required", "error");
-      return;
-    }
 
-    setSaving(true);
     try {
+      const validated = typeSchema.parse(formData);
+      setSaving(true);
       if (editingType?.id) {
         // Edit / Update
-        await API.put(`/types/${editingType.id}`, formData);
+        await API.put(`/types/${editingType.id}`, validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -72,7 +71,7 @@ const TypesPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/types", formData);
+        await API.post("/types", validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -84,6 +83,10 @@ const TypesPage: React.FC = () => {
       setIsModalOpen(false);
       fetchTypes();
     } catch (err: any) {
+      if (err instanceof ZodError) {
+        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        return;
+      }
       Swal.fire(
         "Error",
         err?.response?.data?.message || "Failed to save type",

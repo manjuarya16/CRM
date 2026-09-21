@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PipelineService } from '@/services/pipeline.service';
+import { pipelineSchema } from '@/schemas/pipeline.schema';
 import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
@@ -28,7 +29,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const pipeline = await PipelineService.save(req.body);
+    const validated = pipelineSchema.parse(req.body);
+    const pipeline = await PipelineService.save(validated);
     res.status(201).json({ success: true, data: pipeline });
   } catch (err) {
     next(err);
@@ -37,7 +39,8 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const pipeline = await PipelineService.save(req.body, String(req.params.id));
+    const validated = pipelineSchema.parse(req.body);
+    const pipeline = await PipelineService.save(validated, String(req.params.id));
     res.json({ success: true, data: pipeline });
   } catch (err) {
     next(err);

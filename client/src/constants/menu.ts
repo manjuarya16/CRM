@@ -100,7 +100,7 @@ const MENU_ITEMS: MenuItemTypes[] = [
       {
         key: "users",
         label: "Users",
-        url: "/management/users",
+        url: "/settings/users",
         parentKey: "settings",
       },
       {
@@ -119,6 +119,66 @@ const MENU_ITEMS: MenuItemTypes[] = [
         key: "types",
         label: "Types",
         url: "/settings/types",
+        parentKey: "settings",
+      },
+      {
+        key: "warehouses",
+        label: "Warehouses",
+        url: "/settings/warehouses",
+        parentKey: "settings",
+      },
+      {
+        key: "attributes",
+        label: "Attributes",
+        url: "/settings/attributes",
+        parentKey: "settings",
+      },
+      {
+        key: "email-templates",
+        label: "Email Templates",
+        url: "/settings/email-templates",
+        parentKey: "settings",
+      },
+      {
+        key: "events",
+        label: "Events",
+        url: "/settings/events",
+        parentKey: "settings",
+      },
+      {
+        key: "campaigns",
+        label: "Campaigns",
+        url: "/settings/campaigns",
+        parentKey: "settings",
+      },
+      {
+        key: "webhooks",
+        label: "Webhooks",
+        url: "/settings/webhooks",
+        parentKey: "settings",
+      },
+      {
+        key: "workflows",
+        label: "Workflows",
+        url: "/settings/workflows",
+        parentKey: "settings",
+      },
+      {
+        key: "web-forms",
+        label: "Web Forms",
+        url: "/settings/web-forms",
+        parentKey: "settings",
+      },
+      {
+        key: "data-transfer",
+        label: "Data Transfer",
+        url: "/settings/data-transfer",
+        parentKey: "settings",
+      },
+      {
+        key: "google-contacts",
+        label: "Google Contacts",
+        url: "/settings/google-contacts",
         parentKey: "settings",
       },
     ],
@@ -140,4 +200,3 @@ const MENU_ITEMS: MenuItemTypes[] = [
 ];
 
 export { MENU_ITEMS };
-

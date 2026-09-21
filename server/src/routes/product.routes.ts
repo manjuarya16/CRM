@@ -12,11 +12,23 @@ router.post("/create", requireAuth, (req: Request, res: Response) => {
   productService.createProduct(req, res);
 });
 
+router.post("/", requireAuth, (req: Request, res: Response) => {
+  productService.createProduct(req, res);
+});
+
 router.put("/update/:id", requireAuth, (req: Request, res: Response) => {
   productService.updateProduct(req, res);
 });
 
+router.put("/:id", requireAuth, (req: Request, res: Response) => {
+  productService.updateProduct(req, res);
+});
+
 router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
+  productService.deleteProduct(req, res);
+});
+
+router.delete("/:id", requireAuth, (req: Request, res: Response) => {
   productService.deleteProduct(req, res);
 });
 

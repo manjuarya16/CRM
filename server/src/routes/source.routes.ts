@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { SourceService } from '@/services/source.service';
+import { sourceSchema } from '@/schemas/source.schema';
 import { ApiError } from '@/middleware/errorHandler';
 
 const router = Router();
@@ -28,7 +29,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const source = await SourceService.save(req.body);
+    const validated = sourceSchema.parse(req.body);
+    const source = await SourceService.save(validated);
     res.status(201).json({ success: true, data: source });
   } catch (err) {
     next(err);
@@ -37,7 +39,8 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const source = await SourceService.save(req.body, String(req.params.id));
+    const validated = sourceSchema.parse(req.body);
+    const source = await SourceService.save(validated, String(req.params.id));
     res.json({ success: true, data: source });
   } catch (err) {
     next(err);

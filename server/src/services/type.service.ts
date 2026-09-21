@@ -1,59 +1,75 @@
 import { pool } from '@/config/db';
 import { IType } from '@/interfaces/crm.interface';
-import { ApiError } from '@/middleware/errorHandler';
+import { logger } from '@/utils/logger';
+
+const toNumberParam = (v: any): number | null => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 export class TypeService {
+  // DB Function call: get_all_types(p_search)
   public static async getAll(search?: string): Promise<IType[]> {
-    let query = 'SELECT * FROM lead_types';
-    const params: any[] = [];
-
-    if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      query += ` WHERE name ILIKE $${params.length}`;
+    try {
+      const searchTerm = search?.trim() || null;
+      const { rows } = await pool.query(
+        'SELECT get_all_types($1) as result',
+        [searchTerm]
+      );
+      return rows[0]?.result || [];
+    } catch (error: any) {
+      logger.error({ error, search }, 'TypeService.getAll failed');
+      throw error;
     }
-
-    query += ' ORDER BY id DESC';
-
-    const { rows } = await pool.query<IType>(query, params);
-    return rows;
   }
 
+  // DB Function call: get_type(p_id)
   public static async getById(id: number | string): Promise<IType | null> {
-    const { rows } = await pool.query<IType>('SELECT * FROM lead_types WHERE id = $1', [id]);
-    return rows[0] || null;
-  }
+    try {
+      const typeId = toNumberParam(id);
+      if (!typeId) return null;
 
-  // Unified single function for both Add and Edit
-  public static async save(data: { name: string }, id?: number | string): Promise<IType> {
-    if (id) {
-      // Edit / Update
-      const existing = await this.getById(id);
-      if (!existing) {
-        throw new ApiError(404, 'Type not found');
-      }
-
-      const { rows } = await pool.query<IType>(
-        `UPDATE lead_types
-         SET name = $1, updated_at = NOW()
-         WHERE id = $2
-         RETURNING *`,
-        [data.name, id]
+      const { rows } = await pool.query(
+        'SELECT get_type($1) as result',
+        [typeId]
       );
-      return rows[0];
-    } else {
-      // Add / Create
-      const { rows } = await pool.query<IType>(
-        `INSERT INTO lead_types (name, created_at, updated_at)
-         VALUES ($1, NOW(), NOW())
-         RETURNING *`,
-        [data.name]
-      );
-      return rows[0];
+      return rows[0]?.result || null;
+    } catch (error: any) {
+      logger.error({ error, id }, 'TypeService.getById failed');
+      throw error;
     }
   }
 
+  // Unified single DB Function call for Add and Edit: save_type(p_name, p_id)
+  public static async save(data: { name: string }, id?: number | string): Promise<IType> {
+    try {
+      const typeId = toNumberParam(id);
+      const { rows } = await pool.query(
+        'SELECT save_type($1, $2) as result',
+        [data.name.trim(), typeId]
+      );
+      return rows[0]?.result;
+    } catch (error: any) {
+      logger.error({ error, data, id }, 'TypeService.save failed');
+      throw error;
+    }
+  }
+
+  // DB Function call: delete_type(p_id)
   public static async delete(id: number | string): Promise<boolean> {
-    const result = await pool.query('DELETE FROM lead_types WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
+    try {
+      const typeId = toNumberParam(id);
+      if (!typeId) return false;
+
+      const { rows } = await pool.query(
+        'SELECT delete_type($1) as result',
+        [typeId]
+      );
+      return Boolean(rows[0]?.result);
+    } catch (error: any) {
+      logger.error({ error, id }, 'TypeService.delete failed');
+      throw error;
+    }
   }
 }
