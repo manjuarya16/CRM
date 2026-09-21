@@ -96,8 +96,12 @@ const LeadsPage: React.FC = () => {
       const formData = new FormData();
       formData.append("file", uploadFile);
 
-      // Simulate file upload endpoint or create lead from file
-      Swal.fire("Success", `File "${uploadFile.name}" processed successfully. New lead created.`, "success");
+      const response = await API.post("/leads/create-by-ai", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const msg = response.data?.message || `Lead created from "${uploadFile.name}"`;
+      Swal.fire("Success", msg, "success");
       setShowUploadModal(false);
       setUploadFile(null);
       if (viewMode === "kanban") {
@@ -106,11 +110,13 @@ const LeadsPage: React.FC = () => {
         fetchLeads(page, perPage, search);
       }
     } catch (err: any) {
-      Swal.fire("Error", "Failed to upload file", "error");
+      const msg = err.response?.data?.message || "Failed to upload file. Please try again.";
+      Swal.fire("Error", msg, "error");
     } finally {
       setUploading(false);
     }
   };
+
 
   // Helper: Get initials for avatar
   const getInitials = (name?: string) => {
@@ -227,7 +233,19 @@ const LeadsPage: React.FC = () => {
               return (
                 <div
                   key={stage.id}
-                  className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    const leadIdStr = e.dataTransfer.getData("text/plain");
+                    if (!leadIdStr) return;
+                    const leadId = Number(leadIdStr);
+                    await updateLeadStage(leadId, stage.id, true);
+                    fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
+                  }}
+                  className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
                 >
                   {/* Column Header */}
                   <div className="flex items-center justify-between">
@@ -242,7 +260,7 @@ const LeadsPage: React.FC = () => {
                     </div>
 
                     <Link
-                      to="/leads/create"
+                      to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
                       className="p-1 text-gray-400 hover:text-[#0088cc] hover:bg-white dark:hover:bg-gray-800 rounded transition-colors"
                       title={`Quick add lead to ${stage.name}`}
                     >
@@ -265,8 +283,22 @@ const LeadsPage: React.FC = () => {
                         <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent"></div>
                       </div>
                     ) : stageLeads.length === 0 ? (
-                      <div className="text-center py-8 text-xs text-gray-400 font-medium border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-                        No leads in this stage
+                      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
+                        <div className="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
+                          <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">Your Leads List is Empty</h4>
+                          <p className="text-[11px] text-gray-400 leading-tight">Create a lead to organize your goals.</p>
+                        </div>
+                        <Link
+                          to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
+                          className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                        >
+                          Create Lead
+                        </Link>
                       </div>
                     ) : (
                       stageLeads.map((lead) => {
@@ -274,7 +306,11 @@ const LeadsPage: React.FC = () => {
                         return (
                           <div
                             key={lead.id}
-                            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200/60 dark:border-gray-700/60 hover:shadow-md transition-all space-y-3 relative group"
+                            draggable={true}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", String(lead.id));
+                            }}
+                            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200/60 dark:border-gray-700/60 hover:shadow-md transition-all space-y-3 relative group cursor-grab active:cursor-grabbing"
                           >
                             {/* Card Person Avatar & Name */}
                             <div className="flex items-center justify-between">

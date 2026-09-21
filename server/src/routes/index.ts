@@ -22,7 +22,7 @@ import webformRoutes from '@/routes/webform.routes';
 import dataTransferRoutes from '@/routes/dataTransfer.routes';
 import googleContactRoutes from '@/routes/googleContact.routes';
 import userRoutes from '@/routes/user.routes';
-
+import configRoutes from '@/routes/config.routes';
 const router = Router();
 
 router.get('/health', (_req, res) => {
@@ -42,6 +42,10 @@ router.use('/products', productRoutes);
 router.use('/product', productRoutes);
 router.use('/activities', activityRoutes);
 router.use('/activity', activityRoutes);
+
+// Configuration
+router.use('/configuration', configRoutes);
+router.use('/configurations', configRoutes);
 
 // Settings sub-modules
 router.use('/users', userRoutes);
