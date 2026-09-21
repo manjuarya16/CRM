@@ -139,19 +139,26 @@ html[data-menu-color="gradient"] {
                 }
             }
 
-            &:is(.open, .active, :active, :focus) {
+            &:is(.active) {
+                color: $menu-item-active-color;
+                background-color: $menu-item-active-bg;
+                font-weight: 500;
+            }
+
+            &:is(.open, :active, :focus) {
                 color: $menu-item-active-color;
             }
 
             &:is(:hover) {
                 color: $menu-item-hover-color;
+                background-color: $menu-item-hover-bg;
             }
         }
     }
 
     >.menu-item {
         >.menu-link {
-            &:is(.open, .active, :active, :focus) {
+            &:is(.open, :active, :focus) {
                 background-color: $menu-item-active-bg;
             }
 

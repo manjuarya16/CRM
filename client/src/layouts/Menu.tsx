@@ -29,7 +29,9 @@ const MenuItemWithChildren = ({
   toggleMenu,
   ensureParentsOpen,
 }: SubMenus) => {
-  const open = openMenuItems ? openMenuItems.includes(item.key) : activeMenuItems!.includes(item.key);
+  const isItemActive = activeMenuItems ? activeMenuItems.includes(item.key) : false;
+  const isItemOpen = openMenuItems ? openMenuItems.includes(item.key) : false;
+  const open = isItemOpen || isItemActive;
 
   const toggleMenuItem = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -65,7 +67,7 @@ const MenuItemWithChildren = ({
                 <MenuItemWithChildren
                   item={child}
                   linkClassName={`menu-link ${
-                    activeMenuItems!.includes(child.key) ? " active" : ""
+                    activeMenuItems!.includes(child.key) ? "active" : ""
                   }`}
                   activeMenuItems={activeMenuItems}
                   openMenuItems={openMenuItems}
@@ -77,7 +79,7 @@ const MenuItemWithChildren = ({
                 <MenuItem
                   item={child}
                   className="menu-item"
-                  linkClassName={`menu-link ${activeMenuItems!.includes(child.key) ? " active" : ""}`}
+                  linkClassName={`menu-link ${activeMenuItems!.includes(child.key) ? "active" : ""}`}
                   ensureParentsOpen={ensureParentsOpen}
                 />
               )}
@@ -118,8 +120,8 @@ const MenuItemLink = ({ item, className, ensureParentsOpen }: SubMenus) => {
   };
 
   return (
-    <a
-      href={item.url}
+    <Link
+      to={item.url || "/"}
       target={item.target}
       className={`side-nav-link-ref ${className}`}
       onClick={handleClick}
@@ -131,8 +133,51 @@ const MenuItemLink = ({ item, className, ensureParentsOpen }: SubMenus) => {
         </span>
       )}
       <span className="menu-text flex-1 text-left truncate pr-2">{item.label}</span>
-    </a>
+    </Link>
   );
+};
+
+/**
+ * Helper to match current route path against menu tree items
+ */
+const getMatchPath = (url?: string) => {
+  if (!url) return "";
+  return url.endsWith("/") && url.length > 1 ? url.slice(0, -1) : url;
+};
+
+const findMatchingMenuItem = (
+  items: MenuItemTypes[],
+  pathname: string
+): MenuItemTypes | null => {
+  let bestMatch: MenuItemTypes | null = null;
+  let maxLen = -1;
+
+  const currentPath = pathname.endsWith("/") && pathname.length > 1 
+    ? pathname.slice(0, -1) 
+    : pathname;
+
+  const traverse = (itemList: MenuItemTypes[]) => {
+    for (const item of itemList) {
+      if (item.children && item.children.length > 0) {
+        traverse(item.children);
+      } else if (item.url) {
+        const itemUrl = getMatchPath(item.url);
+        if (
+          currentPath === itemUrl ||
+          (itemUrl !== "/" && currentPath.startsWith(itemUrl + "/")) ||
+          (currentPath === "/dashboard" && itemUrl === "/")
+        ) {
+          if (itemUrl.length > maxLen) {
+            maxLen = itemUrl.length;
+            bestMatch = item;
+          }
+        }
+      }
+    }
+  };
+
+  traverse(items);
+  return bestMatch;
 };
 
 /**
@@ -155,19 +200,15 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
    * toggle the menus
    */
   const toggleMenu = (menuItem: MenuItemTypes, show: boolean) => {
-    console.debug("toggleMenu called", menuItem.key, show);
-    // prevent activeMenu effect from immediately overriding our manual toggle
     ignoreActiveMenuRef.current = true;
     setTimeout(() => (ignoreActiveMenuRef.current = false), 400);
     if (show) {
-      // Open this menu and close any other open menus (only one open at a time)
       const keys = [menuItem["key"], ...findAllParent(menuItems, menuItem)];
       setOpenMenuItems(keys);
       try {
         sessionStorage.setItem("openMenuItems", JSON.stringify(keys));
       } catch (e) {}
     } else {
-      // User explicitly closed the parent: remove it from open keys
       setOpenMenuItems((prev) => prev.filter((k) => k !== menuItem.key));
       try {
         const stored = sessionStorage.getItem("openMenuItems");
@@ -186,7 +227,6 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
     const keysSet = new Set<string>();
     keysSet.add(activeMt.key);
     findAllParent(menuItems, activeMt).forEach((p) => keysSet.add(p));
-    // prevent activeMenu from overriding immediately after navigation
     ignoreActiveMenuRef.current = true;
     setTimeout(() => (ignoreActiveMenuRef.current = false), 400);
     setActiveMenuItems(Array.from(keysSet));
@@ -197,123 +237,28 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
   };
 
   /**
-   * activate the menuitems
+   * activate the menuitems based on route
    */
   const activeMenu = useCallback(() => {
     if (ignoreActiveMenuRef.current) return;
-    const div = document.getElementById("main-side-menu");
-    let matchingMenuItems: HTMLElement[] = [];
+    if (!menuItems || menuItems.length === 0) return;
 
-    if (div) {
-      const items: any = div.getElementsByClassName("side-nav-link-ref");
-      for (let i = 0; i < items.length; ++i) {
-        let trimmedURL = location?.pathname?.replaceAll(
-          process.env.PUBLIC_URL || "",
-          "",
-        );
-        const url = items[i].pathname;
-        if (trimmedURL === process.env.PUBLIC_URL + "/") {
-          trimmedURL += "dashboard";
-        }
-        // match exact or prefix so routes like /management/users/edit/1 mark /management/users
-        const itemUrl = url?.replaceAll(process.env.PUBLIC_URL, "");
-        if (
-          itemUrl &&
-          (trimmedURL === itemUrl || trimmedURL.startsWith(itemUrl))
-        ) {
-          matchingMenuItems.push(items[i]);
-        }
-      }
+    const matchedItem = findMatchingMenuItem(menuItems, location.pathname);
+    if (matchedItem) {
+      const keysSet = new Set<string>();
+      keysSet.add(matchedItem.key);
+      const parents = findAllParent(menuItems, matchedItem);
+      parents.forEach((p) => keysSet.add(p));
 
-      if (matchingMenuItems.length > 0) {
-        // Prefer the most specific (longest) matching URL so child routes
-        // like `/apps/stock-management/master` activate the child menu only.
-        const getMatchPath = (el: any) => {
-          const url = el.pathname || "";
-          return (url || "").replaceAll(process.env.PUBLIC_URL || "", "");
-        };
-        let bestMatches = matchingMenuItems;
-        // compute longest path length among matches
-        const maxLen = Math.max(
-          ...matchingMenuItems.map((m: any) => getMatchPath(m).length),
-        );
-        bestMatches = matchingMenuItems.filter(
-          (m: any) => getMatchPath(m).length === maxLen,
-        );
-
-        const keysSet = new Set<string>();
-        for (const matched of bestMatches) {
-          const mid = matched.getAttribute("data-menu-key");
-          const activeMt = findMenuItem(menuItems, mid as any);
-          if (activeMt) {
-            keysSet.add(activeMt["key"]);
-            const parents = findAllParent(menuItems, activeMt);
-            parents.forEach((p) => keysSet.add(p));
-          }
-        }
-
-        console.debug("activeMenu keys", Array.from(keysSet));
-        setActiveMenuItems(Array.from(keysSet));
-        // also open parents for the current route
-        setOpenMenuItems(Array.from(keysSet));
-
-        // scroll to the first activated item
-        setTimeout(function () {
-          const activatedItem = matchingMenuItems[0];
-          if (activatedItem != null) {
-            const simplebarContent = document.querySelector(
-              "#leftside-menu-container .simplebar-content-wrapper",
-            );
-            const offset = activatedItem!.offsetTop - 300;
-            if (simplebarContent && offset > 100) {
-              scrollTo(simplebarContent, offset, 600);
-            }
-          }
-        }, 200);
-
-        // scrollTo (Left Side Bar Active Menu)
-        const easeInOutQuad = (t: number, b: number, c: number, d: number) => {
-          t /= d / 2;
-          if (t < 1) return (c / 2) * t * t + b;
-          t--;
-          return (-c / 2) * (t * (t - 2) - 1) + b;
-        };
-
-        const scrollTo = (element: any, to: any, duration: any) => {
-          const start = element.scrollTop,
-            change = to - start,
-            increment = 20;
-          let currentTime = 0;
-          const animateScroll = function () {
-            currentTime += increment;
-            const val = easeInOutQuad(currentTime, start, change, duration);
-            element.scrollTop = val;
-            if (currentTime < duration) {
-              setTimeout(animateScroll, increment);
-            }
-          };
-          animateScroll();
-        };
-      }
+      const activeArray = Array.from(keysSet);
+      setActiveMenuItems(activeArray);
+      setOpenMenuItems((prev) => Array.from(new Set([...prev, ...activeArray])));
+    } else {
+      setActiveMenuItems([]);
     }
-  }, [location, menuItems]);
+  }, [location.pathname, menuItems]);
 
   useEffect(() => {
-    // Apply any previously manually-opened menu keys (short-lived)
-    try {
-      const stored = sessionStorage.getItem("openMenuItems");
-      if (stored) {
-        const arr = JSON.parse(stored);
-        if (Array.isArray(arr) && arr.length) {
-          setOpenMenuItems(arr);
-          // prevent immediate override by activeMenu
-          ignoreActiveMenuRef.current = true;
-          setTimeout(() => (ignoreActiveMenuRef.current = false), 400);
-          return;
-        }
-      }
-    } catch (e) {}
-
     activeMenu();
   }, [activeMenu]);
 
@@ -327,17 +272,17 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
                 <li className="menu-title">{item.label}</li>
               ) : (
                 <>
-                              {item.children ? (
-                                <MenuItemWithChildren
-                                  item={item}
-                                  toggleMenu={toggleMenu}
-                                  ensureParentsOpen={ensureParentsOpen}
-                                  subMenuClassNames="sub-menu"
-                                  activeMenuItems={activeMenuItems}
-                                  openMenuItems={openMenuItems}
-                                  linkClassName={`menu-link ${activeMenuItems!.includes(item.key) ? "active" : ""}`}
-                                />
-                              ) : (
+                  {item.children ? (
+                    <MenuItemWithChildren
+                      item={item}
+                      toggleMenu={toggleMenu}
+                      ensureParentsOpen={ensureParentsOpen}
+                      subMenuClassNames="sub-menu"
+                      activeMenuItems={activeMenuItems}
+                      openMenuItems={openMenuItems}
+                      linkClassName={`menu-link ${activeMenuItems!.includes(item.key) ? "active" : ""}`}
+                    />
+                  ) : (
                     <MenuItem
                       item={item}
                       linkClassName={`menu-link ${activeMenuItems!.includes(item.key) ? "active" : ""}`}
