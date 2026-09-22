@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useProductStore } from "@/store";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const EditProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +17,7 @@ const EditProductPage: React.FC = () => {
     quantity: "0",
     price: "",
   });
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (id) {
@@ -28,6 +30,17 @@ const EditProductPage: React.FC = () => {
             quantity: String(product.quantity ?? 0),
             price: product.price ? String(product.price) : "",
           });
+          if (product.custom_attributes) {
+            if (typeof product.custom_attributes === "object") {
+              setCustomAttributes(product.custom_attributes);
+            } else if (typeof product.custom_attributes === "string") {
+              try {
+                setCustomAttributes(JSON.parse(product.custom_attributes));
+              } catch {
+                setCustomAttributes({});
+              }
+            }
+          }
         }
         setLoading(false);
       });
@@ -48,7 +61,8 @@ const EditProductPage: React.FC = () => {
         description: formData.description || undefined,
         quantity: Number(formData.quantity) || 0,
         price: formData.price ? Number(formData.price) : undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
       navigate("/products");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to update product", "error");
@@ -130,6 +144,15 @@ const EditProductPage: React.FC = () => {
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
             />
           </div>
+        </div>
+
+        {/* Dynamic Custom Attributes for Products */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="products"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">

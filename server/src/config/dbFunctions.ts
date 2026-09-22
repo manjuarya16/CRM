@@ -816,9 +816,17 @@ CREATE TABLE IF NOT EXISTS warehouses (
     contact_emails JSONB NOT NULL DEFAULT '[]'::jsonb,
     contact_numbers JSONB NOT NULL DEFAULT '[]'::jsonb,
     contact_address JSONB NOT NULL DEFAULT '{}'::jsonb,
+    custom_attributes JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NULL,
     updated_at TIMESTAMPTZ DEFAULT NULL
 );
+
+ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS warehouse_locations (
     id SERIAL PRIMARY KEY,
@@ -844,6 +852,7 @@ BEGIN
         'contact_emails', w.contact_emails,
         'contact_numbers', w.contact_numbers,
         'contact_address', w.contact_address,
+        'custom_attributes', COALESCE(w.custom_attributes, '{}'::jsonb),
         'created_at', w.created_at,
         'updated_at', w.updated_at,
         'locations', COALESCE((
@@ -883,6 +892,7 @@ BEGIN
             'contact_emails', w.contact_emails,
             'contact_numbers', w.contact_numbers,
             'contact_address', w.contact_address,
+            'custom_attributes', COALESCE(w.custom_attributes, '{}'::jsonb),
             'created_at', w.created_at,
             'updated_at', w.updated_at,
             'location_count', COALESCE(COUNT(wl.id), 0)::int
@@ -904,6 +914,8 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS save_warehouse(VARCHAR, TEXT, VARCHAR, JSONB, JSONB, JSONB, INTEGER, JSONB);
+
 CREATE OR REPLACE FUNCTION save_warehouse(
     p_name VARCHAR(255),
     p_description TEXT DEFAULT NULL,
@@ -912,7 +924,8 @@ CREATE OR REPLACE FUNCTION save_warehouse(
     p_contact_numbers JSONB DEFAULT '[]'::jsonb,
     p_contact_address JSONB DEFAULT '{}'::jsonb,
     p_id INTEGER DEFAULT NULL,
-    p_locations JSONB DEFAULT NULL
+    p_locations JSONB DEFAULT NULL,
+    p_custom_attributes JSONB DEFAULT '{}'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -931,6 +944,7 @@ BEGIN
             contact_emails = COALESCE(p_contact_emails, contact_emails),
             contact_numbers = COALESCE(p_contact_numbers, contact_numbers),
             contact_address = COALESCE(p_contact_address, contact_address),
+            custom_attributes = COALESCE(p_custom_attributes, custom_attributes),
             updated_at = NOW()
         WHERE id = p_id
         RETURNING id INTO v_warehouse_id;
@@ -941,10 +955,10 @@ BEGIN
     ELSE
         -- Add new warehouse
         INSERT INTO warehouses (
-            name, description, contact_name, contact_emails, contact_numbers, contact_address, created_at, updated_at
+            name, description, contact_name, contact_emails, contact_numbers, contact_address, custom_attributes, created_at, updated_at
         )
         VALUES (
-            p_name, p_description, p_contact_name, COALESCE(p_contact_emails, '[]'::jsonb), COALESCE(p_contact_numbers, '[]'::jsonb), COALESCE(p_contact_address, '{}'::jsonb), NOW(), NOW()
+            p_name, p_description, p_contact_name, COALESCE(p_contact_emails, '[]'::jsonb), COALESCE(p_contact_numbers, '[]'::jsonb), COALESCE(p_contact_address, '{}'::jsonb), COALESCE(p_custom_attributes, '{}'::jsonb), NOW(), NOW()
         )
         RETURNING id INTO v_warehouse_id;
     END IF;
@@ -963,9 +977,10 @@ BEGIN
             END IF;
 
             IF v_loc_name IS NOT NULL AND v_loc_name != '' THEN
-                INSERT INTO warehouse_locations (warehouse_id, name, created_at, updated_at)
-                VALUES (v_warehouse_id, v_loc_name, NOW(), NOW())
-                ON CONFLICT (warehouse_id, name) DO NOTHING;
+                IF NOT EXISTS (SELECT 1 FROM warehouse_locations WHERE warehouse_id = v_warehouse_id AND name = v_loc_name) THEN
+                    INSERT INTO warehouse_locations (warehouse_id, name, created_at, updated_at)
+                    VALUES (v_warehouse_id, v_loc_name, NOW(), NOW());
+                END IF;
             END IF;
         END LOOP;
     END IF;
@@ -1061,7 +1076,8 @@ $$;
 CREATE OR REPLACE FUNCTION get_all_attributes(
     p_search TEXT DEFAULT NULL,
     p_entity_type TEXT DEFAULT NULL,
-    p_type TEXT DEFAULT NULL
+    p_type TEXT DEFAULT NULL,
+    p_quick_add BOOLEAN DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1102,6 +1118,7 @@ BEGIN
         WHERE (p_search IS NULL OR p_search = '' OR a.name ILIKE '%' || p_search || '%' OR a.code ILIKE '%' || p_search || '%')
           AND (p_entity_type IS NULL OR p_entity_type = '' OR p_entity_type = 'all' OR a.entity_type = p_entity_type)
           AND (p_type IS NULL OR p_type = '' OR p_type = 'all' OR a.type = p_type)
+          AND (p_quick_add IS NULL OR a.quick_add = p_quick_add)
         ORDER BY a.sort_order ASC, a.id DESC
     ) sub;
 
@@ -2344,7 +2361,110 @@ BEGIN
     )
     RETURNING id INTO v_id;
 
-    RETURN (SELECT jsonb_build_object('id', v_id, 'total_contacts', COALESCE(p_total, 0), 'status', 'completed'));
+    RETURN jsonb_build_object('id', v_id);
+END;
+$$;
+
+
+-- ==========================================================
+-- 20. TAGS DB FUNCTIONS
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    color VARCHAR(50) DEFAULT '#0088cc',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION get_tag(p_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', t.id,
+        'name', t.name,
+        'color', t.color,
+        'created_at', t.created_at,
+        'updated_at', t.updated_at
+    ) INTO v_result
+    FROM tags t
+    WHERE t.id = p_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION get_all_tags(p_search TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT COALESCE(jsonb_agg(row_data), '[]'::jsonb) INTO v_result
+    FROM (
+        SELECT jsonb_build_object(
+            'id', t.id,
+            'name', t.name,
+            'color', t.color,
+            'created_at', t.created_at,
+            'updated_at', t.updated_at
+        ) AS row_data
+        FROM tags t
+        WHERE (p_search IS NULL OR p_search = '' OR t.name ILIKE '%' || p_search || '%')
+        ORDER BY t.name ASC
+    ) sub;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION save_tag(
+    p_name VARCHAR(255),
+    p_color VARCHAR(50) DEFAULT '#0088cc',
+    p_id INTEGER DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id INTEGER;
+BEGIN
+    IF p_id IS NOT NULL AND p_id > 0 THEN
+        UPDATE tags
+        SET name = COALESCE(p_name, name),
+            color = COALESCE(p_color, color),
+            updated_at = NOW()
+        WHERE id = p_id
+        RETURNING id INTO v_id;
+
+        IF v_id IS NULL THEN
+            RAISE EXCEPTION 'Tag with ID % not found', p_id;
+        END IF;
+    ELSE
+        INSERT INTO tags (name, color, created_at, updated_at)
+        VALUES (p_name, COALESCE(p_color, '#0088cc'), NOW(), NOW())
+        RETURNING id INTO v_id;
+    END IF;
+
+    RETURN get_tag(v_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION delete_tag(p_id INTEGER)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_deleted INTEGER;
+BEGIN
+    DELETE FROM tags WHERE id = p_id;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RETURN v_deleted > 0;
 END;
 $$;
 `;

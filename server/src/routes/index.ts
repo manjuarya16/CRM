@@ -21,6 +21,7 @@ import workflowRoutes from '@/routes/workflow.routes';
 import webformRoutes from '@/routes/webform.routes';
 import dataTransferRoutes from '@/routes/dataTransfer.routes';
 import googleContactRoutes from '@/routes/googleContact.routes';
+import tagRoutes from '@/routes/tag.routes';
 import userRoutes from '@/routes/user.routes';
 import configRoutes from '@/routes/config.routes';
 const router = Router();
@@ -82,6 +83,8 @@ router.use('/web-forms', webformRoutes);
 router.use('/web-form', webformRoutes);
 router.use('/data-transfer', dataTransferRoutes);
 router.use('/google-contacts', googleContactRoutes);
+router.use('/tags', tagRoutes);
+router.use('/tag', tagRoutes);
 
 router.use('/', authRoutes);
 

@@ -10,7 +10,7 @@ const router = Router();
 const upload = multer({
   dest: path.join(process.cwd(), "uploads", "leads"),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: any) => {
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/bmp"];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);

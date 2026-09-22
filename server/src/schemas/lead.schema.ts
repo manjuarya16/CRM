@@ -11,6 +11,7 @@ export const leadSchema = z.object({
   lead_type_id: z.coerce.number().optional().nullable(),
   lead_pipeline_id: z.coerce.number().optional().nullable(),
   lead_pipeline_stage_id: z.coerce.number().optional().nullable(),
+  custom_attributes: z.any().optional().default({}),
 });
 
 export type LeadInput = z.infer<typeof leadSchema>;

@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useProductStore } from "@/store";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const CreateProductPage: React.FC = () => {
   const navigate = useNavigate();
   const { addProduct } = useProductStore();
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [formData, setFormData] = useState({
     sku: "",
     name: "",
@@ -29,7 +31,8 @@ const CreateProductPage: React.FC = () => {
         description: formData.description || undefined,
         quantity: Number(formData.quantity) || 0,
         price: formData.price ? Number(formData.price) : undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
       navigate("/products");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to create product", "error");
@@ -106,6 +109,15 @@ const CreateProductPage: React.FC = () => {
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
             />
           </div>
+        </div>
+
+        {/* Dynamic Custom Attributes for Products */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="products"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">

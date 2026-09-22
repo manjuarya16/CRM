@@ -9,6 +9,7 @@ export const warehouseSchema = z.object({
   contact_numbers: z.any().optional().default([]),
   contact_address: z.any().optional().default({}),
   locations: z.array(z.any()).optional().default([]),
+  custom_attributes: z.record(z.string(), z.any()).optional().default({}),
 });
 
 export const warehouseSchemaResolver = zodResolver(warehouseSchema);

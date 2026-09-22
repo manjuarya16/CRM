@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import API from "@/config";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 interface ProductRow {
   id?: number; // existing product record ID (for update)
@@ -29,7 +30,7 @@ const getPersonEmail = (person: any): string => {
       return emails[0].value;
     }
     if (typeof emails === "string") return emails;
-  } catch (e) {}
+  } catch (e) { }
   return "";
 };
 
@@ -62,6 +63,7 @@ const EditLeadPage: React.FC = () => {
     lead_pipeline_stage_id: "",
     expected_close_date: "",
   });
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   // Tab 2 â€“ Contact Person
   const [personMode, setPersonMode] = useState<"existing" | "new">("existing");
@@ -81,9 +83,9 @@ const EditLeadPage: React.FC = () => {
     fetchSources();
     fetchTypes();
     fetchPipelines();
-    API.get("/persons?limit=100").then((r) => { if (r.data?.data) setPersons(r.data.data); }).catch(() => {});
-    API.get("/organizations?limit=100").then((r) => { if (r.data?.data) setOrganizations(r.data.data); }).catch(() => {});
-    API.get("/products?limit=200").then((r) => { if (r.data?.data) setProducts(r.data.data); }).catch(() => {});
+    API.get("/persons?limit=100").then((r) => { if (r.data?.data) setPersons(r.data.data); }).catch(() => { });
+    API.get("/organizations?limit=100").then((r) => { if (r.data?.data) setOrganizations(r.data.data); }).catch(() => { });
+    API.get("/products?limit=200").then((r) => { if (r.data?.data) setProducts(r.data.data); }).catch(() => { });
 
     if (id) {
       setLoading(true);
@@ -104,6 +106,17 @@ const EditLeadPage: React.FC = () => {
           if (lead.person_id) {
             setPersonId(String(lead.person_id));
             setPersonMode("existing");
+          }
+          if (lead.custom_attributes) {
+            if (typeof lead.custom_attributes === "object") {
+              setCustomAttributes(lead.custom_attributes);
+            } else if (typeof lead.custom_attributes === "string") {
+              try {
+                setCustomAttributes(JSON.parse(lead.custom_attributes));
+              } catch {
+                setCustomAttributes({});
+              }
+            }
           }
           fetchStages(lead.lead_pipeline_id || undefined);
         }
@@ -183,9 +196,9 @@ const EditLeadPage: React.FC = () => {
 
   const filteredPersons = personSearch
     ? persons.filter((p) =>
-        p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
-        (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
-      )
+      p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
+      (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
+    )
     : persons;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -289,11 +302,10 @@ const EditLeadPage: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? "text-[#0088cc] border-[#0088cc]"
-                  : "text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-800 dark:hover:text-white hover:border-gray-300"
-              }`}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
+                ? "text-[#0088cc] border-[#0088cc]"
+                : "text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-800 dark:hover:text-white hover:border-gray-300"
+                }`}
             >
               {tab.label}
             </button>
@@ -573,7 +585,7 @@ const EditLeadPage: React.FC = () => {
           </div>
         </div>
       </form>
-    </div>
+    </div >
   );
 };
 

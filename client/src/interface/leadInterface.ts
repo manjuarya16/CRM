@@ -22,6 +22,7 @@ export interface ILead {
   type_name?: string;
   user_name?: string;
   total_count?: number;
+  custom_attributes?: Record<string, any>;
 }
 
 export interface ILeadSource {
