@@ -98,6 +98,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       lead_pipeline_stage_id,
       expected_close_date,
       products,         // [{ product_id, quantity, price }]
+      custom_attributes,
     } = req.body;
 
     // Resolve person_id: use existing or create new person inline
@@ -139,6 +140,15 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
     );
 
     const lead = result.rows[0];
+
+    if (lead && custom_attributes !== undefined) {
+      const customAttrsJson = JSON.stringify(custom_attributes || {});
+      await connection.query(
+        "UPDATE leads SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, lead.id]
+      );
+      lead.custom_attributes = custom_attributes;
+    }
 
     // Optionally set stage
     if (lead && lead_pipeline_stage_id) {

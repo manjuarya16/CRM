@@ -307,6 +307,28 @@ const LeadViewPage: React.FC = () => {
                     {selectedLead.expected_close_date ? new Date(selectedLead.expected_close_date).toLocaleDateString() : "-"}
                   </span>
                 </div>
+                {(() => {
+                  let attrs: Record<string, any> = {};
+                  if (selectedLead.custom_attributes) {
+                    if (typeof selectedLead.custom_attributes === "object") {
+                      attrs = selectedLead.custom_attributes;
+                    } else if (typeof selectedLead.custom_attributes === "string") {
+                      try { attrs = JSON.parse(selectedLead.custom_attributes); } catch {}
+                    }
+                  }
+                  if (Object.keys(attrs).length === 0) return null;
+                  return (
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                      <p className="font-semibold text-gray-700 dark:text-gray-300 text-[11px] uppercase tracking-wider">Custom Attributes</p>
+                      {Object.entries(attrs).map(([k, v]) => (
+                        <div key={k} className="flex justify-between">
+                          <span className="text-gray-500 capitalize">{k.replace(/_/g, " ")}</span>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">{String(v ?? "-")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
