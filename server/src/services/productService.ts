@@ -58,9 +58,15 @@ const getProductById = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const productData = result.rows[0];
+    if (productData && (productData.custom_attributes === undefined || productData.custom_attributes === null)) {
+      const pRes = await connection.query("SELECT custom_attributes FROM products WHERE id = $1", [id]);
+      productData.custom_attributes = pRes.rows[0]?.custom_attributes || {};
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      data: result.rows[0],
+      data: productData,
     });
   } catch (error: any) {
     logger.error(error);
@@ -83,7 +89,8 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
       description,
       quantity,
       price,
-    }: IProductCreateInput = req.body;
+      custom_attributes,
+    }: IProductCreateInput & { custom_attributes?: any } = req.body;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
@@ -96,10 +103,20 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const createdProduct = result.rows[0];
+    if (createdProduct?.id && custom_attributes) {
+      const customAttrsJson = JSON.stringify(custom_attributes);
+      await connection.query(
+        "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, createdProduct.id]
+      );
+      createdProduct.custom_attributes = custom_attributes;
+    }
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Product created successfully",
-      data: result.rows[0],
+      data: createdProduct,
     });
   } catch (error: any) {
     logger.error(error);
@@ -123,7 +140,8 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
       description,
       quantity,
       price,
-    }: IProductUpdateInput = req.body;
+      custom_attributes,
+    }: IProductUpdateInput & { custom_attributes?: any } = req.body;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_product($1, $2, $3, $4, $5, $6)",
@@ -137,10 +155,20 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const updatedProduct = result.rows[0];
+    if (id && custom_attributes !== undefined) {
+      const customAttrsJson = JSON.stringify(custom_attributes || {});
+      await connection.query(
+        "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, id]
+      );
+      if (updatedProduct) updatedProduct.custom_attributes = custom_attributes;
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: "Product updated successfully",
-      data: result.rows[0],
+      data: updatedProduct,
     });
   } catch (error: any) {
     logger.error(error);

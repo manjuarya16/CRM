@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import API from "@/config";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const EditLeadPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +29,7 @@ const EditLeadPage: React.FC = () => {
     lead_pipeline_stage_id: "",
     expected_close_date: "",
   });
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   useEffect(() => {
     fetchSources();
@@ -54,6 +56,17 @@ const EditLeadPage: React.FC = () => {
             lead_pipeline_stage_id: lead.lead_pipeline_stage_id ? String(lead.lead_pipeline_stage_id) : "",
             expected_close_date: lead.expected_close_date ? lead.expected_close_date.substring(0, 10) : "",
           });
+          if (lead.custom_attributes) {
+            if (typeof lead.custom_attributes === "object") {
+              setCustomAttributes(lead.custom_attributes);
+            } else if (typeof lead.custom_attributes === "string") {
+              try {
+                setCustomAttributes(JSON.parse(lead.custom_attributes));
+              } catch {
+                setCustomAttributes({});
+              }
+            }
+          }
         }
         setLoading(false);
       });
@@ -91,7 +104,8 @@ const EditLeadPage: React.FC = () => {
         lead_pipeline_id: formData.lead_pipeline_id ? Number(formData.lead_pipeline_id) : undefined,
         lead_pipeline_stage_id: formData.lead_pipeline_stage_id ? Number(formData.lead_pipeline_stage_id) : undefined,
         expected_close_date: formData.expected_close_date || undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
       navigate("/leads");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to update lead", "error");
@@ -269,6 +283,15 @@ const EditLeadPage: React.FC = () => {
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
             />
           </div>
+        </div>
+
+        {/* Dynamic Custom Attributes for Leads */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="leads"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">

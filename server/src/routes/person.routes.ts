@@ -12,7 +12,7 @@ router.get('/', async (req, res, next) => {
     const search = req.query.search ? String(req.query.search) : undefined;
 
     const result = await PersonService.getAll({ page, perPage, search });
-    res.json({ success: true, ...result });
+    res.json({ success: true, data: result.rows, rows: result.rows, total: result.total });
   } catch (err) {
     next(err);
   }

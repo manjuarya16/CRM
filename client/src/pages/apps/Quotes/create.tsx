@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
 import { ITempQuoteItem } from "@/interface";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ const CreateQuotePage: React.FC = () => {
   const [persons, setPersons] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   // Quote Header state
   const [formData, setFormData] = useState({
@@ -135,7 +137,8 @@ const CreateQuotePage: React.FC = () => {
         sub_total: rawSubTotal,
         grand_total: grandTotal,
         expired_at: formData.expired_at || undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
 
       // 2. Add items to created quote
       if (created?.id && items.length > 0) {
@@ -224,6 +227,15 @@ const CreateQuotePage: React.FC = () => {
                 className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
               />
             </div>
+          </div>
+
+          {/* Dynamic Custom Attributes for Quotes */}
+          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+            <DynamicAttributeFields
+              entityType="quotes"
+              values={customAttributes}
+              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            />
           </div>
         </div>
 

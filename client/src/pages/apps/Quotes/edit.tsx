@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const EditQuotePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ const EditQuotePage: React.FC = () => {
     tax_amount: "0",
     adjustment_amount: "0",
   });
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [newItem, setNewItem] = useState({
     product_id: "",
@@ -54,6 +56,17 @@ const EditQuotePage: React.FC = () => {
             tax_amount: q.tax_amount ? String(q.tax_amount) : "0",
             adjustment_amount: q.adjustment_amount ? String(q.adjustment_amount) : "0",
           });
+          if (q.custom_attributes) {
+            if (typeof q.custom_attributes === "object") {
+              setCustomAttributes(q.custom_attributes);
+            } else if (typeof q.custom_attributes === "string") {
+              try {
+                setCustomAttributes(JSON.parse(q.custom_attributes));
+              } catch {
+                setCustomAttributes({});
+              }
+            }
+          }
         }
         setLoading(false);
       });
@@ -137,7 +150,8 @@ const EditQuotePage: React.FC = () => {
         sub_total: rawSubTotal,
         grand_total: grandTotal,
         expired_at: formData.expired_at || undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
 
       navigate("/quotes");
     } catch (error: any) {
@@ -369,6 +383,15 @@ const EditQuotePage: React.FC = () => {
               <span>Grand Total:</span>
               <span className="text-[#0088cc]">${grandTotal.toFixed(2)}</span>
             </div>
+          </div>
+
+          {/* Dynamic Custom Attributes for Quotes */}
+          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+            <DynamicAttributeFields
+              entityType="quotes"
+              values={customAttributes}
+              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            />
           </div>
         </div>
 

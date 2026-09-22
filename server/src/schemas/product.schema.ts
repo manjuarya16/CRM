@@ -6,6 +6,7 @@ export const productSchema = z.object({
   description: z.string().optional().nullable(),
   quantity: z.coerce.number().min(0, 'Quantity cannot be negative').optional().default(0),
   price: z.coerce.number().min(0, 'Price cannot be negative').optional().nullable(),
+  custom_attributes: z.any().optional().default({}),
 });
 
 export type ProductInput = z.infer<typeof productSchema>;

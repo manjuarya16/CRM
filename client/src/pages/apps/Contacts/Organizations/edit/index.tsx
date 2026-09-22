@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { OrganizationFormData } from "@/interface";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const COUNTRIES = [
   "United States",
@@ -44,6 +45,7 @@ const EditOrganizationPage: React.FC = () => {
     user_id: "",
   });
 
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
@@ -83,6 +85,17 @@ const EditOrganizationPage: React.FC = () => {
           postcode: addrObj.postcode || "",
           user_id: org.user_id ? String(org.user_id) : "",
         });
+        if (org.custom_attributes) {
+          if (typeof org.custom_attributes === "object") {
+            setCustomAttributes(org.custom_attributes);
+          } else if (typeof org.custom_attributes === "string") {
+            try {
+              setCustomAttributes(JSON.parse(org.custom_attributes));
+            } catch {
+              setCustomAttributes({});
+            }
+          }
+        }
       }
     } catch (e: any) {
       console.error(e);
@@ -117,6 +130,7 @@ const EditOrganizationPage: React.FC = () => {
           postcode: formData.postcode.trim(),
         },
         user_id: formData.user_id ? Number(formData.user_id) : null,
+        custom_attributes: customAttributes,
       };
 
       const res = await API.put(`/organization/${id}`, payload);
@@ -299,6 +313,15 @@ const EditOrganizationPage: React.FC = () => {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Dynamic Custom Attributes for Organizations */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="organizations"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
       </form>
     </div>

@@ -58,9 +58,15 @@ const getLeadById = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const leadData = result.rows[0];
+    if (leadData && (leadData.custom_attributes === undefined || leadData.custom_attributes === null)) {
+      const lRes = await connection.query("SELECT custom_attributes FROM leads WHERE id = $1", [id]);
+      leadData.custom_attributes = lRes.rows[0]?.custom_attributes || {};
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      data: result.rows[0],
+      data: leadData,
     });
   } catch (error: any) {
     logger.error(error);
@@ -87,7 +93,8 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       lead_type_id,
       lead_pipeline_id,
       expected_close_date,
-    }: ILeadCreateInput = req.body;
+      custom_attributes,
+    }: ILeadCreateInput & { custom_attributes?: any } = req.body;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
@@ -104,10 +111,20 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const createdLead = result.rows[0];
+    if (createdLead?.id && custom_attributes) {
+      const customAttrsJson = JSON.stringify(custom_attributes);
+      await connection.query(
+        "UPDATE leads SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, createdLead.id]
+      );
+      createdLead.custom_attributes = custom_attributes;
+    }
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Lead created successfully",
-      data: result.rows[0],
+      data: createdLead,
     });
   } catch (error: any) {
     logger.error(error);
@@ -138,7 +155,8 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       lead_pipeline_id,
       lead_pipeline_stage_id,
       expected_close_date,
-    }: ILeadUpdateInput = req.body;
+      custom_attributes,
+    }: ILeadUpdateInput & { custom_attributes?: any } = req.body;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
@@ -159,10 +177,20 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const updatedLead = result.rows[0];
+    if (id && custom_attributes !== undefined) {
+      const customAttrsJson = JSON.stringify(custom_attributes || {});
+      await connection.query(
+        "UPDATE leads SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, id]
+      );
+      if (updatedLead) updatedLead.custom_attributes = custom_attributes;
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: "Lead updated successfully",
-      data: result.rows[0],
+      data: updatedLead,
     });
   } catch (error: any) {
     logger.error(error);

@@ -48,3 +48,7 @@ export interface IAttribute {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface AttributeFormProps {
+  isEdit?: boolean;
+}

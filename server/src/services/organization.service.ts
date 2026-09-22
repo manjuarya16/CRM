@@ -43,16 +43,17 @@ export class OrganizationService {
     }
   }
 
-  public static async create(data: CreateOrganizationInput): Promise<IOrganization> {
+  public static async create(data: CreateOrganizationInput & { custom_attributes?: any }): Promise<IOrganization> {
     try {
       const addressJson = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
+      const customAttrsJson = typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : (data.custom_attributes || '{}');
       const userId = toNumberParam(data.user_id);
 
       const { rows } = await pool.query<IOrganization>(
-        `INSERT INTO organizations (name, address, user_id, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), NOW())
+        `INSERT INTO organizations (name, address, user_id, custom_attributes, created_at, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, NOW(), NOW())
          RETURNING *`,
-        [data.name.trim(), addressJson || null, userId]
+        [data.name.trim(), addressJson || null, userId, customAttrsJson]
       );
       return rows[0];
     } catch (error: any) {
@@ -61,7 +62,7 @@ export class OrganizationService {
     }
   }
 
-  public static async update(id: number | string, data: UpdateOrganizationInput): Promise<IOrganization> {
+  public static async update(id: number | string, data: UpdateOrganizationInput & { custom_attributes?: any }): Promise<IOrganization> {
     try {
       const orgId = toNumberParam(id);
       if (!orgId) throw new ApiError(404, 'Organization not found');
@@ -77,13 +78,16 @@ export class OrganizationService {
         address = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
       }
       const userId = data.user_id !== undefined ? toNumberParam(data.user_id) : existing.user_id;
+      const customAttrsJson = data.custom_attributes !== undefined
+        ? (typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : data.custom_attributes)
+        : JSON.stringify(existing.custom_attributes || {});
 
       const { rows } = await pool.query<IOrganization>(
         `UPDATE organizations 
-         SET name = $1, address = $2, user_id = $3, updated_at = NOW()
-         WHERE id = $4
+         SET name = $1, address = $2, user_id = $3, custom_attributes = $4::jsonb, updated_at = NOW()
+         WHERE id = $5
          RETURNING *`,
-        [name, address, userId, orgId]
+        [name, address, userId, customAttrsJson, orgId]
       );
       return rows[0];
     } catch (error: any) {

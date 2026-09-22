@@ -3,12 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import API from "@/config";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const CreateLeadPage: React.FC = () => {
   const navigate = useNavigate();
   const { addLead, sources, types, pipelines, fetchSources, fetchTypes, fetchPipelines } = useLeadStore();
   const [persons, setPersons] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -46,7 +48,8 @@ const CreateLeadPage: React.FC = () => {
         lead_type_id: formData.lead_type_id ? Number(formData.lead_type_id) : undefined,
         lead_pipeline_id: formData.lead_pipeline_id ? Number(formData.lead_pipeline_id) : undefined,
         expected_close_date: formData.expected_close_date || undefined,
-      });
+        custom_attributes: customAttributes,
+      } as any);
       navigate("/leads");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to create lead", "error");
@@ -168,6 +171,15 @@ const CreateLeadPage: React.FC = () => {
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
             />
           </div>
+        </div>
+
+        {/* Dynamic Custom Attributes for Leads */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="leads"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">

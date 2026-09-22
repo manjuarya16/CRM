@@ -152,6 +152,9 @@ const DataTransferPage = React.lazy(
 const GoogleContactsPage = React.lazy(
   () => import("../pages/apps/Settings/GoogleContacts"),
 );
+const TagsPage = React.lazy(
+  () => import("../pages/apps/Settings/Tags"),
+);
 
 const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
@@ -262,6 +265,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditPersonPage />,
   },
   {
+    path: "/contacts/persons/edit/:id",
+    name: "Edit Person",
+    element: <EditPersonPage />,
+  },
+  {
     path: "/contacts/organizations",
     name: "Organizations",
     element: <OrganizationsPage />,
@@ -273,6 +281,11 @@ const authProtectedRoutes: RoutesProps[] = [
   },
   {
     path: "/contacts/organizations/:id/edit",
+    name: "Edit Organization",
+    element: <EditOrganizationPage />,
+  },
+  {
+    path: "/contacts/organizations/edit/:id",
     name: "Edit Organization",
     element: <EditOrganizationPage />,
   },
@@ -334,6 +347,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditRolePage />,
   },
   {
+    path: "/settings/roles/edit/:id",
+    name: "Edit Role",
+    element: <EditRolePage />,
+  },
+  {
     path: "/settings/pipelines",
     name: "Settings Pipelines",
     element: <PipelinesPage />,
@@ -364,6 +382,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditWarehousePage />,
   },
   {
+    path: "/settings/warehouses/edit/:id",
+    name: "Edit Warehouse",
+    element: <EditWarehousePage />,
+  },
+  {
     path: "/settings/attributes",
     name: "Settings Attributes",
     element: <AttributesPage />,
@@ -375,6 +398,11 @@ const authProtectedRoutes: RoutesProps[] = [
   },
   {
     path: "/settings/attributes/:id/edit",
+    name: "Edit Attribute",
+    element: <EditAttributePage />,
+  },
+  {
+    path: "/settings/attributes/edit/:id",
     name: "Edit Attribute",
     element: <EditAttributePage />,
   },
@@ -396,6 +424,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditEmailTemplatePage />,
   },
   {
+    path: "/settings/email-templates/edit/:id",
+    name: "Edit Email Template",
+    element: <EditEmailTemplatePage />,
+  },
+  {
     path: "/settings/events",
     name: "Settings Events",
     element: <EventsPage />,
@@ -407,6 +440,11 @@ const authProtectedRoutes: RoutesProps[] = [
   },
   {
     path: "/settings/events/:id/edit",
+    name: "Edit Event",
+    element: <EditEventPage />,
+  },
+  {
+    path: "/settings/events/edit/:id",
     name: "Edit Event",
     element: <EditEventPage />,
   },
@@ -426,6 +464,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditCampaignPage />,
   },
   {
+    path: "/settings/campaigns/edit/:id",
+    name: "Edit Campaign",
+    element: <EditCampaignPage />,
+  },
+  {
     path: "/settings/webhooks",
     name: "Settings Webhooks",
     element: <WebhooksPage />,
@@ -437,6 +480,11 @@ const authProtectedRoutes: RoutesProps[] = [
   },
   {
     path: "/settings/webhooks/:id/edit",
+    name: "Edit Webhook",
+    element: <EditWebhookPage />,
+  },
+  {
+    path: "/settings/webhooks/edit/:id",
     name: "Edit Webhook",
     element: <EditWebhookPage />,
   },
@@ -456,6 +504,11 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditWorkflowPage />,
   },
   {
+    path: "/settings/workflows/edit/:id",
+    name: "Edit Workflow",
+    element: <EditWorkflowPage />,
+  },
+  {
     path: "/settings/web-forms",
     name: "Settings Web Forms",
     element: <WebFormsPage />,
@@ -471,9 +524,19 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditWebFormPage />,
   },
   {
+    path: "/settings/web-forms/edit/:id",
+    name: "Edit Web Form",
+    element: <EditWebFormPage />,
+  },
+  {
     path: "/settings/data-transfer",
     name: "Settings Data Transfer",
     element: <DataTransferPage />,
+  },
+  {
+    path: "/settings/tags",
+    name: "Settings Tags",
+    element: <TagsPage />,
   },
   {
     path: "/settings/google-contacts",

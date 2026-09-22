@@ -2,14 +2,15 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-
-import { EmailItem, ContactItem, PersonFormData } from "@/interface";
+import { EmailItem, ContactItem } from "@/interface";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const CreatePersonPage: React.FC = () => {
   const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -118,6 +119,7 @@ const CreatePersonPage: React.FC = () => {
       organization_id: formData.organization_id ? Number(formData.organization_id) : null,
       job_title: formData.job_title.trim() || null,
       user_id: formData.user_id ? Number(formData.user_id) : null,
+      custom_attributes: customAttributes,
     };
 
     try {
@@ -379,6 +381,15 @@ const CreatePersonPage: React.FC = () => {
               ))}
             </select>
           </div>
+        </div>
+
+        {/* Dynamic Custom Attributes for Persons */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <DynamicAttributeFields
+            entityType="persons"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
 
         {/* Bottom Bar */}

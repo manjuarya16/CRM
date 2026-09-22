@@ -7,6 +7,7 @@ export const personSchema = z.object({
   organization_id: z.coerce.number().optional().nullable(),
   job_title: z.string().max(191).optional().nullable(),
   user_id: z.coerce.number().optional().nullable(),
+  custom_attributes: z.any().optional().default({}),
 });
 
 export type PersonInput = z.infer<typeof personSchema>;

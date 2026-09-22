@@ -101,6 +101,7 @@ export class PersonService {
       organization_id?: number | null;
       job_title?: string | null;
       user_id?: number | null;
+      custom_attributes?: Record<string, any>;
     },
     id?: number | string
   ): Promise<IPerson> {
@@ -108,6 +109,7 @@ export class PersonService {
       const personId = toNumberParam(id);
       const emailsJson = typeof data.emails === 'object' ? JSON.stringify(data.emails) : (data.emails || '[]');
       const contactsJson = typeof data.contact_numbers === 'object' ? JSON.stringify(data.contact_numbers) : (data.contact_numbers || '[]');
+      const customAttrsJson = typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : (data.custom_attributes || '{}');
       const orgId = toNumberParam(data.organization_id);
       const userId = toNumberParam(data.user_id);
 
@@ -119,18 +121,18 @@ export class PersonService {
 
         const { rows } = await pool.query<IPerson>(
           `UPDATE persons
-           SET name = $1, emails = $2, contact_numbers = $3, organization_id = $4, job_title = $5, user_id = $6, updated_at = NOW()
-           WHERE id = $7
+           SET name = $1, emails = $2, contact_numbers = $3, organization_id = $4, job_title = $5, user_id = $6, custom_attributes = $7::jsonb, updated_at = NOW()
+           WHERE id = $8
            RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, personId]
+          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]
         );
         return rows[0];
       } else {
         const { rows } = await pool.query<IPerson>(
-          `INSERT INTO persons (name, emails, contact_numbers, organization_id, job_title, user_id, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          `INSERT INTO persons (name, emails, contact_numbers, organization_id, job_title, user_id, custom_attributes, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
            RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId]
+          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson]
         );
         return rows[0];
       }

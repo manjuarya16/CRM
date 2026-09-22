@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { OrganizationFormData } from "@/interface";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 const COUNTRIES = [
   "United States",
@@ -31,6 +31,7 @@ const CreateOrganizationPage: React.FC = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -83,6 +84,7 @@ const CreateOrganizationPage: React.FC = () => {
           postcode: formData.postcode.trim(),
         },
         user_id: formData.user_id ? Number(formData.user_id) : null,
+        custom_attributes: customAttributes,
       };
 
       const res = await API.post("/organization", payload);
@@ -257,6 +259,15 @@ const CreateOrganizationPage: React.FC = () => {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Dynamic Custom Attributes for Organizations */}
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+          <DynamicAttributeFields
+            entityType="organizations"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
       </form>
     </div>
