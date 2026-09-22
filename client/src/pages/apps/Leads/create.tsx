@@ -17,6 +17,7 @@ const TABS = [
   { id: "lead-details", label: "Lead Details" },
   { id: "contact-person", label: "Contact Person" },
   { id: "products", label: "Products" },
+  { id: "custom-attributes", label: "Custom Attributes" },
 ];
 
 // â”€â”€ Formatters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -80,6 +81,9 @@ const CreateLeadPage: React.FC = () => {
   const [productRows, setProductRows] = useState<ProductRow[]>([
     { product_id: "", product_name: "", quantity: "1", price: "0" },
   ]);
+
+  // Tab 4 – Custom Attributes
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   useEffect(() => {
     fetchSources();
@@ -212,6 +216,7 @@ const CreateLeadPage: React.FC = () => {
         lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
         expected_close_date: details.expected_close_date || undefined,
         products: validProducts.length > 0 ? validProducts : undefined,
+        custom_attributes: customAttributes,
       };
 
       if (personMode === "existing" && personId) {
@@ -659,6 +664,19 @@ const CreateLeadPage: React.FC = () => {
                 Add More
               </button>
             </div>
+          </div>
+
+          {/* Section 4 — CUSTOM ATTRIBUTES */}
+          <div
+            id="custom-attributes"
+            ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
+            className="pt-4 border-t border-gray-100 dark:border-gray-700"
+          >
+            <DynamicAttributeFields
+              entityType="leads"
+              values={customAttributes}
+              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            />
           </div>
         </div>
       </form>
