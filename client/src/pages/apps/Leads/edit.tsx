@@ -291,7 +291,7 @@ const EditLeadPage: React.FC = () => {
             disabled={saving}
             className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
           >
-            {saving ? "Savingâ€¦" : "Save Lead"}
+            {saving ? "Saving..." : "Save Lead"}
           </button>
         </div>
       </div>
@@ -447,7 +447,7 @@ const EditLeadPage: React.FC = () => {
                     <label className={labelCls}>Search Contact</label>
                     <input type="text" value={personSearch}
                       onChange={(e) => setPersonSearch(e.target.value)}
-                      placeholder="Search by name or emailâ€¦" className={inputCls} />
+                      placeholder="Search by name or email..." className={inputCls} />
                   </div>
                   <div>
                     <label className={labelCls}>Select Person</label>

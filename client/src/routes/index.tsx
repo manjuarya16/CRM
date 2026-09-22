@@ -51,6 +51,7 @@ const CreateActivityPage = React.lazy(() => import("../pages/apps/Activities/cre
 const EditActivityPage = React.lazy(() => import("../pages/apps/Activities/edit"));
 
 const MailPage = React.lazy(() => import("../pages/apps/Mail"));
+const MailViewPage = React.lazy(() => import("../pages/apps/Mail/view"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
 const UsersPage = React.lazy(() => import("../pages/apps/Settings/Users"));
 const GroupsPage = React.lazy(() => import("../pages/apps/Settings/Groups"));
@@ -241,6 +242,18 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/mail",
     name: "Mail",
     element: <MailPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/mail/view/:id",
+    name: "View Mail",
+    element: <MailViewPage />,
+    route: PrivateRoute,
+  },
+  {
+    path: "/mail/:id/view",
+    name: "View Mail",
+    element: <MailViewPage />,
     route: PrivateRoute,
   },
   {

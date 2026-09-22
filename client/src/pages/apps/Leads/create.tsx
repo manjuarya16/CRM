@@ -247,49 +247,50 @@ const CreateLeadPage: React.FC = () => {
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="p-6 space-y-4">
-      {/* Header */}
-      <div className="sticky top-[60px] z-50 flex items-center justify-between bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 shadow-sm">
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-            <Link to="/leads" className="text-[#0088cc] hover:underline">Leads</Link> / Create
+      {/* Header + Tabs unified sticky card */}
+      <div className="sticky top-[60px] z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-3 pb-0">
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+              <Link to="/leads" className="text-[#0088cc] hover:underline">Leads</Link> / Create
+            </div>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">Create Lead</h1>
           </div>
-          <h1 className="text-xl font-bold text-gray-800 dark:text-white">Create Lead</h1>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/leads"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </Link>
+            <button
+              onClick={handleSubmit}
+              disabled={saving}
+              className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Lead"}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/leads"
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </Link>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
-          >
-            {saving ? "Savingâ€¦" : "Save Lead"}
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-        {/* â”€â”€ Tab Bar â”€â”€ */}
-        <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 px-2">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 mt-1">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                activeTab === tab.id
                   ? "text-[#0088cc] border-[#0088cc]"
-                  : "text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-800 dark:hover:text-white hover:border-gray-300"
-                }`}
+                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
+              }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
+      </div>
 
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <div className="flex flex-col gap-8 px-6 py-6">
           {/* â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
               Section 1 â€” LEAD DETAILS
@@ -414,7 +415,7 @@ const CreateLeadPage: React.FC = () => {
                   rows={4}
                   value={details.description}
                   onChange={(e) => setDetails({ ...details, description: e.target.value })}
-                  placeholder="Opportunity detailsâ€¦"
+                  placeholder="Opportunity details..."
                   className={inputCls}
                 />
               </div>
@@ -468,7 +469,7 @@ const CreateLeadPage: React.FC = () => {
                       type="text"
                       value={personSearch}
                       onChange={(e) => setPersonSearch(e.target.value)}
-                      placeholder="Search by name or emailâ€¦"
+                      placeholder="Search by name or email..."
                       className={inputCls}
                     />
                   </div>

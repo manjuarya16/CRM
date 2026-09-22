@@ -74,8 +74,8 @@ export interface LeadStore {
   stages: ILeadStage[];
   leadProducts: ILeadProduct[];
   kanbanLeads: ILead[];
-  fetchLeads: (page?: number, limit?: number, search?: string) => Promise<void>;
-  fetchKanbanLeads: (pipelineId?: number, search?: string) => Promise<void>;
+  fetchLeads: (page?: number, limit?: number, search?: string, filters?: Record<string, any>) => Promise<void>;
+  fetchKanbanLeads: (pipelineId?: number, search?: string, filters?: Record<string, any>) => Promise<void>;
   fetchLeadById: (id: number) => Promise<ILead | null>;
   addLead: (leadData: any) => Promise<any>;
   updateLead: (id: number, leadData: any) => Promise<any>;

@@ -21,13 +21,50 @@ const LeadsPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
 
+  // Magic AI Configuration state
+  const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
+
   // Upload File Modal
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
 
+  // Filter Drawer & Options
+  const [showFilterDrawer, setShowFilterDrawer] = useState<boolean>(false);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [personsList, setPersonsList] = useState<any[]>([]);
+  const [sourcesList, setSourcesList] = useState<any[]>([]);
+  const [typesList, setTypesList] = useState<any[]>([]);
+
+  const [filterForm, setFilterForm] = useState({
+    id: "",
+    lead_value: "",
+    user_id: "",
+    person_id: "",
+    lead_type_id: "",
+    lead_source_id: "",
+    tag: "",
+    expected_close_date: "",
+    created_at: "",
+  });
+
   useEffect(() => {
     fetchPipelines();
+    // Fetch configuration to check if Magic AI Doc Generation is enabled
+    API.get("/configuration").then((res) => {
+      if (res.data?.data) {
+        const docGen = res.data.data["general.magic_ai.doc_generation.enabled"];
+        if (docGen !== undefined) {
+          setIsDocGenEnabled(String(docGen) === "1" || docGen === true);
+        }
+      }
+    }).catch(() => {});
+
+    // Fetch lists for filter dropdowns
+    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => {});
+    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => {});
+    API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => {});
+    API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -43,9 +80,9 @@ const LeadsPage: React.FC = () => {
     if (selectedPipelineId !== "") {
       fetchStages(Number(selectedPipelineId));
       if (viewMode === "kanban") {
-        fetchKanbanLeads(Number(selectedPipelineId), search);
+        fetchKanbanLeads(Number(selectedPipelineId), search, filterForm);
       } else {
-        fetchLeads(page, perPage, search);
+        fetchLeads(page, perPage, search, filterForm);
       }
     }
   }, [selectedPipelineId, viewMode, page, perPage]);
@@ -53,12 +90,46 @@ const LeadsPage: React.FC = () => {
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
     if (viewMode === "kanban") {
-      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
+      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
     } else {
       setPage(1);
-      fetchLeads(1, perPage, search);
+      fetchLeads(1, perPage, search, filterForm);
     }
   };
+
+  const handleApplyAdvancedFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (viewMode === "kanban") {
+      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
+    } else {
+      setPage(1);
+      fetchLeads(1, perPage, search, filterForm);
+    }
+    setShowFilterDrawer(false);
+  };
+
+  const handleResetFilters = () => {
+    const emptyForm = {
+      id: "",
+      lead_value: "",
+      user_id: "",
+      person_id: "",
+      lead_type_id: "",
+      lead_source_id: "",
+      tag: "",
+      expected_close_date: "",
+      created_at: "",
+    };
+    setFilterForm(emptyForm);
+    setSearch("");
+    if (viewMode === "kanban") {
+      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, "", emptyForm);
+    } else {
+      setPage(1);
+      fetchLeads(1, perPage, "", emptyForm);
+    }
+  };
+
 
   const handleDelete = async (lead: ILead) => {
     const result = await Swal.fire({
@@ -117,8 +188,6 @@ const LeadsPage: React.FC = () => {
     }
   };
 
-
-  // Helper: Get initials for avatar
   const getInitials = (name?: string) => {
     if (!name) return "LD";
     const parts = name.trim().split(" ");
@@ -126,7 +195,6 @@ const LeadsPage: React.FC = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  // Helper colors for avatar circles
   const avatarColors = [
     "bg-amber-100 text-amber-800 border-amber-300",
     "bg-[#0088cc]/10 text-[#0088cc] border-[#0088cc]/30",
@@ -145,13 +213,17 @@ const LeadsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="px-4 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2"
-          >
-            <i className="mgc_upload_line text-base"></i>
-            Upload File
-          </button>
+          {/* Upload File button (Conditional upon Magic AI / DOC Generation setting) */}
+          {isDocGenEnabled && (
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="px-4 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2"
+            >
+              <i className="mgc_upload_line text-base"></i>
+              Upload File
+            </button>
+          )}
+
           <Link
             to="/leads/create"
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
@@ -162,19 +234,21 @@ const LeadsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar & Pipeline Selector & View Switcher */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 flex flex-wrap items-center justify-between gap-4">
-        <form onSubmit={handleFilter} className="flex items-center gap-2 flex-1 min-w-[260px] max-w-md">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 flex flex-wrap items-center justify-between gap-3">
+        <form onSubmit={handleFilter} className="flex items-center gap-2 flex-1 min-w-[220px] max-w-lg">
           <input
             type="text"
             placeholder="Search leads or persons..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            className="flex-1 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
           />
           <button
-            type="submit"
-            className="px-4 py-1.5 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold text-sm rounded-lg border border-[#bae6fd] transition-colors"
+            type="button"
+            onClick={() => setShowFilterDrawer(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold text-sm rounded-lg border border-gray-300 dark:border-gray-600 whitespace-nowrap transition-colors"
           >
+            <i className="mgc_filter_line text-base"></i>
             Filter
           </button>
         </form>
@@ -191,7 +265,7 @@ const LeadsPage: React.FC = () => {
             ))}
           </select>
 
-          {/* View Toggle Buttons: Kanban vs Table */}
+          {/* View Toggle Buttons */}
           <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
             <button
               onClick={() => setViewMode("kanban")}
@@ -247,7 +321,6 @@ const LeadsPage: React.FC = () => {
                   }}
                   className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
                 >
-                  {/* Column Header */}
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
@@ -268,7 +341,6 @@ const LeadsPage: React.FC = () => {
                     </Link>
                   </div>
 
-                  {/* Stage Progress Bar Indicator */}
                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#0088cc] rounded-full transition-all duration-300"
@@ -276,7 +348,6 @@ const LeadsPage: React.FC = () => {
                     ></div>
                   </div>
 
-                  {/* Lead Cards list */}
                   <div className="space-y-3 min-h-[120px]">
                     {loading ? (
                       <div className="text-center py-8">
@@ -301,75 +372,63 @@ const LeadsPage: React.FC = () => {
                         </Link>
                       </div>
                     ) : (
-                      stageLeads.map((lead) => {
-                        const initials = getInitials(lead.person_name || lead.title);
-                        return (
-                          <div
-                            key={lead.id}
-                            draggable={true}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", String(lead.id));
-                            }}
-                            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200/60 dark:border-gray-700/60 hover:shadow-md transition-all space-y-3 relative group cursor-grab active:cursor-grabbing"
-                          >
-                            {/* Card Person Avatar & Name */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold ${colorClass}`}>
-                                  {initials}
-                                </div>
-                                <div className="leading-tight">
-                                  <p className="text-xs font-bold text-gray-800 dark:text-gray-100">{lead.person_name || "Unassigned Person"}</p>
-                                </div>
-                              </div>
-
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                <Link to={`/leads/edit/${lead.id}`} className="p-1 text-gray-400 hover:text-[#0088cc]">
-                                  <i className="mgc_edit_line text-sm"></i>
-                                </Link>
-                                <button onClick={() => handleDelete(lead)} className="p-1 text-gray-400 hover:text-red-500">
-                                  <i className="mgc_delete_line text-sm"></i>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Lead Title */}
-                            <div>
+                      stageLeads.map((lead) => (
+                        <div
+                          key={lead.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", String(lead.id));
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          className="group bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200/80 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/60 transition-all cursor-grab active:cursor-grabbing space-y-3"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-0.5">
                               <Link
                                 to={`/leads/view/${lead.id}`}
-                                className="text-sm font-bold text-gray-800 dark:text-gray-100 hover:text-[#0088cc] transition-colors leading-snug block"
+                                className="font-bold text-sm text-gray-800 dark:text-gray-100 hover:text-[#0088cc] dark:hover:text-[#0088cc] transition-colors line-clamp-1"
                               >
                                 {lead.title}
                               </Link>
-                              <span className="text-[11px] text-gray-400">Lead #{lead.id}</span>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {lead.person_name || "No Person"}
+                              </p>
                             </div>
 
-                            {/* Badges / Tags row */}
-                            <div className="flex flex-wrap gap-1.5 pt-1 text-[11px]">
-                              {lead.lead_value !== undefined && (
-                                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded font-bold">
-                                  ${Number(lead.lead_value).toLocaleString()}
-                                </span>
-                              )}
-                              {lead.user_name && (
-                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded font-medium flex items-center gap-1">
-                                  👤 {lead.user_name}
-                                </span>
-                              )}
-                              {lead.source_name && (
-                                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
-                                  {lead.source_name}
-                                </span>
-                              )}
-                              {lead.type_name && (
-                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded font-medium">
-                                  {lead.type_name}
-                                </span>
-                              )}
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Link
+                                to={`/leads/edit/${lead.id}`}
+                                className="p-1 text-gray-400 hover:text-[#0088cc]"
+                                title="Edit Lead"
+                              >
+                                <i className="mgc_edit_line text-sm"></i>
+                              </Link>
+                              <button
+                                onClick={() => handleDelete(lead)}
+                                className="p-1 text-gray-400 hover:text-red-600"
+                                title="Delete Lead"
+                              >
+                                <i className="mgc_delete_line text-sm"></i>
+                              </button>
                             </div>
                           </div>
-                        );
-                      })
+
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-gray-700/60">
+                            <span className="font-bold text-gray-800 dark:text-gray-200">
+                              ${Number(lead.lead_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </span>
+
+                            {lead.person_name && (
+                              <span
+                                className={`h-6 w-6 rounded-full border flex items-center justify-center font-bold text-[10px] ${colorClass}`}
+                                title={lead.person_name}
+                              >
+                                {getInitials(lead.person_name)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
@@ -383,17 +442,17 @@ const LeadsPage: React.FC = () => {
       {viewMode === "table" && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
-                  <th className="py-3 px-4 font-semibold">Title</th>
-                  <th className="py-3 px-4 font-semibold">Status</th>
-                  <th className="py-3 px-4 font-semibold">Value</th>
-                  <th className="py-3 px-4 font-semibold">Contact Person</th>
-                  <th className="py-3 px-4 font-semibold">Source</th>
-                  <th className="py-3 px-4 font-semibold">Stage</th>
-                  <th className="py-3 px-4 font-semibold">Created At</th>
-                  <th className="py-3 px-4 font-semibold text-right">Actions</th>
+            <table className="w-full text-left text-xs text-gray-600 dark:text-gray-300">
+              <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-700 dark:text-gray-300 uppercase font-semibold border-b border-gray-100 dark:border-gray-700">
+                <tr>
+                  <th className="py-3 px-4">Title</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Value</th>
+                  <th className="py-3 px-4">Contact Person</th>
+                  <th className="py-3 px-4">Source</th>
+                  <th className="py-3 px-4">Stage</th>
+                  <th className="py-3 px-4">Created At</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -482,7 +541,7 @@ const LeadsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Create Lead Using File</h3>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Create Lead Using AI File Upload</h3>
               <button onClick={() => setShowUploadModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
 
@@ -516,6 +575,160 @@ const LeadsPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* LEAD FILTERS DRAWER / MODAL (MATCHING KRAYIN CRM DOC) */}
+      {showFilterDrawer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 h-full w-full max-w-md shadow-2xl border-l border-gray-200 dark:border-gray-700 p-6 flex flex-col justify-between space-y-6 overflow-y-auto">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b pb-4">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                  <i className="mgc_filter_line text-[#0088cc]"></i>
+                  Filters in Leads
+                </h3>
+                <button onClick={() => setShowFilterDrawer(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              </div>
+
+              <form onSubmit={handleApplyAdvancedFilters} className="space-y-4">
+                {/* 1. ID */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">ID</label>
+                  <input
+                    type="number"
+                    placeholder="Search by Lead ID"
+                    value={filterForm.id}
+                    onChange={(e) => setFilterForm({ ...filterForm, id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+
+                {/* 2. Lead Value */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Value</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Min / Exact Lead Value"
+                    value={filterForm.lead_value}
+                    onChange={(e) => setFilterForm({ ...filterForm, lead_value: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+
+                {/* 3. Sales Person */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Sales Person</label>
+                  <select
+                    value={filterForm.user_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, user_id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Select Sales Person</option>
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Contact Person */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Person</label>
+                  <select
+                    value={filterForm.person_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, person_id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Select Contact Person</option>
+                    {personsList.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Lead Type */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Type</label>
+                  <select
+                    value={filterForm.lead_type_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, lead_type_id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Select Lead Type</option>
+                    {typesList.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 6. Source */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Source</label>
+                  <select
+                    value={filterForm.lead_source_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, lead_source_id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Select Source</option>
+                    {sourcesList.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 7. Tags */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</label>
+                  <input
+                    type="text"
+                    placeholder="Filter by tag..."
+                    value={filterForm.tag}
+                    onChange={(e) => setFilterForm({ ...filterForm, tag: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+
+                {/* 8. Expected Close Date */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Expected Close Date</label>
+                  <input
+                    type="date"
+                    value={filterForm.expected_close_date}
+                    onChange={(e) => setFilterForm({ ...filterForm, expected_close_date: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+
+                {/* 9. Created At */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Created At</label>
+                  <input
+                    type="date"
+                    value={filterForm.created_at}
+                    onChange={(e) => setFilterForm({ ...filterForm, created_at: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="flex-1 py-2 px-3 border border-gray-300 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 text-center"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 px-3 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold text-center"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

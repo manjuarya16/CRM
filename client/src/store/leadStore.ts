@@ -16,10 +16,20 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
   leadProducts: [],
   kanbanLeads: [],
 
-  fetchLeads: async (page = 1, limit = 10, search = "") => {
+  fetchLeads: async (page = 1, limit = 10, search = "", filters: Record<string, any> = {}) => {
     set({ loading: true });
     try {
-      const response = await API.get(`/leads?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`);
+      const params = new URLSearchParams();
+      params.append("page", String(page));
+      params.append("limit", String(limit));
+      if (search) params.append("search", search);
+      Object.entries(filters).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== "") {
+          params.append(key, String(val));
+        }
+      });
+
+      const response = await API.get(`/leads?${params.toString()}`);
       if (response.data?.success) {
         set({
           leads: response.data.data || [],
@@ -36,13 +46,19 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     }
   },
 
-  fetchKanbanLeads: async (pipelineId?: number, search = "") => {
+  fetchKanbanLeads: async (pipelineId?: number, search = "", filters: Record<string, any> = {}) => {
     set({ loading: true });
     try {
-      const url = pipelineId
-        ? `/leads/kanban?pipeline_id=${pipelineId}&search=${encodeURIComponent(search)}`
-        : `/leads/kanban?search=${encodeURIComponent(search)}`;
-      const response = await API.get(url);
+      const params = new URLSearchParams();
+      if (pipelineId) params.append("pipeline_id", String(pipelineId));
+      if (search) params.append("search", search);
+      Object.entries(filters).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== "") {
+          params.append(key, String(val));
+        }
+      });
+
+      const response = await API.get(`/leads/kanban?${params.toString()}`);
       if (response.data?.success) {
         set({
           kanbanLeads: response.data.data || [],
@@ -55,6 +71,7 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
       set({ loading: false });
     }
   },
+
 
   fetchLeadById: async (id: number) => {
     set({ loading: true });

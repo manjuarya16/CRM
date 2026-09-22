@@ -24,6 +24,7 @@ import googleContactRoutes from '@/routes/googleContact.routes';
 import tagRoutes from '@/routes/tag.routes';
 import userRoutes from '@/routes/user.routes';
 import configRoutes from '@/routes/config.routes';
+import mailRoutes from '@/routes/mail.routes';
 const router = Router();
 
 router.get('/health', (_req, res) => {
@@ -43,6 +44,8 @@ router.use('/products', productRoutes);
 router.use('/product', productRoutes);
 router.use('/activities', activityRoutes);
 router.use('/activity', activityRoutes);
+router.use('/mail', mailRoutes);
+router.use('/emails', mailRoutes);
 
 // Configuration
 router.use('/configuration', configRoutes);

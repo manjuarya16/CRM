@@ -30,6 +30,8 @@ const LeadViewPage: React.FC = () => {
 
   const [personsList, setPersonsList] = useState<any[]>([]);
 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   // Forms state for quick actions
   const [modalForm, setModalForm] = useState({
     title: "",
@@ -148,15 +150,26 @@ const LeadViewPage: React.FC = () => {
         });
         Swal.fire("Success", "Email logged for lead", "success");
       } else if (activeModal === "file") {
-        await addActivity({
-          title: "File Attachment",
-          type: "file",
-          comment: "Attached file document to lead",
-          lead_id: leadId,
-          person_id: selectedLead?.person_id,
-        });
-        Swal.fire("Success", "File attached to lead", "success");
+        if (selectedFile) {
+          const formData = new FormData();
+          formData.append("file", selectedFile);
+          await API.post(`/leads/${leadId}/upload-file`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          Swal.fire("Success", "File uploaded and attached to lead", "success");
+          setSelectedFile(null);
+        } else {
+          await addActivity({
+            title: modalForm.title || "File Attachment",
+            type: "file",
+            comment: modalForm.comment || "Attached file document to lead",
+            lead_id: leadId,
+            person_id: selectedLead?.person_id,
+          });
+          Swal.fire("Success", "File activity logged", "success");
+        }
       } else if (activeModal === "note") {
+
         await addActivity({
           title: modalForm.title || "Note",
           type: "note",
@@ -437,8 +450,8 @@ const LeadViewPage: React.FC = () => {
             {/* TAB CONTENT */}
             <div className="p-5">
 
-              {/* ALL / CHANGELOGS TIMELINE */}
-              {(activeTab === "all" || activeTab === "changelogs") && (
+              {/* CHANGELOGS TIMELINE */}
+              {activeTab === "changelogs" && (
                 <div className="space-y-3">
                   {changelogs.map((item) => (
                     <div key={item.id} className="p-4 bg-gray-50/80 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-3">
@@ -454,11 +467,12 @@ const LeadViewPage: React.FC = () => {
                 </div>
               )}
 
-              {/* ACTIVITIES TABS: PLANNED, NOTES, CALLS, MEETINGS, LUNCHES, FILES, EMAILS */}
-              {["planned", "notes", "calls", "meetings", "lunches", "files", "emails"].includes(activeTab) && (
+              {/* ACTIVITIES TABS: ALL, PLANNED, NOTES, CALLS, MEETINGS, LUNCHES, FILES, EMAILS */}
+              {["all", "planned", "notes", "calls", "meetings", "lunches", "files", "emails"].includes(activeTab) && (
                 <div className="space-y-3">
                   {(() => {
                     const filtered = leadActivities.filter((a) => {
+                      if (activeTab === "all") return true;
                       if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(a.type) && !a.is_done;
                       if (activeTab === "notes") return a.type === "note";
                       if (activeTab === "calls") return a.type === "call";
@@ -469,7 +483,7 @@ const LeadViewPage: React.FC = () => {
                       return true;
                     });
 
-                    if (filtered.length === 0) {
+                    if (filtered.length === 0 && activeTab !== "all") {
                       return (
                         <div className="text-center py-10 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
                           <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 capitalize">
@@ -482,46 +496,125 @@ const LeadViewPage: React.FC = () => {
                       );
                     }
 
-                    return filtered.map((act) => (
-                      <div key={act.id} className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded">
-                              {act.type}
-                            </span>
-                            {act.created_at && (
-                              <span className="text-[11px] text-gray-400">
-                                {new Date(act.created_at).toLocaleString()}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100">{act.title}</h4>
-                          {act.comment && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{act.comment}</p>}
+                    if (filtered.length === 0 && activeTab === "all" && changelogs.length > 0) {
+                      return (
+                        <div className="space-y-3">
+                          {changelogs.map((item) => (
+                            <div key={item.id} className="p-4 bg-gray-50/80 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-3">
+                              <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+                                <i className="mgc_settings_line text-base"></i>
+                              </div>
+                              <div className="space-y-0.5">
+                                <p className="text-xs font-bold text-gray-800 dark:text-gray-100">{item.action}</p>
+                                <p className="text-[11px] text-gray-400">{item.time}, By {item.user}</p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
+                      );
+                    }
 
-                        {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
-                        {["call", "meeting", "lunch"].includes(act.type) && (
-                          <button
-                            onClick={async () => {
-                              await updateActivity(act.id, { is_done: !act.is_done });
-                              fetchActivities(1, 100, "", leadId);
-                            }}
-                            title="Click to toggle Done/Pending"
-                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                              act.is_done
-                                ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
-                                : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
-                            }`}
-                          >
-                            {act.is_done ? "Done ✓" : "Pending ⏳"}
-                          </button>
-                        )}
+                    const extractFileUrl = (text?: string) => {
+                      if (!text) return null;
+                      if (text.startsWith("/uploads/")) return `http://localhost:3040${text}`;
+                      if (text.startsWith("http")) return text;
+                      const match = text.match(/\/uploads\/[^\s]+/);
+                      if (match) return `http://localhost:3040${match[0]}`;
+                      return null;
+                    };
+
+                    return (
+                      <div className="space-y-3">
+                        {filtered.map((act) => {
+                          const fileUrl = extractFileUrl(act.comment);
+                          return (
+                            <div key={act.id} className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded">
+                                      {act.type}
+                                    </span>
+                                    {act.created_at && (
+                                      <span className="text-[11px] text-gray-400">
+                                        {new Date(act.created_at).toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100">{act.title}</h4>
+                                  {act.comment && act.type !== "file" && (
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{act.comment}</p>
+                                  )}
+                                </div>
+
+                                {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
+                                {["call", "meeting", "lunch"].includes(act.type) && (
+                                  <button
+                                    onClick={async () => {
+                                      await updateActivity(act.id, { is_done: !act.is_done });
+                                      fetchActivities(1, 100, "", leadId);
+                                    }}
+                                    title="Click to toggle Done/Pending"
+                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                                      act.is_done
+                                        ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
+                                        : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
+                                    }`}
+                                  >
+                                    {act.is_done ? "Done ✓" : "Pending ⏳"}
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* File Card with Download Link */}
+                              {(act.type === "file" || fileUrl) && (
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 mt-2">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#0088cc] flex items-center justify-center text-xl shrink-0">
+                                      <i className="mgc_file_text_line"></i>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">{act.title}</p>
+                                      <p className="text-[10px] text-gray-400">Uploaded Document</p>
+                                    </div>
+                                  </div>
+                                  {fileUrl ? (
+                                    <a
+                                      href={fileUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#0088cc] text-white rounded-lg text-xs font-semibold hover:bg-[#0077bb] shadow-sm transition-colors"
+                                    >
+                                      <i className="mgc_download_2_line text-sm"></i> Download / View File
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 italic">No file link</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Append stage updates timeline to 'All' tab */}
+                        {activeTab === "all" && changelogs.map((item) => (
+                          <div key={item.id} className="p-4 bg-gray-50/80 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-3">
+                            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+                              <i className="mgc_settings_line text-base"></i>
+                            </div>
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-gray-800 dark:text-gray-100">{item.action}</p>
+                              <p className="text-[11px] text-gray-400">{item.time}, By {item.user}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ));
-
+                    );
                   })()}
                 </div>
               )}
+
 
 
               {/* PRODUCTS TAB */}
@@ -730,13 +823,19 @@ const LeadViewPage: React.FC = () => {
                     <>
                       <div>
                         <label className="block text-xs font-semibold mb-1">Select File *</label>
-                        <input type="file" required className="w-full text-xs text-gray-600 border p-2 rounded" />
+                        <input
+                          type="file"
+                          required
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          className="w-full text-xs text-gray-600 border p-2 rounded"
+                        />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold mb-1">Comment / Description</label>
                         <input
                           type="text"
                           placeholder="File description..."
+
                           value={modalForm.comment}
                           onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
                           className="w-full px-3 py-1.5 border rounded text-xs"

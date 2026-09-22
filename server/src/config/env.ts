@@ -26,6 +26,13 @@ const envSchema = z
     JWT_EXPIRES_IN: z.string().default('7d'),
     SEED_ADMIN_EMAIL: z.string().email().default('admin@example.com'),
     SEED_ADMIN_PASSWORD: z.string().default('ChangeMe123!'),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().default(587),
+    SMTP_SECURE: z.union([z.boolean(), z.string()]).optional().transform((v) => v === true || v === 'true'),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_FROM_EMAIL: z.string().optional(),
+    SMTP_FROM_NAME: z.string().optional(),
   })
   .transform((data) => ({
     ...data,
