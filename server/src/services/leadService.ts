@@ -17,9 +17,18 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Number(req.query.limit || req.query.per_page) || 10);
 
+    const id = req.query.id ? Number(req.query.id) : null;
+    const lead_value = req.query.lead_value ? Number(req.query.lead_value) : null;
+    const user_id = req.query.user_id ? Number(req.query.user_id) : null;
+    const person_id = req.query.person_id ? Number(req.query.person_id) : null;
+    const lead_type_id = req.query.lead_type_id ? Number(req.query.lead_type_id) : null;
+    const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
+    const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
+    const created_at = req.query.created_at ? String(req.query.created_at) : null;
+
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_all_leads($1, $2, $3)",
-      [search, page, limit]
+      "SELECT * FROM public.fn_get_all_leads($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+      [search, page, limit, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at]
     );
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
@@ -41,6 +50,7 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
+
 
 const getLeadById = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -445,9 +455,18 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
     const pipelineId = req.query.pipeline_id ? Number(req.query.pipeline_id) : null;
     const search = String(req.query.search || "");
 
+    const id = req.query.id ? Number(req.query.id) : null;
+    const lead_value = req.query.lead_value ? Number(req.query.lead_value) : null;
+    const user_id = req.query.user_id ? Number(req.query.user_id) : null;
+    const person_id = req.query.person_id ? Number(req.query.person_id) : null;
+    const lead_type_id = req.query.lead_type_id ? Number(req.query.lead_type_id) : null;
+    const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
+    const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
+    const created_at = req.query.created_at ? String(req.query.created_at) : null;
+
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_leads_kanban($1, $2)",
-      [pipelineId, search]
+      "SELECT * FROM public.fn_get_leads_kanban($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [pipelineId, search, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at]
     );
 
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
@@ -458,6 +477,7 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
+
 
 
 const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
@@ -475,6 +495,23 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
+
+    // Ensure uploads/leads directory exists
+    const uploadDir = path.join(process.cwd(), "uploads", "leads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destPath = path.join(uploadDir, uniqueName);
+
+    // Copy uploaded file to permanent destination
+    if (file.path && fs.existsSync(file.path)) {
+      fs.copyFileSync(file.path, destPath);
+      try { fs.unlinkSync(file.path); } catch (e) {}
+    }
+
+    const fileUrl = `/uploads/leads/${uniqueName}`;
 
     // Build a lead title from the filename (strip extension)
     const fileBaseName = path.basename(file.originalname, path.extname(file.originalname))
@@ -520,22 +557,98 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     const lead = leadResult.rows[0];
 
-    if (lead && stageId) {
-      await connection.query(
-        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
-        [stageId, lead.id]
-      );
-    }
+    if (lead) {
+      if (stageId) {
+        await connection.query(
+          "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
+          [stageId, lead.id]
+        );
+      }
 
-    // Clean up temp file
-    if (file.path && fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
+      // Attach file activity to the newly created lead
+      await connection.query(
+        "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        [
+          file.originalname,
+          "file",
+          fileUrl,
+          null,
+          null,
+          true,
+          (req as any).user?.id || null,
+          null,
+          lead.id,
+          null,
+        ]
+      );
     }
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: `Lead "${leadTitle}" created successfully from uploaded file.`,
       data: lead,
+    });
+  } catch (error: any) {
+    logger.error(error);
+    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    connection?.release();
+  }
+};
+
+const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
+  let connection: PoolClient | undefined;
+  try {
+    connection = await pool.connect();
+    const leadId = Number(req.params.id);
+    const file = (req as any).file;
+
+    if (!leadId || !file) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Lead ID and file are required.",
+      });
+      return;
+    }
+
+    const uploadDir = path.join(process.cwd(), "uploads", "leads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destPath = path.join(uploadDir, uniqueName);
+
+    if (file.path && fs.existsSync(file.path)) {
+      fs.copyFileSync(file.path, destPath);
+      try { fs.unlinkSync(file.path); } catch (e) {}
+    }
+
+    const fileUrl = `/uploads/leads/${uniqueName}`;
+
+    const actRes = await connection.query(
+      "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [
+        file.originalname,
+        "file",
+        fileUrl,
+        null,
+        null,
+        true,
+        (req as any).user?.id || null,
+        null,
+        leadId,
+        null,
+      ]
+    );
+
+    res.status(HttpStatusCodes.CREATED).json({
+      success: true,
+      message: "File attached successfully to lead.",
+      data: actRes.rows[0],
     });
   } catch (error: any) {
     logger.error(error);
@@ -564,6 +677,8 @@ export default {
   updateLeadStage,
   getKanbanLeads,
   createLeadByAI,
+  uploadLeadFile,
 };
+
 
 

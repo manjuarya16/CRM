@@ -53,6 +53,16 @@ router.post(
   }
 );
 
+router.post(
+  "/:id/upload-file",
+  requireAuth,
+  upload.single("file"),
+  (req: Request, res: Response) => {
+    leadService.uploadLeadFile(req, res);
+  }
+);
+
+
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
 router.get("/", requireAuth, (req: Request, res: Response) => {

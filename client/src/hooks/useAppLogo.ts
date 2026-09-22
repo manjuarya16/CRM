@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useOrganizationStore, useAuthStore } from "../store";
+import { useOrganizationStore, useAuthStore, useConfigStore } from "../store";
 import commonAPI from "../helpers/api/common";
 import { API_URL } from "../config";
 
@@ -13,10 +13,17 @@ const resolveLogoUrl = (logo: string | null): string | null => {
 const useAppLogo = () => {
   const { organization, getOrganization } = useOrganizationStore();
   const { userLoggedIn } = useAuthStore();
+  const { configs, fetchConfigs } = useConfigStore();
   const [publicBranding, setPublicBranding] = useState<{
     name: string | null;
     logo: string | null;
   }>({ name: null, logo: null });
+
+  useEffect(() => {
+    if (Object.keys(configs).length === 0) {
+      fetchConfigs();
+    }
+  }, [configs, fetchConfigs]);
 
   useEffect(() => {
     if (userLoggedIn) {
@@ -36,7 +43,10 @@ const useAppLogo = () => {
     }
   }, [userLoggedIn]);
 
-  const rawLogo = userLoggedIn ? organization?.logo : publicBranding.logo;
+  const adminLogo = configs["general.general.admin_logo.logo_image"];
+  const rawLogo = userLoggedIn
+    ? (organization?.logo || adminLogo)
+    : (publicBranding.logo || adminLogo);
   const orgLogo = resolveLogoUrl(rawLogo ?? null);
 
   return {

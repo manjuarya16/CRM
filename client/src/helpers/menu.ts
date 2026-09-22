@@ -1,9 +1,42 @@
 import { MENU_ITEMS, MenuItemTypes } from "../constants/menu";
 
-const getMenuItems = () => {
-  // NOTE - You can fetch from server and return here as well
-  return MENU_ITEMS;
-}
+const getCustomLabel = (item: MenuItemTypes, configs?: Record<string, any>): string => {
+  if (!configs) return item.label;
+
+  // 1. Check general.settings.menu.<key>
+  const directKey = `general.settings.menu.${item.key}`;
+  if (configs[directKey] && String(configs[directKey]).trim() !== "") {
+    return String(configs[directKey]).trim();
+  }
+
+  // 2. Check general.settings.menu.<parentKey>.<key> if item has parentKey
+  if (item.parentKey) {
+    const nestedKey = `general.settings.menu.${item.parentKey}.${item.key}`;
+    if (configs[nestedKey] && String(configs[nestedKey]).trim() !== "") {
+      return String(configs[nestedKey]).trim();
+    }
+  }
+
+  return item.label;
+};
+
+const customizeItems = (items: MenuItemTypes[], configs?: Record<string, any>): MenuItemTypes[] => {
+  if (!configs || Object.keys(configs).length === 0) return items;
+
+  return items.map((item) => {
+    const label = getCustomLabel(item, configs);
+    const children = item.children ? customizeItems(item.children, configs) : undefined;
+    return {
+      ...item,
+      label,
+      ...(children ? { children } : {}),
+    };
+  });
+};
+
+const getMenuItems = (configs?: Record<string, any>) => {
+  return customizeItems(MENU_ITEMS, configs);
+};
 
 const findAllParent = (
   menuItems: MenuItemTypes[],
@@ -19,7 +52,7 @@ const findAllParent = (
     }
   }
   return parents;
-}
+};
 
 const findMenuItem = (
   menuItems: MenuItemTypes[] | undefined,
@@ -35,6 +68,6 @@ const findMenuItem = (
     }
   }
   return null;
-}
+};
 
-export { getMenuItems, findAllParent, findMenuItem, };
+export { getMenuItems, findAllParent, findMenuItem };
