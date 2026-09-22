@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import API from "@/config";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 // â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ProductRow {
@@ -30,7 +31,7 @@ const getPersonEmail = (person: any): string => {
       return emails[0].value;
     }
     if (typeof emails === "string") return emails;
-  } catch (e) {}
+  } catch (e) { }
   return "";
 };
 
@@ -101,13 +102,13 @@ const CreateLeadPage: React.FC = () => {
 
     API.get("/persons?limit=100").then((r) => {
       if (r.data?.data) setPersons(r.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
     API.get("/organizations?limit=100").then((r) => {
       if (r.data?.data) setOrganizations(r.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
     API.get("/products?limit=200").then((r) => {
       if (r.data?.data) setProducts(r.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -169,9 +170,9 @@ const CreateLeadPage: React.FC = () => {
   // Filtered persons for search
   const filteredPersons = personSearch
     ? persons.filter((p) =>
-        p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
-        (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
-      )
+      p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
+      (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
+    )
     : persons;
 
   // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -198,8 +199,8 @@ const CreateLeadPage: React.FC = () => {
       const leadValue = validProducts.length > 0
         ? totalLeadValue
         : details.lead_value
-        ? Number(details.lead_value)
-        : undefined;
+          ? Number(details.lead_value)
+          : undefined;
 
       const payload: any = {
         title: details.title.trim(),
@@ -274,11 +275,10 @@ const CreateLeadPage: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
                   ? "text-[#0088cc] border-[#0088cc]"
                   : "text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-800 dark:hover:text-white hover:border-gray-300"
-              }`}
+                }`}
             >
               {tab.label}
             </button>

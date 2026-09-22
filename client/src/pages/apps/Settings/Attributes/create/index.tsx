@@ -11,7 +11,7 @@ const CreateAttributePage: React.FC = () => {
         breadCrumbItems={["Settings", "Attributes", "Create Attribute"]}
       />
 
-      <div className="max-w-4xl mx-auto py-4">
+      <div className="w-full py-2">
         <AttributeForm isEdit={false} />
       </div>
     </>

@@ -4,6 +4,7 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { ZodError } from "zod";
 import { warehouseSchema } from "@/schemas/warehouse.schema";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 interface WarehouseFormProps {
   mode: "create" | "edit";
@@ -18,6 +19,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const [contactName, setContactName] = useState<string>("");
   const [contactEmail, setContactEmail] = useState<string>("");
   const [contactNumber, setContactNumber] = useState<string>("");
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   
   // Address
   const [country, setCountry] = useState<string>("");
@@ -91,6 +93,19 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
         } else {
           setLocations([""]);
         }
+
+        // Parse custom attributes
+        if (data.custom_attributes) {
+          if (typeof data.custom_attributes === "object") {
+            setCustomAttributes(data.custom_attributes);
+          } else if (typeof data.custom_attributes === "string") {
+            try {
+              setCustomAttributes(JSON.parse(data.custom_attributes));
+            } catch {
+              setCustomAttributes({});
+            }
+          }
+        }
       }
     } catch {
       Swal.fire("Error", "Failed to load warehouse details", "error");
@@ -148,6 +163,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
           street_address: streetAddress.trim(),
         },
         locations: cleanLocations,
+        custom_attributes: customAttributes,
       };
 
       const validated = warehouseSchema.parse(payload);
@@ -339,6 +355,15 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Dynamic Custom Attributes for Warehouses */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+            <DynamicAttributeFields
+              entityType="warehouses"
+              values={customAttributes}
+              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            />
           </div>
         </div>
 

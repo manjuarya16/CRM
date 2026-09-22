@@ -4,6 +4,7 @@ export interface IOrganization {
   address?: any;
   user_id?: number | null;
   person_count?: number;
+  custom_attributes?: any;
   created_at?: string;
   updated_at?: string;
 }
@@ -17,6 +18,7 @@ export interface IPerson {
   job_title?: string | null;
   user_id?: number | null;
   unique_id?: string | null;
+  custom_attributes?: any;
   created_at?: string;
   updated_at?: string;
 }
@@ -28,6 +30,7 @@ export interface IProduct {
   description?: string | null;
   quantity: number;
   price?: number | null;
+  custom_attributes?: any;
   created_at?: string;
   updated_at?: string;
 }
@@ -47,6 +50,7 @@ export interface IQuote {
   expired_at?: string | null;
   person_id?: number | null;
   user_id?: number | null;
+  custom_attributes?: any;
   created_at?: string;
   updated_at?: string;
 }
@@ -74,6 +78,7 @@ export interface IWarehouse {
   contact_emails: any;
   contact_numbers: any;
   contact_address: any;
+  custom_attributes?: any;
   created_at?: string;
   updated_at?: string;
 }

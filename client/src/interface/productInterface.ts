@@ -8,6 +8,7 @@ export interface IProduct {
   created_at?: string;
   updated_at?: string;
   total_count?: number;
+  custom_attributes?: Record<string, any>;
 }
 
 export interface ProductStore {

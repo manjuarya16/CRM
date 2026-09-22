@@ -13,6 +13,7 @@ export const quoteSchema = z.object({
   grand_total: z.coerce.number().optional().nullable(),
   person_id: z.coerce.number().optional().nullable(),
   user_id: z.coerce.number().optional().nullable(),
+  custom_attributes: z.any().optional().default({}),
 });
 
 export type QuoteInput = z.infer<typeof quoteSchema>;

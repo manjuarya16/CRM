@@ -4,14 +4,15 @@ import { saveAttributeSchema, updateAttributeSchema } from '@/schemas/attribute.
 
 const router = Router();
 
-// GET /api/attributes (with search, entity_type, and type filter queries)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { search, entity_type, type } = req.query;
+    const { search, entity_type, type, quick_add } = req.query;
+    const isQuickAdd = quick_add === 'true' ? true : quick_add === 'false' ? false : undefined;
     const attributes = await AttributeService.getAll(
       search as string,
       entity_type as string,
-      type as string
+      type as string,
+      isQuickAdd
     );
     return res.json({ success: true, data: attributes });
   } catch (error: any) {
@@ -47,6 +48,12 @@ router.post('/', async (req: Request, res: Response) => {
     const saved = await AttributeService.save(validation.data);
     return res.status(201).json({ success: true, data: saved, message: 'Attribute created successfully' });
   } catch (error: any) {
+    if (error.code === '23505') {
+      return res.status(400).json({
+        success: false,
+        message: `Attribute with code '${req.body.code}' already exists for entity type '${req.body.entity_type}'.`,
+      });
+    }
     return res.status(500).json({ success: false, message: error.message || 'Failed to create attribute' });
   }
 });
@@ -66,6 +73,12 @@ router.put('/:id', async (req: Request, res: Response) => {
     const saved = await AttributeService.save(validation.data, req.params.id);
     return res.json({ success: true, data: saved, message: 'Attribute updated successfully' });
   } catch (error: any) {
+    if (error.code === '23505') {
+      return res.status(400).json({
+        success: false,
+        message: `Attribute with code '${req.body.code}' already exists for entity type '${req.body.entity_type}'.`,
+      });
+    }
     return res.status(500).json({ success: false, message: error.message || 'Failed to update attribute' });
   }
 });

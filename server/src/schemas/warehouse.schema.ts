@@ -8,6 +8,7 @@ export const warehouseSchema = z.object({
   contact_numbers: z.any().optional().default([]),
   contact_address: z.any().optional().default({}),
   locations: z.array(z.any()).optional().default([]),
+  custom_attributes: z.any().optional().default({}),
 });
 
 export type WarehouseInput = z.infer<typeof warehouseSchema>;

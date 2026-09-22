@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 
 import { EmailItem, ContactItem, PersonFormData } from "@/interface";
 
@@ -12,6 +13,7 @@ const EditPersonPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -80,6 +82,17 @@ const EditPersonPage: React.FC = () => {
           job_title: person.job_title || "",
           user_id: person.user_id ? String(person.user_id) : "",
         });
+        if (person.custom_attributes) {
+          if (typeof person.custom_attributes === "object") {
+            setCustomAttributes(person.custom_attributes);
+          } else if (typeof person.custom_attributes === "string") {
+            try {
+              setCustomAttributes(JSON.parse(person.custom_attributes));
+            } catch {
+              setCustomAttributes({});
+            }
+          }
+        }
       }
     } catch (e: any) {
       Swal.fire({
@@ -163,6 +176,7 @@ const EditPersonPage: React.FC = () => {
       organization_id: formData.organization_id ? Number(formData.organization_id) : null,
       job_title: formData.job_title.trim() || null,
       user_id: formData.user_id ? Number(formData.user_id) : null,
+      custom_attributes: customAttributes,
     };
 
     try {
@@ -428,6 +442,15 @@ const EditPersonPage: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Dynamic Custom Attributes for Persons */}
+          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+            <DynamicAttributeFields
+              entityType="persons"
+              values={customAttributes}
+              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            />
           </div>
         </div>
 

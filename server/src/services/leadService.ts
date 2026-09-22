@@ -60,9 +60,15 @@ const getLeadById = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const leadData = result.rows[0];
+    if (leadData && (leadData.custom_attributes === undefined || leadData.custom_attributes === null)) {
+      const lRes = await connection.query("SELECT custom_attributes FROM leads WHERE id = $1", [id]);
+      leadData.custom_attributes = lRes.rows[0]?.custom_attributes || {};
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      data: result.rows[0],
+      data: leadData,
     });
   } catch (error: any) {
     logger.error(error);
@@ -190,6 +196,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       lead_pipeline_stage_id,
       expected_close_date,
       products,
+      custom_attributes,
     } = req.body;
 
     // Resolve person_id: use existing or create new person inline
@@ -233,6 +240,17 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const updatedLead = result.rows[0];
+
+    if (id && custom_attributes !== undefined) {
+      const customAttrsJson = JSON.stringify(custom_attributes || {});
+      await connection.query(
+        "UPDATE leads SET custom_attributes = $1::jsonb WHERE id = $2",
+        [customAttrsJson, id]
+      );
+      if (updatedLead) updatedLead.custom_attributes = custom_attributes;
+    }
+
     // If stage explicitly provided, ensure it updates directly on leads table
     if (lead_pipeline_stage_id) {
       await connection.query(
@@ -256,7 +274,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: "Lead updated successfully",
-      data: result.rows[0],
+      data: updatedLead,
     });
   } catch (error: any) {
     logger.error(error);

@@ -25,7 +25,7 @@ const PersonsPage: React.FC = () => {
         `/persons?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`
       ).catch(() => ({ data: { data: [], total: 0 } }));
 
-      const list = res.data?.data || [];
+      const list = res.data?.data || res.data?.rows || [];
       setPersons(list);
       setTotal(res.data?.total !== undefined ? res.data.total : list.length);
     } catch {

@@ -16,6 +16,7 @@ export interface IQuote {
   lead_id?: number;
   created_at?: string;
   updated_at?: string;
+  custom_attributes?: Record<string, any>;
 }
 
 export interface IQuoteItem {
