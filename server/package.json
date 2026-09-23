@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch src --exec ts-node -r tsconfig-paths/register src/index.ts",
+    "prebuild": "npm run lint",
     "build": "tsc -p tsconfig.json",
+    "prestart": "npm run build",
     "start": "node -r tsconfig-paths/register dist/index.js",
     "seed:user": "ts-node -r tsconfig-paths/register src/scripts/seedUser.ts",
     "lint": "eslint ."

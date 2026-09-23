@@ -19,7 +19,17 @@ export function createApp(): express.Express {
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-  app.use(pinoHttp({ logger }));
+  app.use(
+    pinoHttp({
+      logger,
+      customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
+      customErrorMessage: (req, res, err) => `${req.method} ${req.url} ${res.statusCode} - ${err?.message || 'Error'}`,
+      serializers: {
+        req: () => undefined,
+        res: () => undefined,
+      },
+    })
+  );
   app.use(passport.initialize());
 
   // Static uploads directory
