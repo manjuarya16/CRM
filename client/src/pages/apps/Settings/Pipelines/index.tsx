@@ -37,6 +37,7 @@ const PipelinesPage: React.FC = () => {
     is_default: false,
     stages: DEFAULT_STAGES,
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -63,6 +64,7 @@ const PipelinesPage: React.FC = () => {
       is_default: pipelines.length === 0,
       stages: [...DEFAULT_STAGES.map((s) => ({ ...s }))],
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -77,6 +79,7 @@ const PipelinesPage: React.FC = () => {
           ? pipeline.stages.map((s) => ({ ...s }))
           : [...DEFAULT_STAGES.map((s) => ({ ...s }))],
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -120,6 +123,7 @@ const PipelinesPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     try {
       const validated = pipelineSchema.parse(formData);
@@ -149,7 +153,14 @@ const PipelinesPage: React.FC = () => {
       fetchPipelines();
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const fieldErrors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) {
+            fieldErrors[String(field)] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
         return;
       }
       Swal.fire(
@@ -462,7 +473,7 @@ const PipelinesPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-5">
+            <form noValidate onSubmit={handleSave} className="p-5 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
@@ -470,14 +481,20 @@ const PipelinesPage: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. Sales Pipeline"
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.name
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.name && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -496,8 +513,15 @@ const PipelinesPage: React.FC = () => {
                         rotten_days: Number(e.target.value) || 30,
                       })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.rotten_days
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.rotten_days && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.rotten_days}</p>
+                  )}
                   <p className="text-[11px] text-gray-400 mt-1">
                     Days after which a lead in stage is considered stale.
                   </p>
@@ -543,6 +567,10 @@ const PipelinesPage: React.FC = () => {
                   </button>
                 </div>
 
+                {errors.stages && (
+                  <p className="text-xs text-red-500 font-medium">{errors.stages}</p>
+                )}
+
                 <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                   {formData.stages.map((st, idx) => (
                     <div
@@ -555,7 +583,6 @@ const PipelinesPage: React.FC = () => {
                       <div className="flex-1">
                         <input
                           type="text"
-                          required
                           placeholder="Stage Name"
                           value={st.name}
                           onChange={(e) =>

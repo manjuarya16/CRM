@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { webFormSchema, WebFormInput } from "@/schemas";
@@ -106,6 +106,10 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
     setValue("attributes", updated);
   };
 
+  const onInvalid = (errs: any) => {
+    console.log("Zod validation errors:", errs);
+  };
+
   const onSubmit = async (data: WebFormInput) => {
     try {
       setLoading(true);
@@ -127,7 +131,7 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+    <form noValidate onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
       {/* General Settings */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -138,7 +142,9 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
             type="text"
             {...register("title")}
             placeholder="e.g. Contact Us Website Form"
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.title ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title.message}</p>}
         </div>
@@ -151,7 +157,9 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
             type="text"
             {...register("form_id")}
             placeholder="e.g. website-contact-form"
-            className="w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.form_id ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.form_id && <p className="text-xs text-red-500 mt-1">{errors.form_id.message}</p>}
         </div>

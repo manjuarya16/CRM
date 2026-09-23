@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { webhookSchema, WebhookInput } from "@/schemas";
@@ -97,6 +97,10 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
     setValue("query_params", updated);
   };
 
+  const onInvalid = (errs: any) => {
+    console.log("Zod validation errors:", errs);
+  };
+
   const onSubmit = async (data: WebhookInput) => {
     try {
       setLoading(true);
@@ -119,7 +123,7 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+    <form noValidate onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -129,7 +133,9 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
             type="text"
             {...register("name")}
             placeholder="e.g. Zapier Lead Sync Webhook"
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
         </div>
@@ -170,10 +176,12 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
             Target Endpoint URL <span className="text-red-500">*</span>
           </label>
           <input
-            type="url"
+            type="text"
             {...register("end_point")}
             placeholder="https://hooks.zapier.com/hooks/catch/..."
-            className="w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.end_point ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.end_point && <p className="text-xs text-red-500 mt-1">{errors.end_point.message}</p>}
         </div>

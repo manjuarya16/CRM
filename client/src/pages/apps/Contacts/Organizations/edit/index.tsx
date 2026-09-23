@@ -224,7 +224,7 @@ const EditOrganizationPage: React.FC = () => {
       </div>
 
       {/* Main Form Card */}
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8 space-y-6">
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8 space-y-6">
         {/* Name Field */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">

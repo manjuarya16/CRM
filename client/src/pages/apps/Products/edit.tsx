@@ -48,6 +48,8 @@ const EditProductPage: React.FC = () => {
     }
   }, [id]);
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const validation = productSchema.safeParse({
@@ -59,10 +61,16 @@ const EditProductPage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const issue = validation.error.issues[0];
-      Swal.fire("Validation Error", issue ? issue.message : "Invalid product data", "warning");
+      const errMap: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          errMap[issue.path[0].toString()] = issue.message;
+        }
+      });
+      setErrors(errMap);
       return;
     }
+    setErrors({});
     setSaving(true);
     try {
       await updateProduct(Number(id), {
@@ -100,27 +108,38 @@ const EditProductPage: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">SKU *</label>
             <input
               type="text"
-              required
               value={formData.sku}
-              onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+              onChange={(e) => {
+                setFormData({ ...formData, sku: e.target.value });
+                if (errors.sku) setErrors((prev) => ({ ...prev, sku: "" }));
+              }}
+              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                errors.sku ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
             />
+            {errors.sku && <p className="mt-1 text-xs text-red-500 font-medium">{errors.sku}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Product Name</label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Product Name *</label>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+              }}
+              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
             />
+            {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
           </div>
 
           <div>
@@ -128,9 +147,15 @@ const EditProductPage: React.FC = () => {
             <input
               type="number"
               value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+              onChange={(e) => {
+                setFormData({ ...formData, quantity: e.target.value });
+                if (errors.quantity) setErrors((prev) => ({ ...prev, quantity: "" }));
+              }}
+              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                errors.quantity ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
             />
+            {errors.quantity && <p className="mt-1 text-xs text-red-500 font-medium">{errors.quantity}</p>}
           </div>
 
           <div>
@@ -139,10 +164,16 @@ const EditProductPage: React.FC = () => {
               type="number"
               step="0.01"
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, price: e.target.value });
+                if (errors.price) setErrors((prev) => ({ ...prev, price: "" }));
+              }}
               placeholder="0.00"
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                errors.price ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
             />
+            {errors.price && <p className="mt-1 text-xs text-red-500 font-medium">{errors.price}</p>}
           </div>
 
           <div className="md:col-span-2">

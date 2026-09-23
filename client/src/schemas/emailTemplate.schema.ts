@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const emailTemplateSchema = z.object({
   name: z.string().trim().min(1, "Template name is required").max(255),

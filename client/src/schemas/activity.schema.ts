@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const activitySchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(191, "Title is too long"),

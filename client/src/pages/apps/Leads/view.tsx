@@ -51,6 +51,7 @@ const LeadViewPage: React.FC = () => {
 
   // Add Product form
   const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "" });
+  const [prodError, setProdError] = useState<string>("");
 
   useEffect(() => {
     API.get("/persons?limit=100").then((res) => {
@@ -129,9 +130,10 @@ const LeadViewPage: React.FC = () => {
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProd.product_id) {
-      Swal.fire("Validation Error", "Select a product", "warning");
+      setProdError("Please select a product");
       return;
     }
+    setProdError("");
     await addLeadProduct(leadId, Number(newProd.product_id), Number(newProd.quantity) || 1, newProd.price ? Number(newProd.price) : undefined);
     setNewProd({ product_id: "", quantity: "1", price: "" });
     fetchLeadById(leadId);
@@ -642,14 +644,20 @@ const LeadViewPage: React.FC = () => {
                       <label className="block text-xs font-semibold mb-1">Product</label>
                       <select
                         value={newProd.product_id}
-                        onChange={(e) => setNewProd({ ...newProd, product_id: e.target.value })}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border rounded text-xs"
+                        onChange={(e) => {
+                          setNewProd({ ...newProd, product_id: e.target.value });
+                          if (prodError) setProdError("");
+                        }}
+                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${
+                          prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
+                        } rounded text-xs`}
                       >
                         <option value="">Select Product</option>
                         {productsList.map((p) => (
                           <option key={p.id} value={p.id}>{p.name} (${p.price})</option>
                         ))}
                       </select>
+                      {prodError && <p className="mt-1 text-xs text-red-500 font-medium">{prodError}</p>}
                     </div>
                     <div className="w-20">
                       <label className="block text-xs font-semibold mb-1">Qty</label>
