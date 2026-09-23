@@ -20,6 +20,7 @@ export interface IPerson {
   sales_owner_name?: string | null;
   created_at?: string;
   updated_at?: string;
+  custom_attributes?: any;
   activities?: any[];
   leads?: any[];
 }
@@ -32,3 +33,16 @@ export interface PersonFormData {
   job_title: string;
   user_id: string;
 }
+
+export interface PersonState {
+  persons: IPerson[];
+  loading: boolean;
+  total: number;
+  error: any;
+  fetchPersons: (params?: { page?: number; perPage?: number; search?: string }) => Promise<void>;
+  getPersonById: (id: number | string) => Promise<IPerson | null>;
+  savePerson: (data: PersonFormData, id?: number | string) => Promise<IPerson>;
+  deletePerson: (id: number | string) => Promise<boolean>;
+  clearAllPersons: () => Promise<{ success: boolean; message: string }>;
+}
+

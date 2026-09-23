@@ -6,7 +6,7 @@ import API from "@/config";
 interface ComposeMailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (message?: string) => void;
   initialData?: {
     to?: string[];
     cc?: string[];
@@ -172,15 +172,17 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
         formData.append("attachments", file);
       });
 
+      let res: any;
       if (initialData?.draftId) {
-        await updateDraft(initialData.draftId, formData);
+        res = await updateDraft(initialData.draftId, formData);
       } else {
-        await sendEmail(formData);
+        res = await sendEmail(formData);
       }
 
       resetForm();
       onClose();
-      if (onSuccess) onSuccess();
+      const successText = res?.message || (isDraft ? "Draft saved successfully!" : "Email sent successfully!");
+      if (onSuccess) onSuccess(successText);
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || "Failed to process email.");
     } finally {

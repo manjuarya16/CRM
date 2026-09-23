@@ -46,6 +46,14 @@ const MailPage: React.FC = () => {
   const [editingDraft, setEditingDraft] = useState<any | null>(null);
   const [searchInput, setSearchInput] = useState(search);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+  };
 
   useEffect(() => {
     fetchEmails();
@@ -522,12 +530,31 @@ const MailPage: React.FC = () => {
           setIsComposeOpen(false);
           setEditingDraft(null);
         }}
-        onSuccess={() => {
+        onSuccess={(msg) => {
+          showToast(msg || "Email sent successfully!", "success");
           fetchEmails();
           fetchCounts();
         }}
         initialData={editingDraft}
       />
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed top-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border transition-all duration-300 ${
+          toastMessage.type === "success"
+            ? "bg-emerald-600 text-white border-emerald-500 shadow-emerald-900/20"
+            : "bg-red-600 text-white border-red-500 shadow-red-900/20"
+        }`}>
+          <i className={`${toastMessage.type === "success" ? "mgc_check_circle_fill" : "mgc_close_circle_fill"} text-lg`}></i>
+          <span className="text-xs font-semibold">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-3 text-white/80 hover:text-white"
+          >
+            <i className="mgc_close_line text-sm"></i>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

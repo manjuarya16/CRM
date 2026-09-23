@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { usePersonStore } from "@/store";
 import { EmailItem, ContactItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
@@ -142,7 +143,7 @@ const CreatePersonPage: React.FC = () => {
 
     try {
       setSaving(true);
-      await API.post("/persons", payload);
+      await usePersonStore.getState().savePerson(payload as any);
       Swal.fire({
         icon: "success",
         title: "Success",

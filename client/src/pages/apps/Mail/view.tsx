@@ -35,6 +35,14 @@ const MailViewPage: React.FC = () => {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [sending, setSending] = useState<boolean>(false);
   const [composerError, setComposerError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ type, text });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+  };
 
   // CRM Link Picker State
   const [linkingPersonId, setLinkingPersonId] = useState<string>("");
@@ -188,6 +196,7 @@ const MailViewPage: React.FC = () => {
       setComposerMode(null);
       setReplyBody("");
       setAttachments([]);
+      showToast("Email reply sent successfully!", "success");
       await loadEmail(email.id);
       fetchCounts();
     } catch (err: any) {
@@ -926,6 +935,24 @@ const MailViewPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed top-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border transition-all duration-300 ${
+          toastMessage.type === "success"
+            ? "bg-emerald-600 text-white border-emerald-500 shadow-emerald-900/20"
+            : "bg-red-600 text-white border-red-500 shadow-red-900/20"
+        }`}>
+          <i className={`${toastMessage.type === "success" ? "mgc_check_circle_fill" : "mgc_close_circle_fill"} text-lg`}></i>
+          <span className="text-xs font-semibold">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-3 text-white/80 hover:text-white"
+          >
+            <i className="mgc_close_line text-sm"></i>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
