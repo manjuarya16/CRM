@@ -2162,12 +2162,39 @@ CREATE TABLE IF NOT EXISTS imports (
     id SERIAL PRIMARY KEY,
     type VARCHAR(50) NOT NULL,
     action VARCHAR(50) NOT NULL,
+    validation_strategy VARCHAR(50) DEFAULT 'stop_on_errors',
+    allowed_errors INTEGER DEFAULT 0,
+    field_separator VARCHAR(10) DEFAULT ',',
+    process_in_queue BOOLEAN DEFAULT false,
     state VARCHAR(50) DEFAULT 'completed',
     summary JSONB DEFAULT '{}'::jsonb,
-    error_file TEXT,
+    error_file TEXT DEFAULT '',
+    file_path TEXT DEFAULT '',
+    file_name TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS validation_strategy VARCHAR(50) DEFAULT 'stop_on_errors';
+ALTER TABLE imports ALTER COLUMN validation_strategy SET DEFAULT 'stop_on_errors';
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS allowed_errors INTEGER DEFAULT 0;
+ALTER TABLE imports ALTER COLUMN allowed_errors SET DEFAULT 0;
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS field_separator VARCHAR(10) DEFAULT ',';
+ALTER TABLE imports ALTER COLUMN field_separator SET DEFAULT ',';
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS process_in_queue BOOLEAN DEFAULT false;
+ALTER TABLE imports ALTER COLUMN process_in_queue SET DEFAULT false;
+
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS file_path TEXT DEFAULT '';
+ALTER TABLE imports ALTER COLUMN file_path DROP NOT NULL;
+ALTER TABLE imports ALTER COLUMN file_path SET DEFAULT '';
+
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS file_name TEXT DEFAULT '';
+ALTER TABLE imports ALTER COLUMN file_name DROP NOT NULL;
+ALTER TABLE imports ALTER COLUMN file_name SET DEFAULT '';
+
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS error_file TEXT DEFAULT '';
+ALTER TABLE imports ALTER COLUMN error_file DROP NOT NULL;
+ALTER TABLE imports ALTER COLUMN error_file SET DEFAULT '';
 
 CREATE OR REPLACE FUNCTION get_all_imports()
 RETURNS JSONB
@@ -2182,9 +2209,15 @@ BEGIN
             'id', i.id,
             'type', i.type,
             'action', i.action,
+            'validation_strategy', i.validation_strategy,
+            'allowed_errors', i.allowed_errors,
+            'field_separator', i.field_separator,
+            'process_in_queue', i.process_in_queue,
             'state', i.state,
             'summary', i.summary,
             'error_file', i.error_file,
+            'file_path', i.file_path,
+            'file_name', i.file_name,
             'created_at', i.created_at,
             'updated_at', i.updated_at
         ) AS row_data
@@ -2201,7 +2234,13 @@ CREATE OR REPLACE FUNCTION save_import_record(
     p_action VARCHAR(50),
     p_state VARCHAR(50),
     p_summary JSONB,
-    p_error_file TEXT DEFAULT NULL
+    p_error_file TEXT DEFAULT NULL,
+    p_validation_strategy VARCHAR(50) DEFAULT 'stop_on_errors',
+    p_allowed_errors INTEGER DEFAULT 0,
+    p_field_separator VARCHAR(10) DEFAULT ',',
+    p_process_in_queue BOOLEAN DEFAULT false,
+    p_file_path TEXT DEFAULT '',
+    p_file_name TEXT DEFAULT ''
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -2209,8 +2248,24 @@ AS $$
 DECLARE
     v_id INTEGER;
 BEGIN
-    INSERT INTO imports (type, action, state, summary, error_file, created_at, updated_at)
-    VALUES (p_type, p_action, COALESCE(p_state, 'completed'), COALESCE(p_summary, '{}'::jsonb), p_error_file, NOW(), NOW())
+    INSERT INTO imports (
+        type, action, validation_strategy, allowed_errors, field_separator, process_in_queue, state, summary, error_file, file_path, file_name, created_at, updated_at
+    )
+    VALUES (
+        p_type, 
+        p_action, 
+        COALESCE(p_validation_strategy, 'stop_on_errors'), 
+        COALESCE(p_allowed_errors, 0), 
+        COALESCE(p_field_separator, ','),
+        COALESCE(p_process_in_queue, false),
+        COALESCE(p_state, 'completed'), 
+        COALESCE(p_summary, '{}'::jsonb), 
+        COALESCE(p_error_file, ''),
+        COALESCE(p_file_path, ''),
+        COALESCE(p_file_name, p_type || '_import.csv'),
+        NOW(), 
+        NOW()
+    )
     RETURNING id INTO v_id;
 
     RETURN (SELECT jsonb_build_object('id', v_id, 'state', p_state));
@@ -2373,9 +2428,22 @@ CREATE TABLE IF NOT EXISTS tags (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     color VARCHAR(50) DEFAULT '#0088cc',
+    user_id INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+DO $$ 
+BEGIN 
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'tags' AND column_name = 'user_id'
+    ) THEN 
+        ALTER TABLE tags ALTER COLUMN user_id DROP NOT NULL;
+    ELSE 
+        ALTER TABLE tags ADD COLUMN user_id INTEGER;
+    END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION get_tag(p_id INTEGER)
 RETURNS JSONB
@@ -2388,6 +2456,7 @@ BEGIN
         'id', t.id,
         'name', t.name,
         'color', t.color,
+        'user_id', t.user_id,
         'created_at', t.created_at,
         'updated_at', t.updated_at
     ) INTO v_result
@@ -2411,6 +2480,7 @@ BEGIN
             'id', t.id,
             'name', t.name,
             'color', t.color,
+            'user_id', t.user_id,
             'created_at', t.created_at,
             'updated_at', t.updated_at
         ) AS row_data
@@ -2426,7 +2496,8 @@ $$;
 CREATE OR REPLACE FUNCTION save_tag(
     p_name VARCHAR(255),
     p_color VARCHAR(50) DEFAULT '#0088cc',
-    p_id INTEGER DEFAULT NULL
+    p_id INTEGER DEFAULT NULL,
+    p_user_id INTEGER DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -2438,6 +2509,7 @@ BEGIN
         UPDATE tags
         SET name = COALESCE(p_name, name),
             color = COALESCE(p_color, color),
+            user_id = COALESCE(p_user_id, user_id),
             updated_at = NOW()
         WHERE id = p_id
         RETURNING id INTO v_id;
@@ -2446,8 +2518,8 @@ BEGIN
             RAISE EXCEPTION 'Tag with ID % not found', p_id;
         END IF;
     ELSE
-        INSERT INTO tags (name, color, created_at, updated_at)
-        VALUES (p_name, COALESCE(p_color, '#0088cc'), NOW(), NOW())
+        INSERT INTO tags (name, color, user_id, created_at, updated_at)
+        VALUES (p_name, COALESCE(p_color, '#0088cc'), p_user_id, NOW(), NOW())
         RETURNING id INTO v_id;
     END IF;
 

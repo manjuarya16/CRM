@@ -9,6 +9,8 @@ const WorkflowsPage: React.FC = () => {
   const [workflows, setWorkflows] = useState<IWorkflow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [perPage, setPerPage] = useState<number>(10);
+  const [page, setPage] = useState<number>(1);
 
   const fetchWorkflows = async () => {
     try {
@@ -52,6 +54,9 @@ const WorkflowsPage: React.FC = () => {
       w.entity_type.toLowerCase().includes(search.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filtered.length / perPage) || 1;
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
       <PageBreadcrumb title="Workflows" breadCrumbItems={["Settings", "Workflows"]} />
@@ -77,12 +82,30 @@ const WorkflowsPage: React.FC = () => {
               type="text"
               placeholder="Search workflows by name or entity..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-9 pr-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             />
             <i className="mgc_search_line absolute left-3 top-2 text-gray-400"></i>
           </div>
-          <span className="text-xs text-gray-400">{filtered.length} workflows</span>
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Per Page:</span>
+            <select
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value));
+                setPage(1);
+              }}
+              className="text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 focus:outline-none dark:text-gray-200"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -108,7 +131,7 @@ const WorkflowsPage: React.FC = () => {
                   <td colSpan={7} className="py-8 text-center text-gray-400">No workflows found.</td>
                 </tr>
               ) : (
-                filtered.map((item) => (
+                paginated.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-750 transition-colors">
                     <td className="py-3 px-4 text-gray-500 font-mono text-xs">#{item.id}</td>
                     <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-100">{item.name}</td>
@@ -149,6 +172,33 @@ const WorkflowsPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+          <div>
+            Showing {filtered.length === 0 ? 0 : (page - 1) * perPage + 1} to{" "}
+            {Math.min(page * perPage, filtered.length)} of {filtered.length} workflows
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              Previous
+            </button>
+            <span className="font-semibold text-gray-700 dark:text-gray-300">
+              {page} of {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

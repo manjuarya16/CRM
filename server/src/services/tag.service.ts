@@ -30,17 +30,19 @@ export class TagService {
     }
   }
 
-  public static async save(data: { name: string; color?: string }, id?: any) {
+  public static async save(data: { name: string; color?: string; user_id?: any }, id?: any, userId?: any) {
     const numId = toNumberParam(id);
+    const numUserId = toNumberParam(userId || data.user_id);
     try {
-      const result = await pool.query('SELECT save_tag($1, $2, $3) AS data', [
+      const result = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [
         data.name,
         data.color || '#0088cc',
         numId,
+        numUserId,
       ]);
       return result.rows[0]?.data || null;
     } catch (err) {
-      logger.error({ err, data, id }, 'TagService.save failed');
+      logger.error({ err, data, id, userId }, 'TagService.save failed');
       throw err;
     }
   }

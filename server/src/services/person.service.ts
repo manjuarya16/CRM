@@ -9,6 +9,58 @@ const toNumberParam = (v: any): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: string; value: string }> => {
+  if (!val) return [];
+  const parseStr = (str: string, lbl = defaultLabel): Array<{ label: string; value: string }> => {
+    let clean = str.trim().replace(/""/g, '"');
+    if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 2) clean = clean.slice(1, -1);
+    if ((clean.startsWith('[') && clean.endsWith(']')) || (clean.startsWith('{') && clean.endsWith('}'))) {
+      try {
+        const p = JSON.parse(clean);
+        return parsePersonField(p, lbl);
+      } catch {}
+    }
+    if (clean.includes(':') || clean.includes(',')) {
+      const parts = clean.split(',');
+      const res: Array<{ label: string; value: string }> = [];
+      for (const p of parts) {
+        const t = p.trim();
+        if (!t) continue;
+        if (t.includes(':')) {
+          const idx = t.indexOf(':');
+          const l = t.substring(0, idx).trim();
+          const v = t.substring(idx + 1).trim();
+          if (v) res.push({ label: l || lbl, value: v });
+        } else {
+          res.push({ label: lbl, value: t });
+        }
+      }
+      if (res.length > 0) return res;
+    }
+    return [{ label: lbl, value: clean }];
+  };
+
+  if (Array.isArray(val)) {
+    const res: Array<{ label: string; value: string }> = [];
+    for (const item of val) {
+      if (typeof item === 'object' && item !== null) {
+        const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+        const itemLabel = item.label || defaultLabel;
+        if (typeof itemVal === 'string' && (itemVal.startsWith('[') || itemVal.startsWith('{') || itemVal.includes(':') || itemVal.includes(','))) {
+          res.push(...parseStr(itemVal, itemLabel));
+        } else if (itemVal) {
+          res.push({ label: itemLabel, value: String(itemVal).trim() });
+        }
+      } else if (typeof item === 'string') {
+        res.push(...parseStr(item, defaultLabel));
+      }
+    }
+    return res;
+  }
+  if (typeof val === 'string') return parseStr(val, defaultLabel);
+  return [];
+};
+
 export class PersonService {
   public static async getAll(params: { page?: number; perPage?: number; search?: string }): Promise<{ rows: any[]; total: number }> {
     try {
@@ -17,36 +69,23 @@ export class PersonService {
       const search = params.search ? String(params.search).trim() : '';
       const offset = (page - 1) * perPage;
 
-      let whereSql = 'WHERE 1=1';
-      const queryParams: any[] = [];
+      const { rows } = await pool.query('SELECT get_all_persons($1, $2, $3) as result', [
+        search || null,
+        perPage,
+        offset,
+      ]);
 
-      if (search) {
-        queryParams.push(`%${search}%`);
-        whereSql += ` AND (p.name ILIKE $${queryParams.length} OR p.job_title ILIKE $${queryParams.length} OR o.name ILIKE $${queryParams.length} OR p.emails::text ILIKE $${queryParams.length})`;
-      }
+      const resData = rows[0]?.result || { rows: [], total: 0 };
+      const cleanedRows = (resData.rows || []).map((row: any) => ({
+        ...row,
+        emails: parsePersonField(row.emails, 'work'),
+        contact_numbers: parsePersonField(row.contact_numbers, 'work'),
+      }));
 
-      const countRes = await pool.query(
-        `SELECT COUNT(*) as count 
-         FROM persons p 
-         LEFT JOIN organizations o ON p.organization_id = o.id 
-         ${whereSql}`,
-        queryParams
-      );
-      const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-      queryParams.push(perPage, offset);
-      const { rows } = await pool.query(
-        `SELECT p.*, o.name as organization_name, u.name as sales_owner_name
-         FROM persons p
-         LEFT JOIN organizations o ON p.organization_id = o.id
-         LEFT JOIN users u ON p.user_id = u.id
-         ${whereSql}
-         ORDER BY p.id DESC
-         LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
-        queryParams
-      );
-
-      return { rows, total };
+      return {
+        rows: cleanedRows,
+        total: Number(resData.total) || 0,
+      };
     } catch (error: any) {
       logger.error({ error, params }, 'PersonService.getAll failed');
       throw error;
@@ -58,16 +97,24 @@ export class PersonService {
       const personId = toNumberParam(id);
       if (!personId) return null;
 
-      const { rows } = await pool.query(
-        `SELECT p.*, o.name as organization_name, u.name as sales_owner_name
-         FROM persons p
-         LEFT JOIN organizations o ON p.organization_id = o.id
-         LEFT JOIN users u ON p.user_id = u.id
-         WHERE p.id = $1`,
-        [personId]
-      );
+      const { rows } = await pool.query('SELECT get_person($1) as result', [personId]);
+      const person = rows[0]?.result || null;
+      if (!person) return null;
 
-      if (!rows[0]) return null;
+      const cleanJobTitle = (title: any) => {
+        if (!title || typeof title !== 'string') return title || '';
+        if (title.includes('{') || title.includes('[') || title.includes('"')) {
+          return '';
+        }
+        return title;
+      };
+
+      const cleanedPerson = {
+        ...person,
+        emails: parsePersonField(person.emails, 'work'),
+        contact_numbers: parsePersonField(person.contact_numbers, 'work'),
+        job_title: cleanJobTitle(person.job_title),
+      };
 
       const activitiesRes = await pool.query(
         `SELECT * FROM activities WHERE id IN (
@@ -82,7 +129,7 @@ export class PersonService {
       ).catch(() => ({ rows: [] }));
 
       return {
-        ...rows[0],
+        ...cleanedPerson,
         activities: activitiesRes.rows,
         leads: leadsRes.rows,
       };
@@ -113,29 +160,20 @@ export class PersonService {
       const orgId = toNumberParam(data.organization_id);
       const userId = toNumberParam(data.user_id);
 
-      if (personId) {
-        const existing = await pool.query('SELECT * FROM persons WHERE id = $1', [personId]);
-        if (!existing.rows[0]) {
-          throw new ApiError(404, 'Person not found');
-        }
-
-        const { rows } = await pool.query<IPerson>(
-          `UPDATE persons
-           SET name = $1, emails = $2, contact_numbers = $3, organization_id = $4, job_title = $5, user_id = $6, custom_attributes = $7::jsonb, updated_at = NOW()
-           WHERE id = $8
-           RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]
-        );
-        return rows[0];
-      } else {
-        const { rows } = await pool.query<IPerson>(
-          `INSERT INTO persons (name, emails, contact_numbers, organization_id, job_title, user_id, custom_attributes, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-           RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson]
-        );
-        return rows[0];
-      }
+      const { rows } = await pool.query(
+        'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb, $8) as result',
+        [
+          data.name.trim(),
+          emailsJson,
+          contactsJson,
+          orgId,
+          data.job_title || null,
+          userId,
+          customAttrsJson,
+          personId,
+        ]
+      );
+      return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, data, id }, 'PersonService.save failed');
       throw error;
@@ -147,8 +185,8 @@ export class PersonService {
       const personId = toNumberParam(id);
       if (!personId) return false;
 
-      const result = await pool.query('DELETE FROM persons WHERE id = $1', [personId]);
-      return (result.rowCount ?? 0) > 0;
+      const { rows } = await pool.query('SELECT delete_person($1) as result', [personId]);
+      return Boolean(rows[0]?.result);
     } catch (error: any) {
       logger.error({ error, id }, 'PersonService.delete failed');
       throw error;

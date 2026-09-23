@@ -150,6 +150,9 @@ const EditWebFormPage = React.lazy(
 const DataTransferPage = React.lazy(
   () => import("../pages/apps/Settings/DataTransfer"),
 );
+const CreateImportPage = React.lazy(
+  () => import("../pages/apps/Settings/DataTransfer/create"),
+);
 const GoogleContactsPage = React.lazy(
   () => import("../pages/apps/Settings/GoogleContacts"),
 );
@@ -557,6 +560,16 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/data-transfer",
     name: "Settings Data Transfer",
     element: <DataTransferPage />,
+  },
+  {
+    path: "/settings/data-transfer/create",
+    name: "Create Import",
+    element: <CreateImportPage />,
+  },
+  {
+    path: "/settings/data-transfer/imports/create",
+    name: "Create Import",
+    element: <CreateImportPage />,
   },
   {
     path: "/settings/tags",

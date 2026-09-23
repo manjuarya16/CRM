@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useProductStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { productSchema } from "@/schemas";
 
 const CreateProductPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,8 +20,17 @@ const CreateProductPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.sku.trim()) {
-      Swal.fire("Validation Error", "SKU is required", "warning");
+    const validation = productSchema.safeParse({
+      sku: formData.sku.trim(),
+      name: formData.name.trim(),
+      description: formData.description || undefined,
+      quantity: Number(formData.quantity) || 0,
+      price: formData.price ? Number(formData.price) : undefined,
+    });
+
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      Swal.fire("Validation Error", issue ? issue.message : "Invalid product data", "warning");
       return;
     }
     setSaving(true);

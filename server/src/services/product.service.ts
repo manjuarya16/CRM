@@ -15,25 +15,13 @@ export class ProductService {
       const page = Math.max(1, Number(params.page) || 1);
       const perPage = Math.max(1, Number(params.perPage) || 10);
       const search = params.search ? String(params.search).trim() : '';
-      const offset = (page - 1) * perPage;
 
-      let whereSql = 'WHERE 1=1';
-      const queryParams: any[] = [];
-
-      if (search) {
-        queryParams.push(`%${search}%`);
-        whereSql += ` AND (name ILIKE $${queryParams.length} OR sku ILIKE $${queryParams.length})`;
-      }
-
-      const countRes = await pool.query(`SELECT COUNT(*) as count FROM products ${whereSql}`, queryParams);
-      const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-      queryParams.push(perPage, offset);
-      const { rows } = await pool.query<IProduct>(
-        `SELECT * FROM products ${whereSql} ORDER BY id DESC LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
-        queryParams
-      );
-
+      const { rows } = await pool.query('SELECT * FROM public.fn_get_all_products($1, $2, $3)', [
+        search,
+        page,
+        perPage,
+      ]);
+      const total = rows.length > 0 ? Number(rows[0].total_count || rows.length) : 0;
       return { rows, total };
     } catch (error: any) {
       logger.error({ error, params }, 'ProductService.getAll failed');
@@ -46,7 +34,7 @@ export class ProductService {
       const productId = toNumberParam(id);
       if (!productId) return null;
 
-      const { rows } = await pool.query<IProduct>('SELECT * FROM products WHERE id = $1', [productId]);
+      const { rows } = await pool.query('SELECT * FROM public.fn_get_product_by_id($1)', [productId]);
       return rows[0] || null;
     } catch (error: any) {
       logger.error({ error, id }, 'ProductService.getById failed');
@@ -62,28 +50,15 @@ export class ProductService {
       const price = data.price !== undefined && data.price !== null ? Number(data.price) : null;
 
       if (productId) {
-        const existing = await this.getById(productId);
-        if (!existing) throw new ApiError(404, 'Product not found');
-
-        const { rows } = await pool.query<IProduct>(
-          `UPDATE products
-           SET sku = COALESCE($1, sku),
-               name = COALESCE($2, name),
-               description = $3,
-               quantity = $4,
-               price = $5,
-               updated_at = NOW()
-           WHERE id = $6
-           RETURNING *`,
-          [data.sku?.trim(), data.name?.trim(), data.description || null, quantity, price, productId]
+        const { rows } = await pool.query(
+          'SELECT * FROM public.fn_update_product($1, $2, $3, $4, $5, $6)',
+          [productId, data.sku?.trim() || null, data.name?.trim() || null, data.description || null, quantity, price]
         );
         return rows[0];
       } else {
-        const { rows } = await pool.query<IProduct>(
-          `INSERT INTO products (sku, name, description, quantity, price, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-           RETURNING *`,
-          [data.sku?.trim(), data.name?.trim() || null, data.description || null, quantity, price]
+        const { rows } = await pool.query(
+          'SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)',
+          [data.sku?.trim() || null, data.name?.trim() || null, data.description || null, quantity, price]
         );
         return rows[0];
       }
@@ -98,8 +73,8 @@ export class ProductService {
       const productId = toNumberParam(id);
       if (!productId) return false;
 
-      const result = await pool.query('DELETE FROM products WHERE id = $1', [productId]);
-      return (result.rowCount ?? 0) > 0;
+      const { rows } = await pool.query('SELECT public.fn_delete_product($1) AS deleted', [productId]);
+      return Boolean(rows[0]?.deleted);
     } catch (error: any) {
       logger.error({ error, id }, 'ProductService.delete failed');
       throw error;

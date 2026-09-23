@@ -170,6 +170,12 @@ const MENU_ITEMS: MenuItemTypes[] = [
         parentKey: "settings",
       },
       {
+        key: "tags",
+        label: "Tags",
+        url: "/settings/tags",
+        parentKey: "settings",
+      },
+      {
         key: "data-transfer",
         label: "Data Transfer",
         url: "/settings/data-transfer",

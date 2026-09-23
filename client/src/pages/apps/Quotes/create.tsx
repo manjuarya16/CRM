@@ -5,6 +5,7 @@ import { useQuoteStore } from "@/store";
 import API from "@/config";
 import { ITempQuoteItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { quoteSchema } from "@/schemas";
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();
@@ -114,12 +115,21 @@ const CreateQuotePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.subject.trim()) {
-      Swal.fire("Validation Error", "Subject is required", "warning");
-      return;
-    }
-    if (!formData.person_id) {
-      Swal.fire("Validation Error", "Contact Person is required", "warning");
+    const validation = quoteSchema.safeParse({
+      subject: formData.subject.trim(),
+      description: formData.description || undefined,
+      person_id: formData.person_id ? Number(formData.person_id) : undefined,
+      discount_percent: globalDiscountPercent,
+      discount_amount: totalDiscount,
+      tax_amount: taxAmount,
+      adjustment_amount: adjustmentAmount,
+      sub_total: rawSubTotal,
+      grand_total: grandTotal,
+    });
+
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      Swal.fire("Validation Error", issue ? issue.message : "Invalid quote input", "warning");
       return;
     }
 

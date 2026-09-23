@@ -21,8 +21,11 @@ const AttributesPage: React.FC = () => {
   const [entityFilter, setEntityFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedAttribute, setSelectedAttribute] = useState<IAttribute | null>(null);
+  const [perPage, setPerPage] = useState<number>(10);
+  const [page, setPage] = useState<number>(1);
 
   useEffect(() => {
+    setPage(1);
     fetchAttributes();
   }, [entityFilter, typeFilter]);
 
@@ -48,6 +51,7 @@ const AttributesPage: React.FC = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     fetchAttributes();
   };
 
@@ -73,6 +77,9 @@ const AttributesPage: React.FC = () => {
       }
     }
   };
+
+  const totalPages = Math.ceil(attributes.length / perPage) || 1;
+  const paginatedAttributes = attributes.slice((page - 1) * perPage, page * perPage);
 
   return (
     <>
@@ -105,7 +112,7 @@ const AttributesPage: React.FC = () => {
 
         {/* Filter Card */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-5 gap-3">
             {/* Search */}
             <div className="relative md:col-span-2">
               <i className="mgc_search_line absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -136,7 +143,7 @@ const AttributesPage: React.FC = () => {
             </div>
 
             {/* Type Filter */}
-            <div className="flex gap-2">
+            <div>
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
@@ -158,6 +165,22 @@ const AttributesPage: React.FC = () => {
                 <option value="datetime">Date Time</option>
                 <option value="image">Image</option>
                 <option value="file">File</option>
+              </select>
+            </div>
+
+            {/* Per Page Selector */}
+            <div className="flex gap-2 items-center">
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-gray-900 dark:text-white"
+              >
+                <option value={10}>10 per page</option>
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
               </select>
               <button
                 type="submit"
@@ -209,7 +232,7 @@ const AttributesPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
-                  {attributes.map((attr) => {
+                  {paginatedAttributes.map((attr) => {
                     const entityInfo = ENTITY_TYPE_LABELS[attr.entity_type] || {
                       label: attr.entity_type,
                       badge: "bg-gray-100 text-gray-800 border-gray-200",
@@ -298,6 +321,33 @@ const AttributesPage: React.FC = () => {
                   })}
                 </tbody>
               </table>
+
+              {/* Pagination Footer */}
+              <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                <div>
+                  Showing {attributes.length === 0 ? 0 : (page - 1) * perPage + 1} to{" "}
+                  {Math.min(page * perPage, attributes.length)} of {attributes.length} attributes
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Previous
+                  </button>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    {page} of {totalPages}
+                  </span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

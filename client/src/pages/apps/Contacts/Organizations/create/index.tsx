@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { organizationSchema } from "@/schemas";
 
 const COUNTRIES = [
   "United States",
@@ -60,12 +61,27 @@ const CreateOrganizationPage: React.FC = () => {
   };
 
   const validate = () => {
-    const errs: { [key: string]: string } = {};
-    if (!formData.name.trim()) {
-      errs.name = "Name is required";
+    const payloadToValidate = {
+      name: formData.name.trim(),
+      address: formData.address.trim(),
+      country: formData.country,
+      state: formData.state.trim(),
+      city: formData.city.trim(),
+      postcode: formData.postcode.trim(),
+      user_id: formData.user_id ? Number(formData.user_id) : null,
+    };
+    const validation = organizationSchema.safeParse(payloadToValidate);
+    if (!validation.success) {
+      const errs: { [key: string]: string } = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0] ? String(issue.path[0]) : "general";
+        errs[field] = issue.message;
+      });
+      setErrors(errs);
+      return false;
     }
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+    setErrors({});
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

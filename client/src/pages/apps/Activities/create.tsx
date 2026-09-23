@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useActivityStore } from "@/store";
 import API from "@/config";
+import { activitySchema } from "@/schemas";
 
 const CreateActivityPage: React.FC = () => {
   const navigate = useNavigate();
@@ -34,8 +35,19 @@ const CreateActivityPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title.trim()) {
-      Swal.fire("Validation Error", "Title is required", "warning");
+    const validation = activitySchema.safeParse({
+      title: formData.title.trim(),
+      type: formData.type,
+      comment: formData.comment || undefined,
+      schedule_from: formData.schedule_from || undefined,
+      schedule_to: formData.schedule_to || undefined,
+      location: formData.location || undefined,
+      is_done: formData.is_done,
+    });
+
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      Swal.fire("Validation Error", issue ? issue.message : "Invalid activity data", "warning");
       return;
     }
     setSaving(true);
