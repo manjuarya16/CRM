@@ -11,4 +11,6 @@ export { useActivityStore } from "./activityStore";
 export { useQuoteStore } from "./quoteStore";
 export { useConfigStore } from "./configStore";
 export { useMailStore } from "./mailStore";
+export { usePersonStore } from "./personStore";
+
 

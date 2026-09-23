@@ -50,6 +50,15 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.delete('/all', async (req, res, next) => {
+  try {
+    const count = await PersonService.deleteAll();
+    res.json({ success: true, message: `${count} persons deleted successfully` });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const deleted = await PersonService.delete(String(req.params.id));
