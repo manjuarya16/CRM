@@ -35,6 +35,7 @@ const TagsPage: React.FC = () => {
   const [editingTag, setEditingTag] = useState<ITag | null>(null);
   const [tagName, setTagName] = useState<string>("");
   const [tagColor, setTagColor] = useState<string>("#0088cc");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -65,15 +66,23 @@ const TagsPage: React.FC = () => {
       setTagName("");
       setTagColor("#0088cc");
     }
+    setErrors({});
     setIsModalOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     const validation = tagSchema.safeParse({ name: tagName.trim(), color: tagColor });
     if (!validation.success) {
-      const issue = validation.error.issues[0];
-      Swal.fire("Validation Error", issue ? issue.message : "Tag name is required", "warning");
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) {
+          fieldErrors[String(field)] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
       return;
     }
 
@@ -299,19 +308,25 @@ const TagsPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form noValidate onSubmit={handleSave} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Tag Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   value={tagName}
                   onChange={(e) => setTagName(e.target.value)}
                   placeholder="e.g. VIP, High Priority, Hot Lead"
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-gray-900 dark:text-white"
+                  className={`w-full px-3.5 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-gray-900 dark:text-white ${
+                    errors.name
+                      ? "border-red-500 focus:border-red-500"
+                      : "border-gray-300 dark:border-gray-600"
+                  }`}
                 />
+                {errors.name && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                )}
               </div>
 
               <div>

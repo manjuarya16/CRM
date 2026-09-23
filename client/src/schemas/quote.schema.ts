@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const quoteSchema = z.object({
   subject: z.string().trim().min(1, "Subject is required").max(191, "Subject is too long"),

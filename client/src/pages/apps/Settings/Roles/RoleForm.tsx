@@ -194,6 +194,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const [description, setDescription] = useState<string>("");
   const [permissionType, setPermissionType] = useState<"all" | "custom">("custom");
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<boolean>(mode === "edit");
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -285,7 +286,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
     e.preventDefault();
 
     if (!name.trim()) {
-      Swal.fire("Validation Error", "Role name is required", "warning");
+      setErrors((prev) => ({ ...prev, name: "Role name is required" }));
       return;
     }
 
@@ -298,6 +299,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       };
 
       const validated = roleSchema.parse(payload);
+      setErrors({});
       setSaving(true);
 
       if (mode === "edit" && id) {
@@ -323,7 +325,13 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       navigate("/settings/roles");
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const errMap: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          if (issue.path[0]) {
+            errMap[issue.path[0].toString()] = issue.message;
+          }
+        });
+        setErrors((prev) => ({ ...prev, ...errMap }));
         return;
       }
       Swal.fire("Error", err?.response?.data?.message || "Failed to save role", "error");
@@ -347,7 +355,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const pageTitle = isCreate ? "Create Role" : "Edit Role";
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 max-w-7xl mx-auto space-y-6">
+    <form noValidate onSubmit={handleSubmit} className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Breadcrumbs & Actions Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -416,27 +424,37 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
             </label>
             <input
               type="text"
-              required
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+              }}
               placeholder="e.g. Field Officers, Sales Manager"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4f46e5] focus:border-transparent"
+              className={`w-full px-3.5 py-2.5 text-sm border ${
+                errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#4f46e5]"
+              } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
             />
+            {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
           </div>
 
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
-              Description <span className="text-red-500">*</span>
+              Description
             </label>
             <input
               type="text"
-              required
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (errors.description) setErrors((prev) => ({ ...prev, description: "" }));
+              }}
               placeholder="e.g. Access permissions for field agents"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4f46e5] focus:border-transparent"
+              className={`w-full px-3.5 py-2.5 text-sm border ${
+                errors.description ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#4f46e5]"
+              } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
             />
+            {errors.description && <p className="mt-1 text-xs text-red-500 font-medium">{errors.description}</p>}
           </div>
 
           {/* Permission Type */}

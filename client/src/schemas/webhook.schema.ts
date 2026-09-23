@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const webhookSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(255),
   entity_type: z.string().trim().min(1, "Entity type is required"),
   description: z.string().nullable().optional(),
   method: z.enum(["GET", "POST", "PUT", "DELETE"]).default("POST"),
-  end_point: z.string().url("Invalid URL endpoint"),
+  end_point: z.string().trim().min(1, "Endpoint URL is required").url("Invalid URL endpoint"),
   query_params: z.array(z.object({ key: z.string(), value: z.string() })).optional().default([]),
   headers: z.array(z.object({ key: z.string(), value: z.string() })).optional().default([]),
   payload_type: z.enum(["default", "x-www-form-urlencoded", "raw"]).default("default"),

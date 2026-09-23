@@ -30,6 +30,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
 
   // Locations
   const [locations, setLocations] = useState<string[]>([""]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [loading, setLoading] = useState<boolean>(mode === "edit");
   const [saving, setSaving] = useState<boolean>(false);
@@ -137,12 +138,16 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const errMap: Record<string, string> = {};
     if (!name.trim()) {
-      Swal.fire("Validation Error", "Warehouse name is required", "warning");
-      return;
+      errMap.name = "Warehouse name is required";
     }
     if (!contactName.trim()) {
-      Swal.fire("Validation Error", "Contact person name is required", "warning");
+      errMap.contact_name = "Contact person name is required";
+    }
+
+    if (Object.keys(errMap).length > 0) {
+      setErrors(errMap);
       return;
     }
 
@@ -167,6 +172,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
       };
 
       const validated = warehouseSchema.parse(payload);
+      setErrors({});
       setSaving(true);
 
       if (mode === "edit" && id) {
@@ -192,7 +198,13 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
       navigate("/settings/warehouses");
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const errMap: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          if (issue.path[0]) {
+            errMap[issue.path[0].toString()] = issue.message;
+          }
+        });
+        setErrors((prev) => ({ ...prev, ...errMap }));
         return;
       }
       Swal.fire("Error", err?.response?.data?.message || "Failed to save warehouse", "error");
@@ -216,7 +228,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const pageTitle = isCreate ? "Create Warehouse" : "Edit Warehouse";
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 max-w-6xl mx-auto space-y-6">
+    <form noValidate onSubmit={handleSubmit} className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Breadcrumbs & Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -285,12 +297,17 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
               </label>
               <input
                 type="text"
-                required
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                }}
                 placeholder="e.g. Primary Central Warehouse, East Depot"
-                className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent"
+                className={`w-full px-3.5 py-2.5 text-sm border ${
+                  errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
               />
+              {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
             </div>
 
             <div>
@@ -320,12 +337,17 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
               </label>
               <input
                 type="text"
-                required
                 value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
+                onChange={(e) => {
+                  setContactName(e.target.value);
+                  if (errors.contact_name) setErrors((prev) => ({ ...prev, contact_name: "" }));
+                }}
                 placeholder="e.g. Robert Smith (Operations Manager)"
-                className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent"
+                className={`w-full px-3.5 py-2.5 text-sm border ${
+                  errors.contact_name ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
               />
+              {errors.contact_name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.contact_name}</p>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

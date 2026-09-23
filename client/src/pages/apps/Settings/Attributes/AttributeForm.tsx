@@ -176,11 +176,6 @@ export const AttributeForm: React.FC<AttributeFormProps> = ({ isEdit = false }) 
         }
       });
       setErrors(fieldErrors);
-      Swal.fire({
-        icon: "warning",
-        title: "Validation Error",
-        text: "Please check the form for errors.",
-      });
       return;
     }
 

@@ -214,16 +214,20 @@ const PersonsPage: React.FC = () => {
     }
 
     const headers = ["ID", "Name", "Emails", "Contact Numbers", "Organization Name", "Job Title", "Sales Owner", "Created At"];
-    const rows = persons.map((p) => [
-      p.id,
-      `"${(p.name || "").replace(/"/g, '""')}"`,
-      `"${formatEmails(p.emails).replace(/"/g, '""')}"`,
-      `"${formatContacts(p.contact_numbers).replace(/"/g, '""')}"`,
-      `"${(p.organization_name || "").replace(/"/g, '""')}"`,
-      `"${(p.job_title || "").replace(/"/g, '""')}"`,
-      `"${(p.sales_owner_name || "").replace(/"/g, '""')}"`,
-      `"${p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}"`,
-    ]);
+    const rows = persons.map((p) => {
+      const emailStr = Array.isArray(p.emails) ? p.emails.map((e: any) => typeof e === "object" ? e.value || e.email : String(e)).join("; ") : String(p.emails || "");
+      const contactStr = Array.isArray(p.contact_numbers) ? p.contact_numbers.map((c: any) => typeof c === "object" ? c.value || c.number : String(c)).join("; ") : String(p.contact_numbers || "");
+      return [
+        p.id,
+        `"${(p.name || "").replace(/"/g, '""')}"`,
+        `"${emailStr.replace(/"/g, '""')}"`,
+        `"${contactStr.replace(/"/g, '""')}"`,
+        `"${(p.organization_name || "").replace(/"/g, '""')}"`,
+        `"${(p.job_title || "").replace(/"/g, '""')}"`,
+        `"${(p.sales_owner_name || "").replace(/"/g, '""')}"`,
+        `"${p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}"`,
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);

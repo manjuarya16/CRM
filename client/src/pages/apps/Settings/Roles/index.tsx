@@ -35,6 +35,7 @@ const RolesPage: React.FC = () => {
     permission_type: "all",
     permissions: [],
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
   const [permissionSearch, setPermissionSearch] = useState<string>("");
 
@@ -63,6 +64,7 @@ const RolesPage: React.FC = () => {
       permission_type: "all",
       permissions: [...ALL_CRM_PERMISSION_KEYS],
     });
+    setErrors({});
     setPermissionSearch("");
     setIsModalOpen(true);
   };
@@ -88,6 +90,7 @@ const RolesPage: React.FC = () => {
       permission_type: (role.permission_type as "all" | "custom") || "all",
       permissions: perms,
     });
+    setErrors({});
     setPermissionSearch("");
     setIsModalOpen(true);
   };
@@ -141,6 +144,7 @@ const RolesPage: React.FC = () => {
   // Unified Save (Add & Edit)
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     try {
       const payload = {
@@ -181,7 +185,14 @@ const RolesPage: React.FC = () => {
       fetchRoles();
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const fieldErrors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) {
+            fieldErrors[String(field)] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
         return;
       }
       Swal.fire("Error", err?.response?.data?.message || "Failed to save role", "error");
@@ -691,7 +702,7 @@ const RolesPage: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSaveRole} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form noValidate onSubmit={handleSaveRole} className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Basic Role Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -700,12 +711,18 @@ const RolesPage: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. Sales Manager, Support Lead"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none ${
+                      errors.name
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.name && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -717,8 +734,15 @@ const RolesPage: React.FC = () => {
                     placeholder="Brief description of this role's duties"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none ${
+                      errors.description
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.description && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.description}</p>
+                  )}
                 </div>
               </div>
 

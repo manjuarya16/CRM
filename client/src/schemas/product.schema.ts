@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const productSchema = z.object({
   sku: z.string().trim().min(1, "SKU is required").max(100, "SKU is too long"),

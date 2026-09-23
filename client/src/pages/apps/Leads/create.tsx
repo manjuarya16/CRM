@@ -85,6 +85,7 @@ const CreateLeadPage: React.FC = () => {
 
   // Tab 4 – Custom Attributes
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchSources();
@@ -183,6 +184,7 @@ const CreateLeadPage: React.FC = () => {
   // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     const validation = leadSchema.safeParse({
       title: details.title.trim(),
       description: details.description || undefined,
@@ -194,8 +196,14 @@ const CreateLeadPage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const firstIssue = validation.error.issues[0];
-      Swal.fire("Validation Error", firstIssue ? firstIssue.message : "Invalid form input", "warning");
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) {
+          fieldErrors[String(field)] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
       scrollToSection("lead-details");
       return;
     }
@@ -302,7 +310,7 @@ const CreateLeadPage: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <div className="flex flex-col gap-8 px-6 py-6">
           {/* â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
               Section 1 â€” LEAD DETAILS
@@ -322,12 +330,16 @@ const CreateLeadPage: React.FC = () => {
                 <label className={labelCls}>Title *</label>
                 <input
                   type="text"
-                  required
                   value={details.title}
                   onChange={(e) => setDetails({ ...details, title: e.target.value })}
                   placeholder="e.g. Enterprise Solution Deal"
-                  className={inputCls}
+                  className={`${inputCls} ${
+                    errors.title ? "border-red-500 focus:border-red-500" : ""
+                  }`}
                 />
+                {errors.title && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>
+                )}
               </div>
 
               {/* Lead Value */}

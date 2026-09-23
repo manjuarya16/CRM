@@ -33,6 +33,7 @@ const UsersPage: React.FC = () => {
     group_ids: [] as number[],
     view_permission: "global",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ const UsersPage: React.FC = () => {
       group_ids: [],
       view_permission: "global",
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -92,6 +94,7 @@ const UsersPage: React.FC = () => {
       group_ids: user.group_ids || (user.groups || []).map((g) => g.id),
       view_permission: user.view_permission || "global",
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -108,10 +111,11 @@ const UsersPage: React.FC = () => {
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     try {
       if (!editingUser && !formData.password) {
-        Swal.fire("Validation Error", "Password is required for new users", "warning");
+        setErrors({ password: "Password is required for new users" });
         return;
       }
 
@@ -156,7 +160,14 @@ const UsersPage: React.FC = () => {
       fetchUsers();
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const fieldErrors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) {
+            fieldErrors[String(field)] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
         return;
       }
       Swal.fire(
@@ -534,7 +545,7 @@ const UsersPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4">
+            <form noValidate onSubmit={handleSave} className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
@@ -542,14 +553,20 @@ const UsersPage: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. John Doe"
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.name
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.name && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -558,14 +575,20 @@ const UsersPage: React.FC = () => {
                   </label>
                   <input
                     type="email"
-                    required
                     placeholder="john@example.com"
                     value={formData.email}
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.email
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.email && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.email}</p>
+                  )}
                 </div>
               </div>
 
@@ -577,13 +600,19 @@ const UsersPage: React.FC = () => {
                   <input
                     type="password"
                     placeholder="••••••••"
-                    required={!editingUser}
                     value={formData.password}
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.password
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.password && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.password}</p>
+                  )}
                 </div>
 
                 <div>
@@ -593,7 +622,6 @@ const UsersPage: React.FC = () => {
                   <input
                     type="password"
                     placeholder="••••••••"
-                    required={!editingUser && Boolean(formData.password)}
                     value={formData.confirm_password}
                     onChange={(e) =>
                       setFormData({
@@ -601,8 +629,15 @@ const UsersPage: React.FC = () => {
                         confirm_password: e.target.value,
                       })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.confirm_password
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
+                  {errors.confirm_password && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.confirm_password}</p>
+                  )}
                 </div>
               </div>
 
@@ -619,7 +654,11 @@ const UsersPage: React.FC = () => {
                         role_id: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.role_id
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   >
                     {roles.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -627,6 +666,9 @@ const UsersPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  {errors.role_id && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.role_id}</p>
+                  )}
                 </div>
 
                 <div>
@@ -641,12 +683,19 @@ const UsersPage: React.FC = () => {
                         view_permission: e.target.value,
                       })
                     }
-                    className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.view_permission
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   >
                     <option value="global">Global (Access all data)</option>
                     <option value="group">Group (Access group data)</option>
                     <option value="individual">Individual (Only own data)</option>
                   </select>
+                  {errors.view_permission && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.view_permission}</p>
+                  )}
                 </div>
               </div>
 

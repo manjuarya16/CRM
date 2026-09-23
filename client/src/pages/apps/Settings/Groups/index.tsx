@@ -21,6 +21,7 @@ const GroupsPage: React.FC = () => {
     name: "",
     description: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ const GroupsPage: React.FC = () => {
   const openCreateModal = () => {
     setEditingGroup(null);
     setFormData({ name: "", description: "" });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -51,12 +53,14 @@ const GroupsPage: React.FC = () => {
       name: group.name || "",
       description: group.description || "",
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     try {
       const validated = groupSchema.parse(formData);
@@ -86,7 +90,14 @@ const GroupsPage: React.FC = () => {
       fetchGroups();
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const fieldErrors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) {
+            fieldErrors[String(field)] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
         return;
       }
       Swal.fire(
@@ -360,21 +371,27 @@ const GroupsPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4">
+            <form noValidate onSubmit={handleSave} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                   Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="Enter group name"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                    errors.name
+                      ? "border-red-500 focus:border-red-500"
+                      : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                  }`}
                 />
+                {errors.name && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                )}
               </div>
 
               <div>
@@ -388,8 +405,15 @@ const GroupsPage: React.FC = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                    errors.description
+                      ? "border-red-500 focus:border-red-500"
+                      : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                  }`}
                 ></textarea>
+                {errors.description && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.description}</p>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">

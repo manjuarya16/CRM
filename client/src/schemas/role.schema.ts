@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const roleSchema = z.object({
   name: z.string().trim().min(1, "Role name is required").max(191, "Role name is too long"),

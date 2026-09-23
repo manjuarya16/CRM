@@ -23,6 +23,8 @@ const CreateActivityPage: React.FC = () => {
     person_id: "",
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   useEffect(() => {
     API.get("/leads?limit=100").then((res) => {
       if (res.data?.data) setLeads(res.data.data);
@@ -46,10 +48,16 @@ const CreateActivityPage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const issue = validation.error.issues[0];
-      Swal.fire("Validation Error", issue ? issue.message : "Invalid activity data", "warning");
+      const errMap: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          errMap[issue.path[0].toString()] = issue.message;
+        }
+      });
+      setErrors(errMap);
       return;
     }
+    setErrors({});
     setSaving(true);
     try {
       await addActivity({
@@ -82,19 +90,24 @@ const CreateActivityPage: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
             <input
               type="text"
-              required
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, title: e.target.value });
+                if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
+              }}
               placeholder="e.g. Call with client"
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                errors.title ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
             />
+            {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
           </div>
 
           <div>

@@ -36,6 +36,8 @@ const CreateQuotePage: React.FC = () => {
     tax_percent: "0",
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   useEffect(() => {
     API.get("/persons?limit=100").then((res) => {
       if (res.data?.data) setPersons(res.data.data);
@@ -48,6 +50,7 @@ const CreateQuotePage: React.FC = () => {
 
   // When selected product changes in item row, pre-fill price/sku/name
   const handleProductSelect = (productIdStr: string) => {
+    if (errors.item_product) setErrors((prev) => ({ ...prev, item_product: "" }));
     const pId = Number(productIdStr);
     const prod = products.find((p) => p.id === pId);
     if (prod) {
@@ -65,9 +68,10 @@ const CreateQuotePage: React.FC = () => {
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.product_id) {
-      Swal.fire("Validation Error", "Please select a product", "warning");
+      setErrors((prev) => ({ ...prev, item_product: "Please select a product" }));
       return;
     }
+    setErrors((prev) => ({ ...prev, item_product: "" }));
     const prod = products.find((p) => p.id === Number(newItem.product_id));
     const qty = Number(newItem.quantity) || 1;
     const price = Number(newItem.price) || 0;
@@ -128,8 +132,13 @@ const CreateQuotePage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const issue = validation.error.issues[0];
-      Swal.fire("Validation Error", issue ? issue.message : "Invalid quote input", "warning");
+      const errMap: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          errMap[issue.path[0].toString()] = issue.message;
+        }
+      });
+      setErrors((prev) => ({ ...prev, ...errMap }));
       return;
     }
 
@@ -184,7 +193,7 @@ const CreateQuotePage: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form noValidate onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Header */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
           <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 border-b pb-2">Quote Details</h2>
@@ -194,27 +203,37 @@ const CreateQuotePage: React.FC = () => {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Subject *</label>
               <input
                 type="text"
-                required
                 value={formData.subject}
-                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, subject: e.target.value });
+                  if (errors.subject) setErrors((prev) => ({ ...prev, subject: "" }));
+                }}
                 placeholder="e.g. Enterprise License Quote for ACME"
-                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+                className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                  errors.subject ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
               />
+              {errors.subject && <p className="mt-1 text-xs text-red-500 font-medium">{errors.subject}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Person *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Person</label>
               <select
-                required
                 value={formData.person_id}
-                onChange={(e) => setFormData({ ...formData, person_id: e.target.value })}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+                onChange={(e) => {
+                  setFormData({ ...formData, person_id: e.target.value });
+                  if (errors.person_id) setErrors((prev) => ({ ...prev, person_id: "" }));
+                }}
+                className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                  errors.person_id ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
               >
                 <option value="">Select Person</option>
                 {persons.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
+              {errors.person_id && <p className="mt-1 text-xs text-red-500 font-medium">{errors.person_id}</p>}
             </div>
 
             <div>
@@ -260,13 +279,16 @@ const CreateQuotePage: React.FC = () => {
               <select
                 value={newItem.product_id}
                 onChange={(e) => handleProductSelect(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+                className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${
+                  errors.item_product ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
+                } rounded-lg text-sm`}
               >
                 <option value="">Select Product</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
                 ))}
               </select>
+              {errors.item_product && <p className="mt-1 text-xs text-red-500 font-medium">{errors.item_product}</p>}
             </div>
 
             <div>

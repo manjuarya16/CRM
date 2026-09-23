@@ -20,6 +20,7 @@ const TypesPage: React.FC = () => {
   const [formData, setFormData] = useState({
     name: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -41,6 +42,7 @@ const TypesPage: React.FC = () => {
   const openCreateModal = () => {
     setEditingType(null);
     setFormData({ name: "" });
+    setErrors({});
     setIsModalOpen(true);
   };
 
@@ -49,12 +51,14 @@ const TypesPage: React.FC = () => {
     setFormData({
       name: type.name || "",
     });
+    setErrors({});
     setIsModalOpen(true);
   };
 
   // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     try {
       const validated = typeSchema.parse(formData);
@@ -84,7 +88,14 @@ const TypesPage: React.FC = () => {
       fetchTypes();
     } catch (err: any) {
       if (err instanceof ZodError) {
-        Swal.fire("Validation Error", err.issues[0]?.message || "Invalid input", "warning");
+        const fieldErrors: Record<string, string> = {};
+        err.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) {
+            fieldErrors[String(field)] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
         return;
       }
       Swal.fire(
@@ -347,21 +358,27 @@ const TypesPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4">
+            <form noValidate onSubmit={handleSave} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                   Type Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Existing Business, New Business"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  className="w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                    errors.name
+                      ? "border-red-500 focus:border-red-500"
+                      : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                  }`}
                 />
+                {errors.name && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">

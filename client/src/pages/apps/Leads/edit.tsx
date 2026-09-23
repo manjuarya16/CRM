@@ -66,6 +66,7 @@ const EditLeadPage: React.FC = () => {
     expected_close_date: "",
   });
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Tab 2 â€“ Contact Person
   const [personMode, setPersonMode] = useState<"existing" | "new">("existing");
@@ -205,6 +206,7 @@ const EditLeadPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     const validation = leadSchema.safeParse({
       title: details.title.trim(),
       description: details.description || undefined,
@@ -216,8 +218,14 @@ const EditLeadPage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const firstIssue = validation.error.issues[0];
-      Swal.fire("Validation Error", firstIssue ? firstIssue.message : "Invalid form input", "warning");
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) {
+          fieldErrors[String(field)] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
       scrollToSection("lead-details");
       return;
     }
@@ -308,7 +316,7 @@ const EditLeadPage: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         {/* Tab Bar */}
         <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 px-2">
           {TABS.map((tab) => (
@@ -340,9 +348,14 @@ const EditLeadPage: React.FC = () => {
             <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className={labelCls}>Title *</label>
-                <input type="text" required value={details.title}
+                <input type="text" value={details.title}
                   onChange={(e) => setDetails({ ...details, title: e.target.value })}
-                  className={inputCls} />
+                  className={`${inputCls} ${
+                    errors.title ? "border-red-500 focus:border-red-500" : ""
+                  }`} />
+                {errors.title && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>
+                )}
               </div>
 
               <div>

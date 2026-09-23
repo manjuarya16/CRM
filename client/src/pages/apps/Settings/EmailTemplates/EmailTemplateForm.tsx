@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { emailTemplateSchema, EmailTemplateInput } from "@/schemas";
@@ -54,6 +54,10 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
     setValue("content", current + " " + tag + " ");
   };
 
+  const onInvalid = (errs: any) => {
+    console.log("Zod validation errors:", errs);
+  };
+
   const onSubmit = async (data: EmailTemplateInput) => {
     try {
       setLoading(true);
@@ -73,7 +77,7 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+    <form noValidate onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -83,7 +87,9 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
             type="text"
             {...register("name")}
             placeholder="e.g. Welcome Lead Onboarding Email"
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
         </div>
@@ -96,7 +102,9 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
             type="text"
             {...register("subject")}
             placeholder="e.g. Welcome to {%lead.title%}!"
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.subject ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           />
           {errors.subject && <p className="text-xs text-red-500 mt-1">{errors.subject.message}</p>}
         </div>
@@ -129,7 +137,9 @@ Thank you for reaching out regarding {%lead.title%}.
 
 Best regards,
 {%user.name%}"
-            className="w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+              errors.content ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+            }`}
           ></textarea>
           {errors.content && <p className="text-xs text-red-500 mt-1">{errors.content.message}</p>}
         </div>

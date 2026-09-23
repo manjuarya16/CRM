@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@/utils/zodResolver";
 
 export const groupSchema = z.object({
   name: z.string().trim().min(1, "Group name is required").max(191, "Group name is too long"),
