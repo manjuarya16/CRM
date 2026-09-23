@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getConfigurations, saveConfigurations, uploadConfigImage } from "@/services/configService";
+import { getConfigurations, saveConfigurations, uploadConfigImage, testSmtpConnection } from "@/services/configService";
 import { useConfigStore } from "@/store";
 import { SERVER_URL } from "@/config";
 
@@ -92,6 +92,15 @@ const CONFIG_NAV: { category: string; items: NavItem[] }[] = [
     category: "Email Settings",
     items: [
       {
+        id: "smtp",
+        key: "email.smtp",
+        title: "SMTP Settings",
+        icon: "mgc_send_line",
+        subItems: [
+          { id: "smtp_account", key: "email.smtp.account", title: "SMTP Configuration" },
+        ],
+      },
+      {
         id: "imap",
         key: "email.imap",
         title: "IMAP Settings",
@@ -154,6 +163,15 @@ const ConfigurationPage: React.FC = () => {
     "general.magic_ai.settings.model": "openai/gpt-4o-mini",
     "general.magic_ai.settings.other_model": "",
     "general.magic_ai.doc_generation.enabled": "1",
+    // Email — SMTP Configuration
+    "email.smtp.account.enable": "1",
+    "email.smtp.account.host": "smtp.gmail.com",
+    "email.smtp.account.port": "587",
+    "email.smtp.account.encryption": "tls",
+    "email.smtp.account.username": "",
+    "email.smtp.account.password": "",
+    "email.smtp.account.from_name": "CRM Admin",
+    "email.smtp.account.from_email": "",
     // Email — IMAP
     "email.imap.account.host": "imap.gmail.com",
     "email.imap.account.port": "993",
@@ -163,7 +181,36 @@ const ConfigurationPage: React.FC = () => {
     "email.imap.account.password": "",
   });
 
+  const [showSmtpPass, setShowSmtpPass] = useState<boolean>(false);
+  const [testingSmtp, setTestingSmtp] = useState<boolean>(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   useEffect(() => { fetchConfigs(); }, []);
+
+  const handleTestSmtp = async () => {
+    setTestingSmtp(true);
+    setSmtpTestResult(null);
+    try {
+      const res = await testSmtpConnection({
+        enabled: isOn("email.smtp.account.enable"),
+        host: formValues["email.smtp.account.host"],
+        port: Number(formValues["email.smtp.account.port"]) || 587,
+        secure: formValues["email.smtp.account.encryption"] === "ssl",
+        user: formValues["email.smtp.account.username"],
+        pass: formValues["email.smtp.account.password"],
+        fromName: formValues["email.smtp.account.from_name"],
+        fromEmail: formValues["email.smtp.account.from_email"],
+      });
+      setSmtpTestResult(res);
+    } catch (err: any) {
+      setSmtpTestResult({
+        success: false,
+        message: err.response?.data?.message || "Failed to test SMTP connection.",
+      });
+    } finally {
+      setTestingSmtp(false);
+    }
+  };
 
   const fetchConfigs = async () => {
     setLoading(true);
@@ -715,6 +762,155 @@ const ConfigurationPage: React.FC = () => {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ════════════════════════════════════════════════════════════
+                  EMAIL → SMTP
+              ════════════════════════════════════════════════════════════ */}
+              {activeTab === "smtp" && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                      <i className="mgc_send_line text-[#0088cc]"></i>
+                      SMTP Email Server Settings
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Configure dynamic SMTP credentials for outgoing emails (Gmail, SendGrid, custom mail server).
+                    </p>
+                  </div>
+
+                  <div className="space-y-6 max-w-2xl">
+                    <ToggleSwitch
+                      checked={isOn("email.smtp.account.enable")}
+                      onChange={(v) => handleToggle("email.smtp.account.enable", v)}
+                      label="Enable Outgoing Email Delivery"
+                      hint="When enabled, composed emails are dispatched to real recipient inboxes via SMTP."
+                    />
+
+                    {isOn("email.smtp.account.enable") && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>SMTP Host</label>
+                            <input
+                              type="text"
+                              value={formValues["email.smtp.account.host"] || ""}
+                              onChange={(e) => handleInputChange("email.smtp.account.host", e.target.value)}
+                              placeholder="smtp.gmail.com"
+                              className={inputCls}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>SMTP Port</label>
+                            <input
+                              type="text"
+                              value={formValues["email.smtp.account.port"] || "587"}
+                              onChange={(e) => handleInputChange("email.smtp.account.port", e.target.value)}
+                              placeholder="587"
+                              className={inputCls}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label className={labelCls}>Encryption</label>
+                            <select
+                              value={formValues["email.smtp.account.encryption"] || "tls"}
+                              onChange={(e) => handleInputChange("email.smtp.account.encryption", e.target.value)}
+                              className={inputCls}
+                            >
+                              <option value="tls">TLS / STARTTLS (Port 587)</option>
+                              <option value="ssl">SSL (Port 465)</option>
+                              <option value="none">None (Port 25)</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>From Sender Name</label>
+                            <input
+                              type="text"
+                              value={formValues["email.smtp.account.from_name"] || ""}
+                              onChange={(e) => handleInputChange("email.smtp.account.from_name", e.target.value)}
+                              placeholder="CRM Admin"
+                              className={inputCls}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>From Sender Email Address</label>
+                            <input
+                              type="text"
+                              value={formValues["email.smtp.account.from_email"] || ""}
+                              onChange={(e) => handleInputChange("email.smtp.account.from_email", e.target.value)}
+                              placeholder="admin@yourdomain.com"
+                              className={inputCls}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label className={labelCls}>SMTP Username / Email</label>
+                            <input
+                              type="text"
+                              value={formValues["email.smtp.account.username"] || ""}
+                              onChange={(e) => handleInputChange("email.smtp.account.username", e.target.value)}
+                              placeholder="user@gmail.com"
+                              className={inputCls}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label className={labelCls}>SMTP Password / App Password</label>
+                            <div className="relative">
+                              <input
+                                type={showSmtpPass ? "text" : "password"}
+                                value={formValues["email.smtp.account.password"] || ""}
+                                onChange={(e) => handleInputChange("email.smtp.account.password", e.target.value)}
+                                placeholder="••••••••••••"
+                                className={`${inputCls} pr-10`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowSmtpPass(!showSmtpPass)}
+                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                              >
+                                <i className={showSmtpPass ? "mgc_eye_close_line" : "mgc_eye_line"}></i>
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-gray-400">
+                              For Gmail, use a 16-character App Password (generated from Google Account Security).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Test Connection Button & Result */}
+                        <div className="pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={handleTestSmtp}
+                            disabled={testingSmtp}
+                            className="inline-flex items-center justify-center px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {testingSmtp ? (
+                              <><i className="mgc_loading_2_line animate-spin mr-2"></i>Testing Connection...</>
+                            ) : (
+                              <><i className="mgc_wifi_line mr-1.5"></i>Test SMTP Connection</>
+                            )}
+                          </button>
+
+                          {smtpTestResult && (
+                            <span className={`text-xs px-3 py-1.5 rounded-md font-medium ${
+                              smtpTestResult.success
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                                : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                            }`}>
+                              {smtpTestResult.message}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 

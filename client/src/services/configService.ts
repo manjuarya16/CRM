@@ -18,3 +18,8 @@ export const uploadConfigImage = async (file: File) => {
   });
   return response.data;
 };
+
+export const testSmtpConnection = async (testConfig?: Record<string, any>) => {
+  const response = await API.post("/configuration/test-smtp", { testConfig });
+  return response.data;
+};

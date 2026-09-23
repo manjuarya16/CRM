@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { configService } from '@/services/configService';
+import { testSmtpConnection } from '@/utils/mailer';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -82,6 +83,17 @@ router.post('/upload-image', upload.single('file'), (req: Request, res: Response
       data: { url: relativeUrl },
       message: 'Image uploaded successfully',
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/configuration/test-smtp - Test SMTP connection
+router.post('/test-smtp', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { testConfig } = req.body;
+    const result = await testSmtpConnection(testConfig || {});
+    res.json(result);
   } catch (error) {
     next(error);
   }
