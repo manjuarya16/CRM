@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { usePersonStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
@@ -39,17 +40,16 @@ const EditPersonPage: React.FC = () => {
   const fetchMetadataAndPerson = async () => {
     try {
       setLoading(true);
-      const [orgsRes, usersRes, personRes] = await Promise.all([
+      const [orgsRes, usersRes, person] = await Promise.all([
         API.get("/organization").catch(() => ({ data: { data: [] } })),
         API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
-        API.get(`/persons/${id}`),
+        usePersonStore.getState().getPersonById(id!),
       ]);
 
       setOrganizations(orgsRes.data?.data || []);
       const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
       setUsers(userRows);
 
-      const person = personRes.data?.data;
       if (person) {
         const unpackItems = (raw: any, defaultLabel = "work"): Array<{ label: string; value: string }> => {
           if (!raw) return [];
@@ -233,7 +233,7 @@ const EditPersonPage: React.FC = () => {
 
     try {
       setSaving(true);
-      await API.put(`/persons/${id}`, payload);
+      await usePersonStore.getState().savePerson(payload as any, id);
       Swal.fire({
         icon: "success",
         title: "Success",
