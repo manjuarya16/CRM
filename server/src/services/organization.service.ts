@@ -11,18 +11,26 @@ const toNumberParam = (v: any): number | null => {
 };
 
 export class OrganizationService {
-  public static async getAll(): Promise<IOrganization[]> {
+  public static async getAll(params?: { page?: number; perPage?: number; search?: string }): Promise<{ rows: IOrganization[]; total: number }> {
     try {
-      const { rows } = await pool.query<IOrganization>(
-        `SELECT o.*, COALESCE(COUNT(p.id), 0)::int AS person_count
-         FROM organizations o
-         LEFT JOIN persons p ON p.organization_id = o.id
-         GROUP BY o.id
-         ORDER BY o.id ASC`
-      );
-      return rows;
+      const page = Math.max(1, Number(params?.page) || 1);
+      const perPage = Math.max(1, Number(params?.perPage) || 10);
+      const search = params?.search ? String(params.search).trim() : '';
+      const offset = (page - 1) * perPage;
+
+      const { rows } = await pool.query('SELECT get_all_organizations($1, $2, $3) as result', [
+        search || null,
+        perPage,
+        offset,
+      ]);
+
+      const resData = rows[0]?.result || { rows: [], total: 0 };
+      return {
+        rows: resData.rows || [],
+        total: Number(resData.total) || 0,
+      };
     } catch (error: any) {
-      logger.error({ error }, 'OrganizationService.getAll failed');
+      logger.error({ error, params }, 'OrganizationService.getAll failed');
       throw error;
     }
   }
@@ -32,11 +40,8 @@ export class OrganizationService {
       const orgId = toNumberParam(id);
       if (!orgId) return null;
 
-      const { rows } = await pool.query<IOrganization>(
-        'SELECT * FROM organizations WHERE id = $1',
-        [orgId]
-      );
-      return rows[0] || null;
+      const { rows } = await pool.query('SELECT get_organization($1) as result', [orgId]);
+      return rows[0]?.result || null;
     } catch (error: any) {
       logger.error({ error, id }, 'OrganizationService.getById failed');
       throw error;
@@ -49,13 +54,11 @@ export class OrganizationService {
       const customAttrsJson = typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : (data.custom_attributes || '{}');
       const userId = toNumberParam(data.user_id);
 
-      const { rows } = await pool.query<IOrganization>(
-        `INSERT INTO organizations (name, address, user_id, custom_attributes, created_at, updated_at)
-         VALUES ($1, $2, $3, $4::jsonb, NOW(), NOW())
-         RETURNING *`,
+      const { rows } = await pool.query(
+        'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result',
         [data.name.trim(), addressJson || null, userId, customAttrsJson]
       );
-      return rows[0];
+      return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, data }, 'OrganizationService.create failed');
       throw error;
@@ -73,23 +76,22 @@ export class OrganizationService {
       }
 
       const name = data.name !== undefined ? data.name.trim() : existing.name;
-      let address = existing.address;
+      let addressJson: string | null = null;
       if (data.address !== undefined) {
-        address = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
+        addressJson = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
+      } else if (existing.address) {
+        addressJson = typeof existing.address === 'object' ? JSON.stringify(existing.address) : existing.address;
       }
       const userId = data.user_id !== undefined ? toNumberParam(data.user_id) : existing.user_id;
       const customAttrsJson = data.custom_attributes !== undefined
         ? (typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : data.custom_attributes)
         : JSON.stringify(existing.custom_attributes || {});
 
-      const { rows } = await pool.query<IOrganization>(
-        `UPDATE organizations 
-         SET name = $1, address = $2, user_id = $3, custom_attributes = $4::jsonb, updated_at = NOW()
-         WHERE id = $5
-         RETURNING *`,
-        [name, address, userId, customAttrsJson, orgId]
+      const { rows } = await pool.query(
+        'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb, $5) as result',
+        [name, addressJson, userId, customAttrsJson, orgId]
       );
-      return rows[0];
+      return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, id, data }, 'OrganizationService.update failed');
       throw error;
@@ -101,8 +103,8 @@ export class OrganizationService {
       const orgId = toNumberParam(id);
       if (!orgId) return false;
 
-      const result = await pool.query('DELETE FROM organizations WHERE id = $1', [orgId]);
-      return (result.rowCount ?? 0) > 0;
+      const { rows } = await pool.query('SELECT delete_organization($1) as result', [orgId]);
+      return Boolean(rows[0]?.result);
     } catch (error: any) {
       logger.error({ error, id }, 'OrganizationService.delete failed');
       throw error;

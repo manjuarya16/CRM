@@ -320,12 +320,29 @@ const LeadViewPage: React.FC = () => {
                   return (
                     <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
                       <p className="font-semibold text-gray-700 dark:text-gray-300 text-[11px] uppercase tracking-wider">Custom Attributes</p>
-                      {Object.entries(attrs).map(([k, v]) => (
-                        <div key={k} className="flex justify-between">
-                          <span className="text-gray-500 capitalize">{k.replace(/_/g, " ")}</span>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">{String(v ?? "-")}</span>
-                        </div>
-                      ))}
+                      {Object.entries(attrs).map(([k, v]) => {
+                        const valStr = String(v ?? "");
+                        const isImage = typeof v === "string" && (
+                          valStr.startsWith("data:image/") ||
+                          valStr.startsWith("http://") ||
+                          valStr.startsWith("https://") ||
+                          /\.(jpg|jpeg|png|gif|webp)$/i.test(valStr)
+                        );
+                        return (
+                          <div key={k} className="flex justify-between items-center gap-2">
+                            <span className="text-gray-500 capitalize">{k.replace(/_/g, " ")}</span>
+                            {isImage ? (
+                              <img
+                                src={valStr}
+                                alt={k}
+                                className="w-12 h-12 object-cover rounded-md border border-gray-200 dark:border-gray-700 shadow-sm"
+                              />
+                            ) : (
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{valStr || "-"}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })()}

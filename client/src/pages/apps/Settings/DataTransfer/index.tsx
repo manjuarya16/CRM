@@ -1,32 +1,23 @@
 import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { PageBreadcrumb } from "@/components";
 import { IImport } from "@/interface";
 
 const DataTransferPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"imports" | "export">("imports");
+  const navigate = useNavigate();
   const [imports, setImports] = useState<IImport[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Import Modal Wizard State
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importType, setImportType] = useState<"leads" | "persons" | "organizations" | "products">("leads");
-  const [importAction, setImportAction] = useState<"append" | "overwrite">("append");
-  const [validationStrategy, setValidationStrategy] = useState<"stop_on_errors" | "skip_error_entries">("skip_error_entries");
-  const [allowedErrors, setAllowedErrors] = useState<number>(10);
-  const [csvText, setCsvText] = useState<string>("");
-  const [parsedRows, setParsedRows] = useState<any[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
-
-  // Export State
-  const [exportType, setExportType] = useState<"leads" | "persons" | "organizations" | "products">("leads");
-  const [isExporting, setIsExporting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [perPage, setPerPage] = useState<number>(10);
+  const [page, setPage] = useState<number>(1);
 
   const fetchImports = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/data-transfer/imports").catch(() => ({ data: { data: [] } }));
+      const res = await API.get("/data-transfer/imports", {
+        params: { search: search || undefined },
+      }).catch(() => ({ data: { data: [] } }));
       setImports(res.data?.data || []);
     } catch {
       setImports([]);
@@ -39,397 +30,218 @@ const DataTransferPage: React.FC = () => {
     fetchImports();
   }, []);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = (event.target?.result as string) || "";
-      setCsvText(text);
-      parseCsv(text);
-    };
-    reader.readAsText(file);
+  const handleFilter = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    fetchImports();
   };
 
-  const parseCsv = (text: string) => {
-    try {
-      const lines = text.trim().split("\n").filter((l) => l.trim().length > 0);
-      if (lines.length < 2) {
-        setParsedRows([]);
-        return;
+  const handleDelete = async (id: number) => {
+    const result = await Swal.fire({
+      title: "Delete Import Record?",
+      text: "Are you sure you want to delete this import history log?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Yes, delete",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await API.delete(`/data-transfer/imports/${id}`).catch(() => {});
+        setImports(imports.filter((i) => i.id !== id));
+        Swal.fire({ icon: "success", title: "Deleted!", timer: 1500, showConfirmButton: false });
+      } catch {
+        Swal.fire({ icon: "error", title: "Error", text: "Failed to delete record" });
       }
-      const headers = lines[0].split(",").map((h) => h.trim().replace(/^["']|["']$/g, ""));
-      const rows: any[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map((v) => v.trim().replace(/^["']|["']$/g, ""));
-        const rowObj: Record<string, any> = {};
-        headers.forEach((h, idx) => {
-          rowObj[h] = values[idx] || "";
-        });
-        rows.push(rowObj);
-      }
-      setParsedRows(rows);
-    } catch {
-      setParsedRows([]);
     }
   };
 
-  const loadSample = async () => {
-    try {
-      const res = await API.get(`/data-transfer/sample/${importType}`);
-      const sample = res.data?.data || [];
-      if (sample.length > 0) {
-        const headers = Object.keys(sample[0]).join(",");
-        const values = Object.values(sample[0]).join(",");
-        const csv = headers + "\n" + values;
-        setCsvText(csv);
-        setParsedRows(sample);
-      }
-    } catch {
-      Swal.fire({ icon: "error", title: "Error", text: "Failed to load sample template" });
-    }
-  };
-
-  const handleExecuteImport = async () => {
-    if (parsedRows.length === 0) {
-      Swal.fire({ icon: "warning", title: "No Data", text: "Please upload a valid CSV file or load a sample first." });
-      return;
-    }
-
-    try {
-      setIsImporting(true);
-      const res = await API.post("/data-transfer/import", {
-        type: importType,
-        action: importAction,
-        validation_strategy: validationStrategy,
-        allowed_errors: allowedErrors,
-        field_separator: ",",
-        rows: parsedRows,
-      });
-
-      Swal.fire({
-        icon: "success",
-        title: "Import Finished!",
-        text: `Processed ${res.data?.data?.processed} of ${res.data?.data?.total} records with ${res.data?.data?.errors} errors.`,
-      });
-
-      setIsImportModalOpen(false);
-      setCsvText("");
-      setParsedRows([]);
-      fetchImports();
-    } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Import Failed", text: err.response?.data?.message || "Import encountered an error" });
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleExecuteExport = async () => {
-    try {
-      setIsExporting(true);
-      const res = await API.get(`/data-transfer/export/${exportType}`);
-      const data = res.data?.data || [];
-      if (data.length === 0) {
-        Swal.fire({ icon: "info", title: "Empty", text: `No records found to export for ${exportType}.` });
-        return;
-      }
-
-      const headers = Object.keys(data[0]);
-      const csvLines = [headers.join(",")];
-      data.forEach((row: any) => {
-        const values = headers.map((h) => {
-          const val = row[h];
-          if (val === null || val === undefined) return "";
-          if (typeof val === "object") return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
-          return `"${String(val).replace(/"/g, '""')}"`;
-        });
-        csvLines.push(values.join(","));
-      });
-
-      const blob = new Blob([csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `crm_${exportType}_export_${new Date().toISOString().split("T")[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      Swal.fire({ icon: "success", title: "Export Ready!", text: `Downloaded ${data.length} ${exportType} records as CSV.`, timer: 1500, showConfirmButton: false });
-    } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Export Failed", text: err.response?.data?.message || "Export error" });
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  const totalRecords = imports.length;
+  const totalPages = Math.ceil(totalRecords / perPage) || 1;
+  const startIndex = totalRecords === 0 ? 0 : (page - 1) * perPage + 1;
+  const endIndex = Math.min(page * perPage, totalRecords);
+  const paginatedImports = imports.slice((page - 1) * perPage, page * perPage);
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      <PageBreadcrumb title="Data Transfer" breadCrumbItems={["Settings", "Data Transfer"]} />
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* Top Bar & Breadcrumb */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Data Transfer</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Bulk CSV import and data export tools for CRM entities</p>
+          <nav className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+            <Link to="/dashboard" className="text-[#0088cc] hover:underline">
+              Dashboard
+            </Link>
+            <span>/</span>
+            <Link to="/settings" className="text-[#0088cc] hover:underline">
+              Settings
+            </Link>
+            <span>/</span>
+            <span className="text-gray-700 dark:text-gray-300 font-normal">Imports</span>
+          </nav>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            Imports
+          </h1>
         </div>
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_upload_line text-lg"></i>
-          Import CSV Data
-        </button>
+
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate("/settings/data-transfer/create")}
+            className="inline-flex items-center justify-center px-5 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors"
+          >
+            Create Import
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 gap-6 text-sm font-medium">
-        <button
-          onClick={() => setActiveTab("imports")}
-          className={`pb-3 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === "imports"
-              ? "border-blue-600 text-blue-600 font-bold dark:text-blue-400"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-          }`}
-        >
-          <i className="mgc_history_line"></i>
-          Import History & Logs
-        </button>
-        <button
-          onClick={() => setActiveTab("export")}
-          className={`pb-3 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === "export"
-              ? "border-blue-600 text-blue-600 font-bold dark:text-blue-400"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-          }`}
-        >
-          <i className="mgc_download_2_line"></i>
-          Export CRM Data
-        </button>
-      </div>
+      {/* Main Table Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Filter Controls Bar */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Search + Filter Button */}
+          <form onSubmit={handleFilter} className="flex items-center gap-2 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <i className="mgc_search_line absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc]"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold rounded-lg text-sm transition-colors"
+            >
+              Filter
+            </button>
+          </form>
 
-      {/* Tab 1: Imports */}
-      {activeTab === "imports" && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">Past Import Records</h3>
-            <span className="text-xs text-gray-400">{imports.length} imports</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-700/50 text-xs uppercase font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-                  <th className="py-3.5 px-4">ID</th>
-                  <th className="py-3.5 px-4">Type</th>
-                  <th className="py-3.5 px-4">Action</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Processed / Total</th>
-                  <th className="py-3.5 px-4">Errors</th>
-                  <th className="py-3.5 px-4 text-right">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">Loading import logs...</td>
-                  </tr>
-                ) : imports.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-400">No import records found. Click "Import CSV Data" to begin.</td>
-                  </tr>
-                ) : (
-                  imports.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-750 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs text-gray-500">#{item.id}</td>
-                      <td className="py-3 px-4 capitalize font-medium text-gray-800 dark:text-gray-100">{item.type}</td>
-                      <td className="py-3 px-4 capitalize text-gray-600 dark:text-gray-300">{item.action}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                          item.state === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
-                          item.state === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" :
-                          "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-                        }`}>
-                          {item.state || "completed"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-600 dark:text-gray-300">
-                        {item.summary?.processed ?? 0} / {item.summary?.total ?? 0}
-                      </td>
-                      <td className="py-3 px-4 text-xs font-mono">
-                        <span className={item.summary?.errors ? "text-red-500 font-bold" : "text-gray-400"}>
-                          {item.summary?.errors ?? 0}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-400 text-right">
-                        {item.created_at ? new Date(item.created_at).toLocaleString() : "-"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 2: Export */}
-      {activeTab === "export" && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 max-w-2xl space-y-6">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Export CRM Entities to CSV</h3>
-            <p className="text-sm text-gray-500 mt-1">Download your CRM leads, contacts, organizations, or product catalog.</p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Select Entity to Export
-              </label>
+          {/* Right: Per Page & Pagination Controls */}
+          <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span>Per Page</span>
               <select
-                value={exportType}
-                onChange={(e) => setExportType(e.target.value as any)}
-                className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
               >
-                <option value="leads">Leads (Title, Value, Pipeline Status, Dates)</option>
-                <option value="persons">Persons / Contacts (Name, Emails, Phones, Job Title)</option>
-                <option value="organizations">Organizations (Name, Addresses)</option>
-                <option value="products">Products (SKU, Name, Price, Quantity)</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
               </select>
             </div>
 
-            <button
-              onClick={handleExecuteExport}
-              disabled={isExporting}
-              className="px-5 py-2.5 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors flex items-center gap-2"
-            >
-              <i className="mgc_download_2_line text-lg"></i>
-              {isExporting ? "Generating CSV..." : `Export ${exportType.toUpperCase()} CSV`}
-            </button>
-          </div>
-        </div>
-      )}
+            <span className="font-medium">
+              {totalRecords === 0 ? "0 - 0 of 0" : `${startIndex} - ${endIndex} of ${totalRecords}`}
+            </span>
 
-      {/* Import Modal */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4 my-8">
-            <div className="flex items-center justify-between border-b pb-3 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">CSV Import Wizard</h3>
-              <button onClick={() => setIsImportModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Entity Type</label>
-                <select
-                  value={importType}
-                  onChange={(e) => {
-                    setImportType(e.target.value as any);
-                    setParsedRows([]);
-                    setCsvText("");
-                  }}
-                  className="w-full px-3 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                >
-                  <option value="leads">Leads</option>
-                  <option value="persons">Persons / Contacts</option>
-                  <option value="organizations">Organizations</option>
-                  <option value="products">Products</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Import Action</label>
-                <select
-                  value={importAction}
-                  onChange={(e) => setImportAction(e.target.value as any)}
-                  className="w-full px-3 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                >
-                  <option value="append">Append (Insert New)</option>
-                  <option value="overwrite">Overwrite / Update</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Validation Strategy</label>
-                <select
-                  value={validationStrategy}
-                  onChange={(e) => setValidationStrategy(e.target.value as any)}
-                  className="w-full px-3 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                >
-                  <option value="skip_error_entries">Skip invalid rows</option>
-                  <option value="stop_on_errors">Stop entire import on error</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Max Allowed Errors</label>
-                <input
-                  type="number"
-                  value={allowedErrors}
-                  onChange={(e) => setAllowedErrors(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                />
-              </div>
-            </div>
-
-            {/* File Upload / Sample */}
-            <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-5 text-center space-y-3 bg-gray-50 dark:bg-gray-750">
-              <i className="mgc_upload_2_line text-3xl text-gray-400"></i>
-              <div>
-                <p className="text-xs font-medium text-gray-700 dark:text-gray-200">Upload CSV file for {importType.toUpperCase()}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Comma separated .csv files with header row</p>
-              </div>
-              <div className="flex justify-center gap-3">
-                <label className="cursor-pointer px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 shadow-sm">
-                  Choose File
-                  <input type="file" accept=".csv,text/csv" onChange={handleFileUpload} className="hidden" />
-                </label>
-                <button
-                  type="button"
-                  onClick={loadSample}
-                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium hover:bg-blue-100"
-                >
-                  Load Sample Template
-                </button>
-              </div>
-            </div>
-
-            {/* Parsed Preview */}
-            {parsedRows.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Ready to Import: {parsedRows.length} rows</span>
-                </div>
-                <div className="max-h-36 overflow-auto border rounded-lg text-xs bg-gray-50 dark:bg-gray-900/50 p-2 font-mono">
-                  <pre>{JSON.stringify(parsedRows.slice(0, 3), null, 2)}</pre>
-                  {parsedRows.length > 3 && <p className="text-[10px] text-gray-400 italic mt-1">...and {parsedRows.length - 3} more rows</p>}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-3 border-t dark:border-gray-700">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setIsImportModalOpen(false)}
-                className="px-4 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                Cancel
+                <i className="mgc_chevron_left_line text-base"></i>
               </button>
               <button
                 type="button"
-                onClick={handleExecuteImport}
-                disabled={isImporting || parsedRows.length === 0}
-                className="px-5 py-2 text-xs font-semibold text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg disabled:opacity-50 flex items-center gap-2"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                {isImporting ? "Importing..." : "Execute Import"}
+                <i className="mgc_chevron_right_line text-base"></i>
               </button>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Data Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50/80 dark:bg-gray-900/50 text-gray-700 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                <th className="py-3 px-4">ID</th>
+                <th className="py-3 px-4">Type</th>
+                <th className="py-3 px-4">State</th>
+                <th className="py-3 px-4">Uploaded File</th>
+                <th className="py-3 px-4">Error File</th>
+                <th className="py-3 px-4">Started At</th>
+                <th className="py-3 px-4">Completed At</th>
+                <th className="py-3 px-4">Summary</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-gray-400">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0088cc] border-t-transparent mr-2"></div>
+                    Loading import records...
+                  </td>
+                </tr>
+              ) : paginatedImports.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-16 text-center text-gray-500 font-medium text-sm">
+                    No Records Available.
+                  </td>
+                </tr>
+              ) : (
+                paginatedImports.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-750 transition-colors">
+                    <td className="py-3 px-4 font-mono text-gray-500">#{item.id}</td>
+                    <td className="py-3 px-4 capitalize font-semibold">{item.type}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold capitalize ${
+                        item.state === "completed"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                          : item.state === "partial"
+                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "bg-[#e0f2fe] text-[#0284c7]"
+                      }`}>
+                        {item.state || "Completed"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-[#0088cc] font-medium truncate max-w-[150px]">
+                      {item.summary?.fileName || `${item.type}_import.csv`}
+                    </td>
+                    <td className="py-3 px-4 text-gray-400 italic">
+                      {item.summary?.errors ? "error_log.csv" : "-"}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
+                      {item.created_at ? new Date(item.created_at).toLocaleString() : "-"}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
+                      {item.created_at ? new Date(item.created_at).toLocaleString() : "-"}
+                    </td>
+                    <td className="py-3 px-4 text-xs font-mono">
+                      Processed: {item.summary?.processed ?? 0} / Total: {item.summary?.total ?? 0}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition-colors"
+                        title="Delete record"
+                      >
+                        <i className="mgc_delete_2_line text-base"></i>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };
+
 export default DataTransferPage;

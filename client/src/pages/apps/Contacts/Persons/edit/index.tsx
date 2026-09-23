@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { personSchema } from "@/schemas";
 
 import { EmailItem, ContactItem, PersonFormData } from "@/interface";
 
@@ -50,36 +51,75 @@ const EditPersonPage: React.FC = () => {
 
       const person = personRes.data?.data;
       if (person) {
-        let parsedEmails: EmailItem[] = [];
-        if (Array.isArray(person.emails)) {
-          parsedEmails = person.emails;
-        } else if (typeof person.emails === "string") {
-          try {
-            parsedEmails = JSON.parse(person.emails);
-          } catch {
-            parsedEmails = [{ label: "work", value: person.emails }];
+        const unpackItems = (raw: any, defaultLabel = "work"): Array<{ label: string; value: string }> => {
+          if (!raw) return [];
+          const parseStr = (str: string, label = defaultLabel): Array<{ label: string; value: string }> => {
+            let clean = str.trim().replace(/""/g, '"');
+            if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 2) clean = clean.slice(1, -1);
+            if ((clean.startsWith("[") && clean.endsWith("]")) || (clean.startsWith("{") && clean.endsWith("}"))) {
+              try {
+                const p = JSON.parse(clean);
+                return unpackItems(p, label);
+              } catch {}
+            }
+            if (clean.includes(":") || clean.includes(",")) {
+              const parts = clean.split(",");
+              const res: Array<{ label: string; value: string }> = [];
+              for (const p of parts) {
+                const t = p.trim();
+                if (!t) continue;
+                if (t.includes(":")) {
+                  const idx = t.indexOf(":");
+                  const l = t.substring(0, idx).trim();
+                  const v = t.substring(idx + 1).trim();
+                  if (v) res.push({ label: l || label, value: v });
+                } else {
+                  res.push({ label, value: t });
+                }
+              }
+              if (res.length > 0) return res;
+            }
+            return [{ label, value: clean }];
+          };
+
+          if (Array.isArray(raw)) {
+            const res: Array<{ label: string; value: string }> = [];
+            for (const item of raw) {
+              if (typeof item === "object" && item !== null) {
+                const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+                const itemLabel = item.label || defaultLabel;
+                if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(","))) {
+                  res.push(...parseStr(itemVal, itemLabel));
+                } else if (itemVal) {
+                  res.push({ label: itemLabel, value: String(itemVal).trim() });
+                }
+              } else if (typeof item === "string") {
+                res.push(...parseStr(item, defaultLabel));
+              }
+            }
+            return res;
           }
-        }
+          if (typeof raw === "string") return parseStr(raw, defaultLabel);
+          return [];
+        };
+
+        let parsedEmails = unpackItems(person.emails, "work");
         if (parsedEmails.length === 0) parsedEmails = [{ label: "work", value: "" }];
 
-        let parsedContacts: ContactItem[] = [];
-        if (Array.isArray(person.contact_numbers)) {
-          parsedContacts = person.contact_numbers;
-        } else if (typeof person.contact_numbers === "string") {
-          try {
-            parsedContacts = JSON.parse(person.contact_numbers);
-          } catch {
-            parsedContacts = [{ label: "work", value: person.contact_numbers }];
-          }
-        }
+        let parsedContacts = unpackItems(person.contact_numbers, "work");
         if (parsedContacts.length === 0) parsedContacts = [{ label: "work", value: "" }];
+
+        let cleanTitle = person.job_title || "";
+        if (cleanTitle.includes("{") || cleanTitle.includes("[") || cleanTitle.includes('"')) {
+          cleanTitle = "";
+        }
 
         setFormData({
           name: person.name || "",
           emails: parsedEmails,
           contact_numbers: parsedContacts,
           organization_id: person.organization_id ? String(person.organization_id) : "",
-          job_title: person.job_title || "",
+          job_title: cleanTitle,
           user_id: person.user_id ? String(person.user_id) : "",
         });
         if (person.custom_attributes) {
@@ -158,24 +198,41 @@ const EditPersonPage: React.FC = () => {
     });
   };
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
+    setErrors({});
+
+    const payloadToValidate = {
+      name: formData.name.trim(),
+      emails: formData.emails,
+      contact_numbers: formData.contact_numbers,
+      organization_id: formData.organization_id ? Number(formData.organization_id) : null,
+      job_title: formData.job_title.trim() || null,
+      user_id: formData.user_id ? Number(formData.user_id) : null,
+    };
+
+    const validation = personSchema.safeParse(payloadToValidate);
+    if (!validation.success) {
+      const formattedErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const fieldName = issue.path[0] ? String(issue.path[0]) : "general";
+        formattedErrors[fieldName] = issue.message;
+      });
+      setErrors(formattedErrors);
       Swal.fire({
         icon: "warning",
         title: "Validation Error",
-        text: "Person name is required",
+        text: Object.values(formattedErrors)[0] || "Please check the form for errors.",
       });
       return;
     }
 
     const payload = {
-      name: formData.name.trim(),
+      ...payloadToValidate,
       emails: formData.emails.filter((e) => e.value.trim() !== ""),
       contact_numbers: formData.contact_numbers.filter((c) => c.value.trim() !== ""),
-      organization_id: formData.organization_id ? Number(formData.organization_id) : null,
-      job_title: formData.job_title.trim() || null,
-      user_id: formData.user_id ? Number(formData.user_id) : null,
       custom_attributes: customAttributes,
     };
 

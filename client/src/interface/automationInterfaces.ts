@@ -117,6 +117,7 @@ export interface IImport {
     total: number;
     processed: number;
     errors: number;
+    fileName?: string;
     error_samples?: any[];
   };
   error_file?: string | null;

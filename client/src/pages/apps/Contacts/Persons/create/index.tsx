@@ -4,6 +4,7 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { EmailItem, ContactItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { personSchema } from "@/schemas";
 
 const CreatePersonPage: React.FC = () => {
   const navigate = useNavigate();
@@ -101,24 +102,41 @@ const CreatePersonPage: React.FC = () => {
     });
   };
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
+    setErrors({});
+
+    const payloadToValidate = {
+      name: formData.name.trim(),
+      emails: formData.emails,
+      contact_numbers: formData.contact_numbers,
+      organization_id: formData.organization_id ? Number(formData.organization_id) : null,
+      job_title: formData.job_title.trim() || null,
+      user_id: formData.user_id ? Number(formData.user_id) : null,
+    };
+
+    const validation = personSchema.safeParse(payloadToValidate);
+    if (!validation.success) {
+      const formattedErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const fieldName = issue.path[0] ? String(issue.path[0]) : "general";
+        formattedErrors[fieldName] = issue.message;
+      });
+      setErrors(formattedErrors);
       Swal.fire({
         icon: "warning",
         title: "Validation Error",
-        text: "Person name is required",
+        text: Object.values(formattedErrors)[0] || "Please check the form for errors.",
       });
       return;
     }
 
     const payload = {
-      name: formData.name.trim(),
+      ...payloadToValidate,
       emails: formData.emails.filter((e) => e.value.trim() !== ""),
       contact_numbers: formData.contact_numbers.filter((c) => c.value.trim() !== ""),
-      organization_id: formData.organization_id ? Number(formData.organization_id) : null,
-      job_title: formData.job_title.trim() || null,
-      user_id: formData.user_id ? Number(formData.user_id) : null,
       custom_attributes: customAttributes,
     };
 

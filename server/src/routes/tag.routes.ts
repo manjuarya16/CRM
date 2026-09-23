@@ -30,11 +30,12 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/tags
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, color } = req.body;
+    const { name, color, user_id } = req.body;
+    const userId = (req as any).user?.id || user_id;
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Tag name is required' });
     }
-    const saved = await TagService.save({ name: name.trim(), color: color || '#0088cc' });
+    const saved = await TagService.save({ name: name.trim(), color: color || '#0088cc' }, undefined, userId);
     return res.status(201).json({ success: true, data: saved, message: 'Tag created successfully' });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || 'Failed to create tag' });
@@ -44,10 +45,12 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/tags/:id
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { name, color } = req.body;
+    const { name, color, user_id } = req.body;
+    const userId = (req as any).user?.id || user_id;
     const saved = await TagService.save(
       { name: name ? name.trim() : '', color: color || '#0088cc' },
-      req.params.id
+      req.params.id,
+      userId
     );
     return res.json({ success: true, data: saved, message: 'Tag updated successfully' });
   } catch (error: any) {

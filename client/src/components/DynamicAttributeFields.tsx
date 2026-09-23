@@ -272,18 +272,132 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
                 />
               )}
 
-              {/* Image / File Upload */}
-              {["image", "file"].includes(attr.type) && (
-                <input
-                  type="file"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      onChange(attr.code, file.name);
-                    }
-                  }}
-                  className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                />
+              {/* Image Upload & Preview */}
+              {attr.type === "image" && (
+                <div className="space-y-2">
+                  {val ? (
+                    <div className="flex items-center gap-3 p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900">
+                      <img
+                        src={val}
+                        alt={attr.name}
+                        className="w-16 h-16 object-cover rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
+                          {typeof val === 'string' && val.startsWith('data:') ? 'Image uploaded' : String(val).split('/').pop()}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <label className="text-xs font-semibold text-primary hover:underline cursor-pointer">
+                            <span>Change Image</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    if (reader.result) {
+                                      onChange(attr.code, reader.result as string);
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => onChange(attr.code, "")}
+                            className="text-xs font-semibold text-red-500 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              onChange(attr.code, reader.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* File Upload & Preview */}
+              {attr.type === "file" && (
+                <div className="space-y-2">
+                  {val ? (
+                    <div className="flex items-center justify-between p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900">
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-xs">
+                        {typeof val === 'string' && val.startsWith('data:') ? 'File attached' : String(val).split('/').pop()}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs font-semibold text-primary hover:underline cursor-pointer">
+                          <span>Change</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) {
+                                    onChange(attr.code, reader.result as string);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => onChange(attr.code, "")}
+                          className="text-xs font-semibold text-red-500 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              onChange(attr.code, reader.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    />
+                  )}
+                </div>
               )}
 
               {err && <p className="text-xs text-red-500 mt-1">{err}</p>}

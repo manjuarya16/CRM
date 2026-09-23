@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { quoteSchema } from "@/schemas";
 
 const EditQuotePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -132,8 +133,21 @@ const EditQuotePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.subject.trim()) {
-      Swal.fire("Validation Error", "Subject is required", "warning");
+    const validation = quoteSchema.safeParse({
+      subject: formData.subject.trim(),
+      description: formData.description || undefined,
+      person_id: formData.person_id ? Number(formData.person_id) : undefined,
+      discount_percent: globalDiscountPercent,
+      discount_amount: totalDiscount,
+      tax_amount: taxAmount,
+      adjustment_amount: adjustmentAmount,
+      sub_total: rawSubTotal,
+      grand_total: grandTotal,
+    });
+
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      Swal.fire("Validation Error", issue ? issue.message : "Invalid quote input", "warning");
       return;
     }
 

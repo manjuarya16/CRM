@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import PageBreadcrumb from "@/components/PageBreadcrumb";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { tagSchema } from "@/schemas";
 
 export interface ITag {
   id: number;
@@ -26,6 +27,8 @@ const TagsPage: React.FC = () => {
   const [tags, setTags] = useState<ITag[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
+  const [perPage, setPerPage] = useState<number>(10);
+  const [page, setPage] = useState<number>(1);
 
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -47,7 +50,7 @@ const TagsPage: React.FC = () => {
       }
     } catch {
       Swal.fire("Error", "Failed to load tags", "error");
-    } fontally: {
+    } finally {
       setLoading(false);
     }
   };
@@ -67,8 +70,10 @@ const TagsPage: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tagName.trim()) {
-      Swal.fire("Validation Error", "Tag name is required", "warning");
+    const validation = tagSchema.safeParse({ name: tagName.trim(), color: tagColor });
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      Swal.fire("Validation Error", issue ? issue.message : "Tag name is required", "warning");
       return;
     }
 
@@ -113,6 +118,9 @@ const TagsPage: React.FC = () => {
     }
   };
 
+  const totalPages = Math.ceil(tags.length / perPage) || 1;
+  const paginatedTags = tags.slice((page - 1) * perPage, page * perPage);
+
   return (
     <>
       <PageBreadcrumb title="Tags" name="Tags" breadCrumbItems={["Settings", "Tags"]} />
@@ -136,14 +144,15 @@ const TagsPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Search */}
+        {/* Search & Per Page */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              setPage(1);
               fetchTags();
             }}
-            className="flex gap-3"
+            className="flex flex-col sm:flex-row gap-3"
           >
             <div className="relative flex-1">
               <i className="mgc_search_line absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -155,12 +164,26 @@ const TagsPage: React.FC = () => {
                 className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-gray-900 dark:text-white"
               />
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium"
-            >
-              Search
-            </button>
+            <div className="flex gap-2">
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-gray-900 dark:text-white"
+              >
+                <option value={10}>10 per page</option>
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
+              </select>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium"
+              >
+                Search
+              </button>
+            </div>
           </form>
         </div>
 
@@ -188,7 +211,7 @@ const TagsPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
-                  {tags.map((tag) => (
+                  {paginatedTags.map((tag) => (
                     <tr key={tag.id} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                       <td className="px-5 py-3.5 text-xs text-gray-400">#{tag.id}</td>
                       <td className="px-5 py-3.5 font-medium">
@@ -227,6 +250,33 @@ const TagsPage: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+
+              {/* Pagination Footer */}
+              <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                <div>
+                  Showing {tags.length === 0 ? 0 : (page - 1) * perPage + 1} to{" "}
+                  {Math.min(page * perPage, tags.length)} of {tags.length} tags
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Previous
+                  </button>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    {page} of {totalPages}
+                  </span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

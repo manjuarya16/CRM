@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { leadSchema } from "@/schemas";
 
 interface ProductRow {
   id?: number; // existing product record ID (for update)
@@ -204,8 +205,19 @@ const EditLeadPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!details.title.trim()) {
-      Swal.fire("Validation Error", "Lead Title is required", "warning");
+    const validation = leadSchema.safeParse({
+      title: details.title.trim(),
+      description: details.description || undefined,
+      lead_value: details.lead_value ? Number(details.lead_value) : undefined,
+      lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
+      lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
+      lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
+      lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
+    });
+
+    if (!validation.success) {
+      const firstIssue = validation.error.issues[0];
+      Swal.fire("Validation Error", firstIssue ? firstIssue.message : "Invalid form input", "warning");
       scrollToSection("lead-details");
       return;
     }

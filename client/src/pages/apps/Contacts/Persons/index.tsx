@@ -41,46 +41,94 @@ const PersonsPage: React.FC = () => {
     fetchPersons();
   };
 
-  const parseEmails = (emails: any): EmailItem[] => {
-    if (!emails) return [];
-    if (Array.isArray(emails)) return emails;
-    if (typeof emails === "string") {
-      try {
-        const parsed = JSON.parse(emails);
-        if (Array.isArray(parsed)) return parsed;
-        return [{ label: "work", value: emails }];
-      } catch {
-        return [{ label: "work", value: emails }];
+  const parseItems = (raw: any, defaultLabel = "work"): Array<{ label: string; value: string }> => {
+    if (!raw) return [];
+
+    const processString = (str: string, label = defaultLabel): Array<{ label: string; value: string }> => {
+      let clean = str.trim();
+      clean = clean.replace(/""/g, '"');
+      if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 2) {
+        clean = clean.slice(1, -1);
       }
+      if ((clean.startsWith("[") && clean.endsWith("]")) || (clean.startsWith("{") && clean.endsWith("}"))) {
+        try {
+          const parsed = JSON.parse(clean);
+          return parseItems(parsed, label);
+        } catch {}
+      }
+      if (clean.includes(":") || clean.includes(",")) {
+        const parts = clean.split(",");
+        const res: Array<{ label: string; value: string }> = [];
+        for (const p of parts) {
+          const t = p.trim();
+          if (!t) continue;
+          if (t.includes(":")) {
+            const idx = t.indexOf(":");
+            const l = t.substring(0, idx).trim();
+            const v = t.substring(idx + 1).trim();
+            if (v) res.push({ label: l || label, value: v });
+          } else {
+            res.push({ label, value: t });
+          }
+        }
+        if (res.length > 0) return res;
+      }
+      return [{ label, value: clean }];
+    };
+
+    if (Array.isArray(raw)) {
+      const result: Array<{ label: string; value: string }> = [];
+      for (const item of raw) {
+        if (typeof item === "object" && item !== null) {
+          const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+          const itemLabel = item.label || defaultLabel;
+          if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(","))) {
+            result.push(...processString(itemVal, itemLabel));
+          } else if (itemVal) {
+            result.push({ label: itemLabel, value: String(itemVal).trim() });
+          }
+        } else if (typeof item === "string") {
+          result.push(...processString(item, defaultLabel));
+        }
+      }
+      return result;
     }
+
+    if (typeof raw === "string") {
+      return processString(raw, defaultLabel);
+    }
+
     return [];
   };
 
-  const parseContacts = (contacts: any): ContactItem[] => {
-    if (!contacts) return [];
-    if (Array.isArray(contacts)) return contacts;
-    if (typeof contacts === "string") {
-      try {
-        const parsed = JSON.parse(contacts);
-        if (Array.isArray(parsed)) return parsed;
-        return [{ label: "work", value: contacts }];
-      } catch {
-        return [{ label: "work", value: contacts }];
-      }
-    }
-    return [];
+  const formatEmails = (emails: any) => {
+    const list = parseItems(emails, "work");
+    if (!list.length) return "-";
+    return (
+      <div className="flex flex-col gap-0.5">
+        {list.map((item, index) => (
+          <div key={index} className="text-xs">
+            <span className="font-medium text-gray-800 dark:text-gray-200">{item.value}</span>
+            {item.label && <span className="text-gray-400 dark:text-gray-500 ms-1.5 font-normal">({item.label})</span>}
+          </div>
+        ))}
+      </div>
+    );
   };
 
-  const formatEmails = (emails: any): string => {
-    const list = parseEmails(emails);
+  const formatContacts = (contacts: any) => {
+    const list = parseItems(contacts, "work");
     if (!list.length) return "-";
-    return list.map((e) => `${e.value}${e.label ? ` (${e.label})` : ""}`).join(", ");
-  };
-
-  const formatContacts = (contacts: any): string => {
-    const list = parseContacts(contacts);
-    if (!list.length) return "-";
-    return list.map((c) => `${c.value}${c.label ? ` (${c.label})` : ""}`).join(", ");
+    return (
+      <div className="flex flex-col gap-0.5">
+        {list.map((item, index) => (
+          <div key={index} className="text-xs">
+            <span className="font-medium text-gray-800 dark:text-gray-200">{item.value}</span>
+            {item.label && <span className="text-gray-400 dark:text-gray-500 ms-1.5 font-normal">({item.label})</span>}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
