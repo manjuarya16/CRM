@@ -3,7 +3,6 @@ import type { Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
-import type { ILeadCreateInput, ILeadUpdateInput } from "@/interfaces/leadInterface";
 import path from "path";
 import fs from "fs";
 
@@ -51,7 +50,6 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-
 const getLeadById = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
@@ -72,8 +70,7 @@ const getLeadById = async (req: Request, res: Response): Promise<void> => {
 
     const leadData = result.rows[0];
     if (leadData && (leadData.custom_attributes === undefined || leadData.custom_attributes === null)) {
-      const lRes = await connection.query("SELECT custom_attributes FROM leads WHERE id = $1", [id]);
-      leadData.custom_attributes = lRes.rows[0]?.custom_attributes || {};
+      leadData.custom_attributes = {};
     }
 
     res.status(HttpStatusCodes.OK).json({
@@ -110,7 +107,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       products,         // [{ product_id, quantity, price }]
     } = req.body;
 
-    // Resolve person_id: use existing or create new person inline
+    // Resolve person_id: use existing or create new person via procedural function save_person
     let person_id = rawPersonId ? Number(rawPersonId) : null;
 
     if (!person_id && person && person.name) {
@@ -121,8 +118,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         person.phone ? [{ label: "work", value: person.phone }] : []
       );
       const personRes = await connection.query(
-        `INSERT INTO persons (name, emails, contact_numbers, organization_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+        "SELECT save_person($1, $2::jsonb, $3::jsonb, $4) as result",
         [
           person.name,
           emailsJson,
@@ -130,7 +126,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
           person.organization_id ? Number(person.organization_id) : null,
         ]
       );
-      person_id = personRes.rows[0]?.id || null;
+      person_id = personRes.rows[0]?.result?.id || null;
     }
 
     const result = await connection.query(
@@ -150,15 +146,15 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
 
     const lead = result.rows[0];
 
-    // Optionally set stage
+    // Optionally set stage via fn_update_lead_stage
     if (lead && lead_pipeline_stage_id) {
       await connection.query(
-        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
-        [Number(lead_pipeline_stage_id), lead.id]
+        "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
+        [lead.id, Number(lead_pipeline_stage_id)]
       );
     }
 
-    // Save products
+    // Save products via fn_add_lead_product
     if (lead && Array.isArray(products) && products.length > 0) {
       for (const p of products) {
         if (!p.product_id) continue;
@@ -185,7 +181,6 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-
 const updateLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
@@ -209,7 +204,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       custom_attributes,
     } = req.body;
 
-    // Resolve person_id: use existing or create new person inline
+    // Resolve person_id: use existing or create new person via save_person
     let person_id = rawPersonId ? Number(rawPersonId) : null;
     if (!person_id && person && person.name) {
       const emailsJson = JSON.stringify(
@@ -219,8 +214,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
         person.phone ? [{ label: "work", value: person.phone }] : []
       );
       const personRes = await connection.query(
-        `INSERT INTO persons (name, emails, contact_numbers, organization_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+        "SELECT save_person($1, $2::jsonb, $3::jsonb, $4) as result",
         [
           person.name,
           emailsJson,
@@ -228,7 +222,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
           person.organization_id ? Number(person.organization_id) : null,
         ]
       );
-      person_id = personRes.rows[0]?.id || null;
+      person_id = personRes.rows[0]?.result?.id || null;
     }
 
     const result = await connection.query(
@@ -255,23 +249,23 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
     if (id && custom_attributes !== undefined) {
       const customAttrsJson = JSON.stringify(custom_attributes || {});
       await connection.query(
-        "UPDATE leads SET custom_attributes = $1::jsonb WHERE id = $2",
-        [customAttrsJson, id]
+        "SELECT public.fn_update_lead_custom_attributes($1, $2::jsonb)",
+        [id, customAttrsJson]
       );
       if (updatedLead) updatedLead.custom_attributes = custom_attributes;
     }
 
-    // If stage explicitly provided, ensure it updates directly on leads table
+    // If stage explicitly provided, update stage via fn_update_lead_stage
     if (lead_pipeline_stage_id) {
       await connection.query(
-        "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
-        [Number(lead_pipeline_stage_id), id]
+        "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
+        [id, Number(lead_pipeline_stage_id)]
       );
     }
 
-    // Update products if array provided
+    // Update products if array provided using fn_clear_lead_products & fn_add_lead_product
     if (Array.isArray(products)) {
-      await connection.query("DELETE FROM lead_products WHERE lead_id = $1", [id]);
+      await connection.query("SELECT public.fn_clear_lead_products($1)", [id]);
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
@@ -296,7 +290,6 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
-
 
 const deleteLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -478,14 +471,11 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-
-
 const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
 
-    // multer puts the file at req.file
     const file = (req as any).file;
 
     if (!file) {
@@ -496,7 +486,6 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Ensure uploads/leads directory exists
     const uploadDir = path.join(process.cwd(), "uploads", "leads");
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -505,7 +494,6 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const destPath = path.join(uploadDir, uniqueName);
 
-    // Copy uploaded file to permanent destination
     if (file.path && fs.existsSync(file.path)) {
       fs.copyFileSync(file.path, destPath);
       try { fs.unlinkSync(file.path); } catch (e) {}
@@ -513,7 +501,6 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
-    // Build a lead title from the filename (strip extension)
     const fileBaseName = path.basename(file.originalname, path.extname(file.originalname))
       .replace(/[_-]/g, " ")
       .replace(/\s+/g, " ")
@@ -521,25 +508,21 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     const leadTitle = fileBaseName || `Lead from ${new Date().toLocaleDateString()}`;
 
-    // Get default pipeline and its first stage
-    const pipelineRes = await connection.query(
-      "SELECT * FROM lead_pipelines WHERE is_default = TRUE ORDER BY id ASC LIMIT 1"
-    );
+    // Get default pipeline and its first stage using stored functions
+    const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
     let pipelineId: number | null = null;
     let stageId: number | null = null;
 
-    if (pipelineRes.rows.length > 0) {
-      pipelineId = pipelineRes.rows[0].id;
-      const stageRes = await connection.query(
-        "SELECT * FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC LIMIT 1",
-        [pipelineId]
-      );
+    const defaultPipeline = pipelineRes.rows.find((p: any) => p.is_default) || pipelineRes.rows[0];
+    if (defaultPipeline) {
+      pipelineId = defaultPipeline.id;
+      const stageRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
       if (stageRes.rows.length > 0) {
         stageId = stageRes.rows[0].id;
       }
     }
 
-    // Create the lead
+    // Create the lead using fn_create_lead
     const leadResult = await connection.query(
       "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       [
@@ -560,12 +543,12 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     if (lead) {
       if (stageId) {
         await connection.query(
-          "UPDATE leads SET lead_pipeline_stage_id = $1 WHERE id = $2",
-          [stageId, lead.id]
+          "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
+          [lead.id, stageId]
         );
       }
 
-      // Attach file activity to the newly created lead
+      // Attach file activity to the newly created lead using fn_create_activity
       await connection.query(
         "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         [
@@ -679,6 +662,3 @@ export default {
   createLeadByAI,
   uploadLeadFile,
 };
-
-
-

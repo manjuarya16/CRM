@@ -2467,6 +2467,216 @@ BEGIN
     RETURN v_deleted > 0;
 END;
 $$;
+
+-- ==========================================================
+-- 21. PERSONS DB FUNCTIONS
+-- ==========================================================
+
+CREATE OR REPLACE FUNCTION get_person(p_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', p.id,
+        'name', p.name,
+        'emails', p.emails,
+        'contact_numbers', p.contact_numbers,
+        'organization_id', p.organization_id,
+        'organization_name', o.name,
+        'job_title', p.job_title,
+        'user_id', p.user_id,
+        'sales_owner_name', u.name,
+        'custom_attributes', COALESCE(p.custom_attributes, '{}'::jsonb),
+        'created_at', p.created_at,
+        'updated_at', p.updated_at,
+        'activities', COALESCE((
+            SELECT jsonb_agg(a.*)
+            FROM activities a
+            INNER JOIN activity_participants ap ON ap.activity_id = a.id
+            WHERE ap.person_id = p.id
+        ), '[]'::jsonb),
+        'leads', COALESCE((
+            SELECT jsonb_agg(l.*)
+            FROM leads l
+            WHERE l.person_id = p.id
+        ), '[]'::jsonb)
+    ) INTO v_result
+    FROM persons p
+    LEFT JOIN organizations o ON p.organization_id = o.id
+    LEFT JOIN users u ON p.user_id = u.id
+    WHERE p.id = p_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION get_all_persons(
+    p_search TEXT DEFAULT NULL,
+    p_limit INTEGER DEFAULT 10,
+    p_offset INTEGER DEFAULT 0
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_total INTEGER;
+    v_rows JSONB;
+BEGIN
+    SELECT COUNT(*) INTO v_total
+    FROM persons p
+    LEFT JOIN organizations o ON p.organization_id = o.id
+    WHERE (p_search IS NULL OR p_search = '' OR p.name ILIKE '%' || p_search || '%' OR p.job_title ILIKE '%' || p_search || '%' OR o.name ILIKE '%' || p_search || '%' OR p.emails::text ILIKE '%' || p_search || '%');
+
+    SELECT COALESCE(jsonb_agg(row_data), '[]'::jsonb) INTO v_rows
+    FROM (
+        SELECT jsonb_build_object(
+            'id', p.id,
+            'name', p.name,
+            'emails', p.emails,
+            'contact_numbers', p.contact_numbers,
+            'organization_id', p.organization_id,
+            'organization_name', o.name,
+            'job_title', p.job_title,
+            'user_id', p.user_id,
+            'sales_owner_name', u.name,
+            'custom_attributes', COALESCE(p.custom_attributes, '{}'::jsonb),
+            'created_at', p.created_at,
+            'updated_at', p.updated_at
+        ) AS row_data
+        FROM persons p
+        LEFT JOIN organizations o ON p.organization_id = o.id
+        LEFT JOIN users u ON p.user_id = u.id
+        WHERE (p_search IS NULL OR p_search = '' OR p.name ILIKE '%' || p_search || '%' OR p.job_title ILIKE '%' || p_search || '%' OR o.name ILIKE '%' || p_search || '%' OR p.emails::text ILIKE '%' || p_search || '%')
+        ORDER BY p.id DESC
+        LIMIT p_limit OFFSET p_offset
+    ) sub;
+
+    RETURN jsonb_build_object('rows', v_rows, 'total', v_total);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION save_person(
+    p_name VARCHAR(255),
+    p_emails JSONB DEFAULT '[]'::jsonb,
+    p_contact_numbers JSONB DEFAULT '[]'::jsonb,
+    p_organization_id INTEGER DEFAULT NULL,
+    p_job_title VARCHAR(255) DEFAULT NULL,
+    p_user_id INTEGER DEFAULT NULL,
+    p_custom_attributes JSONB DEFAULT '{}'::jsonb,
+    p_id INTEGER DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id INTEGER;
+BEGIN
+    IF p_id IS NOT NULL AND p_id > 0 THEN
+        UPDATE persons
+        SET name = COALESCE(p_name, name),
+            emails = COALESCE(p_emails, emails),
+            contact_numbers = COALESCE(p_contact_numbers, contact_numbers),
+            organization_id = p_organization_id,
+            job_title = p_job_title,
+            user_id = p_user_id,
+            custom_attributes = COALESCE(p_custom_attributes, custom_attributes),
+            updated_at = NOW()
+        WHERE id = p_id
+        RETURNING id INTO v_id;
+
+        IF v_id IS NULL THEN
+            RAISE EXCEPTION 'Person with ID % not found', p_id;
+        END IF;
+    ELSE
+        INSERT INTO persons (
+            name, emails, contact_numbers, organization_id, job_title, user_id, custom_attributes, created_at, updated_at
+        )
+        VALUES (
+            p_name, COALESCE(p_emails, '[]'::jsonb), COALESCE(p_contact_numbers, '[]'::jsonb),
+            p_organization_id, p_job_title, p_user_id, COALESCE(p_custom_attributes, '{}'::jsonb), NOW(), NOW()
+        )
+        RETURNING id INTO v_id;
+    END IF;
+
+    RETURN get_person(v_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION delete_person(p_id INTEGER)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_deleted INTEGER;
+BEGIN
+    -- Delete quote child records and quotes for this person
+    DELETE FROM quote_items WHERE quote_id IN (SELECT id FROM quotes WHERE person_id = p_id);
+    DELETE FROM lead_quotes WHERE quote_id IN (SELECT id FROM quotes WHERE person_id = p_id);
+    DELETE FROM quotes WHERE person_id = p_id;
+
+    -- Unbind or remove other related records
+    UPDATE leads SET person_id = NULL WHERE person_id = p_id;
+    UPDATE emails SET person_id = NULL WHERE person_id = p_id;
+    DELETE FROM activity_participants WHERE person_id = p_id;
+    DELETE FROM contact_export_batch_items WHERE person_id = p_id;
+    DELETE FROM person_activities WHERE person_id = p_id;
+    DELETE FROM person_tags WHERE person_id = p_id;
+
+    DELETE FROM persons WHERE id = p_id;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RETURN v_deleted > 0;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION delete_all_persons()
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_deleted INTEGER;
+BEGIN
+    -- Delete quote child records and quotes
+    DELETE FROM quote_items WHERE quote_id IN (SELECT id FROM quotes WHERE person_id IS NOT NULL);
+    DELETE FROM lead_quotes WHERE quote_id IN (SELECT id FROM quotes WHERE person_id IS NOT NULL);
+    DELETE FROM quotes WHERE person_id IS NOT NULL;
+
+    -- Unbind or remove other related records
+    UPDATE leads SET person_id = NULL WHERE person_id IS NOT NULL;
+    UPDATE emails SET person_id = NULL WHERE person_id IS NOT NULL;
+    DELETE FROM activity_participants WHERE person_id IS NOT NULL;
+    DELETE FROM contact_export_batch_items WHERE person_id IS NOT NULL;
+    DELETE FROM person_activities;
+    DELETE FROM person_tags;
+
+    DELETE FROM persons;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RETURN v_deleted;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_clear_lead_products(p_lead_id INTEGER)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM lead_products WHERE lead_id = p_lead_id;
+    UPDATE leads SET lead_value = 0 WHERE id = p_lead_id;
+    RETURN TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_update_lead_custom_attributes(p_lead_id INTEGER, p_custom_attributes JSONB)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE leads SET custom_attributes = p_custom_attributes WHERE id = p_lead_id;
+    RETURN TRUE;
+END;
+$$;
 `;
 
 export async function initDbFunctions(): Promise<void> {

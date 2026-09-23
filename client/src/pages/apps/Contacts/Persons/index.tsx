@@ -1,44 +1,29 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 
+import { usePersonStore } from "@/store";
 import { IPerson, EmailItem, ContactItem } from "@/interface";
 
 const PersonsPage: React.FC = () => {
-  const [persons, setPersons] = useState<IPerson[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const { persons, loading, total, fetchPersons, deletePerson, clearAllPersons } = usePersonStore();
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
-  const [total, setTotal] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   useEffect(() => {
-    fetchPersons();
+    loadPersons();
   }, [page, perPage]);
 
-  const fetchPersons = async () => {
-    try {
-      setLoading(true);
-      const res = await API.get(
-        `/persons?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`
-      ).catch(() => ({ data: { data: [], total: 0 } }));
-
-      const list = res.data?.data || res.data?.rows || [];
-      setPersons(list);
-      setTotal(res.data?.total !== undefined ? res.data.total : list.length);
-    } catch {
-      setPersons([]);
-    } finally {
-      setLoading(false);
-    }
+  const loadPersons = () => {
+    fetchPersons({ page, perPage, search });
   };
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    fetchPersons();
+    loadPersons();
   };
 
   const parseEmails = (emails: any): EmailItem[] => {
@@ -110,7 +95,7 @@ const PersonsPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete(`/persons/${person.id}`);
+        await deletePerson(person.id);
         Swal.fire({
           icon: "success",
           title: "Deleted!",
@@ -118,12 +103,12 @@ const PersonsPage: React.FC = () => {
           timer: 1500,
           showConfirmButton: false,
         });
-        fetchPersons();
+        loadPersons();
       } catch (err: any) {
         Swal.fire({
           icon: "error",
           title: "Error",
-          text: err.response?.data?.message || "Failed to delete person",
+          text: err.response?.data?.message || err.message || "Failed to delete person",
         });
       }
     }
@@ -143,7 +128,7 @@ const PersonsPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await Promise.all(selectedIds.map((id) => API.delete(`/persons/${id}`)));
+        await Promise.all(selectedIds.map((id) => deletePerson(id)));
         Swal.fire({
           icon: "success",
           title: "Deleted!",
@@ -152,12 +137,43 @@ const PersonsPage: React.FC = () => {
           showConfirmButton: false,
         });
         setSelectedIds([]);
-        fetchPersons();
+        loadPersons();
       } catch (err: any) {
-        Swal.fire("Error", err.response?.data?.message || "Failed to delete records", "error");
+        Swal.fire("Error", err.response?.data?.message || err.message || "Failed to delete records", "error");
       }
     }
   };
+
+  const handleClearAll = async () => {
+    const result = await Swal.fire({
+      title: "Clear All Persons?",
+      text: `This will permanently delete all ${total} person records. This action cannot be undone!`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, clear all!",
+      cancelButtonText: "Cancel",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const res = await clearAllPersons();
+        Swal.fire({
+          icon: "success",
+          title: "Cleared!",
+          text: res.message || "All persons deleted successfully.",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+        setSelectedIds([]);
+        loadPersons();
+      } catch (err: any) {
+        Swal.fire("Error", err.response?.data?.message || err.message || "Failed to clear all persons", "error");
+      }
+    }
+  };
+
 
   const handleExport = () => {
     if (persons.length === 0) {
@@ -228,6 +244,16 @@ const PersonsPage: React.FC = () => {
           >
             Export
           </button>
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="inline-flex items-center px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm font-medium rounded-lg border border-red-200 dark:border-red-800 transition-colors shadow-sm"
+            >
+              <i className="mgc_delete_line text-base mr-1.5"></i>
+              Clear All
+            </button>
+          )}
           <Link
             to="/contacts/persons/create"
             className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
@@ -235,6 +261,7 @@ const PersonsPage: React.FC = () => {
             Create Person
           </Link>
         </div>
+
       </div>
 
       {/* Main Card */}

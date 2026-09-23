@@ -2,6 +2,7 @@ import { pool } from '@/config/db';
 import { IPerson } from '@/interfaces/crm.interface';
 import { ApiError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
+import { PoolClient } from 'pg';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -10,89 +11,52 @@ const toNumberParam = (v: any): number | null => {
 };
 
 export class PersonService {
+  // DB Function call: get_all_persons(p_search, p_limit, p_offset)
   public static async getAll(params: { page?: number; perPage?: number; search?: string }): Promise<{ rows: any[]; total: number }> {
+    let client: PoolClient | undefined;
     try {
+      client = await pool.connect();
       const page = Math.max(1, Number(params.page) || 1);
       const perPage = Math.max(1, Number(params.perPage) || 10);
-      const search = params.search ? String(params.search).trim() : '';
+      const search = params.search ? String(params.search).trim() : null;
       const offset = (page - 1) * perPage;
 
-      let whereSql = 'WHERE 1=1';
-      const queryParams: any[] = [];
-
-      if (search) {
-        queryParams.push(`%${search}%`);
-        whereSql += ` AND (p.name ILIKE $${queryParams.length} OR p.job_title ILIKE $${queryParams.length} OR o.name ILIKE $${queryParams.length} OR p.emails::text ILIKE $${queryParams.length})`;
-      }
-
-      const countRes = await pool.query(
-        `SELECT COUNT(*) as count 
-         FROM persons p 
-         LEFT JOIN organizations o ON p.organization_id = o.id 
-         ${whereSql}`,
-        queryParams
+      const { rows } = await client.query(
+        'SELECT get_all_persons($1, $2, $3) as result',
+        [search, perPage, offset]
       );
-      const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-      queryParams.push(perPage, offset);
-      const { rows } = await pool.query(
-        `SELECT p.*, o.name as organization_name, u.name as sales_owner_name
-         FROM persons p
-         LEFT JOIN organizations o ON p.organization_id = o.id
-         LEFT JOIN users u ON p.user_id = u.id
-         ${whereSql}
-         ORDER BY p.id DESC
-         LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
-        queryParams
-      );
-
-      return { rows, total };
+      const res = rows[0]?.result || { rows: [], total: 0 };
+      return { rows: res.rows || [], total: Number(res.total) || 0 };
     } catch (error: any) {
       logger.error({ error, params }, 'PersonService.getAll failed');
       throw error;
+    } finally {
+      if (client) client.release();
     }
   }
 
+  // DB Function call: get_person(p_id)
   public static async getById(id: number | string): Promise<any | null> {
+    let client: PoolClient | undefined;
     try {
       const personId = toNumberParam(id);
       if (!personId) return null;
 
-      const { rows } = await pool.query(
-        `SELECT p.*, o.name as organization_name, u.name as sales_owner_name
-         FROM persons p
-         LEFT JOIN organizations o ON p.organization_id = o.id
-         LEFT JOIN users u ON p.user_id = u.id
-         WHERE p.id = $1`,
+      client = await pool.connect();
+      const { rows } = await client.query(
+        'SELECT get_person($1) as result',
         [personId]
       );
-
-      if (!rows[0]) return null;
-
-      const activitiesRes = await pool.query(
-        `SELECT * FROM activities WHERE id IN (
-           SELECT activity_id FROM activity_participants WHERE person_id = $1
-         ) ORDER BY id DESC`,
-        [personId]
-      ).catch(() => ({ rows: [] }));
-
-      const leadsRes = await pool.query(
-        `SELECT * FROM leads WHERE person_id = $1 ORDER BY id DESC`,
-        [personId]
-      ).catch(() => ({ rows: [] }));
-
-      return {
-        ...rows[0],
-        activities: activitiesRes.rows,
-        leads: leadsRes.rows,
-      };
+      return rows[0]?.result || null;
     } catch (error: any) {
       logger.error({ error, id }, 'PersonService.getById failed');
       throw error;
+    } finally {
+      if (client) client.release();
     }
   }
 
-  // Unified single function for Add & Edit
+  // Unified DB Function call: save_person(...)
   public static async save(
     data: {
       name: string;
@@ -105,6 +69,7 @@ export class PersonService {
     },
     id?: number | string
   ): Promise<IPerson> {
+    let client: PoolClient | undefined;
     try {
       const personId = toNumberParam(id);
       const emailsJson = typeof data.emails === 'object' ? JSON.stringify(data.emails) : (data.emails || '[]');
@@ -113,45 +78,59 @@ export class PersonService {
       const orgId = toNumberParam(data.organization_id);
       const userId = toNumberParam(data.user_id);
 
-      if (personId) {
-        const existing = await pool.query('SELECT * FROM persons WHERE id = $1', [personId]);
-        if (!existing.rows[0]) {
-          throw new ApiError(404, 'Person not found');
-        }
+      client = await pool.connect();
+      const { rows } = await client.query(
+        'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb, $8) as result',
+        [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]
+      );
 
-        const { rows } = await pool.query<IPerson>(
-          `UPDATE persons
-           SET name = $1, emails = $2, contact_numbers = $3, organization_id = $4, job_title = $5, user_id = $6, custom_attributes = $7::jsonb, updated_at = NOW()
-           WHERE id = $8
-           RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]
-        );
-        return rows[0];
-      } else {
-        const { rows } = await pool.query<IPerson>(
-          `INSERT INTO persons (name, emails, contact_numbers, organization_id, job_title, user_id, custom_attributes, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-           RETURNING *`,
-          [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson]
-        );
-        return rows[0];
+      if (!rows[0]?.result) {
+        throw new ApiError(404, 'Person not found or save failed');
       }
+      return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, data, id }, 'PersonService.save failed');
       throw error;
+    } finally {
+      if (client) client.release();
     }
   }
 
+  // DB Function call: delete_person(p_id)
   public static async delete(id: number | string): Promise<boolean> {
+    let client: PoolClient | undefined;
     try {
       const personId = toNumberParam(id);
       if (!personId) return false;
 
-      const result = await pool.query('DELETE FROM persons WHERE id = $1', [personId]);
-      return (result.rowCount ?? 0) > 0;
+      client = await pool.connect();
+      const { rows } = await client.query(
+        'SELECT delete_person($1) as result',
+        [personId]
+      );
+      return Boolean(rows[0]?.result);
     } catch (error: any) {
       logger.error({ error, id }, 'PersonService.delete failed');
       throw error;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // DB Function call: delete_all_persons()
+  public static async deleteAll(): Promise<number> {
+    let client: PoolClient | undefined;
+    try {
+      client = await pool.connect();
+      const { rows } = await client.query(
+        'SELECT delete_all_persons() as result'
+      );
+      return Number(rows[0]?.result) || 0;
+    } catch (error: any) {
+      logger.error({ error }, 'PersonService.deleteAll failed');
+      throw error;
+    } finally {
+      if (client) client.release();
     }
   }
 }
