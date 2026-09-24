@@ -7,6 +7,8 @@ const poolConfig: PoolConfig = env.DATABASE_URL
       connectionString: env.DATABASE_URL,
       max: env.PG_POOL_MAX,
       idleTimeoutMillis: env.PG_IDLE_TIMEOUT,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
     }
   : {
       host: env.PGHOST,
@@ -16,6 +18,8 @@ const poolConfig: PoolConfig = env.DATABASE_URL
       database: env.PGDATABASE,
       max: env.PG_POOL_MAX,
       idleTimeoutMillis: env.PG_IDLE_TIMEOUT,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
     };
 
 export const pool = new Pool(poolConfig);

@@ -12,56 +12,7 @@ import {
 } from "../components";
 import { useAuthStore } from "../store";
 import { useEffect, useState } from "react";
-import {
-  NotificationItem,
-  ProfileMenuItem,
-} from "../interface/leftSideInterface";
-
-/**
- * notification items
- */
-const notifications: NotificationItem[] = [
-  {
-    id: 1,
-    text: "Datacorp",
-    subText: "Caleb Flakelar commented on Admin",
-    icon: "mgc_message_3_line text-lg",
-    bgColor: "primary",
-    createdAt: subtractHours(new Date(), 1),
-  },
-  {
-    id: 2,
-    text: "Admin",
-    subText: "New user registered",
-    icon: "mgc_user_add_line text-lg",
-    bgColor: "info",
-    createdAt: subtractHours(new Date(), 60),
-  },
-  {
-    id: 3,
-    text: "Cristina Pride",
-    subText: "Hi, How are you? What about our next meeting",
-    icon: "mgc_chat_2_line text-lg",
-    bgColor: "info",
-    createdAt: subtractHours(new Date(), 1440),
-  },
-  {
-    id: 4,
-    text: "Datacorp",
-    subText: "Caleb Flakelar commented on Admin",
-    icon: "mgc_message_1_line text-lg",
-    bgColor: "primary",
-    createdAt: subtractHours(new Date(), 2880),
-  },
-  {
-    id: 5,
-    text: "Karen Robinson",
-    subText: "Wow ! this admin looks good and awesome design",
-    icon: "mgc_user_3_line text-lg",
-    bgColor: "success",
-    createdAt: subtractHours(new Date(), 2880),
-  },
-];
+import { ProfileMenuItem } from "../interface/leftSideInterface";
 
 /**
  * profile menu items
@@ -83,14 +34,6 @@ const profileMenus: ProfileMenuItem[] = [
   //   redirectTo: '/auth/lock-screen',
   // },
 ];
-
-/**
- * for subtraction minutes
- */
-function subtractHours(date: Date, minutes: number) {
-  date.setMinutes(date.getMinutes() - minutes);
-  return date;
-}
 
 const Topbar = () => {
   const { width } = useViewPort();
@@ -230,6 +173,8 @@ const Topbar = () => {
 
         {/* Right side controls */}
         <div className="flex items-center gap-3 ml-auto">
+          <NotificationDropdown />
+
           <button
             id="light-dark-mode"
             type="button"

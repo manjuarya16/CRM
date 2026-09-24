@@ -15,3 +15,21 @@ export interface SettingCategory {
   items: SettingItem[];
   gridCols?: string;
 }
+
+export interface ConfigNavItem {
+  id: string;
+  key: string;
+  title: string;
+  icon: string;
+  subItems?: { id: string; key: string; title: string }[];
+}
+
+export interface ConfigState {
+  configs: Record<string, any>;
+  loading: boolean;
+  fetchConfigs: () => Promise<Record<string, any>>;
+  saveConfigurations: (settings: Record<string, any>) => Promise<any>;
+  uploadConfigImage: (file: File) => Promise<any>;
+  testSmtpConnection: (testConfig?: Record<string, any>) => Promise<any>;
+  setConfigs: (configs: Record<string, any>) => void;
+}

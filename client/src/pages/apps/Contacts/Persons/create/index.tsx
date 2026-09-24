@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { usePersonStore } from "@/store";
-import { EmailItem, ContactItem } from "@/interface";
+import { PersonEmailItem, ContactItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
@@ -16,7 +16,7 @@ const CreatePersonPage: React.FC = () => {
 
   const [formData, setFormData] = useState<{
     name: string;
-    emails: EmailItem[];
+    emails: PersonEmailItem[];
     contact_numbers: ContactItem[];
     organization_id: string;
     job_title: string;

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMailStore } from "@/store/mailStore";
+import { useMailStore } from "@/store";
 import { ComposeMailModal } from "./ComposeMailModal";
-import { EmailItem } from "@/services/mailService";
+import { EmailItem } from "@/interface";
 
 const FOLDERS = [
   { id: "inbox", label: "Inbox", icon: "mgc_inbox_line" },

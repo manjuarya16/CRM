@@ -39,32 +39,42 @@ export interface ILeadPipeline {
   id: number;
   name: string;
   is_default?: boolean;
-  rotten_days?: number;
 }
 
 export interface ILeadStage {
   id: number;
-  code?: string;
   name: string;
+  lead_pipeline_id: number;
   probability?: number;
   sort_order?: number;
-  lead_pipeline_id: number;
+  code?: string;
 }
 
 export interface ILeadProduct {
   id: number;
   lead_id: number;
   product_id: number;
+  name?: string;
   product_name?: string;
   sku?: string;
-  quantity: number;
-  price: number;
-  amount: number;
+  price?: number;
+  quantity?: number;
+  amount?: number;
 }
 
-export interface LeadStore {
+export interface ProductRow {
+  id?: number;
+  product_id: string;
+  product_name: string;
+  quantity: string;
+  price: string;
+}
+
+export interface LeadState {
   leads: ILead[];
   total: number;
+  page: number;
+  limit: number;
   loading: boolean;
   error: string | null;
   selectedLead: ILead | null;
@@ -91,3 +101,5 @@ export interface LeadStore {
   setSelectedLead: (lead: ILead | null) => void;
   clearError: () => void;
 }
+
+export type LeadStore = LeadState;

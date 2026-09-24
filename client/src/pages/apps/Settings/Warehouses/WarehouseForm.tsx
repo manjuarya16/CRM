@@ -5,10 +5,7 @@ import Swal from "sweetalert2";
 import { ZodError } from "zod";
 import { warehouseSchema } from "@/schemas/warehouse.schema";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
-
-interface WarehouseFormProps {
-  mode: "create" | "edit";
-}
+import { WarehouseFormProps } from "@/interface";
 
 export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const { id } = useParams<{ id: string }>();

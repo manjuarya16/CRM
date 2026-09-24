@@ -38,48 +38,57 @@ export interface IUserData {
 }
 
 export interface UserFormDataAdd {
-  name: string;
+  user_id?: string | number;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
   email: string;
   phone?: string;
-  user_id?: string;
-  password?: string;
+  phone_number?: string;
   role_id?: number;
+  organization_id?: number;
   branch_id?: number;
   department_id?: number;
-  organization_id?: number;
+  password?: string;
+  password_confirmation?: string;
   // Address fields
   street?: string;
   city?: string;
-  state?: string;
-  // store ids for dependent selects
-  state_id?: number;
   city_id?: number;
+  state?: string;
+  state_id?: number;
   postal_code?: string;
   country?: string;
   address_type?: string;
+  [key: string]: any;
 }
 
-export interface UserFormDataEit {
-  id?: number;
+export interface UserFormDataEdit {
   user_id?: string | number;
-  name: string;
-  email: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  email?: string;
   phone?: string;
-  password?: string;
+  phone_number?: string;
   role_id?: number;
+  organization_id?: number;
   branch_id?: number;
   department_id?: number;
-  organization_id?: number;
+  status?: boolean;
   // Address fields
   street?: string;
   city?: string;
+  city_id?: number;
   state?: string;
   state_id?: number;
-  city_id?: number;
   postal_code?: string;
   country?: string;
   address_type?: string;
+  [key: string]: any;
 }
+
+export type UserFormDataEit = UserFormDataEdit;
 
 export interface UsersResponse {
   rows: any[];
@@ -112,4 +121,21 @@ export interface UserStore {
 
 export interface RecoverPasswordData {
   email: string;
+}
+
+export interface LocationOption {
+  id: number;
+  name: string;
+}
+
+export interface UserProfileInfoRowProps {
+  icon: string;
+  label: string;
+  value?: string | number;
+  editKey?: string;
+  editing?: boolean;
+  form?: Record<string, any>;
+  patch?: (key: string, val: string) => void;
+  type?: string;
+  readonly?: boolean;
 }

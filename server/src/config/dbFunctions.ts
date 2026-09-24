@@ -2749,11 +2749,352 @@ BEGIN
     RETURN TRUE;
 END;
 $$;
+
+-- ==========================================================
+-- NOTIFICATIONS TABLE & PROCEDURAL FUNCTIONS
+-- ==========================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER DEFAULT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    module VARCHAR(50) NOT NULL,
+    entity_id INTEGER DEFAULT NULL,
+    action_type VARCHAR(50) NOT NULL DEFAULT 'created',
+    is_read BOOLEAN NOT NULL DEFAULT false,
+    created_by INTEGER DEFAULT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_module_entity ON notifications(module, entity_id);
+
+CREATE OR REPLACE FUNCTION fn_create_notification(
+    p_user_id INTEGER,
+    p_title VARCHAR,
+    p_message TEXT,
+    p_module VARCHAR,
+    p_entity_id INTEGER,
+    p_action_type VARCHAR,
+    p_created_by INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id INTEGER;
+    v_result JSONB;
+BEGIN
+    INSERT INTO notifications (
+        user_id,
+        title,
+        message,
+        module,
+        entity_id,
+        action_type,
+        is_read,
+        created_by,
+        created_at,
+        updated_at
+    ) VALUES (
+        p_user_id,
+        p_title,
+        p_message,
+        p_module,
+        p_entity_id,
+        COALESCE(p_action_type, 'created'),
+        false,
+        p_created_by,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    )
+    RETURNING id INTO v_id;
+
+    SELECT jsonb_build_object(
+        'id', n.id,
+        'user_id', n.user_id,
+        'title', n.title,
+        'message', n.message,
+        'module', n.module,
+        'entity_id', n.entity_id,
+        'action_type', n.action_type,
+        'is_read', n.is_read,
+        'created_by', n.created_by,
+        'created_at', n.created_at
+    ) INTO v_result
+    FROM notifications n
+    WHERE n.id = v_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_all_notifications(
+    p_user_id INTEGER DEFAULT NULL,
+    p_is_read BOOLEAN DEFAULT NULL,
+    p_module VARCHAR DEFAULT NULL,
+    p_page INTEGER DEFAULT 1,
+    p_limit INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    id INTEGER,
+    user_id INTEGER,
+    title VARCHAR,
+    message TEXT,
+    module VARCHAR,
+    entity_id INTEGER,
+    action_type VARCHAR,
+    is_read BOOLEAN,
+    created_by INTEGER,
+    created_by_name VARCHAR,
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_offset INTEGER;
+BEGIN
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    WITH filtered_notifications AS (
+        SELECT 
+            n.id,
+            n.user_id,
+            n.title,
+            n.message,
+            n.module,
+            n.entity_id,
+            n.action_type,
+            n.is_read,
+            n.created_by,
+            COALESCE(u.name, 'System')::VARCHAR AS created_by_name,
+            n.created_at
+        FROM notifications n
+        LEFT JOIN users u ON u.id = n.created_by
+        WHERE (p_user_id IS NULL OR n.user_id IS NULL OR n.user_id = p_user_id)
+          AND (p_is_read IS NULL OR n.is_read = p_is_read)
+          AND (
+            p_module IS NULL OR p_module = '' OR LOWER(p_module) = 'all'
+            OR LOWER(n.module) = LOWER(p_module)
+            OR (LOWER(p_module) IN ('leads', 'lead') AND LOWER(n.module) IN ('lead', 'leads'))
+            OR (LOWER(p_module) IN ('quotes', 'quote') AND LOWER(n.module) IN ('quote', 'quotes'))
+            OR (LOWER(p_module) IN ('activities', 'activity') AND LOWER(n.module) IN ('activity', 'activities'))
+            OR (LOWER(p_module) IN ('mails', 'mail') AND LOWER(n.module) IN ('mail', 'mails'))
+          )
+    ),
+    counted AS (
+        SELECT COUNT(*)::BIGINT as total FROM filtered_notifications
+    )
+    SELECT 
+        fn.id,
+        fn.user_id,
+        fn.title,
+        fn.message,
+        fn.module,
+        fn.entity_id,
+        fn.action_type,
+        fn.is_read,
+        fn.created_by,
+        fn.created_by_name,
+        fn.created_at,
+        c.total
+    FROM filtered_notifications fn
+    CROSS JOIN counted c
+    ORDER BY fn.created_at DESC
+    LIMIT p_limit OFFSET v_offset;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_unread_notification_count(p_user_id INTEGER DEFAULT NULL)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    SELECT COUNT(*)::INTEGER INTO v_count
+    FROM notifications
+    WHERE is_read = false
+      AND (p_user_id IS NULL OR user_id IS NULL OR user_id = p_user_id);
+    RETURN COALESCE(v_count, 0);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_mark_notification_as_read(p_id INTEGER, p_user_id INTEGER DEFAULT NULL)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE notifications
+    SET is_read = true, updated_at = CURRENT_TIMESTAMP
+    WHERE id = p_id
+      AND (p_user_id IS NULL OR user_id IS NULL OR user_id = p_user_id);
+    RETURN TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_mark_all_notifications_as_read(p_user_id INTEGER DEFAULT NULL)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    WITH updated AS (
+        UPDATE notifications
+        SET is_read = true, updated_at = CURRENT_TIMESTAMP
+        WHERE is_read = false
+          AND (p_user_id IS NULL OR user_id IS NULL OR user_id = p_user_id)
+        RETURNING id
+    )
+    SELECT COUNT(*)::INTEGER INTO v_count FROM updated;
+    RETURN COALESCE(v_count, 0);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_delete_notification(p_id INTEGER, p_user_id INTEGER DEFAULT NULL)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM notifications
+    WHERE id = p_id
+      AND (p_user_id IS NULL OR user_id IS NULL OR user_id = p_user_id);
+    RETURN TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_clear_all_notifications(p_user_id INTEGER DEFAULT NULL)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    WITH deleted AS (
+        DELETE FROM notifications
+        WHERE (p_user_id IS NULL OR user_id IS NULL OR user_id = p_user_id)
+        RETURNING id
+    )
+    SELECT COUNT(*)::INTEGER INTO v_count FROM deleted;
+    RETURN COALESCE(v_count, 0);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_generate_activity_reminders(p_user_id INTEGER DEFAULT NULL)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_count INTEGER := 0;
+    r RECORD;
+    v_title TEXT;
+    v_message TEXT;
+    v_action_type TEXT;
+BEGIN
+    FOR r IN
+        SELECT
+            a.id,
+            a.title,
+            a.type,
+            a.schedule_from,
+            a.user_id,
+            DATE(a.schedule_from) AS sched_date,
+            TO_CHAR(a.schedule_from, 'HH12:MI AM') AS sched_time
+        FROM activities a
+        WHERE a.is_done = false
+          AND a.schedule_from IS NOT NULL
+          AND (p_user_id IS NULL OR a.user_id IS NULL OR a.user_id = p_user_id)
+          AND DATE(a.schedule_from) <= (CURRENT_DATE + INTERVAL '2 days')
+    LOOP
+        -- Case 1: Scheduled Today
+        IF r.sched_date = CURRENT_DATE THEN
+            v_title := 'Today''s Activity: ' || COALESCE(r.title, INITCAP(r.type));
+            v_message := 'You have a ' || LOWER(COALESCE(r.type, 'activity')) || ' scheduled for today at ' || COALESCE(r.sched_time, 'scheduled time');
+            v_action_type := 'reminder_today';
+
+            IF NOT EXISTS (
+                SELECT 1 FROM notifications
+                WHERE entity_id = r.id
+                  AND module = 'activity'
+                  AND DATE(created_at) = CURRENT_DATE
+                  AND title = v_title
+            ) THEN
+                INSERT INTO notifications (title, message, action_type, module, entity_id, user_id, is_read, created_at, updated_at)
+                VALUES (v_title, v_message, v_action_type, 'activity', r.id, r.user_id, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                v_count := v_count + 1;
+            END IF;
+
+        -- Case 2: Scheduled Tomorrow (1 day ahead)
+        ELSIF r.sched_date = (CURRENT_DATE + INTERVAL '1 day') THEN
+            v_title := 'Reminder: ' || COALESCE(r.title, INITCAP(r.type)) || ' tomorrow';
+            v_message := 'Upcoming ' || LOWER(COALESCE(r.type, 'activity')) || ' tomorrow at ' || COALESCE(r.sched_time, 'scheduled time');
+            v_action_type := 'reminder_1day';
+
+            IF NOT EXISTS (
+                SELECT 1 FROM notifications
+                WHERE entity_id = r.id
+                  AND module = 'activity'
+                  AND DATE(created_at) = CURRENT_DATE
+                  AND title = v_title
+            ) THEN
+                INSERT INTO notifications (title, message, action_type, module, entity_id, user_id, is_read, created_at, updated_at)
+                VALUES (v_title, v_message, v_action_type, 'activity', r.id, r.user_id, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                v_count := v_count + 1;
+            END IF;
+
+        -- Case 3: Scheduled in 2 days
+        ELSIF r.sched_date = (CURRENT_DATE + INTERVAL '2 days') THEN
+            v_title := 'Upcoming in 2 days: ' || COALESCE(r.title, INITCAP(r.type));
+            v_message := 'You have a ' || LOWER(COALESCE(r.type, 'activity')) || ' scheduled in 2 days (' || TO_CHAR(r.schedule_from, 'Mon DD, YYYY') || ')';
+            v_action_type := 'reminder_2days';
+
+            IF NOT EXISTS (
+                SELECT 1 FROM notifications
+                WHERE entity_id = r.id
+                  AND module = 'activity'
+                  AND DATE(created_at) = CURRENT_DATE
+                  AND title = v_title
+            ) THEN
+                INSERT INTO notifications (title, message, action_type, module, entity_id, user_id, is_read, created_at, updated_at)
+                VALUES (v_title, v_message, v_action_type, 'activity', r.id, r.user_id, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                v_count := v_count + 1;
+            END IF;
+
+        -- Case 4: Overdue (past due, not done)
+        ELSIF r.sched_date < CURRENT_DATE THEN
+            v_title := 'Overdue Follow-up: ' || COALESCE(r.title, INITCAP(r.type));
+            v_message := 'Pending ' || LOWER(COALESCE(r.type, 'follow-up')) || ' was scheduled for ' || TO_CHAR(r.schedule_from, 'Mon DD') || ' and is not completed yet.';
+            v_action_type := 'overdue';
+
+            IF NOT EXISTS (
+                SELECT 1 FROM notifications
+                WHERE entity_id = r.id
+                  AND module = 'activity'
+                  AND DATE(created_at) = CURRENT_DATE
+                  AND title = v_title
+            ) THEN
+                INSERT INTO notifications (title, message, action_type, module, entity_id, user_id, is_read, created_at, updated_at)
+                VALUES (v_title, v_message, v_action_type, 'activity', r.id, r.user_id, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                v_count := v_count + 1;
+            END IF;
+        END IF;
+    END LOOP;
+
+    RETURN v_count;
+END;
+$$;
+
 `;
 
 export async function initDbFunctions(): Promise<void> {
   try {
     await pool.query(DB_FUNCTIONS_SQL);
+    await pool.query("ALTER TABLE quotes ALTER COLUMN person_id DROP NOT NULL; ALTER TABLE quotes ALTER COLUMN user_id DROP NOT NULL;");
     logger.info('PostgreSQL stored functions for Settings sub-modules initialized successfully.');
   } catch (err) {
     logger.error({ err }, 'Failed to initialize PostgreSQL stored functions');
