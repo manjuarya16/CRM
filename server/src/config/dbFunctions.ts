@@ -1928,6 +1928,16 @@ BEGIN
                 'attribute_code', a.code,
                 'attribute_name', a.name,
                 'attribute_type', a.type,
+                'lookup_type', a.lookup_type,
+                'options', COALESCE((
+                    SELECT jsonb_agg(jsonb_build_object(
+                        'id', ao.id,
+                        'name', ao.name,
+                        'sort_order', ao.sort_order
+                    ) ORDER BY ao.sort_order ASC, ao.id ASC)
+                    FROM attribute_options ao
+                    WHERE ao.attribute_id = a.id
+                ), '[]'::jsonb),
                 'name', COALESCE(wfa.name, a.name),
                 'placeholder', wfa.placeholder,
                 'is_required', wfa.is_required,
@@ -1979,6 +1989,16 @@ BEGIN
                 'attribute_code', a.code,
                 'attribute_name', a.name,
                 'attribute_type', a.type,
+                'lookup_type', a.lookup_type,
+                'options', COALESCE((
+                    SELECT jsonb_agg(jsonb_build_object(
+                        'id', ao.id,
+                        'name', ao.name,
+                        'sort_order', ao.sort_order
+                    ) ORDER BY ao.sort_order ASC, ao.id ASC)
+                    FROM attribute_options ao
+                    WHERE ao.attribute_id = a.id
+                ), '[]'::jsonb),
                 'name', COALESCE(wfa.name, a.name),
                 'placeholder', wfa.placeholder,
                 'is_required', wfa.is_required,
@@ -2032,6 +2052,16 @@ BEGIN
                     'attribute_code', a.code,
                     'attribute_name', a.name,
                     'attribute_type', a.type,
+                    'lookup_type', a.lookup_type,
+                    'options', COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'id', ao.id,
+                            'name', ao.name,
+                            'sort_order', ao.sort_order
+                        ) ORDER BY ao.sort_order ASC, ao.id ASC)
+                        FROM attribute_options ao
+                        WHERE ao.attribute_id = a.id
+                    ), '[]'::jsonb),
                     'name', COALESCE(wfa.name, a.name),
                     'placeholder', wfa.placeholder,
                     'is_required', wfa.is_required,

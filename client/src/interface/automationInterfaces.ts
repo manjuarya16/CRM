@@ -80,6 +80,8 @@ export interface IWebFormAttribute {
   attribute_code?: string;
   attribute_name?: string;
   attribute_type?: string;
+  lookup_type?: string | null;
+  options?: any[];
   name?: string | null;
   placeholder?: string | null;
   is_required: boolean;

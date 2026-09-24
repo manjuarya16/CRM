@@ -82,6 +82,8 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
       attribute_code: attr.code,
       attribute_name: attr.name,
       attribute_type: attr.type,
+      lookup_type: attr.lookup_type,
+      options: attr.options as any[],
       name: attr.name,
       placeholder: "Enter " + attr.name,
       is_required: attr.is_required || false,
@@ -297,47 +299,123 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
         ) : (
           <div className="space-y-2">
             {attributes.map((attr, idx) => (
-              <div key={idx} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 flex flex-wrap items-center gap-3">
-                <span className="font-mono text-xs text-gray-400">#{idx + 1}</span>
-                <input
-                  type="text"
-                  placeholder="Label"
-                  value={attr.name || ""}
-                  onChange={(e) => updateAttributeField(idx, { name: e.target.value })}
-                  className="px-2.5 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 flex-1 min-w-[120px]"
-                />
-                <input
-                  type="text"
-                  placeholder="Placeholder"
-                  value={attr.placeholder || ""}
-                  onChange={(e) => updateAttributeField(idx, { placeholder: e.target.value })}
-                  className="px-2.5 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 flex-1 min-w-[120px]"
-                />
-                <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+              <div key={idx} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-3 w-full">
+                  <span className="font-mono text-xs text-gray-400">#{idx + 1}</span>
+                  <span className="px-2 py-0.5 text-[10px] font-semibold uppercase rounded bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    {attr.attribute_type || "text"}
+                  </span>
+                  {Array.isArray(attr.options) && attr.options.length > 0 && (
+                    <span className="text-[10px] text-gray-500 font-mono">
+                      ({attr.options.length} options)
+                    </span>
+                  )}
                   <input
-                    type="checkbox"
-                    checked={attr.is_required}
-                    onChange={(e) => updateAttributeField(idx, { is_required: e.target.checked })}
-                    className="w-3.5 h-3.5"
+                    type="text"
+                    placeholder="Label"
+                    value={attr.name || ""}
+                    onChange={(e) => updateAttributeField(idx, { name: e.target.value })}
+                    className="px-2.5 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 flex-1 min-w-[120px]"
                   />
-                  Required
-                </label>
-                <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
                   <input
-                    type="checkbox"
-                    checked={attr.is_hidden}
-                    onChange={(e) => updateAttributeField(idx, { is_hidden: e.target.checked })}
-                    className="w-3.5 h-3.5"
+                    type="text"
+                    placeholder="Placeholder"
+                    value={attr.placeholder || ""}
+                    onChange={(e) => updateAttributeField(idx, { placeholder: e.target.value })}
+                    className="px-2.5 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 flex-1 min-w-[120px]"
                   />
-                  Hidden
-                </label>
-                <button
-                  type="button"
-                  onClick={() => removeAttributeField(idx)}
-                  className="p-1 text-gray-400 hover:text-red-500"
-                >
-                  <i className="mgc_delete_line text-base"></i>
-                </button>
+                  <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={attr.is_required}
+                      onChange={(e) => updateAttributeField(idx, { is_required: e.target.checked })}
+                      className="w-3.5 h-3.5"
+                    />
+                    Required
+                  </label>
+                  <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={attr.is_hidden}
+                      onChange={(e) => updateAttributeField(idx, { is_hidden: e.target.checked })}
+                      className="w-3.5 h-3.5"
+                    />
+                    Hidden
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeAttributeField(idx)}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <i className="mgc_delete_line text-base"></i>
+                  </button>
+                </div>
+
+                {/* Inline Options Editor for Selectable Attributes */}
+                {["select", "multiselect", "checkbox", "lookup", "dropdown", "boolean"].includes((attr.attribute_type || "").toLowerCase()) && (
+                  <div className="w-full pt-2 mt-1 border-t border-gray-200 dark:border-gray-600/60 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Field Options:</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(attr.options || []).length === 0 ? (
+                        <span className="text-[10px] text-gray-400 italic">No options added yet</span>
+                      ) : (
+                        (attr.options || []).map((opt: any, optIdx: number) => {
+                          const optName = typeof opt === "string" ? opt : (opt.name || opt.label || opt.value || String(opt));
+                          return (
+                            <span key={optIdx} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md font-medium">
+                              {optName}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newOpts = (attr.options || []).filter((_: any, i: number) => i !== optIdx);
+                                  updateAttributeField(idx, { options: newOpts });
+                                }}
+                                className="text-gray-400 hover:text-red-500 font-bold ml-0.5 text-xs"
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 ml-auto">
+                      <input
+                        type="text"
+                        id={`new_opt_${idx}`}
+                        placeholder="Add option..."
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const val = e.currentTarget.value.trim();
+                            if (val) {
+                              const current = attr.options || [];
+                              updateAttributeField(idx, { options: [...current, { name: val, value: val }] });
+                              e.currentTarget.value = "";
+                            }
+                          }
+                        }}
+                        className="px-2 py-0.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 w-28 sm:w-36"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const inputEl = document.getElementById(`new_opt_${idx}`) as HTMLInputElement;
+                          const val = inputEl?.value.trim();
+                          if (val) {
+                            const current = attr.options || [];
+                            updateAttributeField(idx, { options: [...current, { name: val, value: val }] });
+                            inputEl.value = "";
+                          }
+                        }}
+                        className="px-2.5 py-0.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

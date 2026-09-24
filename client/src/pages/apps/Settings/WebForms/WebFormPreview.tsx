@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { IWebForm } from "@/interface";
 import Swal from "sweetalert2";
 import API from "@/config";
+import { WebFormFieldInput } from "./WebFormFieldInput";
 
 interface WebFormPreviewProps {
   form: IWebForm;
@@ -9,7 +10,7 @@ interface WebFormPreviewProps {
 }
 
 export const WebFormPreview: React.FC<WebFormPreviewProps> = ({ form, onClose }) => {
-  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,27 +75,18 @@ export const WebFormPreview: React.FC<WebFormPreviewProps> = ({ form, onClose })
             )}
 
             <div className="space-y-3 pt-2">
-              {(form.attributes || []).map((attr, idx) => (
-                <div key={idx} className={attr.is_hidden ? "hidden" : "block"}>
-                  <label
-                    className="block text-xs font-semibold mb-1"
-                    style={{ color: form.attribute_label_color || "#475569" }}
-                  >
-                    {attr.name || attr.attribute_name || "Field " + (idx + 1)}
-                    {attr.is_required && <span className="text-red-500 ml-0.5">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    required={attr.is_required}
-                    placeholder={attr.placeholder || "Enter " + (attr.name || "")}
-                    value={formData[attr.attribute_code || ("field_" + idx)] || ""}
-                    onChange={(e) =>
-                      setFormData({ ...formData, [attr.attribute_code || ("field_" + idx)]: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none bg-white text-gray-800"
+              {(form.attributes || []).map((attr, idx) => {
+                const key = attr.attribute_code || `field_${idx}`;
+                return (
+                  <WebFormFieldInput
+                    key={idx}
+                    attr={attr}
+                    value={formData[key]}
+                    onChange={(val) => setFormData({ ...formData, [key]: val })}
+                    labelColor={form.attribute_label_color || "#475569"}
                   />
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="pt-2">

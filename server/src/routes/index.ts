@@ -25,12 +25,14 @@ import tagRoutes from '@/routes/tag.routes';
 import userRoutes from '@/routes/user.routes';
 import configRoutes from '@/routes/config.routes';
 import mailRoutes from '@/routes/mail.routes';
+import dashboardRoutes from '@/routes/dashboard.routes';
 const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+router.use('/dashboard', dashboardRoutes);
 router.use('/auth', authRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/organizations', organizationRoutes);
