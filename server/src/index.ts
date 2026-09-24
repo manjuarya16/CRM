@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
 
   app.listen(env.PORT, () => {
-    logger.info(`Server listening on http://localhost:${env.PORT}`);
+    logger.info(`Server listening on port ${env.PORT} [${env.NODE_ENV}]`);
   });
 }
 

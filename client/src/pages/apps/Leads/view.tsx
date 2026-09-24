@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
-import API from "@/config";
+import API, { SERVER_URL } from "@/config";
+import { extractFileUrl } from "@/utils/fileHelper";
 
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -532,15 +533,6 @@ const LeadViewPage: React.FC = () => {
                         </div>
                       );
                     }
-
-                    const extractFileUrl = (text?: string) => {
-                      if (!text) return null;
-                      if (text.startsWith("/uploads/")) return `http://localhost:3040${text}`;
-                      if (text.startsWith("http")) return text;
-                      const match = text.match(/\/uploads\/[^\s]+/);
-                      if (match) return `http://localhost:3040${match[0]}`;
-                      return null;
-                    };
 
                     return (
                       <div className="space-y-3">

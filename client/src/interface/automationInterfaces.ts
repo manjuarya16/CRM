@@ -160,3 +160,38 @@ export interface IWebFormSubmission {
   ip_address?: string;
   created_at?: string;
 }
+
+export interface CampaignFormProps {
+  initialData?: ICampaign | null;
+  isEdit?: boolean;
+}
+
+export interface EventFormProps {
+  initialData?: IEvent | null;
+  isEdit?: boolean;
+}
+
+export interface EmailTemplateFormProps {
+  initialData?: IEmailTemplate | null;
+  isEdit?: boolean;
+}
+
+export interface WorkflowFormProps {
+  initialData?: IWorkflow | null;
+  isEdit?: boolean;
+}
+
+export interface WebhookFormProps {
+  initialData?: IWebhook | null;
+  isEdit?: boolean;
+}
+
+export interface WebFormFormProps {
+  initialData?: IWebForm | null;
+  isEdit?: boolean;
+}
+
+export interface WebFormPreviewProps {
+  form: IWebForm;
+  onClose: () => void;
+}

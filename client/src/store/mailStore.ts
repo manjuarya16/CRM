@@ -1,45 +1,6 @@
 import { create } from "zustand";
-import {
-  EmailItem,
-  FolderCounts,
-  getEmails,
-  getFolderCounts,
-  getEmailById,
-  deleteEmail,
-  toggleReadStatus,
-  massUpdateEmails,
-  massDeleteEmails,
-} from "@/services/mailService";
-
-interface MailState {
-  activeFolder: string;
-  emails: EmailItem[];
-  selectedEmailIds: number[];
-  currentEmail: EmailItem | null;
-  counts: FolderCounts;
-  search: string;
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  loading: boolean;
-  actionLoading: boolean;
-
-  // Actions
-  setActiveFolder: (folder: string) => void;
-  setSearch: (search: string) => void;
-  setPage: (page: number) => void;
-  toggleSelectEmail: (id: number) => void;
-  selectAllEmails: () => void;
-  clearSelection: () => void;
-  fetchEmails: (folder?: string, page?: number, search?: string) => Promise<void>;
-  fetchCounts: () => Promise<void>;
-  fetchEmailDetails: (id: number) => Promise<EmailItem | null>;
-  markAsRead: (id: number, isRead: boolean) => Promise<void>;
-  removeEmail: (id: number, type?: "trash" | "delete") => Promise<void>;
-  bulkMoveToFolder: (folder: string) => Promise<void>;
-  bulkDelete: (type?: "trash" | "delete") => Promise<void>;
-}
+import API from "@/config";
+import { EmailItem, MailState } from "@/interface";
 
 export const useMailStore = create<MailState>((set, get) => ({
   activeFolder: "inbox",
@@ -59,7 +20,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   },
   search: "",
   page: 1,
-  limit: 20,
+  limit: 15,
   total: 0,
   totalPages: 1,
   loading: false,
@@ -90,64 +51,63 @@ export const useMailStore = create<MailState>((set, get) => ({
   },
 
   selectAllEmails: () => {
-    const { emails, selectedEmailIds } = get();
-    if (selectedEmailIds.length === emails.length) {
-      set({ selectedEmailIds: [] });
-    } else {
-      set({ selectedEmailIds: emails.map((e) => e.id) });
-    }
+    const { emails } = get();
+    set({ selectedEmailIds: emails.map((e) => e.id) });
   },
 
   clearSelection: () => {
     set({ selectedEmailIds: [] });
   },
 
-  fetchEmails: async (folderParam?: string, pageParam?: number, searchParam?: string) => {
-    const folder = folderParam ?? get().activeFolder;
-    const page = pageParam ?? get().page;
-    const search = searchParam ?? get().search;
+  fetchEmails: async (folder?: string, pageNum?: number, searchStr?: string) => {
+    const activeFolder = folder !== undefined ? folder : get().activeFolder;
+    const page = pageNum !== undefined ? pageNum : get().page;
+    const search = searchStr !== undefined ? searchStr : get().search;
     const limit = get().limit;
 
     set({ loading: true });
     try {
-      const res = await getEmails({ folder, search, page, limit });
-      if (res.success) {
+      const response = await API.get("/mail", {
+        params: { folder: activeFolder, search, page, limit },
+      });
+      const data = response.data;
+      if (data.success) {
         set({
-          emails: res.data || [],
-          total: res.pagination?.total || 0,
-          totalPages: res.pagination?.totalPages || 1,
+          emails: data.data || [],
+          total: data.total || 0,
+          totalPages: data.totalPages || Math.ceil((data.total || 0) / limit) || 1,
           loading: false,
         });
       }
-    } catch (err) {
-      console.error("Failed to fetch emails", err);
+    } catch (error) {
+      console.error("Failed to fetch emails", error);
       set({ loading: false });
     }
-    get().fetchCounts();
   },
 
   fetchCounts: async () => {
     try {
-      const res = await getFolderCounts();
-      if (res.success && res.data) {
-        set({ counts: res.data });
+      const response = await API.get("/mail/counts");
+      const data = response.data;
+      if (data.success && data.data) {
+        set({ counts: data.data });
       }
-    } catch (err) {
-      console.error("Failed to fetch folder counts", err);
+    } catch (error) {
+      console.error("Failed to fetch folder counts", error);
     }
   },
 
   fetchEmailDetails: async (id: number) => {
-    set({ loading: true, currentEmail: null });
+    set({ loading: true });
     try {
-      const res = await getEmailById(id);
-      if (res.success && res.data) {
-        set({ currentEmail: res.data, loading: false });
-        get().fetchCounts();
-        return res.data;
+      const response = await API.get(`/mail/${id}`);
+      const data = response.data;
+      if (data.success) {
+        set({ currentEmail: data.data, loading: false });
+        return data.data;
       }
-    } catch (err) {
-      console.error("Failed to load email thread", err);
+    } catch (error) {
+      console.error("Failed to fetch email details", error);
     }
     set({ loading: false });
     return null;
@@ -155,26 +115,31 @@ export const useMailStore = create<MailState>((set, get) => ({
 
   markAsRead: async (id: number, isRead: boolean) => {
     try {
-      await toggleReadStatus(id, isRead);
-      set((state) => ({
-        emails: state.emails.map((e) => (e.id === id ? { ...e, is_read: isRead } : e)),
-      }));
+      await API.patch(`/mail/${id}/read`, { is_read: isRead });
+      const { emails, currentEmail } = get();
+      set({
+        emails: emails.map((e) => (e.id === id ? { ...e, is_read: isRead } : e)),
+        currentEmail: currentEmail && currentEmail.id === id ? { ...currentEmail, is_read: isRead } : currentEmail,
+      });
       get().fetchCounts();
-    } catch (err) {
-      console.error("Failed to toggle read status", err);
+    } catch (error) {
+      console.error("Failed to toggle read status", error);
     }
   },
 
-  removeEmail: async (id: number, type = "trash") => {
+  removeEmail: async (id: number, type: "trash" | "delete" = "trash") => {
+    set({ actionLoading: true });
     try {
-      await deleteEmail(id, type);
-      set((state) => ({
-        emails: state.emails.filter((e) => e.id !== id),
-        selectedEmailIds: state.selectedEmailIds.filter((item) => item !== id),
-      }));
+      await API.delete(`/mail/${id}`, { params: { type } });
+      const { emails } = get();
+      set({
+        emails: emails.filter((e) => e.id !== id),
+        actionLoading: false,
+      });
       get().fetchCounts();
-    } catch (err) {
-      console.error("Failed to delete email", err);
+    } catch (error) {
+      console.error("Failed to remove email", error);
+      set({ actionLoading: false });
     }
   },
 
@@ -184,29 +149,52 @@ export const useMailStore = create<MailState>((set, get) => ({
 
     set({ actionLoading: true });
     try {
-      await massUpdateEmails(selectedEmailIds, [folder]);
-      set({ selectedEmailIds: [] });
-      await get().fetchEmails();
-    } catch (err) {
-      console.error("Failed to bulk update emails", err);
-    } finally {
+      await API.post("/mail/mass-update", { indices: selectedEmailIds, folders: [folder] });
+      set({ selectedEmailIds: [], actionLoading: false });
+      get().fetchEmails();
+      get().fetchCounts();
+    } catch (error) {
+      console.error("Failed to mass update emails", error);
       set({ actionLoading: false });
     }
   },
 
-  bulkDelete: async (type = "trash") => {
+  bulkDelete: async (type: "trash" | "delete" = "trash") => {
     const { selectedEmailIds } = get();
     if (selectedEmailIds.length === 0) return;
 
     set({ actionLoading: true });
     try {
-      await massDeleteEmails(selectedEmailIds, type);
-      set({ selectedEmailIds: [] });
-      await get().fetchEmails();
-    } catch (err) {
-      console.error("Failed to bulk delete emails", err);
-    } finally {
+      await API.post("/mail/mass-destroy", { indices: selectedEmailIds, type });
+      set({ selectedEmailIds: [], actionLoading: false });
+      get().fetchEmails();
+      get().fetchCounts();
+    } catch (error) {
+      console.error("Failed to mass delete emails", error);
       set({ actionLoading: false });
     }
+  },
+
+  sendEmail: async (formData: FormData) => {
+    const response = await API.post("/mail", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    get().fetchCounts();
+    return response.data;
+  },
+
+  updateDraft: async (id: number, formData: FormData) => {
+    const response = await API.put(`/mail/${id}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
+
+  linkEmailEntities: async (
+    id: number,
+    data: { person_id?: number | null; lead_id?: number | null }
+  ) => {
+    const response = await API.put(`/mail/${id}/link`, data);
+    return response.data;
   },
 }));

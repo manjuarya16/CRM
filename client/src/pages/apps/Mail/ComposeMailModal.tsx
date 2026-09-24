@@ -1,24 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { sendEmail, updateDraft } from "@/services/mailService";
-import { useLeadStore } from "@/store";
+import { useLeadStore, useMailStore } from "@/store";
+import { ComposeMailModalProps } from "@/interface";
 import API from "@/config";
-
-interface ComposeMailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: (message?: string) => void;
-  initialData?: {
-    to?: string[];
-    cc?: string[];
-    bcc?: string[];
-    subject?: string;
-    reply?: string;
-    lead_id?: number | null;
-    person_id?: number | null;
-    parent_id?: number | null;
-    draftId?: number | null;
-  };
-}
 
 export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   isOpen,
@@ -27,6 +10,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   initialData,
 }) => {
   const { leads, fetchLeads } = useLeadStore();
+  const { sendEmail, updateDraft } = useMailStore();
   const [persons, setPersons] = useState<{ id: number; name: string; email?: string }[]>([]);
 
   const [toInput, setToInput] = useState<string>("");

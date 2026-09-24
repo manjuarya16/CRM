@@ -1,12 +1,7 @@
 import React, { useState } from "react";
-import { IWebForm } from "@/interface";
+import { IWebForm, WebFormPreviewProps } from "@/interface";
 import Swal from "sweetalert2";
 import API from "@/config";
-
-interface WebFormPreviewProps {
-  form: IWebForm;
-  onClose: () => void;
-}
 
 export const WebFormPreview: React.FC<WebFormPreviewProps> = ({ form, onClose }) => {
   const [formData, setFormData] = useState<Record<string, string>>({});

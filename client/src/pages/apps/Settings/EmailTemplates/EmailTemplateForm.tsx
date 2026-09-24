@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { emailTemplateSchema, EmailTemplateInput } from "@/schemas";
-import { IEmailTemplate } from "@/interface";
-
-interface EmailTemplateFormProps {
-  initialData?: IEmailTemplate | null;
-  isEdit?: boolean;
-}
+import { IEmailTemplate, EmailTemplateFormProps } from "@/interface";
 
 const PLACEHOLDERS = [
   { label: "Lead Name", tag: "{%lead.name%}" },

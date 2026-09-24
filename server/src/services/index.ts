@@ -7,12 +7,12 @@ export * from './pipeline.service';
 export * from './source.service';
 export * from './type.service';
 export * from './person.service';
-export * from './lead.service';
-export * from './quote.service';
-export * from './product.service';
-export * from './activity.service';
-
-
+export { default as leadService } from './leadService';
+export { default as quoteService } from './quoteService';
+export { default as productService } from './productService';
+export { default as activityService } from './activityService';
+export * from './configService';
+export * from './mailService';
 export * from './emailTemplate.service';
 export * from './event.service';
 export * from './campaign.service';
