@@ -26,6 +26,7 @@ import userRoutes from '@/routes/user.routes';
 import configRoutes from '@/routes/config.routes';
 import mailRoutes from '@/routes/mail.routes';
 import dashboardRoutes from '@/routes/dashboard.routes';
+import notificationRoutes from '@/routes/notification.routes';
 const router = Router();
 
 router.get('/health', (_req, res) => {
@@ -48,6 +49,8 @@ router.use('/activities', activityRoutes);
 router.use('/activity', activityRoutes);
 router.use('/mail', mailRoutes);
 router.use('/emails', mailRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/notification', notificationRoutes);
 
 // Configuration
 router.use('/configuration', configRoutes);

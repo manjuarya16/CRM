@@ -1,20 +1,14 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useMailStore } from "@/store/mailStore";
-import { useLeadStore } from "@/store";
-import {
-  EmailItem,
-  sendEmail,
-  linkEmailEntities,
-  deleteEmail,
-  toggleReadStatus,
-} from "@/services/mailService";
-import API from "@/config";
+import { useMailStore, useLeadStore } from "@/store";
+import { EmailItem } from "@/interface";
+import API, { API_URL } from "@/config";
+import { formatFileSize } from "@/utils/formatters";
 
 const MailViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { fetchEmailDetails, counts, fetchCounts } = useMailStore();
+  const { fetchEmailDetails, counts, fetchCounts, sendEmail, linkEmailEntities, removeEmail, markAsRead } = useMailStore();
   const { leads, fetchLeads } = useLeadStore();
 
   const [email, setEmail] = useState<EmailItem | null>(null);
@@ -237,24 +231,15 @@ const MailViewPage: React.FC = () => {
   const handleDeleteEmail = async () => {
     if (!email) return;
     if (confirm("Are you sure you want to move this email to Trash?")) {
-      await deleteEmail(email.id, "trash");
-      fetchCounts();
+      await removeEmail(email.id, "trash");
       navigate("/mail");
     }
   };
 
   const handleToggleRead = async () => {
     if (!email) return;
-    await toggleReadStatus(email.id, !email.is_read);
+    await markAsRead(email.id, !email.is_read);
     setEmail({ ...email, is_read: !email.is_read });
-    fetchCounts();
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return "0 KB";
-    const k = 1024;
-    if (bytes < k * 1024) return `${(bytes / k).toFixed(1)} KB`;
-    return `${(bytes / (k * k)).toFixed(1)} MB`;
   };
 
   if (loading) {
@@ -420,7 +405,7 @@ const MailViewPage: React.FC = () => {
                       </div>
 
                       <a
-                        href={`http://localhost:3040/api/mail/attachments/${file.id}/download`}
+                        href={`${API_URL}/mail/attachments/${file.id}/download`}
                         target="_blank"
                         rel="noreferrer"
                         className="p-1.5 text-gray-400 group-hover:text-[#0088cc] hover:bg-blue-100 dark:hover:bg-gray-600 rounded-md transition-colors"
@@ -524,7 +509,7 @@ const MailViewPage: React.FC = () => {
                         {replyItem.attachments.map((file) => (
                           <a
                             key={file.id}
-                            href={`http://localhost:3040/api/mail/attachments/${file.id}/download`}
+                            href={`${API_URL}/mail/attachments/${file.id}/download`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-md text-xs text-gray-700 dark:text-gray-200 hover:text-[#0088cc]"

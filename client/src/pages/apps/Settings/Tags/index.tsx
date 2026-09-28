@@ -4,12 +4,7 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { tagSchema } from "@/schemas";
 
-export interface ITag {
-  id: number;
-  name: string;
-  color: string;
-  created_at?: string;
-}
+import { ITag } from "@/interface";
 
 const PRESET_COLORS = [
   "#0088cc",

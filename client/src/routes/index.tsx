@@ -21,6 +21,7 @@ const UserEditForm = React.lazy(() => import("../pages/apps/Users/edit"));
 const UserViewForm = React.lazy(() => import("../pages/apps/Users/view"));
 
 // apps
+const NotificationsPage = React.lazy(() => import("../pages/apps/Notifications"));
 const QuotesPage = React.lazy(() => import("../pages/apps/Quotes"));
 const CreateQuotePage = React.lazy(() => import("../pages/apps/Quotes/create"));
 const EditQuotePage = React.lazy(() => import("../pages/apps/Quotes/edit"));
@@ -205,6 +206,12 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/dashboard",
     name: "Dashboard",
     element: <Dashboard />,
+  },
+  {
+    path: "/notifications",
+    name: "Notifications",
+    element: <NotificationsPage />,
+    route: PrivateRoute,
   },
   {
     path: "/leads",

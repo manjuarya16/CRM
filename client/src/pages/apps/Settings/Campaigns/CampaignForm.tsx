@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { campaignSchema, CampaignInput } from "@/schemas";
-import { ICampaign, IEmailTemplate, IEvent } from "@/interface";
-
-interface CampaignFormProps {
-  initialData?: ICampaign | null;
-  isEdit?: boolean;
-}
+import { ICampaign, IEmailTemplate, IEvent, CampaignFormProps } from "@/interface";
 
 export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();

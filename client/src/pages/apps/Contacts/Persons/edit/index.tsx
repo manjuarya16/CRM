@@ -8,6 +8,7 @@ import { personSchema } from "@/schemas";
 
 import { EmailItem, ContactItem, PersonFormData } from "@/interface";
 import { TagPicker } from "@/components/TagPicker";
+import { PersonEmailItem, ContactItem, PersonFormData } from "@/interface";
 
 const EditPersonPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +22,7 @@ const EditPersonPage: React.FC = () => {
 
   const [formData, setFormData] = useState<{
     name: string;
-    emails: EmailItem[];
+    emails: PersonEmailItem[];
     contact_numbers: ContactItem[];
     organization_id: string;
     job_title: string;
@@ -123,7 +124,7 @@ const EditPersonPage: React.FC = () => {
 
         setFormData({
           name: person.name || "",
-          emails: parsedEmails as EmailItem[],
+          emails: parsedEmails as PersonEmailItem[],
           contact_numbers: parsedContacts as ContactItem[],
           organization_id: person.organization_id ? String(person.organization_id) : "",
           job_title: cleanTitle,

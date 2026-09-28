@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IQuoteCreateInput, IQuoteUpdateInput } from "@/interfaces/quoteInterface";
+import { notifyCRMActivity } from "@/utils/notificationHelper";
 
 const logger = pino();
 
@@ -125,6 +126,18 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         [customAttrsJson, createdQuote.id]
       );
       createdQuote.custom_attributes = custom_attributes;
+    }
+
+    if (createdQuote) {
+      notifyCRMActivity({
+        title: "New Quote Generated",
+        message: `Quote "${subject}" for ${grand_total ? `$${grand_total}` : 'customer'} was generated.`,
+        module: "quote",
+        entityId: createdQuote.id,
+        actionType: "created",
+        userId: user_id || null,
+        createdBy: (req as any).user?.id || null,
+      });
     }
 
     res.status(HttpStatusCodes.CREATED).json({

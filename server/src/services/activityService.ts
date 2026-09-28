@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/activityInterface";
+import { notifyCRMActivity } from "@/utils/notificationHelper";
 
 const logger = pino();
 
@@ -111,10 +112,22 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
       ]
     );
 
+    const createdActivity = result.rows[0];
+
+    notifyCRMActivity({
+      title: `Activity Scheduled: ${title || type || "New Activity"}`,
+      message: `A new ${type || "activity"} scheduled for ${schedule_from || "today"}`,
+      module: "activity",
+      entityId: createdActivity?.id || null,
+      actionType: "created",
+      userId: currentUserId,
+      createdBy: (req as any).user?.id || null,
+    });
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Activity created successfully",
-      data: result.rows[0],
+      data: createdActivity,
     });
   } catch (error: any) {
     logger.error(error);
@@ -157,6 +170,18 @@ const updateActivity = async (req: Request, res: Response): Promise<void> => {
         location ?? null,
       ]
     );
+
+    if (is_done) {
+      notifyCRMActivity({
+        title: `Activity Completed: ${title || "Activity"}`,
+        message: `Activity #${id} has been marked as completed`,
+        module: "activity",
+        entityId: id,
+        actionType: "updated",
+        userId: user_id || null,
+        createdBy: (req as any).user?.id || null,
+      });
+    }
 
     res.status(HttpStatusCodes.OK).json({
       success: true,

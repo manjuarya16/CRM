@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 
 import { usePersonStore } from "@/store";
-import { IPerson, EmailItem, ContactItem } from "@/interface";
+import { IPerson, PersonEmailItem, ContactItem } from "@/interface";
 
 const PersonsPage: React.FC = () => {
   const { persons, loading, total, fetchPersons, deletePerson, clearAllPersons } = usePersonStore();

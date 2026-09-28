@@ -5,6 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import path from "path";
 import fs from "fs";
+import { notifyCRMActivity } from "@/utils/notificationHelper";
 
 const logger = pino();
 
@@ -164,6 +165,18 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
           [lead.id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
         );
       }
+    }
+
+    if (lead) {
+      notifyCRMActivity({
+        title: "New Lead Created",
+        message: `Lead "${title}" was created successfully.`,
+        module: "lead",
+        entityId: lead.id,
+        actionType: "created",
+        userId: user_id || null,
+        createdBy: (req as any).user?.id || null,
+      });
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -429,10 +442,39 @@ const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
     const { stage_id, status, lost_reason } = req.body;
+
+    // Fetch current lead details BEFORE updating so we can capture old stage name
+    const beforeRes = await connection.query(
+      "SELECT * FROM public.fn_get_lead_by_id($1)",
+      [leadId]
+    );
+    const leadBefore = beforeRes.rows[0];
+    const oldStageName = leadBefore?.stage_name || "Unknown";
+    const leadTitle = leadBefore?.title || `Lead #${leadId}`;
+
+    // Fetch new stage name via stored procedure
+    const stagesRes = await connection.query(
+      "SELECT * FROM public.fn_get_pipeline_stages(null)"
+    );
+    const targetStage = stagesRes.rows.find((s: any) => Number(s.id) === Number(stage_id));
+    const newStageName = targetStage?.name || `Stage #${stage_id}`;
+
+    // Update the stage
     const result = await connection.query(
       "SELECT * FROM public.fn_update_lead_stage($1, $2, $3, $4)",
       [leadId, stage_id, status ?? true, lost_reason || null]
     );
+
+    // Notify with full context: lead title, old stage → new stage
+    notifyCRMActivity({
+      title: `Lead Stage Changed: ${leadTitle}`,
+      message: `"${leadTitle}" moved from "${oldStageName}" → "${newStageName}"`,
+      module: "lead",
+      entityId: leadId,
+      actionType: "stage_changed",
+      createdBy: (req as any).user?.id || null,
+    });
+
     res.status(HttpStatusCodes.OK).json({ success: true, message: "Lead stage updated", data: result.rows[0] });
   } catch (error: any) {
     logger.error(error);

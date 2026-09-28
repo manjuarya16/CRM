@@ -8,11 +8,7 @@ import useUserStore from "@/store/userStore";
 import commonAPI from "@/helpers/api/common";
 import { API, API_URL } from "@/config";
 import ImageUploader from "@/components/ImageUploader";
-
-interface LocationOption {
-  id: number;
-  name: string;
-}
+import { LocationOption, UserProfileInfoRowProps } from "@/interface";
 
 const Profile = () => {
   const { id } = useParams();
@@ -540,19 +536,6 @@ const Profile = () => {
   );
 };
 
-/* ── InfoRow sub-component ── */
-interface InfoRowProps {
-  icon: string;
-  label: string;
-  value?: string | number;
-  editKey?: string;
-  editing?: boolean;
-  form?: Record<string, any>;
-  patch?: (key: string, val: string) => void;
-  type?: string;
-  readonly?: boolean;
-}
-
 const InfoRow = ({
   icon,
   label,
@@ -563,7 +546,7 @@ const InfoRow = ({
   patch,
   type = "text",
   readonly,
-}: InfoRowProps) => {
+}: UserProfileInfoRowProps) => {
   const isEditable = editing && !readonly && editKey;
   return (
     <div className="flex items-center gap-3">

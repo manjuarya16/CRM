@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { workflowSchema, WorkflowInput } from "@/schemas";
-import { IWorkflow, IWorkflowCondition, IWorkflowAction } from "@/interface";
-
-interface WorkflowFormProps {
-  initialData?: IWorkflow | null;
-  isEdit?: boolean;
-}
+import { IWorkflow, IWorkflowCondition, IWorkflowAction, WorkflowFormProps } from "@/interface";
 
 export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();

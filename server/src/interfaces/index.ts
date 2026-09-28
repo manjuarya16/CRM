@@ -6,3 +6,4 @@ export type { IActivityCreateInput, IActivityUpdateInput } from './activityInter
 export type { ILeadCreateInput, ILeadUpdateInput } from './leadInterface';
 export type { IProductCreateInput, IProductUpdateInput } from './productInterface';
 export type { IQuoteItem, IQuoteCreateInput, IQuoteUpdateInput } from './quoteInterface';
+export * from './notificationInterface';

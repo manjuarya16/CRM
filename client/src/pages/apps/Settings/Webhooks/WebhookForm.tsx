@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { webhookSchema, WebhookInput } from "@/schemas";
-import { IWebhook } from "@/interface";
-
-interface WebhookFormProps {
-  initialData?: IWebhook | null;
-  isEdit?: boolean;
-}
+import { IWebhook, WebhookFormProps } from "@/interface";
 
 export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();

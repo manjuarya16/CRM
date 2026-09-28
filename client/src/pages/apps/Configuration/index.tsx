@@ -1,22 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getConfigurations, saveConfigurations, uploadConfigImage, testSmtpConnection } from "@/services/configService";
 import { useConfigStore } from "@/store";
-import { SERVER_URL } from "@/config";
+import { ConfigNavItem } from "@/interface";
+import { extractFileUrl } from "@/utils/fileHelper";
 
 const resolveImageUrl = (url: string | null): string => {
-  if (!url) return "";
-  if (url.startsWith("data:") || url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${SERVER_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  return extractFileUrl(url) || "";
 };
-
-interface NavItem {
-  id: string;
-  key: string;
-  title: string;
-  icon: string;
-  subItems?: { id: string; key: string; title: string }[];
-}
 
 // ── Reusable Toggle Switch ───────────────────────────────────────────────────
 const ToggleSwitch: React.FC<{
@@ -51,7 +41,7 @@ const ToggleSwitch: React.FC<{
 );
 
 // ── Nav Structure ────────────────────────────────────────────────────────────
-const CONFIG_NAV: { category: string; items: NavItem[] }[] = [
+const CONFIG_NAV: { category: string; items: ConfigNavItem[] }[] = [
   {
     category: "General Configuration",
     items: [
@@ -185,7 +175,9 @@ const ConfigurationPage: React.FC = () => {
   const [testingSmtp, setTestingSmtp] = useState<boolean>(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  useEffect(() => { fetchConfigs(); }, []);
+  const { fetchConfigs: fetchConfigsStore, saveConfigurations, uploadConfigImage, testSmtpConnection } = useConfigStore();
+
+  useEffect(() => { loadConfigs(); }, []);
 
   const handleTestSmtp = async () => {
     setTestingSmtp(true);
@@ -212,13 +204,12 @@ const ConfigurationPage: React.FC = () => {
     }
   };
 
-  const fetchConfigs = async () => {
+  const loadConfigs = async () => {
     setLoading(true);
     try {
-      const res = await getConfigurations();
-      if (res.success && res.data) {
-        setFormValues((prev) => ({ ...prev, ...res.data }));
-        useConfigStore.getState().setConfigs(res.data);
+      const data = await fetchConfigsStore();
+      if (data) {
+        setFormValues((prev) => ({ ...prev, ...data }));
       }
     } catch (err) {
       console.error("Failed to load configurations", err);
@@ -273,7 +264,6 @@ const ConfigurationPage: React.FC = () => {
         setStatusMessage({ type: "success", text: "Configuration saved successfully!" });
         const updatedData = res.data || formValues;
         setFormValues((prev) => ({ ...prev, ...updatedData }));
-        useConfigStore.getState().setConfigs(updatedData);
       } else {
         setStatusMessage({ type: "error", text: res.message || "Failed to save configuration." });
       }
@@ -285,7 +275,7 @@ const ConfigurationPage: React.FC = () => {
     }
   };
 
-  const handleNavClick = (item: NavItem) => {
+  const handleNavClick = (item: ConfigNavItem) => {
     setActiveTab(item.id);
     if (item.subItems && item.subItems.length > 0) {
       setActiveSubTab(item.subItems[0].id);

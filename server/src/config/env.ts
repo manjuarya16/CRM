@@ -5,7 +5,7 @@ const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().default(3040),
-    CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
+    CLIENT_ORIGIN: z.string().default('https://crm.imorse.digital'),
     DATABASE_URL: z.string().optional(),
     PGHOST: z.string().default('localhost'),
     PGPORT: z.coerce.number().default(5432),

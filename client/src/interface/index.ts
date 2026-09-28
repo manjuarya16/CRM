@@ -16,8 +16,11 @@ export * from "./leadInterface";
 export * from "./productInterface";
 export * from "./activityInterface";
 export * from "./quoteInterface";
-
+export * from "./mailInterface";
+export * from "./layoutInterface";
 export * from "./warehouseInterface";
 export * from "./attributeInterface";
 export * from "./automationInterfaces";
 export * from "./tagInterface";
+export * from "./notificationInterface";
+

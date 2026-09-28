@@ -1,4 +1,4 @@
-export interface EmailItem {
+export interface PersonEmailItem {
   label: "work" | "home" | "other";
   value: string;
 }
@@ -11,7 +11,7 @@ export interface ContactItem {
 export interface IPerson {
   id: number;
   name: string;
-  emails: EmailItem[] | string;
+  emails: PersonEmailItem[] | string;
   contact_numbers: ContactItem[] | string;
   organization_id?: number | null;
   organization_name?: string | null;
@@ -27,7 +27,7 @@ export interface IPerson {
 
 export interface PersonFormData {
   name: string;
-  emails: EmailItem[];
+  emails: PersonEmailItem[];
   contact_numbers: ContactItem[];
   organization_id: string;
   job_title: string;
@@ -45,4 +45,3 @@ export interface PersonState {
   deletePerson: (id: number | string) => Promise<boolean>;
   clearAllPersons: () => Promise<{ success: boolean; message: string }>;
 }
-

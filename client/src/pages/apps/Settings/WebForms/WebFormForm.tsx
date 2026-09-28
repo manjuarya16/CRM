@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { webFormSchema, WebFormInput } from "@/schemas";
-import { IWebForm, IWebFormAttribute, IPipeline, IAttribute } from "@/interface";
-
-interface WebFormFormProps {
-  initialData?: IWebForm | null;
-  isEdit?: boolean;
-}
+import { IWebForm, IWebFormAttribute, IPipeline, IAttribute, WebFormFormProps } from "@/interface";
 
 export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();

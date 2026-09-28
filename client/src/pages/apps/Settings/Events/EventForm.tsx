@@ -5,12 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { eventSchema, EventInput } from "@/schemas";
-import { IEvent } from "@/interface";
-
-interface EventFormProps {
-  initialData?: IEvent | null;
-  isEdit?: boolean;
-}
+import { IEvent, EventFormProps } from "@/interface";
 
 export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();

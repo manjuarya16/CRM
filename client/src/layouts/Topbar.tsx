@@ -63,6 +63,7 @@ const notifications: NotificationItem[] = [
     createdAt: subtractHours(new Date(), 2880),
   },
 ];
+import { ProfileMenuItem } from "../interface/leftSideInterface";
 
 /**
  * profile menu items
@@ -84,14 +85,6 @@ const profileMenus: ProfileMenuItem[] = [
   //   redirectTo: '/auth/lock-screen',
   // },
 ];
-
-/**
- * for subtraction minutes
- */
-function subtractHours(date: Date, minutes: number) {
-  date.setMinutes(date.getMinutes() - minutes);
-  return date;
-}
 
 const Topbar = () => {
   const { width } = useViewPort();
@@ -234,6 +227,8 @@ const Topbar = () => {
 
         {/* Right side controls */}
         <div className="flex items-center gap-3 ml-auto">
+          <NotificationDropdown />
+
           <button
             id="light-dark-mode"
             type="button"
