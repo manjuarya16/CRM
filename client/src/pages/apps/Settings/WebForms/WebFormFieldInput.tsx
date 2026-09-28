@@ -1,13 +1,5 @@
 import React from "react";
-import { IWebFormAttribute } from "@/interface";
-
-interface WebFormFieldInputProps {
-  attr: IWebFormAttribute;
-  value: any;
-  onChange: (val: any) => void;
-  labelColor?: string;
-  disabled?: boolean;
-}
+import { IWebFormAttribute, WebFormFieldInputProps } from "@/interface";
 
 export const WebFormFieldInput: React.FC<WebFormFieldInputProps> = ({
   attr,

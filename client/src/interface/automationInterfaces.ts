@@ -89,6 +89,14 @@ export interface IWebFormAttribute {
   sort_order: number;
 }
 
+export interface WebFormFieldInputProps {
+  attr: IWebFormAttribute;
+  value: any;
+  onChange: (val: any) => void;
+  labelColor?: string;
+  disabled?: boolean;
+}
+
 export interface IWebForm {
   id: number;
   form_id: string;

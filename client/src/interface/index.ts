@@ -20,3 +20,4 @@ export * from "./quoteInterface";
 export * from "./warehouseInterface";
 export * from "./attributeInterface";
 export * from "./automationInterfaces";
+export * from "./tagInterface";

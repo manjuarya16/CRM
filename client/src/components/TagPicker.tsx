@@ -1,17 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "@/config";
-
-export interface ITag {
-  id: number;
-  name: string;
-  color?: string;
-}
-
-interface TagPickerProps {
-  selectedTagIds: number[];
-  onChange: (tagIds: number[]) => void;
-  disabled?: boolean;
-}
+import { ITag, TagPickerProps } from "@/interface";
 
 export const TagPicker: React.FC<TagPickerProps> = ({
   selectedTagIds = [],
