@@ -5,6 +5,7 @@ import { useLeadStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 // â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ProductRow {
@@ -84,6 +85,7 @@ const CreateLeadPage: React.FC = () => {
   ]);
 
   // Tab 4 – Custom Attributes
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -250,7 +252,14 @@ const CreateLeadPage: React.FC = () => {
         };
       }
 
-      await addLead(payload);
+      const savedLead: any = await addLead(payload);
+      if (savedLead?.id && selectedTagIds.length > 0) {
+        await API.post("/tags/entity", {
+          entity_type: "lead",
+          entity_id: savedLead.id,
+          tag_ids: selectedTagIds,
+        }).catch(() => {});
+      }
       navigate("/leads");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to create lead", "error");
@@ -441,6 +450,15 @@ const CreateLeadPage: React.FC = () => {
                   onChange={(e) => setDetails({ ...details, description: e.target.value })}
                   placeholder="Opportunity details..."
                   className={inputCls}
+                />
+              </div>
+
+              {/* Tags */}
+              <div className="md:col-span-2">
+                <label className={labelCls}>Tags</label>
+                <TagPicker
+                  selectedTagIds={selectedTagIds}
+                  onChange={setSelectedTagIds}
                 />
               </div>
             </div>

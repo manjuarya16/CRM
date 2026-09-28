@@ -66,6 +66,12 @@ const EditRolePage = React.lazy(
 const PipelinesPage = React.lazy(
   () => import("../pages/apps/Settings/Pipelines"),
 );
+const CreatePipelinePage = React.lazy(
+  () => import("../pages/apps/Settings/Pipelines/create"),
+);
+const EditPipelinePage = React.lazy(
+  () => import("../pages/apps/Settings/Pipelines/edit"),
+);
 const SourcesPage = React.lazy(() => import("../pages/apps/Settings/Sources"));
 const TypesPage = React.lazy(() => import("../pages/apps/Settings/Types"));
 const WarehousesPage = React.lazy(
@@ -389,6 +395,21 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/pipelines",
     name: "Settings Pipelines",
     element: <PipelinesPage />,
+  },
+  {
+    path: "/settings/pipelines/create",
+    name: "Create Pipeline",
+    element: <CreatePipelinePage />,
+  },
+  {
+    path: "/settings/pipelines/edit/:id",
+    name: "Edit Pipeline",
+    element: <EditPipelinePage />,
+  },
+  {
+    path: "/settings/pipelines/:id/edit",
+    name: "Edit Pipeline",
+    element: <EditPipelinePage />,
   },
   {
     path: "/settings/sources",

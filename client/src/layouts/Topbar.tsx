@@ -12,6 +12,7 @@ import {
 } from "../components";
 import { useAuthStore } from "../store";
 import { useEffect, useState } from "react";
+import { QuickCreateModal } from "../components/QuickCreateModal";
 import {
   NotificationItem,
   ProfileMenuItem,
@@ -196,6 +197,8 @@ const Topbar = () => {
     }
   };
 
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+
   return (
     <>
       <header className="app-header flex items-center px-4 gap-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16">
@@ -221,8 +224,9 @@ const Topbar = () => {
             />
           </div>
           <button
-            title="Quick Create"
-            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105"
+            title="Quick Create (Lead, Person, Organization, Product)"
+            onClick={() => setQuickCreateOpen(true)}
+            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105 cursor-pointer"
           >
             <i className="mgc_add_line text-xl font-bold"></i>
           </button>
@@ -249,6 +253,11 @@ const Topbar = () => {
           />
         </div>
       </header>
+
+      <QuickCreateModal
+        isOpen={quickCreateOpen}
+        onClose={() => setQuickCreateOpen(false)}
+      />
     </>
   );
 };

@@ -17,7 +17,7 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/tags/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const tag = await TagService.getById(req.params.id);
+    const tag = await TagService.getById(String(req.params.id));
     if (!tag) {
       return res.status(404).json({ success: false, message: 'Tag not found' });
     }
@@ -49,7 +49,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || user_id;
     const saved = await TagService.save(
       { name: name ? name.trim() : '', color: color || '#0088cc' },
-      req.params.id,
+      String(req.params.id),
       userId
     );
     return res.json({ success: true, data: saved, message: 'Tag updated successfully' });
@@ -61,13 +61,37 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/tags/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const success = await TagService.delete(req.params.id);
+    const success = await TagService.delete(String(req.params.id));
     if (!success) {
       return res.status(404).json({ success: false, message: 'Tag not found or already deleted' });
     }
     return res.json({ success: true, message: 'Tag deleted successfully' });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || 'Failed to delete tag' });
+  }
+});
+
+// GET /api/tags/entity/:type/:id
+router.get('/entity/:type/:id', async (req: Request, res: Response) => {
+  try {
+    const tags = await TagService.getEntityTags(String(req.params.type), String(req.params.id));
+    return res.json({ success: true, data: tags });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to fetch entity tags' });
+  }
+});
+
+// POST /api/tags/entity
+router.post('/entity', async (req: Request, res: Response) => {
+  try {
+    const { entity_type, entity_id, tag_ids } = req.body;
+    if (!entity_type || !entity_id) {
+      return res.status(400).json({ success: false, message: 'entity_type and entity_id are required' });
+    }
+    const tags = await TagService.saveEntityTags(entity_type, entity_id, tag_ids || []);
+    return res.json({ success: true, data: tags, message: 'Entity tags saved successfully' });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to save entity tags' });
   }
 });
 

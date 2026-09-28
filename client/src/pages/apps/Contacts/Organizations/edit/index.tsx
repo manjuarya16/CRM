@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { OrganizationFormData } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { organizationSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 const COUNTRIES = [
   "United States",
@@ -35,6 +36,7 @@ const EditOrganizationPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -56,13 +58,18 @@ const EditOrganizationPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [orgRes, usersRes] = await Promise.all([
+      const [orgRes, usersRes, tagsRes] = await Promise.all([
         API.get(`/organization/${id}`),
         API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
+        API.get(`/tags/entity/organization/${id}`).catch(() => ({ data: { data: [] } })),
       ]);
 
       const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
       setUsers(userRows);
+
+      if (tagsRes.data?.data) {
+        setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+      }
 
       const org = orgRes.data?.data;
       if (org) {
@@ -150,6 +157,11 @@ const EditOrganizationPage: React.FC = () => {
       };
 
       const res = await API.put(`/organization/${id}`, payload);
+      await API.post("/tags/entity", {
+        entity_type: "organization",
+        entity_id: id,
+        tag_ids: selectedTagIds,
+      }).catch(() => {});
       if (res.data?.success || res.status === 200) {
         Swal.fire({
           icon: "success",
@@ -329,6 +341,17 @@ const EditOrganizationPage: React.FC = () => {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Tags */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+            Tags
+          </label>
+          <TagPicker
+            selectedTagIds={selectedTagIds}
+            onChange={setSelectedTagIds}
+          />
         </div>
 
         {/* Dynamic Custom Attributes for Organizations */}

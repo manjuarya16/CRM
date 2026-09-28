@@ -5,6 +5,7 @@ import { useLeadStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 interface ProductRow {
   id?: number; // existing product record ID (for update)
@@ -65,10 +66,11 @@ const EditLeadPage: React.FC = () => {
     lead_pipeline_stage_id: "",
     expected_close_date: "",
   });
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Tab 2 â€“ Contact Person
+  // Tab 2 – Contact Person
   const [personMode, setPersonMode] = useState<"existing" | "new">("existing");
   const [persons, setPersons] = useState<any[]>([]);
   const [personSearch, setPersonSearch] = useState("");
@@ -76,7 +78,7 @@ const EditLeadPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", organization_id: "" });
 
-  // Tab 3 â€“ Products
+  // Tab 3 – Products
   const [products, setProducts] = useState<any[]>([]);
   const [productRows, setProductRows] = useState<ProductRow[]>([
     { product_id: "", product_name: "", quantity: "1", price: "0" },
@@ -91,6 +93,9 @@ const EditLeadPage: React.FC = () => {
     API.get("/products?limit=200").then((r) => { if (r.data?.data) setProducts(r.data.data); }).catch(() => { });
 
     if (id) {
+      API.get(`/tags/entity/lead/${id}`).then((r) => {
+        if (r.data?.data) setSelectedTagIds(r.data.data.map((t: any) => t.id));
+      }).catch(() => {});
       setLoading(true);
       fetchLeadById(Number(id)).then((lead) => {
         if (lead) {
@@ -270,6 +275,11 @@ const EditLeadPage: React.FC = () => {
       }
 
       await updateLead(Number(id), payload);
+      await API.post("/tags/entity", {
+        entity_type: "lead",
+        entity_id: id,
+        tag_ids: selectedTagIds,
+      }).catch(() => {});
       navigate("/leads");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to update lead", "error");
@@ -439,6 +449,15 @@ const EditLeadPage: React.FC = () => {
                 <textarea rows={4} value={details.description}
                   onChange={(e) => setDetails({ ...details, description: e.target.value })}
                   className={inputCls} />
+              </div>
+
+              {/* Tags */}
+              <div className="md:col-span-2">
+                <label className={labelCls}>Tags</label>
+                <TagPicker
+                  selectedTagIds={selectedTagIds}
+                  onChange={setSelectedTagIds}
+                />
               </div>
             </div>
           </div>

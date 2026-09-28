@@ -2779,6 +2779,80 @@ BEGIN
     RETURN TRUE;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION get_entity_tags(p_entity_type TEXT, p_entity_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    IF p_entity_type = 'person' THEN
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color)), '[]'::jsonb) INTO v_result
+        FROM tags t JOIN person_tags et ON t.id = et.tag_id WHERE et.person_id = p_entity_id;
+    ELSIF p_entity_type = 'organization' THEN
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color)), '[]'::jsonb) INTO v_result
+        FROM tags t JOIN organization_tags et ON t.id = et.tag_id WHERE et.organization_id = p_entity_id;
+    ELSIF p_entity_type = 'product' THEN
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color)), '[]'::jsonb) INTO v_result
+        FROM tags t JOIN product_tags et ON t.id = et.tag_id WHERE et.product_id = p_entity_id;
+    ELSE
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color)), '[]'::jsonb) INTO v_result
+        FROM tags t JOIN lead_tags et ON t.id = et.tag_id WHERE et.lead_id = p_entity_id;
+    END IF;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION save_entity_tags(p_entity_type TEXT, p_entity_id INTEGER, p_tag_ids INTEGER[])
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_tid INTEGER;
+BEGIN
+    IF p_entity_type = 'person' THEN
+        DELETE FROM person_tags WHERE person_id = p_entity_id;
+        IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+            FOREACH v_tid IN ARRAY p_tag_ids LOOP
+                IF v_tid IS NOT NULL THEN
+                    INSERT INTO person_tags (person_id, tag_id) VALUES (p_entity_id, v_tid) ON CONFLICT DO NOTHING;
+                END IF;
+            END LOOP;
+        END IF;
+    ELSIF p_entity_type = 'organization' THEN
+        DELETE FROM organization_tags WHERE organization_id = p_entity_id;
+        IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+            FOREACH v_tid IN ARRAY p_tag_ids LOOP
+                IF v_tid IS NOT NULL THEN
+                    INSERT INTO organization_tags (organization_id, tag_id) VALUES (p_entity_id, v_tid) ON CONFLICT DO NOTHING;
+                END IF;
+            END LOOP;
+        END IF;
+    ELSIF p_entity_type = 'product' THEN
+        DELETE FROM product_tags WHERE product_id = p_entity_id;
+        IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+            FOREACH v_tid IN ARRAY p_tag_ids LOOP
+                IF v_tid IS NOT NULL THEN
+                    INSERT INTO product_tags (product_id, tag_id) VALUES (p_entity_id, v_tid) ON CONFLICT DO NOTHING;
+                END IF;
+            END LOOP;
+        END IF;
+    ELSE
+        DELETE FROM lead_tags WHERE lead_id = p_entity_id;
+        IF p_tag_ids IS NOT NULL AND array_length(p_tag_ids, 1) > 0 THEN
+            FOREACH v_tid IN ARRAY p_tag_ids LOOP
+                IF v_tid IS NOT NULL THEN
+                    INSERT INTO lead_tags (lead_id, tag_id) VALUES (p_entity_id, v_tid) ON CONFLICT DO NOTHING;
+                END IF;
+            END LOOP;
+        END IF;
+    END IF;
+
+    RETURN get_entity_tags(p_entity_type, p_entity_id);
+END;
+$$;
 `;
 
 export async function initDbFunctions(): Promise<void> {
