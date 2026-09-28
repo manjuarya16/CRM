@@ -21,4 +21,6 @@ export * from "./layoutInterface";
 export * from "./warehouseInterface";
 export * from "./attributeInterface";
 export * from "./automationInterfaces";
+export * from "./tagInterface";
 export * from "./notificationInterface";
+

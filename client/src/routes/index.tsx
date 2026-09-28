@@ -7,6 +7,7 @@ import PrivateRoute from "./PrivateRoute";
 
 // auth
 const Login = React.lazy(() => import("../pages/auth/Login"));
+const PublicFormPage = React.lazy(() => import("../pages/public/PublicFormPage"));
 
 // dashboard
 const Dashboard = React.lazy(() => import("../pages/dashboard/"));
@@ -65,6 +66,12 @@ const EditRolePage = React.lazy(
 );
 const PipelinesPage = React.lazy(
   () => import("../pages/apps/Settings/Pipelines"),
+);
+const CreatePipelinePage = React.lazy(
+  () => import("../pages/apps/Settings/Pipelines/create"),
+);
+const EditPipelinePage = React.lazy(
+  () => import("../pages/apps/Settings/Pipelines/edit"),
 );
 const SourcesPage = React.lazy(() => import("../pages/apps/Settings/Sources"));
 const TypesPage = React.lazy(() => import("../pages/apps/Settings/Types"));
@@ -180,6 +187,11 @@ const publicRoutes: RoutesProps[] = [
     path: "/auth/login",
     name: "Login",
     element: <Login />,
+  },
+  {
+    path: "/forms/:form_id",
+    name: "Public Web Form",
+    element: <PublicFormPage />,
   },
 ];
 
@@ -390,6 +402,21 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/pipelines",
     name: "Settings Pipelines",
     element: <PipelinesPage />,
+  },
+  {
+    path: "/settings/pipelines/create",
+    name: "Create Pipeline",
+    element: <CreatePipelinePage />,
+  },
+  {
+    path: "/settings/pipelines/edit/:id",
+    name: "Edit Pipeline",
+    element: <EditPipelinePage />,
+  },
+  {
+    path: "/settings/pipelines/:id/edit",
+    name: "Edit Pipeline",
+    element: <EditPipelinePage />,
   },
   {
     path: "/settings/sources",

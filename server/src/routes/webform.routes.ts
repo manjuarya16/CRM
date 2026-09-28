@@ -36,6 +36,18 @@ router.get('/form-id/:form_id', async (req, res, next) => {
   }
 });
 
+router.get('/public/:form_id', async (req, res, next) => {
+  try {
+    const webForm = await WebFormService.getByFormId(req.params.form_id);
+    if (!webForm) {
+      throw new ApiError(404, 'Web form not found');
+    }
+    res.json({ success: true, data: webForm });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/submit/:form_id', async (req, res, next) => {
   try {
     const result = await WebFormService.handleSubmission(req.params.form_id, req.body);

@@ -7,11 +7,14 @@ import { PersonEmailItem, ContactItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
+import { TagPicker } from "@/components/TagPicker";
+
 const CreatePersonPage: React.FC = () => {
   const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState<{
@@ -138,7 +141,14 @@ const CreatePersonPage: React.FC = () => {
 
     try {
       setSaving(true);
-      await usePersonStore.getState().savePerson(payload as any);
+      const savedPerson = await usePersonStore.getState().savePerson(payload as any);
+      if (savedPerson?.id && selectedTagIds.length > 0) {
+        await API.post("/tags/entity", {
+          entity_type: "person",
+          entity_id: savedPerson.id,
+          tag_ids: selectedTagIds,
+        }).catch(() => {});
+      }
       Swal.fire({
         icon: "success",
         title: "Success",
@@ -400,6 +410,17 @@ const CreatePersonPage: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Tags */}
+          <div className="pt-2">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              Tags
+            </label>
+            <TagPicker
+              selectedTagIds={selectedTagIds}
+              onChange={setSelectedTagIds}
+            />
           </div>
         </div>
 

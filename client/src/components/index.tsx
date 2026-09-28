@@ -32,3 +32,5 @@ export {
   Preloader,
 };
 export * from './PaginationControls';
+export * from './TagPicker';
+export * from './QuickCreateModal';

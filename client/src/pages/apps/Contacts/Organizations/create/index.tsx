@@ -4,6 +4,7 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { organizationSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 const COUNTRIES = [
   "United States",
@@ -32,6 +33,7 @@ const CreateOrganizationPage: React.FC = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
@@ -104,6 +106,14 @@ const CreateOrganizationPage: React.FC = () => {
       };
 
       const res = await API.post("/organization", payload);
+      const createdOrgId = res.data?.data?.id || res.data?.id;
+      if (createdOrgId && selectedTagIds.length > 0) {
+        await API.post("/tags/entity", {
+          entity_type: "organization",
+          entity_id: createdOrgId,
+          tag_ids: selectedTagIds,
+        }).catch(() => {});
+      }
       if (res.data?.success || res.status === 200 || res.status === 201) {
         Swal.fire({
           icon: "success",
@@ -275,6 +285,17 @@ const CreateOrganizationPage: React.FC = () => {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Tags */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+            Tags
+          </label>
+          <TagPicker
+            selectedTagIds={selectedTagIds}
+            onChange={setSelectedTagIds}
+          />
         </div>
 
         {/* Dynamic Custom Attributes for Organizations */}

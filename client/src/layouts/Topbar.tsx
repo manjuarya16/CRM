@@ -12,6 +12,57 @@ import {
 } from "../components";
 import { useAuthStore } from "../store";
 import { useEffect, useState } from "react";
+import { QuickCreateModal } from "../components/QuickCreateModal";
+import {
+  NotificationItem,
+  ProfileMenuItem,
+} from "../interface/leftSideInterface";
+
+/**
+ * notification items
+ */
+const notifications: NotificationItem[] = [
+  {
+    id: 1,
+    text: "Datacorp",
+    subText: "Caleb Flakelar commented on Admin",
+    icon: "mgc_message_3_line text-lg",
+    bgColor: "primary",
+    createdAt: subtractHours(new Date(), 1),
+  },
+  {
+    id: 2,
+    text: "Admin",
+    subText: "New user registered",
+    icon: "mgc_user_add_line text-lg",
+    bgColor: "info",
+    createdAt: subtractHours(new Date(), 60),
+  },
+  {
+    id: 3,
+    text: "Cristina Pride",
+    subText: "Hi, How are you? What about our next meeting",
+    icon: "mgc_chat_2_line text-lg",
+    bgColor: "info",
+    createdAt: subtractHours(new Date(), 1440),
+  },
+  {
+    id: 4,
+    text: "Datacorp",
+    subText: "Caleb Flakelar commented on Admin",
+    icon: "mgc_message_1_line text-lg",
+    bgColor: "primary",
+    createdAt: subtractHours(new Date(), 2880),
+  },
+  {
+    id: 5,
+    text: "Karen Robinson",
+    subText: "Wow ! this admin looks good and awesome design",
+    icon: "mgc_user_3_line text-lg",
+    bgColor: "success",
+    createdAt: subtractHours(new Date(), 2880),
+  },
+];
 import { ProfileMenuItem } from "../interface/leftSideInterface";
 
 /**
@@ -139,6 +190,8 @@ const Topbar = () => {
     }
   };
 
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+
   return (
     <>
       <header className="app-header flex items-center px-4 gap-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16">
@@ -164,8 +217,9 @@ const Topbar = () => {
             />
           </div>
           <button
-            title="Quick Create"
-            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105"
+            title="Quick Create (Lead, Person, Organization, Product)"
+            onClick={() => setQuickCreateOpen(true)}
+            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105 cursor-pointer"
           >
             <i className="mgc_add_line text-xl font-bold"></i>
           </button>
@@ -194,6 +248,11 @@ const Topbar = () => {
           />
         </div>
       </header>
+
+      <QuickCreateModal
+        isOpen={quickCreateOpen}
+        onClose={() => setQuickCreateOpen(false)}
+      />
     </>
   );
 };

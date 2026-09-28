@@ -2,18 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { IPipeline, IPipelineStage } from "@/interface";
-import { pipelineSchema } from "@/schemas";
-import { ZodError } from "zod";
-
-const DEFAULT_STAGES: IPipelineStage[] = [
-  { name: "New", probability: 0, sort_order: 1 },
-  { name: "Follow Up", probability: 20, sort_order: 2 },
-  { name: "Prospect", probability: 50, sort_order: 3 },
-  { name: "Negotiation", probability: 80, sort_order: 4 },
-  { name: "Won", probability: 100, sort_order: 5 },
-  { name: "Lost", probability: 0, sort_order: 6 },
-];
+import { IPipeline } from "@/interface";
 
 const PipelinesPage: React.FC = () => {
   const [pipelines, setPipelines] = useState<IPipeline[]>([]);
@@ -22,23 +11,6 @@ const PipelinesPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-
-  // Modal State for Create / Edit Pipeline
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingPipeline, setEditingPipeline] = useState<IPipeline | null>(null);
-  const [formData, setFormData] = useState<{
-    name: string;
-    rotten_days: number;
-    is_default: boolean;
-    stages: IPipelineStage[];
-  }>({
-    name: "",
-    rotten_days: 30,
-    is_default: false,
-    stages: DEFAULT_STAGES,
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
     fetchPipelines();
@@ -53,123 +25,6 @@ const PipelinesPage: React.FC = () => {
       setPipelines([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openCreateModal = () => {
-    setEditingPipeline(null);
-    setFormData({
-      name: "",
-      rotten_days: 30,
-      is_default: pipelines.length === 0,
-      stages: [...DEFAULT_STAGES.map((s) => ({ ...s }))],
-    });
-    setErrors({});
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (pipeline: IPipeline) => {
-    setEditingPipeline(pipeline);
-    setFormData({
-      name: pipeline.name || "",
-      rotten_days: pipeline.rotten_days || 30,
-      is_default: Boolean(pipeline.is_default),
-      stages:
-        pipeline.stages && pipeline.stages.length > 0
-          ? pipeline.stages.map((s) => ({ ...s }))
-          : [...DEFAULT_STAGES.map((s) => ({ ...s }))],
-    });
-    setErrors({});
-    setIsModalOpen(true);
-  };
-
-  const handleAddStage = () => {
-    setFormData((prev) => ({
-      ...prev,
-      stages: [
-        ...prev.stages,
-        {
-          name: `Stage ${prev.stages.length + 1}`,
-          probability: 50,
-          sort_order: prev.stages.length + 1,
-        },
-      ],
-    }));
-  };
-
-  const handleRemoveStage = (index: number) => {
-    if (formData.stages.length <= 1) {
-      Swal.fire("Warning", "A pipeline must have at least one stage.", "warning");
-      return;
-    }
-    setFormData((prev) => ({
-      ...prev,
-      stages: prev.stages.filter((_, idx) => idx !== index),
-    }));
-  };
-
-  const handleStageChange = (
-    index: number,
-    field: keyof IPipelineStage,
-    value: any
-  ) => {
-    setFormData((prev) => {
-      const updated = [...prev.stages];
-      updated[index] = { ...updated[index], [field]: value };
-      return { ...prev, stages: updated };
-    });
-  };
-
-  // Single unified function for both Add and Edit
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-
-    try {
-      const validated = pipelineSchema.parse(formData);
-      setSaving(true);
-      if (editingPipeline?.id) {
-        // Edit / Update
-        await API.put(`/pipelines/${editingPipeline.id}`, validated);
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: "Pipeline updated successfully",
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      } else {
-        // Add / Create
-        await API.post("/pipelines", validated);
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: "Pipeline created successfully",
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      }
-      setIsModalOpen(false);
-      fetchPipelines();
-    } catch (err: any) {
-      if (err instanceof ZodError) {
-        const fieldErrors: Record<string, string> = {};
-        err.issues.forEach((issue) => {
-          const field = issue.path[0];
-          if (field) {
-            fieldErrors[String(field)] = issue.message;
-          }
-        });
-        setErrors(fieldErrors);
-        return;
-      }
-      Swal.fire(
-        "Error",
-        err?.response?.data?.message || "Failed to save pipeline",
-        "error"
-      );
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -250,13 +105,13 @@ const PipelinesPage: React.FC = () => {
             Pipelines
           </h1>
         </div>
-        <button
-          onClick={openCreateModal}
+        <Link
+          to="/settings/pipelines/create"
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
         >
           <i className="mgc_add_line text-lg"></i>
           Create Pipeline
-        </button>
+        </Link>
       </div>
 
       {/* Main Table Card */}
@@ -354,9 +209,12 @@ const PipelinesPage: React.FC = () => {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        <Link
+                          to={`/settings/pipelines/edit/${pipeline.id}`}
+                          className="font-semibold text-[#0088cc] hover:underline"
+                        >
                           {pipeline.name}
-                        </span>
+                        </Link>
                         {pipeline.is_default && (
                           <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
                             DEFAULT
@@ -402,13 +260,13 @@ const PipelinesPage: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(pipeline)}
+                        <Link
+                          to={`/settings/pipelines/edit/${pipeline.id}`}
                           className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                           title="Edit Pipeline"
                         >
                           <i className="mgc_edit_line text-base"></i>
-                        </button>
+                        </Link>
                         <button
                           onClick={() => handleDelete(pipeline)}
                           className={`p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors ${
@@ -456,198 +314,6 @@ const PipelinesPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn overflow-y-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl my-8 overflow-hidden">
-            <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {editingPipeline ? "Edit Pipeline" : "Create Pipeline"}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <i className="mgc_close_line text-xl"></i>
-              </button>
-            </div>
-
-            <form noValidate onSubmit={handleSave} className="p-5 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Pipeline Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Sales Pipeline"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.name
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
-                  {errors.name && (
-                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    Rotten In (Days)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    placeholder="30"
-                    value={formData.rotten_days}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        rotten_days: Number(e.target.value) || 30,
-                      })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.rotten_days
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
-                  {errors.rotten_days && (
-                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.rotten_days}</p>
-                  )}
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Days after which a lead in stage is considered stale.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is_default"
-                  checked={formData.is_default}
-                  onChange={(e) =>
-                    setFormData({ ...formData, is_default: e.target.checked })
-                  }
-                  className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
-                />
-                <label
-                  htmlFor="is_default"
-                  className="text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
-                >
-                  Mark as Default Pipeline
-                </label>
-              </div>
-
-              {/* Dynamic Stages Section */}
-              <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                      Stages & Probabilities
-                    </h4>
-                    <p className="text-[11px] text-gray-400">
-                      Define the progression stages and win likelihood (%).
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddStage}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-semibold text-[#0088cc] rounded-lg transition-colors"
-                  >
-                    <i className="mgc_add_line"></i>
-                    Add Stage
-                  </button>
-                </div>
-
-                {errors.stages && (
-                  <p className="text-xs text-red-500 font-medium">{errors.stages}</p>
-                )}
-
-                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                  {formData.stages.map((st, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg"
-                    >
-                      <span className="text-xs font-bold text-gray-400 w-5 text-center">
-                        {idx + 1}
-                      </span>
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          placeholder="Stage Name"
-                          value={st.name}
-                          onChange={(e) =>
-                            handleStageChange(idx, "name", e.target.value)
-                          }
-                          className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:border-[#0088cc]"
-                        />
-                      </div>
-                      <div className="w-28 flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          placeholder="%"
-                          value={st.probability}
-                          onChange={(e) =>
-                            handleStageChange(
-                              idx,
-                              "probability",
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-full px-2 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:border-[#0088cc]"
-                        />
-                        <span className="text-xs font-semibold text-gray-500">
-                          %
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStage(idx)}
-                        className="p-1.5 text-rose-400 hover:text-rose-600 transition-colors"
-                        title="Delete Stage"
-                      >
-                        <i className="mgc_delete_2_line text-base"></i>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow transition-colors disabled:opacity-50"
-                >
-                  {saving
-                    ? "Saving..."
-                    : editingPipeline
-                    ? "Save Pipeline"
-                    : "Save Pipeline"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

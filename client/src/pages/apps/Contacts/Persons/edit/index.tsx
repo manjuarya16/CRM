@@ -6,6 +6,8 @@ import { usePersonStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
+import { EmailItem, ContactItem, PersonFormData } from "@/interface";
+import { TagPicker } from "@/components/TagPicker";
 import { PersonEmailItem, ContactItem, PersonFormData } from "@/interface";
 
 const EditPersonPage: React.FC = () => {
@@ -15,6 +17,7 @@ const EditPersonPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState<{
@@ -40,15 +43,20 @@ const EditPersonPage: React.FC = () => {
   const fetchMetadataAndPerson = async () => {
     try {
       setLoading(true);
-      const [orgsRes, usersRes, person] = await Promise.all([
+      const [orgsRes, usersRes, person, tagsRes] = await Promise.all([
         API.get("/organization").catch(() => ({ data: { data: [] } })),
         API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
         usePersonStore.getState().getPersonById(id!),
+        API.get(`/tags/entity/person/${id}`).catch(() => ({ data: { data: [] } })),
       ]);
 
       setOrganizations(orgsRes.data?.data || []);
       const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
       setUsers(userRows);
+
+      if (tagsRes.data?.data) {
+        setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+      }
 
       if (person) {
         const unpackItems = (raw: any, defaultLabel = "work"): Array<{ label: string; value: string }> => {
@@ -234,6 +242,11 @@ const EditPersonPage: React.FC = () => {
     try {
       setSaving(true);
       await usePersonStore.getState().savePerson(payload as any, id);
+      await API.post("/tags/entity", {
+        entity_type: "person",
+        entity_id: id,
+        tag_ids: selectedTagIds,
+      }).catch(() => {});
       Swal.fire({
         icon: "success",
         title: "Success",
@@ -500,6 +513,17 @@ const EditPersonPage: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Tags */}
+          <div className="pt-2">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              Tags
+            </label>
+            <TagPicker
+              selectedTagIds={selectedTagIds}
+              onChange={setSelectedTagIds}
+            />
           </div>
 
           {/* Dynamic Custom Attributes for Persons */}

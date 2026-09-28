@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
+import API from "@/config";
 import { useProductStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { productSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 const EditProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +13,7 @@ const EditProductPage: React.FC = () => {
   const { fetchProductById, updateProduct } = useProductStore();
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [formData, setFormData] = useState({
     sku: "",
     name: "",
@@ -22,7 +25,13 @@ const EditProductPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      fetchProductById(Number(id)).then(product => {
+      Promise.all([
+        fetchProductById(Number(id)),
+        API.get(`/tags/entity/product/${id}`).catch(() => ({ data: { data: [] } })),
+      ]).then(([product, tagsRes]) => {
+        if (tagsRes.data?.data) {
+          setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+        }
         if (product) {
           setFormData({
             sku: product.sku || "",
@@ -81,6 +90,11 @@ const EditProductPage: React.FC = () => {
         price: formData.price ? Number(formData.price) : undefined,
         custom_attributes: customAttributes,
       } as any);
+      await API.post("/tags/entity", {
+        entity_type: "product",
+        entity_id: id,
+        tag_ids: selectedTagIds,
+      }).catch(() => {});
       navigate("/products");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to update product", "error");
@@ -183,6 +197,14 @@ const EditProductPage: React.FC = () => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Tags</label>
+            <TagPicker
+              selectedTagIds={selectedTagIds}
+              onChange={setSelectedTagIds}
             />
           </div>
         </div>

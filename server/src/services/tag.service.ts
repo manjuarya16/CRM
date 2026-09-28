@@ -58,4 +58,39 @@ export class TagService {
       throw err;
     }
   }
+
+  public static async getEntityTags(entityType: string, entityId: any) {
+    const numId = toNumberParam(entityId);
+    if (!numId) return [];
+    const validTypes = ['lead', 'person', 'organization', 'product'];
+    const type = validTypes.includes(entityType) ? entityType : 'lead';
+    try {
+      const result = await pool.query('SELECT get_entity_tags($1, $2) AS data', [type, numId]);
+      return result.rows[0]?.data || [];
+    } catch (err) {
+      logger.error({ err, entityType, entityId }, 'TagService.getEntityTags failed');
+      return [];
+    }
+  }
+
+  public static async saveEntityTags(entityType: string, entityId: any, tagIds: any[]) {
+    const numId = toNumberParam(entityId);
+    if (!numId) return [];
+    const validTypes = ['lead', 'person', 'organization', 'product'];
+    const type = validTypes.includes(entityType) ? entityType : 'lead';
+    const cleanTagIds = Array.isArray(tagIds)
+      ? tagIds.map((t) => toNumberParam(t)).filter((t): t is number => t !== null)
+      : [];
+    try {
+      const result = await pool.query('SELECT save_entity_tags($1, $2, $3) AS data', [
+        type,
+        numId,
+        cleanTagIds,
+      ]);
+      return result.rows[0]?.data || [];
+    } catch (err) {
+      logger.error({ err, entityType, entityId, tagIds }, 'TagService.saveEntityTags failed');
+      throw err;
+    }
+  }
 }

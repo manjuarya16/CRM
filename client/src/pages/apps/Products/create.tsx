@@ -1,14 +1,17 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
+import API from "@/config";
 import { useProductStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { productSchema } from "@/schemas";
+import { TagPicker } from "@/components/TagPicker";
 
 const CreateProductPage: React.FC = () => {
   const navigate = useNavigate();
   const { addProduct } = useProductStore();
   const [saving, setSaving] = useState<boolean>(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
   const [formData, setFormData] = useState({
     sku: "",
@@ -43,7 +46,7 @@ const CreateProductPage: React.FC = () => {
     setErrors({});
     setSaving(true);
     try {
-      await addProduct({
+      const res: any = await addProduct({
         sku: formData.sku,
         name: formData.name || undefined,
         description: formData.description || undefined,
@@ -51,6 +54,13 @@ const CreateProductPage: React.FC = () => {
         price: formData.price ? Number(formData.price) : undefined,
         custom_attributes: customAttributes,
       } as any);
+      if (res?.id && selectedTagIds.length > 0) {
+        await API.post("/tags/entity", {
+          entity_type: "product",
+          entity_id: res.id,
+          tag_ids: selectedTagIds,
+        }).catch(() => {});
+      }
       navigate("/products");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to create product", "error");
@@ -148,6 +158,14 @@ const CreateProductPage: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Product details..."
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Tags</label>
+            <TagPicker
+              selectedTagIds={selectedTagIds}
+              onChange={setSelectedTagIds}
             />
           </div>
         </div>
