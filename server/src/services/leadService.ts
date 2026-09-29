@@ -113,12 +113,24 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
     let person_id = rawPersonId ? Number(rawPersonId) : null;
 
     if (!person_id && person && person.name) {
-      const emailsJson = JSON.stringify(
-        person.email ? [{ label: "work", value: person.email }] : []
-      );
-      const phonesJson = JSON.stringify(
-        person.phone ? [{ label: "work", value: person.phone }] : []
-      );
+      let emailsJson: string;
+      if (Array.isArray(person.emails) && person.emails.length > 0) {
+        emailsJson = JSON.stringify(person.emails.filter((e: any) => e.value || (typeof e === "string" && e.trim())));
+      } else if (person.email) {
+        emailsJson = JSON.stringify([{ label: "work", value: person.email }]);
+      } else {
+        emailsJson = JSON.stringify([]);
+      }
+
+      let phonesJson: string;
+      if (Array.isArray(person.contact_numbers) && person.contact_numbers.length > 0) {
+        phonesJson = JSON.stringify(person.contact_numbers.filter((c: any) => c.value || (typeof c === "string" && c.trim())));
+      } else if (person.phone) {
+        phonesJson = JSON.stringify([{ label: "work", value: person.phone }]);
+      } else {
+        phonesJson = JSON.stringify([]);
+      }
+
       const personRes = await connection.query(
         "SELECT save_person($1, $2::jsonb, $3::jsonb, $4) as result",
         [
@@ -221,12 +233,24 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
     // Resolve person_id: use existing or create new person via save_person
     let person_id = rawPersonId ? Number(rawPersonId) : null;
     if (!person_id && person && person.name) {
-      const emailsJson = JSON.stringify(
-        person.email ? [{ label: "work", value: person.email }] : []
-      );
-      const phonesJson = JSON.stringify(
-        person.phone ? [{ label: "work", value: person.phone }] : []
-      );
+      let emailsJson: string;
+      if (Array.isArray(person.emails) && person.emails.length > 0) {
+        emailsJson = JSON.stringify(person.emails.filter((e: any) => e.value || (typeof e === "string" && e.trim())));
+      } else if (person.email) {
+        emailsJson = JSON.stringify([{ label: "work", value: person.email }]);
+      } else {
+        emailsJson = JSON.stringify([]);
+      }
+
+      let phonesJson: string;
+      if (Array.isArray(person.contact_numbers) && person.contact_numbers.length > 0) {
+        phonesJson = JSON.stringify(person.contact_numbers.filter((c: any) => c.value || (typeof c === "string" && c.trim())));
+      } else if (person.phone) {
+        phonesJson = JSON.stringify([{ label: "work", value: person.phone }]);
+      } else {
+        phonesJson = JSON.stringify([]);
+      }
+
       const personRes = await connection.query(
         "SELECT save_person($1, $2::jsonb, $3::jsonb, $4) as result",
         [

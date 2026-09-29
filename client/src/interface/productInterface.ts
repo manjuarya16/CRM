@@ -1,3 +1,13 @@
+export interface IProductInventory {
+  id?: number;
+  warehouse_id: number;
+  warehouse_name?: string;
+  warehouse_location_id?: number | null;
+  warehouse_location_name?: string | null;
+  in_stock: number;
+  allocated: number;
+}
+
 export interface IProduct {
   id: number;
   sku: string;
@@ -9,6 +19,7 @@ export interface IProduct {
   updated_at?: string;
   total_count?: number;
   custom_attributes?: Record<string, any>;
+  inventories?: IProductInventory[];
 }
 
 export interface ProductStore {

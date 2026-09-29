@@ -154,7 +154,9 @@ const updateActivity = async (req: Request, res: Response): Promise<void> => {
       is_done,
       user_id,
       location,
-    }: IActivityUpdateInput = req.body;
+      lead_id,
+      person_id,
+    }: IActivityUpdateInput & { lead_id?: number; person_id?: number } = req.body;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_activity($1, $2, $3, $4, $5, $6, $7, $8, $9)",
@@ -170,6 +172,28 @@ const updateActivity = async (req: Request, res: Response): Promise<void> => {
         location ?? null,
       ]
     );
+
+    // Update lead association if provided
+    if (lead_id !== undefined) {
+      await connection.query("DELETE FROM lead_activities WHERE activity_id = $1", [id]);
+      if (lead_id) {
+        await connection.query(
+          "INSERT INTO lead_activities (activity_id, lead_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [id, lead_id]
+        );
+      }
+    }
+
+    // Update person association if provided
+    if (person_id !== undefined) {
+      await connection.query("DELETE FROM person_activities WHERE activity_id = $1", [id]);
+      if (person_id) {
+        await connection.query(
+          "INSERT INTO person_activities (activity_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [id, person_id]
+        );
+      }
+    }
 
     if (is_done) {
       notifyCRMActivity({

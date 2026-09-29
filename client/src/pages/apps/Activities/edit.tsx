@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useActivityStore } from "@/store";
+import API from "@/config";
 import { activitySchema } from "@/schemas";
 
 const EditActivityPage: React.FC = () => {
@@ -10,6 +11,9 @@ const EditActivityPage: React.FC = () => {
   const { fetchActivityById, updateActivity } = useActivityStore();
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [persons, setPersons] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     type: "call",
@@ -18,11 +22,28 @@ const EditActivityPage: React.FC = () => {
     schedule_to: "",
     location: "",
     is_done: false,
+    lead_id: "",
+    person_id: "",
+    user_id: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    // Fetch supporting dropdown data in parallel
+    API.get("/leads?limit=100").then((res) => {
+      if (res.data?.data) setLeads(res.data.data);
+    }).catch(() => {});
+
+    API.get("/persons?limit=100").then((res) => {
+      if (res.data?.data) setPersons(res.data.data);
+    }).catch(() => {});
+
+    API.get("/users?limit=100").then((res) => {
+      if (res.data?.data) setUsers(res.data.data);
+      else if (Array.isArray(res.data)) setUsers(res.data);
+    }).catch(() => {});
+
     if (id) {
       fetchActivityById(Number(id)).then((act) => {
         if (act) {
@@ -34,6 +55,9 @@ const EditActivityPage: React.FC = () => {
             schedule_to: act.schedule_to ? act.schedule_to.substring(0, 16) : "",
             location: act.location || "",
             is_done: !!act.is_done,
+            lead_id: act.lead_id ? String(act.lead_id) : "",
+            person_id: act.person_id ? String(act.person_id) : "",
+            user_id: act.user_id ? String(act.user_id) : "",
           });
         }
         setLoading(false);
@@ -74,6 +98,9 @@ const EditActivityPage: React.FC = () => {
         schedule_to: formData.schedule_to || undefined,
         location: formData.location || undefined,
         is_done: formData.is_done,
+        lead_id: formData.lead_id ? Number(formData.lead_id) : undefined,
+        person_id: formData.person_id ? Number(formData.person_id) : undefined,
+        user_id: formData.user_id ? Number(formData.user_id) : undefined,
       });
       navigate("/activities");
     } catch (error: any) {
@@ -165,6 +192,49 @@ const EditActivityPage: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, schedule_to: e.target.value })}
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
             />
+          </div>
+
+          {/* CRM Associations */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Link Lead</label>
+            <select
+              value={formData.lead_id}
+              onChange={(e) => setFormData({ ...formData, lead_id: e.target.value })}
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            >
+              <option value="">Select Lead (Optional)</option>
+              {leads.map((l) => (
+                <option key={l.id} value={l.id}>{l.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assigned User</label>
+            <select
+              value={formData.user_id}
+              onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            >
+              <option value="">Select User (Optional)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Link Person</label>
+            <select
+              value={formData.person_id}
+              onChange={(e) => setFormData({ ...formData, person_id: e.target.value })}
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            >
+              <option value="">Select Person (Optional)</option>
+              {persons.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="md:col-span-2 flex items-center gap-2">

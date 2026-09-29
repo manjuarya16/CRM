@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { IWarehouse } from "@/interface";
+import { IWarehouse, IWarehouseProduct } from "@/interface";
 
 const WarehousesPage: React.FC = () => {
   const [warehouses, setWarehouses] = useState<IWarehouse[]>([]);
@@ -15,6 +15,8 @@ const WarehousesPage: React.FC = () => {
   // View Modal
   const [viewingWarehouse, setViewingWarehouse] = useState<IWarehouse | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [viewingProducts, setViewingProducts] = useState<IWarehouseProduct[]>([]);
+  const [viewingProductsLoading, setViewingProductsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     fetchWarehouses();
@@ -33,9 +35,19 @@ const WarehousesPage: React.FC = () => {
     }
   };
 
-  const openViewModal = (item: IWarehouse) => {
+  const openViewModal = async (item: IWarehouse) => {
     setViewingWarehouse(item);
     setIsViewModalOpen(true);
+    setViewingProducts([]);
+    setViewingProductsLoading(true);
+    try {
+      const res = await API.get(`/warehouse/${item.id}/products`).catch(() => ({ data: { data: [] } }));
+      setViewingProducts(res.data?.data || []);
+    } catch {
+      setViewingProducts([]);
+    } finally {
+      setViewingProductsLoading(false);
+    }
   };
 
   const handleDelete = async (item: IWarehouse) => {
@@ -211,13 +223,14 @@ const WarehousesPage: React.FC = () => {
                 <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Email & Phone</th>
                 <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Location</th>
                 <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300 text-center">Locations</th>
+                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300 text-center">Products</th>
                 <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300 text-right w-28">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={9} className="py-12 text-center text-gray-500 dark:text-gray-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-7 h-7 border-2 border-[#0088cc] border-t-transparent rounded-full animate-spin"></div>
                       <span>Loading warehouses...</span>
@@ -226,7 +239,7 @@ const WarehousesPage: React.FC = () => {
                 </tr>
               ) : paginatedWarehouses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={9} className="py-12 text-center text-gray-500 dark:text-gray-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400">
                         <i className="mgc_box_3_line text-2xl"></i>
@@ -289,6 +302,12 @@ const WarehousesPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-center">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-[#0088cc] dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                           {warehouse.location_count || 0} locations
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          <i className="mgc_shopping_bag_line mr-1 text-xs"></i>
+                          {warehouse.product_count || 0} products
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
@@ -412,7 +431,7 @@ const WarehousesPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Locations List */}
+                {/* Locations List */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                   Storage Locations ({viewingWarehouse.locations?.length || viewingWarehouse.location_count || 0})
@@ -431,6 +450,61 @@ const WarehousesPage: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400 italic">No specific storage locations recorded.</p>
+                )}
+              </div>
+
+              {/* Products List */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <i className="mgc_shopping_bag_line text-emerald-500"></i>
+                  Products in this Warehouse ({viewingProductsLoading ? "..." : viewingProducts.length})
+                </h3>
+                {viewingProductsLoading ? (
+                  <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
+                    <div className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs">Loading products...</span>
+                  </div>
+                ) : viewingProducts.length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border border-gray-100 dark:border-gray-700">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-900/60 border-b border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+                          <th className="py-2 px-3 font-semibold">SKU</th>
+                          <th className="py-2 px-3 font-semibold">Name</th>
+                          <th className="py-2 px-3 font-semibold text-right">Price</th>
+                          <th className="py-2 px-3 font-semibold text-right">In Stock</th>
+                          <th className="py-2 px-3 font-semibold text-right">Allocated</th>
+                          <th className="py-2 px-3 font-semibold">Location</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                        {viewingProducts.map((product) => (
+                          <tr key={product.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition-colors">
+                            <td className="py-2 px-3 font-mono text-gray-700 dark:text-gray-300">{product.sku}</td>
+                            <td className="py-2 px-3 font-medium text-gray-800 dark:text-gray-100">{product.name || "-"}</td>
+                            <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
+                              {product.price != null ? `$${Number(product.price).toFixed(2)}` : "-"}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                {product.in_stock ?? 0}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                {product.allocated ?? 0}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-gray-500 dark:text-gray-400">
+                              {product.warehouse_location_name || <span className="italic text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No products linked to this warehouse yet.</p>
                 )}
               </div>
             </div>

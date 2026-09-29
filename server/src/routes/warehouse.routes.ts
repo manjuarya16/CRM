@@ -15,6 +15,17 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+router.get('/:id/products', async (req, res, next) => {
+  try {
+    const warehouseId = Number(req.params.id);
+    if (!warehouseId) throw new ApiError(400, 'Invalid warehouse ID');
+    const products = await WarehouseService.getProductsByWarehouse(warehouseId);
+    res.json({ success: true, data: products });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const warehouse = await WarehouseService.getById(String(req.params.id));

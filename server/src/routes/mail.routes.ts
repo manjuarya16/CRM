@@ -101,18 +101,27 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
   }
 });
 
-// POST /api/mail - Compose email or save draft
-router.post('/', requireAuth, upload.array('attachments', 10), async (req: Request, res: Response, next: NextFunction) => {
+// Helper handler for composing/sending email
+const handleSendEmail = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let payload = { ...req.body };
+    if (!payload.reply_to && payload.to) {
+      payload.reply_to = payload.to;
+    }
     if (typeof payload.reply_to === 'string' && payload.reply_to.startsWith('[')) {
       try { payload.reply_to = JSON.parse(payload.reply_to); } catch (e) {}
+    }
+    if (typeof payload.to === 'string' && payload.to.startsWith('[')) {
+      try { payload.to = JSON.parse(payload.to); } catch (e) {}
     }
     if (typeof payload.cc === 'string' && payload.cc.startsWith('[')) {
       try { payload.cc = JSON.parse(payload.cc); } catch (e) {}
     }
     if (typeof payload.bcc === 'string' && payload.bcc.startsWith('[')) {
       try { payload.bcc = JSON.parse(payload.bcc); } catch (e) {}
+    }
+    if (!payload.reply_to && payload.to) {
+      payload.reply_to = payload.to;
     }
 
     const parsed = createMailSchema.parse(payload);
@@ -127,7 +136,13 @@ router.post('/', requireAuth, upload.array('attachments', 10), async (req: Reque
   } catch (error) {
     next(error);
   }
-});
+};
+
+// POST /api/mail/send - Send email route alias
+router.post('/send', requireAuth, upload.array('attachments', 10), handleSendEmail);
+
+// POST /api/mail - Compose email or save draft
+router.post('/', requireAuth, upload.array('attachments', 10), handleSendEmail);
 
 // ── 3. Dynamic /:id Routes ───────────────────────────────────────────────────
 

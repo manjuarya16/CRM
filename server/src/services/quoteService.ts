@@ -60,10 +60,30 @@ const getQuoteById = async (req: Request, res: Response): Promise<void> => {
     }
 
     const quoteData = result.rows[0];
-    if (quoteData && (quoteData.custom_attributes === undefined || quoteData.custom_attributes === null)) {
-      const qRes = await connection.query("SELECT custom_attributes FROM quotes WHERE id = $1", [id]);
-      quoteData.custom_attributes = qRes.rows[0]?.custom_attributes || {};
+    
+    // Fetch full quote columns (addresses, lead_id, custom attributes)
+    const qRes = await connection.query(
+      "SELECT billing_address, shipping_address, lead_id, user_id, custom_attributes FROM quotes WHERE id = $1",
+      [id]
+    );
+    if (qRes.rows.length > 0) {
+      quoteData.billing_address = qRes.rows[0].billing_address || {};
+      quoteData.shipping_address = qRes.rows[0].shipping_address || {};
+      quoteData.lead_id = qRes.rows[0].lead_id || quoteData.lead_id || null;
+      if (qRes.rows[0].user_id) quoteData.user_id = qRes.rows[0].user_id;
+      quoteData.custom_attributes = qRes.rows[0].custom_attributes || quoteData.custom_attributes || {};
     }
+
+    // Fetch quote line items
+    const itemsRes = await connection.query(
+      `SELECT qi.*, p.name as product_name
+       FROM quote_items qi
+       LEFT JOIN products p ON p.id = qi.product_id
+       WHERE qi.quote_id = $1
+       ORDER BY qi.id ASC`,
+      [id]
+    );
+    quoteData.items = itemsRes.rows || [];
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
@@ -89,6 +109,9 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
       description,
       person_id,
       user_id,
+      lead_id,
+      billing_address,
+      shipping_address,
       discount_percent,
       discount_amount,
       tax_amount,
@@ -96,10 +119,11 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
       sub_total,
       grand_total,
       expired_at,
+      items,
       custom_attributes,
     }: IQuoteCreateInput & { custom_attributes?: any } = req.body;
 
-    const currentUserId = (req as any).user?.id || user_id || null;
+    const currentUserId = user_id || (req as any).user?.id || null;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_quote($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -119,23 +143,67 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
     );
 
     const createdQuote = result.rows[0];
-    if (createdQuote?.id && custom_attributes) {
-      const customAttrsJson = JSON.stringify(custom_attributes);
-      await connection.query(
-        "UPDATE quotes SET custom_attributes = $1::jsonb WHERE id = $2",
-        [customAttrsJson, createdQuote.id]
-      );
-      createdQuote.custom_attributes = custom_attributes;
-    }
+    if (createdQuote?.id) {
+      const bAddrJson = JSON.stringify(billing_address || {});
+      const sAddrJson = JSON.stringify(shipping_address || {});
+      const customAttrsJson = JSON.stringify(custom_attributes || {});
 
-    if (createdQuote) {
+      await connection.query(
+        `UPDATE quotes
+         SET billing_address = $1::jsonb,
+             shipping_address = $2::jsonb,
+             lead_id = $3,
+             user_id = COALESCE($4, user_id),
+             custom_attributes = $5::jsonb
+         WHERE id = $6`,
+        [bAddrJson, sAddrJson, lead_id ? Number(lead_id) : null, currentUserId ? Number(currentUserId) : null, customAttrsJson, createdQuote.id]
+      );
+
+      if (lead_id) {
+        await connection.query(
+          "INSERT INTO lead_quotes (quote_id, lead_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [createdQuote.id, Number(lead_id)]
+        ).catch(() => {});
+      }
+
+      // Insert line items
+      if (Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          if (!item.product_id) continue;
+          await connection.query(
+            `INSERT INTO quote_items (quote_id, product_id, sku, name, quantity, price, discount_percent, discount_amount, tax_percent, tax_amount, total, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+            [
+              createdQuote.id,
+              Number(item.product_id),
+              item.sku || null,
+              item.name || "Product",
+              Number(item.quantity) || 1,
+              Number(item.price) || 0,
+              Number(item.discount_percent) || 0,
+              Number(item.discount_amount) || 0,
+              Number(item.tax_percent) || 0,
+              Number(item.tax_amount) || 0,
+              Number(item.total) || 0,
+            ]
+          );
+        }
+      }
+
+      createdQuote.billing_address = billing_address;
+      createdQuote.shipping_address = shipping_address;
+      createdQuote.lead_id = lead_id;
+      createdQuote.user_id = currentUserId;
+      createdQuote.custom_attributes = custom_attributes;
+      createdQuote.items = items;
+
       notifyCRMActivity({
         title: "New Quote Generated",
         message: `Quote "${subject}" for ${grand_total ? `$${grand_total}` : 'customer'} was generated.`,
         module: "quote",
         entityId: createdQuote.id,
         actionType: "created",
-        userId: user_id || null,
+        userId: currentUserId || null,
         createdBy: (req as any).user?.id || null,
       });
     }
@@ -166,6 +234,9 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
       description,
       person_id,
       user_id,
+      lead_id,
+      billing_address,
+      shipping_address,
       discount_percent,
       discount_amount,
       tax_amount,
@@ -173,6 +244,7 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
       sub_total,
       grand_total,
       expired_at,
+      items,
       custom_attributes,
     }: IQuoteUpdateInput & { custom_attributes?: any } = req.body;
 
@@ -195,13 +267,55 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
     );
 
     const updatedQuote = result.rows[0];
-    if (id && custom_attributes !== undefined) {
+    if (id) {
+      const bAddrJson = JSON.stringify(billing_address || {});
+      const sAddrJson = JSON.stringify(shipping_address || {});
       const customAttrsJson = JSON.stringify(custom_attributes || {});
+
       await connection.query(
-        "UPDATE quotes SET custom_attributes = $1::jsonb WHERE id = $2",
-        [customAttrsJson, id]
+        `UPDATE quotes
+         SET billing_address = $1::jsonb,
+             shipping_address = $2::jsonb,
+             lead_id = $3,
+             user_id = COALESCE($4, user_id),
+             custom_attributes = $5::jsonb
+         WHERE id = $6`,
+        [bAddrJson, sAddrJson, lead_id ? Number(lead_id) : null, user_id ? Number(user_id) : null, customAttrsJson, id]
       );
-      if (updatedQuote) updatedQuote.custom_attributes = custom_attributes;
+
+      // Sync line items
+      if (Array.isArray(items)) {
+        await connection.query("DELETE FROM quote_items WHERE quote_id = $1", [id]);
+        for (const item of items) {
+          if (!item.product_id) continue;
+          await connection.query(
+            `INSERT INTO quote_items (quote_id, product_id, sku, name, quantity, price, discount_percent, discount_amount, tax_percent, tax_amount, total, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+            [
+              id,
+              Number(item.product_id),
+              item.sku || null,
+              item.name || "Product",
+              Number(item.quantity) || 1,
+              Number(item.price) || 0,
+              Number(item.discount_percent) || 0,
+              Number(item.discount_amount) || 0,
+              Number(item.tax_percent) || 0,
+              Number(item.tax_amount) || 0,
+              Number(item.total) || 0,
+            ]
+          );
+        }
+      }
+
+      if (updatedQuote) {
+        updatedQuote.billing_address = billing_address;
+        updatedQuote.shipping_address = shipping_address;
+        updatedQuote.lead_id = lead_id;
+        updatedQuote.user_id = user_id;
+        updatedQuote.custom_attributes = custom_attributes;
+        updatedQuote.items = items;
+      }
     }
 
     res.status(HttpStatusCodes.OK).json({

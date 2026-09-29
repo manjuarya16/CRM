@@ -1,7 +1,18 @@
+export interface IQuoteAddress {
+  country?: string;
+  state?: string;
+  city?: string;
+  postcode?: string;
+  street_address?: string;
+  address?: string;
+}
+
 export interface IQuote {
   id: number;
   subject: string;
   description?: string;
+  billing_address?: IQuoteAddress;
+  shipping_address?: IQuoteAddress;
   discount_percent?: number;
   discount_amount?: number;
   tax_amount?: number;
@@ -17,6 +28,7 @@ export interface IQuote {
   created_at?: string;
   updated_at?: string;
   custom_attributes?: Record<string, any>;
+  items?: IQuoteItem[];
 }
 
 export interface IQuoteItem {

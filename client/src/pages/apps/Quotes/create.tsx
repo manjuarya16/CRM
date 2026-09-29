@@ -3,14 +3,21 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
-import { ITempQuoteItem } from "@/interface";
+import { ITempQuoteItem, IQuoteAddress } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
+import { SearchableLeadSelect } from "@/components/SearchableLeadSelect";
 import { quoteSchema } from "@/schemas";
+
+const fmtCurrency = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();
-  const { addQuote, addQuoteItem } = useQuoteStore();
+  const { addQuote } = useQuoteStore();
+
   const [persons, setPersons] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
@@ -20,10 +27,30 @@ const CreateQuotePage: React.FC = () => {
     subject: "",
     description: "",
     person_id: "",
+    user_id: "",
+    lead_id: "",
     expired_at: "",
     discount_percent: "0",
     tax_amount: "0",
     adjustment_amount: "0",
+  });
+
+  // Addresses
+  const [billingAddress, setBillingAddress] = useState<IQuoteAddress>({
+    street_address: "",
+    country: "",
+    state: "",
+    city: "",
+    postcode: "",
+  });
+
+  const [sameAsBilling, setSameAsBilling] = useState<boolean>(true);
+  const [shippingAddress, setShippingAddress] = useState<IQuoteAddress>({
+    street_address: "",
+    country: "",
+    state: "",
+    city: "",
+    postcode: "",
   });
 
   // Line items state
@@ -43,7 +70,15 @@ const CreateQuotePage: React.FC = () => {
       if (res.data?.data) setPersons(res.data.data);
     }).catch(() => {});
 
-    API.get("/products?limit=100").then((res) => {
+    API.get("/users?limit=100").then((res) => {
+      if (res.data?.data) setUsers(res.data.data);
+    }).catch(() => {});
+
+    API.get("/leads?limit=100").then((res) => {
+      if (res.data?.data) setLeads(res.data.data);
+    }).catch(() => {});
+
+    API.get("/products?limit=200").then((res) => {
       if (res.data?.data) setProducts(res.data.data);
     }).catch(() => {});
   }, []);
@@ -115,14 +150,31 @@ const CreateQuotePage: React.FC = () => {
 
   const taxAmount = Number(formData.tax_amount) || 0;
   const adjustmentAmount = Number(formData.adjustment_amount) || 0;
-  const grandTotal = (rawSubTotal - totalDiscount) + taxAmount + adjustmentAmount;
+  const grandTotal = Math.max(0, (rawSubTotal - totalDiscount) + taxAmount + adjustmentAmount);
+
+  const handleBillingChange = (field: keyof IQuoteAddress, val: string) => {
+    const updated = { ...billingAddress, [field]: val };
+    setBillingAddress(updated);
+    if (sameAsBilling) {
+      setShippingAddress(updated);
+    }
+  };
+
+  const handleToggleSameAsBilling = (checked: boolean) => {
+    setSameAsBilling(checked);
+    if (checked) {
+      setShippingAddress({ ...billingAddress });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     const validation = quoteSchema.safeParse({
       subject: formData.subject.trim(),
       description: formData.description || undefined,
       person_id: formData.person_id ? Number(formData.person_id) : undefined,
+      user_id: formData.user_id ? Number(formData.user_id) : undefined,
       discount_percent: globalDiscountPercent,
       discount_amount: totalDiscount,
       tax_amount: taxAmount,
@@ -138,17 +190,28 @@ const CreateQuotePage: React.FC = () => {
           errMap[issue.path[0].toString()] = issue.message;
         }
       });
-      setErrors((prev) => ({ ...prev, ...errMap }));
+      setErrors(errMap);
       return;
     }
 
+    if (items.length === 0) {
+      setErrors({ items: "Please add at least one line item to the quote" });
+      return;
+    }
+
+    setErrors({});
     setSaving(true);
     try {
-      // 1. Create quote header
-      const created = await addQuote({
-        subject: formData.subject,
+      const finalShippingAddress = sameAsBilling ? billingAddress : shippingAddress;
+
+      await addQuote({
+        subject: formData.subject.trim(),
         description: formData.description || undefined,
-        person_id: Number(formData.person_id),
+        person_id: formData.person_id ? Number(formData.person_id) : undefined,
+        user_id: formData.user_id ? Number(formData.user_id) : undefined,
+        lead_id: formData.lead_id ? Number(formData.lead_id) : undefined,
+        billing_address: billingAddress,
+        shipping_address: finalShippingAddress,
         discount_percent: globalDiscountPercent,
         discount_amount: totalDiscount,
         tax_amount: taxAmount,
@@ -156,23 +219,20 @@ const CreateQuotePage: React.FC = () => {
         sub_total: rawSubTotal,
         grand_total: grandTotal,
         expired_at: formData.expired_at || undefined,
+        items: items.map((i) => ({
+          product_id: i.product_id,
+          sku: i.sku,
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          discount_percent: i.discount_percent,
+          discount_amount: (i.quantity * i.price) * (i.discount_percent / 100),
+          tax_percent: i.tax_percent,
+          tax_amount: (i.quantity * i.price) * (i.tax_percent / 100),
+          total: i.total,
+        })),
         custom_attributes: customAttributes,
-      } as any);
-
-      // 2. Add items to created quote
-      if (created?.id && items.length > 0) {
-        for (const item of items) {
-          await addQuoteItem(created.id, {
-            product_id: item.product_id,
-            sku: item.sku,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            discount_percent: item.discount_percent,
-            tax_percent: item.tax_percent,
-          });
-        }
-      }
+      });
 
       navigate("/quotes");
     } catch (error: any) {
@@ -182,25 +242,55 @@ const CreateQuotePage: React.FC = () => {
     }
   };
 
+  const inputCls =
+    "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
+  const labelCls = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {/* Breadcrumbs */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline">Dashboard</Link>
+        <span>/</span>
+        <Link to="/quotes" className="text-[#0e90d9] hover:underline">Quotes</Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Create Quote</span>
+      </div>
+
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <Link to="/quotes" className="text-sm text-[#0088cc] hover:underline flex items-center gap-1 mb-1">
-            &larr; Back to Quotes
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
+          Create Quote
+        </h1>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/quotes"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
+          >
+            Cancel
           </Link>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Create Quote</h1>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-6 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+            Save Quote
+          </button>
         </div>
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="space-y-6">
-        {/* Section 1: Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 border-b pb-2">Quote Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Card 1: General Info & Ownership */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-5">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
+            Quote Information
+          </h2>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Subject *</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="md:col-span-3">
+              <label className={labelCls}>Subject <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={formData.subject}
@@ -208,170 +298,352 @@ const CreateQuotePage: React.FC = () => {
                   setFormData({ ...formData, subject: e.target.value });
                   if (errors.subject) setErrors((prev) => ({ ...prev, subject: "" }));
                 }}
-                placeholder="e.g. Enterprise License Quote for ACME"
-                className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
-                  errors.subject ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
-                } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
+                placeholder="e.g. Enterprise Software License Quotation"
+                className={`${inputCls} ${errors.subject ? "border-red-500" : ""}`}
               />
               {errors.subject && <p className="mt-1 text-xs text-red-500 font-medium">{errors.subject}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Person</label>
+              <label className={labelCls}>Contact Person <span className="text-red-500">*</span></label>
               <select
                 value={formData.person_id}
                 onChange={(e) => {
                   setFormData({ ...formData, person_id: e.target.value });
                   if (errors.person_id) setErrors((prev) => ({ ...prev, person_id: "" }));
                 }}
-                className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
-                  errors.person_id ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
-                } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
+                className={`${inputCls} ${errors.person_id ? "border-red-500" : ""}`}
               >
-                <option value="">Select Person</option>
+                <option value="">-- Select Contact Person --</option>
                 {persons.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
               {errors.person_id && <p className="mt-1 text-xs text-red-500 font-medium">{errors.person_id}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Expired At</label>
+              <label className={labelCls}>Sales Owner</label>
+              <select
+                value={formData.user_id}
+                onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- Select Sales Owner --</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <SearchableLeadSelect
+                value={formData.lead_id}
+                onChange={(val) => setFormData({ ...formData, lead_id: val })}
+                leads={leads}
+                label="Link to lead"
+                placeholder="Click to add"
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Expired At</label>
               <input
                 type="date"
                 value={formData.expired_at}
                 onChange={(e) => setFormData({ ...formData, expired_at: e.target.value })}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+                className={inputCls}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
-              <textarea
-                rows={3}
+              <label className={labelCls}>Description</label>
+              <input
+                type="text"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Quote terms or details..."
-                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+                placeholder="Brief notes or quote terms..."
+                className={inputCls}
               />
             </div>
-          </div>
-
-          {/* Dynamic Custom Attributes for Quotes */}
-          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-            <DynamicAttributeFields
-              entityType="quotes"
-              values={customAttributes}
-              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-            />
           </div>
         </div>
 
-        {/* Section 2: Items */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 border-b pb-2">Line Items</h2>
+        {/* Card 2: Address Information (Billing & Shipping) */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-6">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
+            Address Information
+          </h2>
 
-          {/* Add Item Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end bg-gray-50 dark:bg-gray-900/40 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Product</label>
-              <select
-                value={newItem.product_id}
-                onChange={(e) => handleProductSelect(e.target.value)}
-                className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${
-                  errors.item_product ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
-                } rounded-lg text-sm`}
-              >
-                <option value="">Select Product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                ))}
-              </select>
-              {errors.item_product && <p className="mt-1 text-xs text-red-500 font-medium">{errors.item_product}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Billing Address */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-[#0088cc] uppercase tracking-wider">
+                Billing Address
+              </h3>
+              <div>
+                <label className={labelCls}>Street Address</label>
+                <textarea
+                  rows={2}
+                  value={billingAddress.street_address}
+                  onChange={(e) => handleBillingChange("street_address", e.target.value)}
+                  placeholder="Street name, suite, unit..."
+                  className={inputCls}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Country</label>
+                  <input
+                    type="text"
+                    value={billingAddress.country}
+                    onChange={(e) => handleBillingChange("country", e.target.value)}
+                    placeholder="e.g. USA"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>State / Province</label>
+                  <input
+                    type="text"
+                    value={billingAddress.state}
+                    onChange={(e) => handleBillingChange("state", e.target.value)}
+                    placeholder="e.g. California"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>City</label>
+                  <input
+                    type="text"
+                    value={billingAddress.city}
+                    onChange={(e) => handleBillingChange("city", e.target.value)}
+                    placeholder="e.g. San Francisco"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Postcode / Zip</label>
+                  <input
+                    type="text"
+                    value={billingAddress.postcode}
+                    onChange={(e) => handleBillingChange("postcode", e.target.value)}
+                    placeholder="e.g. 94105"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Qty</label>
-              <input
-                type="number"
-                min="1"
-                value={newItem.quantity}
-                onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
-            </div>
+            {/* Shipping Address */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[#0088cc] uppercase tracking-wider">
+                  Shipping Address
+                </h3>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={sameAsBilling}
+                    onChange={(e) => handleToggleSameAsBilling(e.target.checked)}
+                    className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
+                  />
+                  Same as billing address
+                </label>
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Price ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={newItem.price}
-                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
+              {!sameAsBilling ? (
+                <>
+                  <div>
+                    <label className={labelCls}>Street Address</label>
+                    <textarea
+                      rows={2}
+                      value={shippingAddress.street_address}
+                      onChange={(e) => setShippingAddress({ ...shippingAddress, street_address: e.target.value })}
+                      placeholder="Shipping street..."
+                      className={inputCls}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Country</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.country}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, country: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>State / Province</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.state}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>City</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.city}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Postcode / Zip</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.postcode}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, postcode: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-500 space-y-1">
+                  <p className="font-semibold text-gray-700 dark:text-gray-300">
+                    Shipping to same address as billing:
+                  </p>
+                  <p>{billingAddress.street_address || "No street address"}</p>
+                  <p>{[billingAddress.city, billingAddress.state, billingAddress.postcode, billingAddress.country].filter(Boolean).join(", ") || "No city/state"}</p>
+                </div>
+              )}
             </div>
+          </div>
+        </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Disc (%)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={newItem.discount_percent}
-                onChange={(e) => setNewItem({ ...newItem, discount_percent: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
-            </div>
+        {/* Card 3: Quote Items & Calculations */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-6">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
+            Quote Items
+          </h2>
 
-            <div>
-              <button
-                type="button"
-                onClick={handleAddItem}
-                className="w-full py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white font-semibold text-sm rounded-lg transition-colors"
-              >
-                + Add Item
-              </button>
+          {/* Add item row */}
+          <div className="bg-gray-50/70 dark:bg-gray-900/40 p-4 border border-gray-200 dark:border-gray-700 rounded-xl space-y-3">
+            <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+              Add Line Item
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Product *</label>
+                <select
+                  value={newItem.product_id}
+                  onChange={(e) => handleProductSelect(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Select product...</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.sku ? `(${p.sku})` : ""} - ${p.price || 0}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Qty</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newItem.quantity}
+                  onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Price ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newItem.price}
+                  onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Disc (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={newItem.discount_percent}
+                  onChange={(e) => setNewItem({ ...newItem, discount_percent: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Tax (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newItem.tax_percent}
+                    onChange={(e) => setNewItem({ ...newItem, tax_percent: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold shadow-sm transition h-[38px] mt-auto whitespace-nowrap"
+                >
+                  + Add
+                </button>
+              </div>
             </div>
+            {errors.item_product && <p className="text-xs text-red-500 font-medium">{errors.item_product}</p>}
           </div>
 
           {/* Table of added items */}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
-                <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
-                  <th className="py-2.5 px-3">Product</th>
+                <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                  <th className="py-2.5 px-3">Product Name</th>
                   <th className="py-2.5 px-3">SKU</th>
-                  <th className="py-2.5 px-3">Qty</th>
-                  <th className="py-2.5 px-3">Price</th>
-                  <th className="py-2.5 px-3">Disc (%)</th>
-                  <th className="py-2.5 px-3">Total</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3 text-right">Qty</th>
+                  <th className="py-2.5 px-3 text-right">Price</th>
+                  <th className="py-2.5 px-3 text-right">Disc (%)</th>
+                  <th className="py-2.5 px-3 text-right">Tax (%)</th>
+                  <th className="py-2.5 px-3 text-right">Total</th>
+                  <th className="py-2.5 px-3 text-center w-12"></th>
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-6 text-gray-400 text-sm">
-                      No items added yet.
+                    <td colSpan={8} className="text-center py-8 text-gray-400 text-xs">
+                      No items added yet. Select a product above and click "+ Add".
                     </td>
                   </tr>
                 ) : (
-                  items.map((item, idx) => (
-                    <tr key={idx} className="border-b border-gray-100 dark:border-gray-700/60">
+                  items.map((item, index) => (
+                    <tr key={index} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50/50">
                       <td className="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">{item.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-xs text-gray-500">{item.sku}</td>
-                      <td className="py-2.5 px-3">{item.quantity}</td>
-                      <td className="py-2.5 px-3">${item.price.toFixed(2)}</td>
-                      <td className="py-2.5 px-3">{item.discount_percent}%</td>
-                      <td className="py-2.5 px-3 font-semibold">${item.total.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right">
+                      <td className="py-2.5 px-3 font-mono text-xs text-gray-500">{item.sku || "-"}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{item.quantity}</td>
+                      <td className="py-2.5 px-3 text-right">{fmtCurrency(item.price)}</td>
+                      <td className="py-2.5 px-3 text-right">{item.discount_percent}%</td>
+                      <td className="py-2.5 px-3 text-right">{item.tax_percent}%</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-[#0088cc]">{fmtCurrency(item.total)}</td>
+                      <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
-                          onClick={() => handleRemoveItem(idx)}
-                          className="text-red-500 hover:text-red-700 text-xs font-semibold"
+                          onClick={() => handleRemoveItem(index)}
+                          className="text-gray-400 hover:text-red-500 font-bold"
                         >
-                          Remove
+                          &times;
                         </button>
                       </td>
                     </tr>
@@ -380,65 +652,64 @@ const CreateQuotePage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {errors.items && <p className="text-xs text-red-500 font-medium">{errors.items}</p>}
 
-          {/* Section 3: Summary Totals */}
-          <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col items-end space-y-2 text-sm">
-            <div className="flex justify-between w-64 text-gray-600 dark:text-gray-300">
-              <span>Subtotal:</span>
-              <span className="font-semibold">${rawSubTotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between w-64 text-gray-600 dark:text-gray-300 items-center">
-              <span>Discount (%):</span>
+          {/* Totals Summary */}
+          <div className="flex flex-col md:flex-row justify-between gap-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <div className="w-full md:w-1/2 space-y-3">
+              <label className={labelCls}>Global Quote Discount (%)</label>
               <input
                 type="number"
-                step="0.1"
+                min="0"
+                max="100"
                 value={formData.discount_percent}
                 onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
-                className="w-20 px-2 py-0.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-right text-xs"
+                className="w-48 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
               />
             </div>
-            <div className="flex justify-between w-64 text-gray-600 dark:text-gray-300 items-center">
-              <span>Tax ($):</span>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.tax_amount}
-                onChange={(e) => setFormData({ ...formData, tax_amount: e.target.value })}
-                className="w-20 px-2 py-0.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-right text-xs"
-              />
-            </div>
-            <div className="flex justify-between w-64 text-gray-600 dark:text-gray-300 items-center">
-              <span>Adjustment ($):</span>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.adjustment_amount}
-                onChange={(e) => setFormData({ ...formData, adjustment_amount: e.target.value })}
-                className="w-20 px-2 py-0.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-right text-xs"
-              />
-            </div>
-            <div className="flex justify-between w-64 text-base font-bold text-gray-800 dark:text-gray-100 pt-2 border-t">
-              <span>Grand Total:</span>
-              <span className="text-[#0088cc]">${grandTotal.toFixed(2)}</span>
+
+            <div className="w-full md:w-80 space-y-2 text-sm">
+              <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span>Sub Total:</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200">{fmtCurrency(rawSubTotal)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span>Total Discount:</span>
+                <span className="text-red-500">-{fmtCurrency(totalDiscount)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span>Tax Amount ($):</span>
+                <input
+                  type="number"
+                  value={formData.tax_amount}
+                  onChange={(e) => setFormData({ ...formData, tax_amount: e.target.value })}
+                  className="w-28 text-right px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-xs"
+                />
+              </div>
+              <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span>Adjustment ($):</span>
+                <input
+                  type="number"
+                  value={formData.adjustment_amount}
+                  onChange={(e) => setFormData({ ...formData, adjustment_amount: e.target.value })}
+                  className="w-28 text-right px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-xs"
+                />
+              </div>
+              <div className="flex justify-between text-base font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
+                <span>Grand Total:</span>
+                <span className="text-[#0088cc]">{fmtCurrency(grandTotal)}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Submit Bar */}
-        <div className="flex items-center justify-end gap-3">
-          <Link
-            to="/quotes"
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Quote"}
-          </button>
+        {/* Custom Attributes */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <DynamicAttributeFields
+            entityType="quotes"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          />
         </div>
       </form>
     </div>
