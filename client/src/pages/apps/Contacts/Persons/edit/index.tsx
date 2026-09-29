@@ -6,9 +6,8 @@ import { usePersonStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
-import { EmailItem, ContactItem, PersonFormData } from "@/interface";
-import { TagPicker } from "@/components/TagPicker";
 import { PersonEmailItem, ContactItem, PersonFormData } from "@/interface";
+import { TagPicker } from "@/components/TagPicker";
 
 const EditPersonPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();

@@ -6,13 +6,6 @@ import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
-
-interface ProductRow {
-  product_id: string;
-  product_name: string;
-  quantity: string;
-  price: string;
-}
 import { ProductRow } from "@/interface";
 
 const TABS = [
@@ -37,6 +30,10 @@ const getPersonEmail = (person: any): string => {
   return "";
 };
 
+interface ContactItem {
+  label: string;
+  value: string;
+}
 
 const CreateLeadPage: React.FC = () => {
   const navigate = useNavigate();
@@ -54,11 +51,15 @@ const CreateLeadPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Users for Sales Owner
+  const [users, setUsers] = useState<any[]>([]);
+
   // Tab 1 – Lead Details
   const [details, setDetails] = useState({
     title: "",
     description: "",
     lead_value: "",
+    user_id: "",
     lead_source_id: "",
     lead_type_id: "",
     lead_pipeline_id: paramPipelineId || "",
@@ -73,7 +74,10 @@ const CreateLeadPage: React.FC = () => {
   const [personId, setPersonId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [newPerson, setNewPerson] = useState({
-    name: "", email: "", phone: "", organization_id: "",
+    name: "",
+    emails: [{ label: "work", value: "" }] as ContactItem[],
+    contact_numbers: [{ label: "work", value: "" }] as ContactItem[],
+    organization_id: "",
   });
 
   // Tab 3 – Products
@@ -106,6 +110,9 @@ const CreateLeadPage: React.FC = () => {
       }
     });
 
+    API.get("/users?limit=100").then((r) => {
+      if (r.data?.data) setUsers(r.data.data);
+    }).catch(() => { });
     API.get("/persons?limit=100").then((r) => {
       if (r.data?.data) setPersons(r.data.data);
     }).catch(() => { });
@@ -124,64 +131,107 @@ const CreateLeadPage: React.FC = () => {
     }
   }, [details.lead_pipeline_id]);
 
- const scrollToSection = (id: string) => {
+  const scrollToSection = (id: string) => {
     setActiveTab(id);
     const el = sectionRefs.current[id];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
-  const addProductRow = () =>
+  // Multiple Emails & Phones handlers for New Contact
+  const handleAddEmailRow = () => {
+    setNewPerson((prev) => ({
+      ...prev,
+      emails: [...prev.emails, { label: "work", value: "" }],
+    }));
+  };
+
+  const handleEmailChange = (index: number, field: "label" | "value", val: string) => {
+    const updated = [...newPerson.emails];
+    updated[index][field] = val;
+    setNewPerson((prev) => ({ ...prev, emails: updated }));
+  };
+
+  const handleRemoveEmailRow = (index: number) => {
+    if (newPerson.emails.length <= 1) {
+      setNewPerson((prev) => ({ ...prev, emails: [{ label: "work", value: "" }] }));
+    } else {
+      setNewPerson((prev) => ({
+        ...prev,
+        emails: prev.emails.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
+  const handleAddPhoneRow = () => {
+    setNewPerson((prev) => ({
+      ...prev,
+      contact_numbers: [...prev.contact_numbers, { label: "mobile", value: "" }],
+    }));
+  };
+
+  const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
+    const updated = [...newPerson.contact_numbers];
+    updated[index][field] = val;
+    setNewPerson((prev) => ({ ...prev, contact_numbers: updated }));
+  };
+
+  const handleRemovePhoneRow = (index: number) => {
+    if (newPerson.contact_numbers.length <= 1) {
+      setNewPerson((prev) => ({ ...prev, contact_numbers: [{ label: "mobile", value: "" }] }));
+    } else {
+      setNewPerson((prev) => ({
+        ...prev,
+        contact_numbers: prev.contact_numbers.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
+  // Product row handlers
+  const handleAddProductRow = () => {
     setProductRows((rows) => [
       ...rows,
       { product_id: "", product_name: "", quantity: "1", price: "0" },
     ]);
+  };
 
-  const removeProductRow = (index: number) =>
-    setProductRows((rows) => rows.filter((_, i) => i !== index));
+  const handleRemoveProductRow = (idx: number) => {
+    setProductRows((rows) => rows.filter((_, i) => i !== idx));
+  };
 
-  const updateProductRow = (index: number, field: keyof ProductRow, value: string) => {
+  const handleProductRowChange = (idx: number, field: keyof ProductRow, val: string) => {
     setProductRows((rows) => {
-      const updated = [...rows];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+      const next = [...rows];
+      next[idx] = { ...next[idx], [field]: val };
+      if (field === "product_id") {
+        const prod = products.find((p) => String(p.id) === val);
+        if (prod) {
+          next[idx].product_name = prod.name || "";
+          next[idx].price = String(prod.price ?? 0);
+        }
+      }
+      return next;
     });
   };
 
-  const selectProduct = (index: number, productId: string) => {
-    const product = products.find((p) => String(p.id) === productId);
-    if (product) {
-      setProductRows((rows) => {
-        const updated = [...rows];
-        updated[index] = {
-          product_id: String(product.id),
-          product_name: product.name,
-          quantity: "1",
-          price: String(product.price || "0"),
-        };
-        return updated;
-      });
-    } else {
-      updateProductRow(index, "product_id", productId);
-    }
-  };
-
-  const totalLeadValue = productRows.reduce((sum, row) => {
-    const qty = parseFloat(row.quantity) || 0;
-    const price = parseFloat(row.price) || 0;
-    return sum + qty * price;
+  const totalLeadValue = productRows.reduce((sum, r) => {
+    const q = parseFloat(r.quantity) || 0;
+    const p = parseFloat(r.price) || 0;
+    return sum + q * p;
   }, 0);
 
-  // Filtered persons for search
-  const filteredPersons = personSearch
-    ? persons.filter((p) =>
-      p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
-      (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
-    )
-    : persons;
+  const filteredPersons = persons.filter((p) => {
+    if (!personSearch) return true;
+    const q = personSearch.toLowerCase();
+    const name = (p.name || "").toLowerCase();
+    const email = getPersonEmail(p).toLowerCase();
+    return name.includes(q) || email.includes(q);
+  });
 
- const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrors({});
+
     const validation = leadSchema.safeParse({
       title: details.title.trim(),
       description: details.description || undefined,
@@ -207,7 +257,6 @@ const CreateLeadPage: React.FC = () => {
 
     setSaving(true);
     try {
-      // Build products payload (only rows with a product selected)
       const validProducts = productRows
         .filter((r) => r.product_id)
         .map((r) => ({
@@ -216,7 +265,6 @@ const CreateLeadPage: React.FC = () => {
           price: parseFloat(r.price) || 0,
         }));
 
-      // Compute lead_value: prefer products total if any products selected
       const leadValue = validProducts.length > 0
         ? totalLeadValue
         : details.lead_value
@@ -227,6 +275,7 @@ const CreateLeadPage: React.FC = () => {
         title: details.title.trim(),
         description: details.description || undefined,
         lead_value: leadValue,
+        user_id: details.user_id ? Number(details.user_id) : undefined,
         lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
         lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
         lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
@@ -239,10 +288,12 @@ const CreateLeadPage: React.FC = () => {
       if (personMode === "existing" && personId) {
         payload.person_id = Number(personId);
       } else if (personMode === "new" && newPerson.name.trim()) {
+        const validEmails = newPerson.emails.filter((e) => e.value.trim());
+        const validPhones = newPerson.contact_numbers.filter((p) => p.value.trim());
         payload.person = {
           name: newPerson.name.trim(),
-          email: newPerson.email.trim() || undefined,
-          phone: newPerson.phone.trim() || undefined,
+          emails: validEmails.length > 0 ? validEmails : undefined,
+          contact_numbers: validPhones.length > 0 ? validPhones : undefined,
           organization_id: newPerson.organization_id ? Number(newPerson.organization_id) : undefined,
         };
       }
@@ -267,7 +318,7 @@ const CreateLeadPage: React.FC = () => {
     "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
   const labelCls = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
 
- return (
+  return (
     <div className="p-6 space-y-4">
       {/* Header + Tabs unified sticky card */}
       <div className="sticky top-[60px] z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
@@ -314,14 +365,15 @@ const CreateLeadPage: React.FC = () => {
 
       <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <div className="flex flex-col gap-8 px-6 py-6">
-        <div
+          {/* TAB 1: Lead Details */}
+          <div
             id="lead-details"
             ref={(el) => { sectionRefs.current["lead-details"] = el; }}
             className="flex flex-col gap-4"
           >
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Lead Details</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Fill in the basic information about this lead.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Fill in the basic information and sales ownership.</p>
             </div>
             <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Title */}
@@ -339,6 +391,23 @@ const CreateLeadPage: React.FC = () => {
                 {errors.title && (
                   <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>
                 )}
+              </div>
+
+              {/* Sales Owner Dropdown */}
+              <div>
+                <label className={labelCls}>Sales Owner</label>
+                <select
+                  value={details.user_id}
+                  onChange={(e) => setDetails({ ...details, user_id: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">-- Select Sales Owner --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Lead Value */}
@@ -454,7 +523,8 @@ const CreateLeadPage: React.FC = () => {
             </div>
           </div>
 
-         <div
+          {/* TAB 2: Contact Person */}
+          <div
             id="contact-person"
             ref={(el) => { sectionRefs.current["contact-person"] = el; }}
             className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
@@ -462,7 +532,7 @@ const CreateLeadPage: React.FC = () => {
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Contact Person</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Search for an existing contact or add a new one.
+                Search for an existing contact or create a new contact with multiple emails/numbers.
               </p>
             </div>
 
@@ -488,10 +558,9 @@ const CreateLeadPage: React.FC = () => {
               </label>
             </div>
 
-            <div className="w-full md:w-1/2">
+            <div className="w-full md:w-2/3">
               {personMode === "existing" ? (
                 <div className="flex flex-col gap-3">
-                  {/* Search box */}
                   <div>
                     <label className={labelCls}>Search Contact</label>
                     <input
@@ -522,14 +591,14 @@ const CreateLeadPage: React.FC = () => {
                   </div>
                   {personId && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                      <span>âœ“</span>
+                      <span>✓</span>
                       <span>{persons.find((p) => String(p.id) === personId)?.name} selected</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
+                <div className="bg-gray-50/50 dark:bg-gray-800/50 p-4 border border-gray-200 dark:border-gray-700 rounded-xl space-y-4">
+                  <div>
                     <label className={labelCls}>Name *</label>
                     <input
                       type="text"
@@ -539,34 +608,102 @@ const CreateLeadPage: React.FC = () => {
                       className={inputCls}
                     />
                   </div>
-                  <div>
-                    <label className={labelCls}>Email</label>
-                    <input
-                      type="email"
-                      value={newPerson.email}
-                      onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                      placeholder="work@example.com"
-                      className={inputCls}
-                    />
+
+                  {/* Multiple Email Rows */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Email Addresses</label>
+                      <button
+                        type="button"
+                        onClick={handleAddEmailRow}
+                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                      >
+                        + Add Email
+                      </button>
+                    </div>
+                    {newPerson.emails.map((em, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={em.label}
+                          onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
+                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                        >
+                          <option value="work">Work</option>
+                          <option value="home">Home</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input
+                          type="email"
+                          value={em.value}
+                          onChange={(e) => handleEmailChange(idx, "value", e.target.value)}
+                          placeholder="email@example.com"
+                          className={inputCls}
+                        />
+                        {newPerson.emails.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEmailRow(idx)}
+                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className={labelCls}>Phone</label>
-                    <input
-                      type="tel"
-                      value={newPerson.phone}
-                      onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                      placeholder="+1 555-000-0000"
-                      className={inputCls}
-                    />
+
+                  {/* Multiple Phone Rows */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Numbers</label>
+                      <button
+                        type="button"
+                        onClick={handleAddPhoneRow}
+                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                      >
+                        + Add Phone
+                      </button>
+                    </div>
+                    {newPerson.contact_numbers.map((pn, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={pn.label}
+                          onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
+                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                        >
+                          <option value="mobile">Mobile</option>
+                          <option value="work">Work</option>
+                          <option value="home">Home</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input
+                          type="tel"
+                          value={pn.value}
+                          onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                          placeholder="+1 234 567 890"
+                          className={inputCls}
+                        />
+                        {newPerson.contact_numbers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoneRow(idx)}
+                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div className="md:col-span-2">
+
+                  <div>
                     <label className={labelCls}>Organization</label>
                     <select
                       value={newPerson.organization_id}
                       onChange={(e) => setNewPerson({ ...newPerson, organization_id: e.target.value })}
                       className={inputCls}
                     >
-                      <option value="">Select Organization</option>
+                      <option value="">-- None / Select Organization --</option>
                       {organizations.map((o) => (
                         <option key={o.id} value={o.id}>{o.name}</option>
                       ))}
@@ -577,7 +714,8 @@ const CreateLeadPage: React.FC = () => {
             </div>
           </div>
 
-        <div
+          {/* TAB 3: Products */}
+          <div
             id="products"
             ref={(el) => { sectionRefs.current["products"] = el; }}
             className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
@@ -585,120 +723,104 @@ const CreateLeadPage: React.FC = () => {
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Products</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Add products associated with this lead. The lead value will be auto-computed.
+                Attach products to this lead to automatically calculate the total deal value.
               </p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800 text-left">
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 rounded-tl-lg">Product Name</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-28">Quantity</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-32">Price</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-32">Amount</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-16 rounded-tr-lg">Action</th>
+                  <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                    <th className="py-2.5 px-3">Product *</th>
+                    <th className="py-2.5 px-3 w-28">Quantity</th>
+                    <th className="py-2.5 px-3 w-36">Price ($)</th>
+                    <th className="py-2.5 px-3 w-36">Amount</th>
+                    <th className="py-2.5 px-3 w-12"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                <tbody>
                   {productRows.map((row, idx) => {
-                    const qty = parseFloat(row.quantity) || 0;
-                    const price = parseFloat(row.price) || 0;
-                    const amount = qty * price;
-
+                    const rowAmount = (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
                     return (
-                      <tr key={idx}>
-                        {/* Product dropdown */}
-                        <td className="px-3 py-2">
+                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="py-2 px-3">
                           <select
                             value={row.product_id}
-                            onChange={(e) => selectProduct(idx, e.target.value)}
+                            onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
                             className={inputCls}
                           >
-                            <option value="">Select Product</option>
+                            <option value="">Select a product...</option>
                             {products.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.sku ? `(${p.sku})` : ""}
+                              </option>
                             ))}
                           </select>
                         </td>
-                        {/* Quantity */}
-                        <td className="px-3 py-2">
+                        <td className="py-2 px-3">
                           <input
                             type="number"
                             min="1"
-                            step="1"
                             value={row.quantity}
-                            onChange={(e) => updateProductRow(idx, "quantity", e.target.value)}
-                            className={`${inputCls} text-center`}
+                            onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
+                            className={inputCls}
                           />
                         </td>
-                        {/* Price */}
-                        <td className="px-3 py-2">
+                        <td className="py-2 px-3">
                           <input
                             type="number"
-                            min="0"
                             step="0.01"
                             value={row.price}
-                            onChange={(e) => updateProductRow(idx, "price", e.target.value)}
-                            className={`${inputCls} text-center`}
+                            onChange={(e) => handleProductRowChange(idx, "price", e.target.value)}
+                            className={inputCls}
                           />
                         </td>
-                        {/* Amount (read-only) */}
-                        <td className="px-3 py-2 text-center font-medium text-gray-700 dark:text-gray-300">
-                          {fmtCurrency(amount)}
+                        <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                          {fmtCurrency(rowAmount)}
                         </td>
-                        {/* Delete */}
-                        <td className="px-3 py-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeProductRow(idx)}
-                            disabled={productRows.length === 1}
-                            title="Remove product"
-                            className="text-red-500 hover:text-red-700 disabled:opacity-30 text-lg leading-none"
-                          >
-                            âœ•
-                          </button>
+                        <td className="py-2 px-3 text-center">
+                          {productRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductRow(idx)}
+                              className="text-gray-400 hover:text-red-500 font-bold"
+                            >
+                              &times;
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
-                {/* Total row */}
-                {totalLeadValue > 0 && (
-                  <tfoot>
-                    <tr className="bg-gray-50 dark:bg-gray-800">
-                      <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-gray-600 dark:text-gray-300">
-                        Total
-                      </td>
-                      <td className="px-3 py-2 text-center font-bold text-[#0088cc]">
-                        {fmtCurrency(totalLeadValue)}
-                      </td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </div>
 
-            {/* Add More */}
-            <div>
+            <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={addProductRow}
-                className="flex items-center gap-1.5 text-sm text-[#0088cc] hover:text-[#0077b5] font-medium"
+                onClick={handleAddProductRow}
+                className="px-3 py-1.5 border border-[#0088cc] text-[#0088cc] rounded-lg text-xs font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
-                <span className="text-lg leading-none">+</span>
-                Add More
+                + Add Product
               </button>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total: </span>
+                <span className="text-base font-bold text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Section 4 — CUSTOM ATTRIBUTES */}
+          {/* TAB 4: Custom Attributes */}
           <div
             id="custom-attributes"
             ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
-            className="pt-4 border-t border-gray-100 dark:border-gray-700"
+            className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
           >
+            <div>
+              <p className="text-base font-semibold text-gray-800 dark:text-white">Custom Attributes</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Additional customized fields for this lead.</p>
+            </div>
             <DynamicAttributeFields
               entityType="leads"
               values={customAttributes}
@@ -712,4 +834,3 @@ const CreateLeadPage: React.FC = () => {
 };
 
 export default CreateLeadPage;
-

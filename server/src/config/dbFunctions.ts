@@ -827,6 +827,9 @@ ALTER TABLE persons ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS custom_attributes JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS lead_id INTEGER;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS billing_address JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS shipping_address JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS warehouse_locations (
     id SERIAL PRIMARY KEY,
@@ -835,6 +838,17 @@ CREATE TABLE IF NOT EXISTS warehouse_locations (
     created_at TIMESTAMPTZ DEFAULT NULL,
     updated_at TIMESTAMPTZ DEFAULT NULL,
     CONSTRAINT warehouse_locations_warehouse_id_name_unique UNIQUE (warehouse_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS product_inventories (
+    id SERIAL PRIMARY KEY,
+    in_stock INTEGER NOT NULL DEFAULT 0,
+    allocated INTEGER NOT NULL DEFAULT 0,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    warehouse_id INTEGER DEFAULT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    warehouse_location_id INTEGER DEFAULT NULL REFERENCES warehouse_locations(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NULL
 );
 
 CREATE OR REPLACE FUNCTION get_warehouse(p_id INTEGER)

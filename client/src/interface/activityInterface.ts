@@ -10,6 +10,7 @@ export interface IActivity {
   user_id?: number;
   user_name?: string;
   lead_id?: number;
+  lead_title?: string;
   person_id?: number;
   created_at?: string;
   updated_at?: string;

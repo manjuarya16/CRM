@@ -18,6 +18,10 @@ import {
   ProfileMenuItem,
 } from "../interface/leftSideInterface";
 
+const subtractHours = (date: Date, minutes: number) => {
+  return new Date(date.getTime() - minutes * 60000);
+};
+
 /**
  * notification items
  */
@@ -63,7 +67,6 @@ const notifications: NotificationItem[] = [
     createdAt: subtractHours(new Date(), 2880),
   },
 ];
-import { ProfileMenuItem } from "../interface/leftSideInterface";
 
 /**
  * profile menu items

@@ -2,6 +2,7 @@ import { pool } from '@/config/db';
 import { CreateMailInput, UpdateMailInput, MassUpdateMailInput, MassDestroyMailInput } from '@/schemas/mail.schema';
 import { sendRealMail } from '@/utils/mailer';
 import { logger } from '@/utils/logger';
+import { fetchTemplateContext, parsePlaceholders } from '@/utils/templateParser';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -149,6 +150,17 @@ export class MailService {
     const uniqueId = `email_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const messageId = `<${uniqueId}@crm.local>`;
 
+    // Parse template placeholders ({%lead.title%}, {%lead.source%}, {%person.name%}, etc.)
+    const templateContext = await fetchTemplateContext({
+      lead_id: data.lead_id,
+      person_id: data.person_id,
+      organization_id: (data as any).organization_id,
+      to_email: data.reply_to,
+      user,
+    });
+    const parsedSubject = parsePlaceholders(data.subject || '(No Subject)', templateContext);
+    const parsedReply = parsePlaceholders(data.reply || '', templateContext);
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -166,9 +178,9 @@ export class MailService {
       `;
 
       const result = await client.query(insertQuery, [
-        data.subject || '(No Subject)',
+        parsedSubject,
         fromEmail.name,
-        data.reply,
+        parsedReply,
         true, // User's own composed mail is marked read
         JSON.stringify(folders),
         JSON.stringify(fromEmail),
@@ -203,9 +215,9 @@ export class MailService {
         await client.query(
           `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
-            `Email: ${data.subject || 'No Subject'}`,
+            `Email: ${parsedSubject}`,
             'email',
-            data.reply,              // $3: comment
+            parsedReply,             // $3: comment
             null,                    // $4: schedule_from
             null,                    // $5: schedule_to
             true,                    // $6: is_done (boolean)
@@ -228,9 +240,9 @@ export class MailService {
           to: data.reply_to,
           cc: data.cc,
           bcc: data.bcc,
-          subject: data.subject || '(No Subject)',
-          text: data.reply,
-          html: data.reply,
+          subject: parsedSubject,
+          text: parsedReply,
+          html: parsedReply,
           attachments: attachedFiles,
         }).catch((err) => logger.error(`[MailService] sendRealMail error: ${err}`));
       }
@@ -265,6 +277,24 @@ export class MailService {
         folders = data.folders;
       }
 
+      const targetLeadId = data.lead_id !== undefined ? data.lead_id : existing.rows[0].lead_id;
+      const targetPersonId = data.person_id !== undefined ? data.person_id : existing.rows[0].person_id;
+      const targetOrgId = (data as any).organization_id !== undefined ? (data as any).organization_id : existing.rows[0].organization_id;
+
+      const templateContext = await fetchTemplateContext({
+        lead_id: targetLeadId,
+        person_id: targetPersonId,
+        organization_id: targetOrgId,
+        to_email: data.reply_to || existing.rows[0].reply_to,
+        user,
+      });
+
+      const rawSubject = data.subject !== undefined ? data.subject : existing.rows[0].subject;
+      const rawReply = data.reply !== undefined ? data.reply : existing.rows[0].reply;
+
+      const parsedSubject = rawSubject ? parsePlaceholders(rawSubject, templateContext) : rawSubject;
+      const parsedReply = rawReply ? parsePlaceholders(rawReply, templateContext) : rawReply;
+
       const updateQuery = `
         UPDATE public.emails
         SET subject = COALESCE($1, subject),
@@ -281,8 +311,8 @@ export class MailService {
       `;
 
       await client.query(updateQuery, [
-        data.subject,
-        data.reply,
+        parsedSubject,
+        parsedReply,
         data.reply_to ? JSON.stringify(data.reply_to) : null,
         data.cc ? JSON.stringify(data.cc) : null,
         data.bcc ? JSON.stringify(data.bcc) : null,
@@ -305,21 +335,20 @@ export class MailService {
       }
 
       // If draft was converted to sent and is linked to a lead, log activity on lead timeline
-      const targetLeadId = data.lead_id || existing.rows[0].lead_id;
       if (targetLeadId && data.is_draft === false) {
         await client.query(
           `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
-            `Email: ${data.subject || existing.rows[0].subject || 'No Subject'}`,
+            `Email: ${parsedSubject || 'No Subject'}`,
             'email',
-            data.reply || existing.rows[0].reply,
+            parsedReply,
             null,
             null,
             true,
             user?.id || null,
             null,
             targetLeadId,
-            data.person_id || existing.rows[0].person_id || null,
+            targetPersonId || null,
           ]
         );
       }
@@ -335,9 +364,9 @@ export class MailService {
           to: data.reply_to || existing.rows[0].reply_to || [],
           cc: data.cc || existing.rows[0].cc,
           bcc: data.bcc || existing.rows[0].bcc,
-          subject: data.subject || existing.rows[0].subject || '(No Subject)',
-          text: data.reply || existing.rows[0].reply || '',
-          html: data.reply || existing.rows[0].reply || '',
+          subject: parsedSubject || '(No Subject)',
+          text: parsedReply || '',
+          html: parsedReply || '',
           attachments: attachedFiles,
         }).catch((err) => logger.error(`[MailService] sendRealMail error: ${err}`));
       }

@@ -6,14 +6,6 @@ import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
-
-interface ProductRow {
-  id?: number; // existing product record ID (for update)
-  product_id: string;
-  product_name: string;
-  quantity: string;
-  price: string;
-}
 import { ProductRow } from "@/interface";
 
 const TABS = [
@@ -38,6 +30,10 @@ const getPersonEmail = (person: any): string => {
   return "";
 };
 
+interface ContactItem {
+  label: string;
+  value: string;
+}
 
 const EditLeadPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +42,6 @@ const EditLeadPage: React.FC = () => {
     fetchLeadById, updateLead,
     sources, types, pipelines, stages,
     fetchSources, fetchTypes, fetchPipelines, fetchStages,
-    fetchLeadProducts, leadProducts, addLeadProduct, deleteLeadProduct,
   } = useLeadStore();
 
   const [activeTab, setActiveTab] = useState("lead-details");
@@ -54,11 +49,15 @@ const EditLeadPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Tab 1 â€“ Lead Details
+  // Users for Sales Owner
+  const [users, setUsers] = useState<any[]>([]);
+
+  // Tab 1 – Lead Details
   const [details, setDetails] = useState({
     title: "",
     description: "",
     lead_value: "",
+    user_id: "",
     status: "true",
     lost_reason: "",
     lead_source_id: "",
@@ -77,7 +76,12 @@ const EditLeadPage: React.FC = () => {
   const [personSearch, setPersonSearch] = useState("");
   const [personId, setPersonId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", organization_id: "" });
+  const [newPerson, setNewPerson] = useState({
+    name: "",
+    emails: [{ label: "work", value: "" }] as ContactItem[],
+    contact_numbers: [{ label: "work", value: "" }] as ContactItem[],
+    organization_id: "",
+  });
 
   // Tab 3 – Products
   const [products, setProducts] = useState<any[]>([]);
@@ -89,6 +93,7 @@ const EditLeadPage: React.FC = () => {
     fetchSources();
     fetchTypes();
     fetchPipelines();
+    API.get("/users?limit=100").then((r) => { if (r.data?.data) setUsers(r.data.data); }).catch(() => { });
     API.get("/persons?limit=100").then((r) => { if (r.data?.data) setPersons(r.data.data); }).catch(() => { });
     API.get("/organizations?limit=100").then((r) => { if (r.data?.data) setOrganizations(r.data.data); }).catch(() => { });
     API.get("/products?limit=200").then((r) => { if (r.data?.data) setProducts(r.data.data); }).catch(() => { });
@@ -104,6 +109,7 @@ const EditLeadPage: React.FC = () => {
             title: lead.title || "",
             description: lead.description || "",
             lead_value: lead.lead_value ? String(lead.lead_value) : "",
+            user_id: lead.user_id ? String(lead.user_id) : "",
             status: lead.status !== false ? "true" : "false",
             lost_reason: lead.lost_reason || "",
             lead_source_id: lead.lead_source_id ? String(lead.lead_source_id) : "",
@@ -158,11 +164,59 @@ const EditLeadPage: React.FC = () => {
     }
   }, [details.lead_pipeline_id]);
 
-
   const scrollToSection = (sectionId: string) => {
     setActiveTab(sectionId);
     const el = sectionRefs.current[sectionId];
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // Multiple Emails & Phones handlers for New Contact
+  const handleAddEmailRow = () => {
+    setNewPerson((prev) => ({
+      ...prev,
+      emails: [...prev.emails, { label: "work", value: "" }],
+    }));
+  };
+
+  const handleEmailChange = (index: number, field: "label" | "value", val: string) => {
+    const updated = [...newPerson.emails];
+    updated[index][field] = val;
+    setNewPerson((prev) => ({ ...prev, emails: updated }));
+  };
+
+  const handleRemoveEmailRow = (index: number) => {
+    if (newPerson.emails.length <= 1) {
+      setNewPerson((prev) => ({ ...prev, emails: [{ label: "work", value: "" }] }));
+    } else {
+      setNewPerson((prev) => ({
+        ...prev,
+        emails: prev.emails.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
+  const handleAddPhoneRow = () => {
+    setNewPerson((prev) => ({
+      ...prev,
+      contact_numbers: [...prev.contact_numbers, { label: "mobile", value: "" }],
+    }));
+  };
+
+  const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
+    const updated = [...newPerson.contact_numbers];
+    updated[index][field] = val;
+    setNewPerson((prev) => ({ ...prev, contact_numbers: updated }));
+  };
+
+  const handleRemovePhoneRow = (index: number) => {
+    if (newPerson.contact_numbers.length <= 1) {
+      setNewPerson((prev) => ({ ...prev, contact_numbers: [{ label: "mobile", value: "" }] }));
+    } else {
+      setNewPerson((prev) => ({
+        ...prev,
+        contact_numbers: prev.contact_numbers.filter((_, i) => i !== index),
+      }));
+    }
   };
 
   // Products helpers
@@ -187,32 +241,32 @@ const EditLeadPage: React.FC = () => {
         const updated = [...rows];
         updated[index] = {
           ...updated[index],
-          product_id: String(product.id),
-          product_name: product.name,
-          price: String(product.price || "0"),
-          quantity: updated[index].quantity || "1",
+          product_id: productId,
+          product_name: product.name || "",
+          price: String(product.price ?? 0),
         };
         return updated;
       });
-    } else {
-      updateProductRow(index, "product_id", productId);
     }
   };
 
-  const totalLeadValue = productRows.reduce((sum, row) => {
-    return sum + (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
+  const totalLeadValue = productRows.reduce((sum, r) => {
+    const q = parseFloat(r.quantity) || 0;
+    const p = parseFloat(r.price) || 0;
+    return sum + q * p;
   }, 0);
 
-  const filteredPersons = personSearch
-    ? persons.filter((p) =>
-      p.name?.toLowerCase().includes(personSearch.toLowerCase()) ||
-      (p.emails && JSON.stringify(p.emails).toLowerCase().includes(personSearch.toLowerCase()))
-    )
-    : persons;
+  const filteredPersons = persons.filter((p) => {
+    if (!personSearch) return true;
+    const q = personSearch.toLowerCase();
+    const name = (p.name || "").toLowerCase();
+    const email = getPersonEmail(p).toLowerCase();
+    return name.includes(q) || email.includes(q);
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrors({});
+
     const validation = leadSchema.safeParse({
       title: details.title.trim(),
       description: details.description || undefined,
@@ -235,6 +289,7 @@ const EditLeadPage: React.FC = () => {
       scrollToSection("lead-details");
       return;
     }
+
     setSaving(true);
     try {
       const validProducts = productRows
@@ -247,40 +302,49 @@ const EditLeadPage: React.FC = () => {
 
       const leadValue = validProducts.length > 0
         ? totalLeadValue
-        : details.lead_value ? Number(details.lead_value) : undefined;
+        : details.lead_value
+          ? Number(details.lead_value)
+          : undefined;
 
       const payload: any = {
         title: details.title.trim(),
         description: details.description || undefined,
         lead_value: leadValue,
         status: details.status === "true",
-        lost_reason: details.status === "false" ? (details.lost_reason || undefined) : undefined,
+        lost_reason: details.lost_reason || undefined,
+        user_id: details.user_id ? Number(details.user_id) : undefined,
         lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
         lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
         lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
         lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
         expected_close_date: details.expected_close_date || undefined,
-        products: validProducts.length > 0 ? validProducts : undefined,
+        products: validProducts,
         custom_attributes: customAttributes,
       };
 
       if (personMode === "existing" && personId) {
         payload.person_id = Number(personId);
       } else if (personMode === "new" && newPerson.name.trim()) {
+        const validEmails = newPerson.emails.filter((e) => e.value.trim());
+        const validPhones = newPerson.contact_numbers.filter((p) => p.value.trim());
         payload.person = {
           name: newPerson.name.trim(),
-          email: newPerson.email.trim() || undefined,
-          phone: newPerson.phone.trim() || undefined,
+          emails: validEmails.length > 0 ? validEmails : undefined,
+          contact_numbers: validPhones.length > 0 ? validPhones : undefined,
           organization_id: newPerson.organization_id ? Number(newPerson.organization_id) : undefined,
         };
       }
 
       await updateLead(Number(id), payload);
-      await API.post("/tags/entity", {
-        entity_type: "lead",
-        entity_id: id,
-        tag_ids: selectedTagIds,
-      }).catch(() => {});
+
+      if (id) {
+        await API.post("/tags/entity", {
+          entity_type: "lead",
+          entity_id: Number(id),
+          tag_ids: selectedTagIds,
+        }).catch(() => {});
+      }
+
       navigate("/leads");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to update lead", "error");
@@ -289,64 +353,67 @@ const EditLeadPage: React.FC = () => {
     }
   };
 
-  const inputCls = "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
+  const inputCls =
+    "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
   const labelCls = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
 
   if (loading) {
     return (
       <div className="p-12 text-center">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#0088cc] border-t-transparent" />
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#0088cc] border-t-transparent"></div>
+        <p className="mt-2 text-xs text-gray-400">Loading lead details...</p>
       </div>
     );
   }
 
   return (
     <div className="p-6 space-y-4">
-      {/* Sticky header */}
-      <div className="sticky top-[60px] z-50 flex items-center justify-between bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 shadow-sm">
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-            <Link to="/leads" className="text-[#0088cc] hover:underline">Leads</Link> / Edit
+      {/* Header + Tabs unified sticky card */}
+      <div className="sticky top-[60px] z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-3 pb-0">
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+              <Link to="/leads" className="text-[#0088cc] hover:underline">Leads</Link> / Edit
+            </div>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">Edit Lead #{id}</h1>
           </div>
-          <h1 className="text-xl font-bold text-gray-800 dark:text-white">Edit Lead</h1>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/leads"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </Link>
+            <button
+              onClick={handleSubmit}
+              disabled={saving}
+              className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Lead"}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/leads"
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </Link>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Lead"}
-          </button>
-        </div>
-      </div>
-
-      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-        {/* Tab Bar */}
-        <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 px-2">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 mt-1">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                ? "text-[#0088cc] border-[#0088cc]"
-                : "text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-800 dark:hover:text-white hover:border-gray-300"
-                }`}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? "text-[#0088cc] border-[#0088cc]"
+                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
+              }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
+      </div>
 
+      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <div className="flex flex-col gap-8 px-6 py-6">
-          {/* â”€â”€â”€ SECTION 1: LEAD DETAILS â”€â”€â”€ */}
+          {/* TAB 1: Lead Details */}
           <div
             id="lead-details"
             ref={(el) => { sectionRefs.current["lead-details"] = el; }}
@@ -354,102 +421,136 @@ const EditLeadPage: React.FC = () => {
           >
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Lead Details</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Basic information about this lead.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Update general information and sales ownership.</p>
             </div>
             <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Title */}
               <div className="md:col-span-2">
                 <label className={labelCls}>Title *</label>
-                <input type="text" value={details.title}
+                <input
+                  type="text"
+                  value={details.title}
                   onChange={(e) => setDetails({ ...details, title: e.target.value })}
-                  className={`${inputCls} ${
-                    errors.title ? "border-red-500 focus:border-red-500" : ""
-                  }`} />
-                {errors.title && (
-                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>
-                )}
+                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500" : ""}`}
+                />
+                {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
               </div>
 
+              {/* Sales Owner Dropdown */}
               <div>
-                <label className={labelCls}>Status</label>
-                <select value={details.status}
-                  onChange={(e) => setDetails({ ...details, status: e.target.value })}
-                  className={inputCls}>
-                  <option value="true">Open</option>
-                  <option value="false">Lost / Closed</option>
+                <label className={labelCls}>Sales Owner</label>
+                <select
+                  value={details.user_id}
+                  onChange={(e) => setDetails({ ...details, user_id: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">-- Select Sales Owner --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {details.status === "false" && (
-                <div>
-                  <label className={labelCls}>Lost Reason</label>
-                  <input type="text" value={details.lost_reason}
-                    onChange={(e) => setDetails({ ...details, lost_reason: e.target.value })}
-                    placeholder="Reason for losing" className={inputCls} />
-                </div>
-              )}
-
+              {/* Lead Value */}
               <div>
                 <label className={labelCls}>Lead Value ($)</label>
-                <input type="number" step="0.01" value={details.lead_value}
+                <input
+                  type="number"
+                  step="0.01"
+                  value={details.lead_value}
                   onChange={(e) => setDetails({ ...details, lead_value: e.target.value })}
-                  className={inputCls} />
+                  className={inputCls}
+                />
                 {totalLeadValue > 0 && (
-                  <p className="text-xs text-[#0088cc] mt-1">Auto from products: {fmtCurrency(totalLeadValue)}</p>
+                  <p className="text-xs text-[#0088cc] mt-1">
+                    Auto from products: {fmtCurrency(totalLeadValue)}
+                  </p>
                 )}
               </div>
 
+              {/* Expected Close Date */}
               <div>
                 <label className={labelCls}>Expected Close Date</label>
-                <input type="date" value={details.expected_close_date}
+                <input
+                  type="date"
+                  value={details.expected_close_date}
                   onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
-                  className={inputCls} />
+                  className={inputCls}
+                />
               </div>
 
+              {/* Lead Source */}
               <div>
                 <label className={labelCls}>Lead Source</label>
-                <select value={details.lead_source_id}
+                <select
+                  value={details.lead_source_id}
                   onChange={(e) => setDetails({ ...details, lead_source_id: e.target.value })}
-                  className={inputCls}>
+                  className={inputCls}
+                >
                   <option value="">Select Source</option>
-                  {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {sources.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
                 </select>
               </div>
 
+              {/* Lead Type */}
               <div>
                 <label className={labelCls}>Lead Type</label>
-                <select value={details.lead_type_id}
+                <select
+                  value={details.lead_type_id}
                   onChange={(e) => setDetails({ ...details, lead_type_id: e.target.value })}
-                  className={inputCls}>
+                  className={inputCls}
+                >
                   <option value="">Select Type</option>
-                  {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
                 </select>
               </div>
 
+              {/* Pipeline */}
               <div>
                 <label className={labelCls}>Pipeline</label>
-                <select value={details.lead_pipeline_id}
+                <select
+                  value={details.lead_pipeline_id}
                   onChange={(e) => setDetails({ ...details, lead_pipeline_id: e.target.value })}
-                  className={inputCls}>
+                  className={inputCls}
+                >
                   <option value="">Select Pipeline</option>
-                  {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {pipelines.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
                 </select>
               </div>
 
+              {/* Stage */}
               <div>
                 <label className={labelCls}>Stage</label>
-                <select value={details.lead_pipeline_stage_id}
+                <select
+                  value={details.lead_pipeline_stage_id}
                   onChange={(e) => setDetails({ ...details, lead_pipeline_stage_id: e.target.value })}
-                  className={inputCls} disabled={!details.lead_pipeline_id}>
+                  className={inputCls}
+                  disabled={!details.lead_pipeline_id}
+                >
                   <option value="">Select Stage</option>
-                  {stages.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                  {stages.map((st) => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
                 </select>
               </div>
 
+              {/* Description */}
               <div className="md:col-span-2">
                 <label className={labelCls}>Description</label>
-                <textarea rows={4} value={details.description}
+                <textarea
+                  rows={4}
+                  value={details.description}
                   onChange={(e) => setDetails({ ...details, description: e.target.value })}
-                  className={inputCls} />
+                  className={inputCls}
+                />
               </div>
 
               {/* Tags */}
@@ -463,7 +564,7 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
 
-          {/* â”€â”€â”€ SECTION 2: CONTACT PERSON â”€â”€â”€ */}
+          {/* TAB 2: Contact Person */}
           <div
             id="contact-person"
             ref={(el) => { sectionRefs.current["contact-person"] = el; }}
@@ -471,32 +572,53 @@ const EditLeadPage: React.FC = () => {
           >
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Contact Person</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Select existing or create a new contact.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Search for an existing contact or create a new contact with multiple emails/numbers.
+              </p>
             </div>
 
+            {/* Toggle: existing / new */}
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input type="radio" checked={personMode === "existing"} onChange={() => setPersonMode("existing")} className="accent-[#0088cc]" />
+                <input
+                  type="radio"
+                  checked={personMode === "existing"}
+                  onChange={() => setPersonMode("existing")}
+                  className="accent-[#0088cc]"
+                />
                 <span className="text-gray-700 dark:text-gray-300">Select Existing Contact</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input type="radio" checked={personMode === "new"} onChange={() => setPersonMode("new")} className="accent-[#0088cc]" />
+                <input
+                  type="radio"
+                  checked={personMode === "new"}
+                  onChange={() => setPersonMode("new")}
+                  className="accent-[#0088cc]"
+                />
                 <span className="text-gray-700 dark:text-gray-300">Create New Contact</span>
               </label>
             </div>
 
-            <div className="w-full md:w-1/2">
+            <div className="w-full md:w-2/3">
               {personMode === "existing" ? (
                 <div className="flex flex-col gap-3">
                   <div>
                     <label className={labelCls}>Search Contact</label>
-                    <input type="text" value={personSearch}
+                    <input
+                      type="text"
+                      value={personSearch}
                       onChange={(e) => setPersonSearch(e.target.value)}
-                      placeholder="Search by name or email..." className={inputCls} />
+                      placeholder="Search by name or email..."
+                      className={inputCls}
+                    />
                   </div>
                   <div>
-                    <label className={labelCls}>Select Person</label>
-                    <select value={personId} onChange={(e) => setPersonId(e.target.value)} className={inputCls}>
+                    <label className={labelCls}>Select Person *</label>
+                    <select
+                      value={personId}
+                      onChange={(e) => setPersonId(e.target.value)}
+                      className={inputCls}
+                    >
                       <option value="">-- Select Person --</option>
                       {filteredPersons.map((p) => {
                         const email = getPersonEmail(p);
@@ -510,38 +632,122 @@ const EditLeadPage: React.FC = () => {
                   </div>
                   {personId && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                      <span>âœ“</span>
+                      <span>✓</span>
                       <span>{persons.find((p) => String(p.id) === personId)?.name} selected</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
+                <div className="bg-gray-50/50 dark:bg-gray-800/50 p-4 border border-gray-200 dark:border-gray-700 rounded-xl space-y-4">
+                  <div>
                     <label className={labelCls}>Name *</label>
-                    <input type="text" value={newPerson.name}
+                    <input
+                      type="text"
+                      value={newPerson.name}
                       onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                      placeholder="Full name" className={inputCls} />
+                      placeholder="Full name"
+                      className={inputCls}
+                    />
                   </div>
+
+                  {/* Multiple Email Rows */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Email Addresses</label>
+                      <button
+                        type="button"
+                        onClick={handleAddEmailRow}
+                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                      >
+                        + Add Email
+                      </button>
+                    </div>
+                    {newPerson.emails.map((em, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={em.label}
+                          onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
+                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                        >
+                          <option value="work">Work</option>
+                          <option value="home">Home</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input
+                          type="email"
+                          value={em.value}
+                          onChange={(e) => handleEmailChange(idx, "value", e.target.value)}
+                          placeholder="email@example.com"
+                          className={inputCls}
+                        />
+                        {newPerson.emails.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEmailRow(idx)}
+                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Multiple Phone Rows */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Numbers</label>
+                      <button
+                        type="button"
+                        onClick={handleAddPhoneRow}
+                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                      >
+                        + Add Phone
+                      </button>
+                    </div>
+                    {newPerson.contact_numbers.map((pn, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={pn.label}
+                          onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
+                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                        >
+                          <option value="mobile">Mobile</option>
+                          <option value="work">Work</option>
+                          <option value="home">Home</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input
+                          type="tel"
+                          value={pn.value}
+                          onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                          placeholder="+1 234 567 890"
+                          className={inputCls}
+                        />
+                        {newPerson.contact_numbers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoneRow(idx)}
+                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
                   <div>
-                    <label className={labelCls}>Email</label>
-                    <input type="email" value={newPerson.email}
-                      onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                      placeholder="work@example.com" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Phone</label>
-                    <input type="tel" value={newPerson.phone}
-                      onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                      placeholder="+1 555-000-0000" className={inputCls} />
-                  </div>
-                  <div className="md:col-span-2">
                     <label className={labelCls}>Organization</label>
-                    <select value={newPerson.organization_id}
+                    <select
+                      value={newPerson.organization_id}
                       onChange={(e) => setNewPerson({ ...newPerson, organization_id: e.target.value })}
-                      className={inputCls}>
-                      <option value="">Select Organization</option>
-                      {organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      className={inputCls}
+                    >
+                      <option value="">-- None / Select Organization --</option>
+                      {organizations.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -549,7 +755,7 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
 
-          {/* â”€â”€â”€ SECTION 3: PRODUCTS â”€â”€â”€ */}
+          {/* TAB 3: Products */}
           <div
             id="products"
             ref={(el) => { sectionRefs.current["products"] = el; }}
@@ -557,86 +763,105 @@ const EditLeadPage: React.FC = () => {
           >
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Products</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Products associated with this lead.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Attach products to this lead to automatically calculate the total deal value.
+              </p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800 text-left">
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300">Product Name</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-28">Quantity</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-32">Price</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-32">Amount</th>
-                    <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 text-center w-16">Action</th>
+                  <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                    <th className="py-2.5 px-3">Product *</th>
+                    <th className="py-2.5 px-3 w-28">Quantity</th>
+                    <th className="py-2.5 px-3 w-36">Price ($)</th>
+                    <th className="py-2.5 px-3 w-36">Amount</th>
+                    <th className="py-2.5 px-3 w-12"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {productRows.map((row, idx) => {
-                    const qty = parseFloat(row.quantity) || 0;
-                    const price = parseFloat(row.price) || 0;
+                <tbody>
+                  {productRows.map((row, index) => {
+                    const rowAmount = (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
                     return (
-                      <tr key={idx}>
-                        <td className="px-3 py-2">
-                          <select value={row.product_id}
-                            onChange={(e) => selectProduct(idx, e.target.value)}
-                            className={inputCls}>
-                            <option value="">Select Product</option>
-                            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="py-2 px-3">
+                          <select
+                            value={row.product_id}
+                            onChange={(e) => selectProduct(index, e.target.value)}
+                            className={inputCls}
+                          >
+                            <option value="">Select a product...</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.sku ? `(${p.sku})` : ""}
+                              </option>
+                            ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2">
-                          <input type="number" min="1" step="1" value={row.quantity}
-                            onChange={(e) => updateProductRow(idx, "quantity", e.target.value)}
-                            className={`${inputCls} text-center`} />
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            min="1"
+                            value={row.quantity}
+                            onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                            className={inputCls}
+                          />
                         </td>
-                        <td className="px-3 py-2">
-                          <input type="number" min="0" step="0.01" value={row.price}
-                            onChange={(e) => updateProductRow(idx, "price", e.target.value)}
-                            className={`${inputCls} text-center`} />
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.price}
+                            onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                            className={inputCls}
+                          />
                         </td>
-                        <td className="px-3 py-2 text-center font-medium text-gray-700 dark:text-gray-300">
-                          {fmtCurrency(qty * price)}
+                        <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                          {fmtCurrency(rowAmount)}
                         </td>
-                        <td className="px-3 py-2 text-center">
-                          <button type="button"
-                            onClick={() => removeProductRow(idx)}
-                            disabled={productRows.length === 1}
-                            className="text-red-500 hover:text-red-700 disabled:opacity-30 text-lg leading-none">
-                            âœ•
-                          </button>
+                        <td className="py-2 px-3 text-center">
+                          {productRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeProductRow(index)}
+                              className="text-gray-400 hover:text-red-500 font-bold"
+                            >
+                              &times;
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
-                {totalLeadValue > 0 && (
-                  <tfoot>
-                    <tr className="bg-gray-50 dark:bg-gray-800">
-                      <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-gray-600 dark:text-gray-300">Total</td>
-                      <td className="px-3 py-2 text-center font-bold text-[#0088cc]">{fmtCurrency(totalLeadValue)}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </div>
 
-            <div>
-              <button type="button" onClick={addProductRow}
-                className="flex items-center gap-1.5 text-sm text-[#0088cc] hover:text-[#0077b5] font-medium">
-                <span className="text-lg leading-none">+</span>
-                Add More
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={addProductRow}
+                className="px-3 py-1.5 border border-[#0088cc] text-[#0088cc] rounded-lg text-xs font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+              >
+                + Add Product
               </button>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total: </span>
+                <span className="text-base font-bold text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
+              </div>
             </div>
           </div>
 
-          {/* SECTION 4: CUSTOM ATTRIBUTES */}
+          {/* TAB 4: Custom Attributes */}
           <div
             id="custom-attributes"
             ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
-            className="pt-4 border-t border-gray-100 dark:border-gray-700"
+            className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
           >
+            <div>
+              <p className="text-base font-semibold text-gray-800 dark:text-white">Custom Attributes</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Additional customized fields for this lead.</p>
+            </div>
             <DynamicAttributeFields
               entityType="leads"
               values={customAttributes}
@@ -645,10 +870,8 @@ const EditLeadPage: React.FC = () => {
           </div>
         </div>
       </form>
-    </div >
+    </div>
   );
 };
 
 export default EditLeadPage;
-
-

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
 import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
+import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
 
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -202,6 +203,20 @@ const LeadViewPage: React.FC = () => {
     }
   };
 
+
+  const mailInitialData = useMemo(() => {
+    const recipient = person?.email
+      ? [person.email]
+      : selectedLead?.person_name && selectedLead?.custom_attributes?.email
+      ? [selectedLead.custom_attributes.email]
+      : [];
+    return {
+      lead_id: leadId,
+      person_id: selectedLead?.person_id,
+      to: recipient,
+      subject: selectedLead?.title ? `Regarding ${selectedLead.title}` : "",
+    };
+  }, [leadId, selectedLead?.person_id, selectedLead?.title, person?.email]);
 
   if (loading || !selectedLead) {
     return (
@@ -740,8 +755,20 @@ const LeadViewPage: React.FC = () => {
         </div>
       </div>
 
+      {/* FULL COMPOSE MAIL MODAL FOR LEADS */}
+      <ComposeMailModal
+        isOpen={activeModal === "mail"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={(msg) => {
+          Swal.fire("Success", msg || "Email sent successfully", "success");
+          setActiveModal(null);
+          fetchActivities(1, 100, "", leadId);
+        }}
+        initialData={mailInitialData}
+      />
+
       {/* QUICK ACTION & WON/LOST MODALS */}
-      {activeModal && (
+      {activeModal && activeModal !== "mail" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6 space-y-4">
 
@@ -805,36 +832,9 @@ const LeadViewPage: React.FC = () => {
             ) : (
               <>
                 <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 capitalize">
-                  {activeModal === "mail" ? "Compose Mail" : activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
+                  {activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
                 </h3>
                 <form onSubmit={handleQuickActionSubmit} className="space-y-3">
-                  {activeModal === "mail" && (
-                    <>
-                      <input
-                        type="email"
-                        required
-                        placeholder="To Email"
-                        value={modalForm.email_to}
-                        onChange={(e) => setModalForm({ ...modalForm, email_to: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Subject"
-                        value={modalForm.email_subject}
-                        onChange={(e) => setModalForm({ ...modalForm, email_subject: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
-                      />
-                      <textarea
-                        rows={4}
-                        placeholder="Message..."
-                        value={modalForm.email_body}
-                        onChange={(e) => setModalForm({ ...modalForm, email_body: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
-                      />
-                    </>
-                  )}
 
                   {activeModal === "file" && (
                     <>

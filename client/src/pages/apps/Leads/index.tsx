@@ -196,11 +196,14 @@ const LeadsPage: React.FC = () => {
   };
 
   const avatarColors = [
-    "bg-amber-100 text-amber-800 border-amber-300",
-    "bg-[#0088cc]/10 text-[#0088cc] border-[#0088cc]/30",
-    "bg-purple-100 text-purple-800 border-purple-300",
-    "bg-pink-100 text-pink-800 border-pink-300",
-    "bg-emerald-100 text-emerald-800 border-emerald-300",
+    "bg-[#6c8ebf] text-white",
+    "bg-[#e6b93d] text-white",
+    "bg-[#82b366] text-white",
+    "bg-[#d6a4c7] text-white",
+    "bg-[#5cb8b2] text-white",
+    "bg-[#f0a070] text-white",
+    "bg-[#7e6ca8] text-white",
+    "bg-[#b5c4d1] text-gray-800",
   ];
 
   return (
@@ -380,53 +383,118 @@ const LeadsPage: React.FC = () => {
                             e.dataTransfer.setData("text/plain", String(lead.id));
                             e.dataTransfer.effectAllowed = "move";
                           }}
-                          className="group bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200/80 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/60 transition-all cursor-grab active:cursor-grabbing space-y-3"
+                          className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
                         >
+                          {/* ROW 1: Avatar + Person + Company + alert icon */}
                           <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-0.5">
-                              <Link
-                                to={`/leads/view/${lead.id}`}
-                                className="font-bold text-sm text-gray-800 dark:text-gray-100 hover:text-[#0088cc] dark:hover:text-[#0088cc] transition-colors line-clamp-1"
-                              >
-                                {lead.title}
-                              </Link>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {lead.person_name || "No Person"}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Link
-                                to={`/leads/edit/${lead.id}`}
-                                className="p-1 text-gray-400 hover:text-[#0088cc]"
-                                title="Edit Lead"
-                              >
-                                <i className="mgc_edit_line text-sm"></i>
-                              </Link>
-                              <button
-                                onClick={() => handleDelete(lead)}
-                                className="p-1 text-gray-400 hover:text-red-600"
-                                title="Delete Lead"
-                              >
-                                <i className="mgc_delete_line text-sm"></i>
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-gray-700/60">
-                            <span className="font-bold text-gray-800 dark:text-gray-200">
-                              ${Number(lead.lead_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                            </span>
-
-                            {lead.person_name && (
-                              <span
-                                className={`h-6 w-6 rounded-full border flex items-center justify-center font-bold text-[10px] ${colorClass}`}
-                                title={lead.person_name}
-                              >
-                                {getInitials(lead.person_name)}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {/* Solid color avatar */}
+                              <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
+                                {getInitials(lead.person_name || lead.title)}
                               </span>
-                            )}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
+                                  {lead.person_name || "No Person"}
+                                </p>
+                                {/* Company name in teal/blue like the screenshot */}
+                                <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
+                                  {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
+                                </p>
+                              </div>
+                            </div>
+                            {/* Alert triangle (always visible) + edit/delete on hover */}
+                            <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
+                              <span className="text-red-400 opacity-70" title="Lead Alert">
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                </svg>
+                              </span>
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
+                                <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
+                                  <i className="mgc_edit_line text-xs"></i>
+                                </Link>
+                                <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
+                                  <i className="mgc_delete_line text-xs"></i>
+                                </button>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* ROW 2: Lead title */}
+                          <Link
+                            to={`/leads/view/${lead.id}`}
+                            className="block text-[12.5px] font-medium text-gray-800 dark:text-gray-200 hover:text-[#0088cc] line-clamp-2 leading-snug"
+                          >
+                            {lead.title}
+                          </Link>
+
+                          {/* ROW 3: User icon+name pill  +  value pill — matching screenshot */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                              <i className="mgc_user_3_line text-[11px] text-gray-400"></i>
+                              {lead.user_name || "Unassigned"}
+                            </span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
+                              ${Number(lead.lead_value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+
+                          {/* ROW 4: Source + Type — gray rounded pills */}
+                          {(lead.source_name || lead.type_name) && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {lead.source_name && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                                  {lead.source_name}
+                                </span>
+                              )}
+                              {lead.type_name && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                                  {lead.type_name}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ROW 5: Tag chips — colored border + text, white/transparent bg like screenshot */}
+                          {Array.isArray((lead.custom_attributes as any)?.tags) && (lead.custom_attributes as any).tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {((lead.custom_attributes as any).tags as string[]).slice(0, 4).map((tag: string, ti: number) => {
+                                const tagStyles = [
+                                  "border-orange-400 text-orange-600 dark:text-orange-400",
+                                  "border-red-400 text-red-600 dark:text-red-400",
+                                  "border-blue-400 text-blue-600 dark:text-blue-400",
+                                  "border-yellow-500 text-yellow-600 dark:text-yellow-400",
+                                  "border-purple-400 text-purple-600 dark:text-purple-400",
+                                  "border-green-500 text-green-600 dark:text-green-400",
+                                ];
+                                return (
+                                  <span
+                                    key={ti}
+                                    className={`px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border font-medium text-[11px] ${tagStyles[ti % tagStyles.length]}`}
+                                  >
+                                    {tag}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* ROW 6: Expected close date + Status */}
+                          {(lead.expected_close_date || lead.status !== undefined) && (
+                            <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
+                              {lead.expected_close_date && (
+                                <span className="flex items-center gap-1 text-gray-400">
+                                  <i className="mgc_calendar_line text-[11px]"></i>
+                                  {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                </span>
+                              )}
+                              {lead.status !== undefined && (
+                                <span className={`ml-auto px-2 py-0.5 rounded-full font-semibold text-[10px] ${lead.status ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400"}`}>
+                                  {lead.status ? "Open" : "Lost"}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -437,6 +505,7 @@ const LeadsPage: React.FC = () => {
           </div>
         </div>
       )}
+
 
       {/* TABLE GRID VIEW */}
       {viewMode === "table" && (

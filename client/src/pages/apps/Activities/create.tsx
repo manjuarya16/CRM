@@ -10,6 +10,7 @@ const CreateActivityPage: React.FC = () => {
   const { addActivity } = useActivityStore();
   const [leads, setLeads] = useState<any[]>([]);
   const [persons, setPersons] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -21,6 +22,7 @@ const CreateActivityPage: React.FC = () => {
     is_done: false,
     lead_id: "",
     person_id: "",
+    user_id: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -32,6 +34,11 @@ const CreateActivityPage: React.FC = () => {
 
     API.get("/persons?limit=100").then((res) => {
       if (res.data?.data) setPersons(res.data.data);
+    }).catch(() => {});
+
+    API.get("/users?limit=100").then((res) => {
+      if (res.data?.data) setUsers(res.data.data);
+      else if (Array.isArray(res.data)) setUsers(res.data);
     }).catch(() => {});
   }, []);
 
@@ -70,6 +77,7 @@ const CreateActivityPage: React.FC = () => {
         is_done: formData.is_done,
         lead_id: formData.lead_id ? Number(formData.lead_id) : undefined,
         person_id: formData.person_id ? Number(formData.person_id) : undefined,
+        user_id: formData.user_id ? Number(formData.user_id) : undefined,
       });
       navigate("/activities");
     } catch (error: any) {
@@ -167,6 +175,20 @@ const CreateActivityPage: React.FC = () => {
               <option value="">Select Lead (Optional)</option>
               {leads.map((l) => (
                 <option key={l.id} value={l.id}>{l.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assigned User</label>
+            <select
+              value={formData.user_id}
+              onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            >
+              <option value="">Select User (Optional)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
           </div>

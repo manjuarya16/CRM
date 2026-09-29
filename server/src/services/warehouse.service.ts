@@ -17,9 +17,51 @@ export class WarehouseService {
         'SELECT get_all_warehouses($1::text) as result',
         [searchTerm]
       );
-      return rows[0]?.result || [];
+      const warehouses: IWarehouse[] = rows[0]?.result || [];
+
+      // Attach product_count to each warehouse
+      if (warehouses.length > 0) {
+        const ids = warehouses.map((w: any) => w.id);
+        const countRes = await pool.query(
+          `SELECT warehouse_id, COUNT(DISTINCT product_id)::int AS product_count
+           FROM product_inventories
+           WHERE warehouse_id = ANY($1::int[])
+           GROUP BY warehouse_id`,
+          [ids]
+        );
+        const countMap: Record<number, number> = {};
+        for (const r of countRes.rows) {
+          countMap[r.warehouse_id] = r.product_count;
+        }
+        for (const w of warehouses as any[]) {
+          w.product_count = countMap[w.id] ?? 0;
+        }
+      }
+
+      return warehouses;
     } catch (error: any) {
       logger.error({ error, search }, 'WarehouseService.getAll failed');
+      throw error;
+    }
+  }
+
+  // Get all products linked to a warehouse via product_inventories
+  public static async getProductsByWarehouse(warehouseId: number): Promise<any[]> {
+    try {
+      const { rows } = await pool.query(
+        `SELECT p.id, p.sku, p.name, p.description, p.price, p.quantity,
+                pi.in_stock, pi.allocated,
+                wl.name AS warehouse_location_name
+         FROM product_inventories pi
+         JOIN products p ON p.id = pi.product_id
+         LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+         WHERE pi.warehouse_id = $1
+         ORDER BY p.name ASC`,
+        [warehouseId]
+      );
+      return rows;
+    } catch (error: any) {
+      logger.error({ error, warehouseId }, 'WarehouseService.getProductsByWarehouse failed');
       throw error;
     }
   }

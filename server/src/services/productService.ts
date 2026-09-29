@@ -64,6 +64,23 @@ const getProductById = async (req: Request, res: Response): Promise<void> => {
       productData.custom_attributes = pRes.rows[0]?.custom_attributes || {};
     }
 
+    // Fetch warehouse inventories for this product
+    try {
+      const invRes = await connection.query(
+        `SELECT pi.id, pi.product_id, pi.warehouse_id, pi.warehouse_location_id, pi.in_stock, pi.allocated,
+                w.name as warehouse_name, wl.name as warehouse_location_name
+         FROM product_inventories pi
+         LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+         LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+         WHERE pi.product_id = $1
+         ORDER BY pi.id ASC`,
+        [id]
+      );
+      productData.inventories = invRes.rows || [];
+    } catch {
+      productData.inventories = [];
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
       data: productData,
@@ -90,7 +107,17 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
       quantity,
       price,
       custom_attributes,
-    }: IProductCreateInput & { custom_attributes?: any } = req.body;
+      inventories,
+    }: IProductCreateInput & { custom_attributes?: any; inventories?: any[] } = req.body;
+
+    // Calculate total quantity from warehouse inventories if provided and > 0
+    let effectiveQuantity = quantity || 0;
+    if (Array.isArray(inventories) && inventories.length > 0) {
+      const totalInvStock = inventories.reduce((sum, inv) => sum + (Number(inv.in_stock) || 0), 0);
+      if (totalInvStock > 0 || (quantity === undefined || quantity === null || quantity === 0)) {
+        effectiveQuantity = totalInvStock;
+      }
+    }
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
@@ -98,19 +125,41 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
         sku,
         name || null,
         description || null,
-        quantity || 0,
+        effectiveQuantity,
         price || null,
       ]
     );
 
     const createdProduct = result.rows[0];
-    if (createdProduct?.id && custom_attributes) {
-      const customAttrsJson = JSON.stringify(custom_attributes);
-      await connection.query(
-        "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
-        [customAttrsJson, createdProduct.id]
-      );
-      createdProduct.custom_attributes = custom_attributes;
+    if (createdProduct?.id) {
+      if (custom_attributes) {
+        const customAttrsJson = JSON.stringify(custom_attributes);
+        await connection.query(
+          "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
+          [customAttrsJson, createdProduct.id]
+        );
+        createdProduct.custom_attributes = custom_attributes;
+      }
+
+      // Save inventories
+      if (Array.isArray(inventories) && inventories.length > 0) {
+        for (const inv of inventories) {
+          if (inv.warehouse_id) {
+            await connection.query(
+              `INSERT INTO product_inventories (product_id, warehouse_id, warehouse_location_id, in_stock, allocated, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+              [
+                createdProduct.id,
+                inv.warehouse_id,
+                inv.warehouse_location_id || null,
+                Number(inv.in_stock) || 0,
+                Number(inv.allocated) || 0,
+              ]
+            );
+          }
+        }
+        createdProduct.inventories = inventories;
+      }
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -141,7 +190,17 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
       quantity,
       price,
       custom_attributes,
-    }: IProductUpdateInput & { custom_attributes?: any } = req.body;
+      inventories,
+    }: IProductUpdateInput & { custom_attributes?: any; inventories?: any[] } = req.body;
+
+    // Calculate total quantity from warehouse inventories if provided
+    let effectiveQuantity = quantity;
+    if (Array.isArray(inventories) && inventories.length > 0) {
+      const totalInvStock = inventories.reduce((sum, inv) => sum + (Number(inv.in_stock) || 0), 0);
+      if (totalInvStock > 0 || quantity === undefined) {
+        effectiveQuantity = totalInvStock;
+      }
+    }
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_product($1, $2, $3, $4, $5, $6)",
@@ -150,19 +209,42 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
         sku ?? null,
         name ?? null,
         description ?? null,
-        quantity ?? null,
+        effectiveQuantity ?? null,
         price ?? null,
       ]
     );
 
     const updatedProduct = result.rows[0];
-    if (id && custom_attributes !== undefined) {
-      const customAttrsJson = JSON.stringify(custom_attributes || {});
-      await connection.query(
-        "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
-        [customAttrsJson, id]
-      );
-      if (updatedProduct) updatedProduct.custom_attributes = custom_attributes;
+    if (id) {
+      if (custom_attributes !== undefined) {
+        const customAttrsJson = JSON.stringify(custom_attributes || {});
+        await connection.query(
+          "UPDATE products SET custom_attributes = $1::jsonb WHERE id = $2",
+          [customAttrsJson, id]
+        );
+        if (updatedProduct) updatedProduct.custom_attributes = custom_attributes;
+      }
+
+      // Sync inventories if passed
+      if (Array.isArray(inventories)) {
+        await connection.query("DELETE FROM product_inventories WHERE product_id = $1", [id]);
+        for (const inv of inventories) {
+          if (inv.warehouse_id) {
+            await connection.query(
+              `INSERT INTO product_inventories (product_id, warehouse_id, warehouse_location_id, in_stock, allocated, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+              [
+                id,
+                inv.warehouse_id,
+                inv.warehouse_location_id || null,
+                Number(inv.in_stock) || 0,
+                Number(inv.allocated) || 0,
+              ]
+            );
+          }
+        }
+        if (updatedProduct) updatedProduct.inventories = inventories;
+      }
     }
 
     res.status(HttpStatusCodes.OK).json({
