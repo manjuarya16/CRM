@@ -507,8 +507,8 @@ const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
       createdBy: (req as any).user?.id || null,
     });
 
-    // Trigger stage_change workflows
-    WorkflowService.triggerWorkflows('leads', 'stage_change', { id: leadId, stage_id, title: leadTitle, status }).catch((e) => logger.error(e));
+    // Trigger stage_change / update workflows
+    processWorkflowsForEvent('leads', 'updated', leadId, (req as any).user).catch((e: any) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({ success: true, message: "Lead stage updated", data: result.rows[0] });
   } catch (error: any) {

@@ -3,7 +3,6 @@ import { passport } from '@/config/passport';
 import type { PublicUser } from '@/interfaces';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface User extends PublicUser {}
   }

@@ -54,6 +54,39 @@ const CampaignsPage: React.FC = () => {
     }
   };
 
+  const handleSend = async (item: ICampaign) => {
+    const res = await Swal.fire({
+      title: "Launch Campaign?",
+      text: `Do you want to send "${item.name}" to all ${item.mail_to === "leads" ? "Leads" : "Contacts"} now?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#0088cc",
+      confirmButtonText: "Yes, Send Now",
+    });
+    if (res.isConfirmed) {
+      try {
+        Swal.fire({
+          title: "Sending Campaign...",
+          text: "Please wait while emails are being dispatched",
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+        const resp = await API.post(`/campaigns/${item.id}/send`);
+        Swal.fire({
+          icon: "success",
+          title: "Campaign Dispatched!",
+          text: resp.data?.message || "Emails sent successfully",
+        });
+      } catch (err: any) {
+        Swal.fire({
+          icon: "error",
+          title: "Failed to Send",
+          text: err.response?.data?.message || "Failed to send campaign emails",
+        });
+      }
+    }
+  };
+
   const filtered = campaigns.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -160,6 +193,13 @@ const CampaignsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleSend(item)}
+                        className="p-1.5 text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
+                        title="Launch / Send Campaign Now"
+                      >
+                        <i className="mgc_send_line text-base"></i>
+                      </button>
                       {canEdit && (
                         <Link
                           to={`/settings/campaigns/${item.id}/edit`}
