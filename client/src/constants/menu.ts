@@ -98,6 +98,12 @@ const MENU_ITEMS: MenuItemTypes[] = [
         parentKey: "settings",
       },
       {
+        key: "access-management",
+        label: "Access Management",
+        url: "/settings/access-management",
+        parentKey: "settings",
+      },
+      {
         key: "users",
         label: "Users",
         url: "/settings/users",

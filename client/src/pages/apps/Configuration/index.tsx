@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useConfigStore } from "@/store";
 import { ConfigNavItem } from "@/interface";
 import { extractFileUrl } from "@/utils/fileHelper";
+import { usePermission } from "@/hooks/usePermission";
 
 const resolveImageUrl = (url: string | null): string => {
   return extractFileUrl(url) || "";
@@ -125,6 +126,9 @@ const MENU_LABEL_FIELDS: { key: string; label: string; placeholder: string }[] =
 
 // ── Component ────────────────────────────────────────────────────────────────
 const ConfigurationPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canEdit = hasPermission("configuration.edit") || hasPermission("settings.configuration.edit") || hasPermission("configuration.manage") || hasPermission("configuration.create");
+
   const [activeTab, setActiveTab] = useState<string>("general");
   const [activeSubTab, setActiveSubTab] = useState<string>("admin_logo");
   const [loading, setLoading] = useState<boolean>(true);
@@ -139,7 +143,7 @@ const ConfigurationPage: React.FC = () => {
     "general.general.admin_logo.favicon_image": "",
     // Settings — Footer
     "general.settings.footer.show": "1",
-    "general.settings.footer.label": 'Powered by <span style="color: rgb(14, 144, 217);"><a href="http://www.krayincrm.com" target="_blank">Krayin</a></span>',
+    "general.settings.footer.label": '© CRM System. All rights reserved.',
     // Settings — Brand Color
     "general.settings.menu_color.brand_color": "#0E90D9",
     // Settings — Dashboard
@@ -309,18 +313,20 @@ const ConfigurationPage: React.FC = () => {
               {statusMessage.text}
             </span>
           )}
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving || loading}
-            className="inline-flex items-center justify-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077bb] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
-          >
-            {saving ? (
-              <><i className="mgc_loading_2_line animate-spin mr-2"></i>Saving...</>
-            ) : (
-              <><i className="mgc_check_line mr-1.5"></i>Save Configuration</>
-            )}
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={saving || loading}
+              className="inline-flex items-center justify-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077bb] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <><i className="mgc_loading_2_line animate-spin mr-2"></i>Saving...</>
+              ) : (
+                <><i className="mgc_check_line mr-1.5"></i>Save Configuration</>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -531,7 +537,7 @@ const ConfigurationPage: React.FC = () => {
                               value={formValues["general.settings.footer.label"] || ""}
                               onChange={(e) => handleInputChange("general.settings.footer.label", e.target.value)}
                               className={inputCls}
-                              placeholder='Powered by <a href="...">Krayin</a>'
+                              placeholder='© CRM System. All rights reserved.'
                             />
                             <p className="text-[10px] text-gray-400">HTML is supported.</p>
                           </div>

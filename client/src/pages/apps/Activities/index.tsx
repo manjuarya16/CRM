@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useActivityStore } from "@/store";
 import { IActivity } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const fmtDateTime = (dt?: string) => {
   if (!dt) return "-";
@@ -24,7 +25,13 @@ const TYPE_BADGE: Record<string, string> = {
 };
 
 const ActivitiesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("activities.create");
+  const canEdit = hasPermission("activities.edit");
+  const canDelete = hasPermission("activities.delete");
+  const canView = hasPermission("activities.view");
   const { activities, total, loading, fetchActivities, deleteActivity, updateActivity } = useActivityStore();
+
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
@@ -105,13 +112,15 @@ const ActivitiesPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Activities</h1>
-        <Link
-          to="/activities/create"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line"></i> Create Activity
-        </Link>
-      </div>
+        {canCreate && (
+          <Link
+            to="/activities/create"
+            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            + Create Activity
+          </Link>
+        )}
+      </div >
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         {/* Filter Bar */}
@@ -252,11 +261,10 @@ const ActivitiesPage: React.FC = () => {
                         onClick={() => handleToggleDone(act)}
                         disabled={togglingId === act.id}
                         title={act.is_done ? "Mark as Pending" : "Mark as Done"}
-                        className={`flex items-center justify-center h-5 w-5 rounded border-2 mx-auto transition-colors focus:outline-none ${
-                          act.is_done
-                            ? "bg-green-500 border-green-500 text-white hover:bg-green-600"
-                            : "border-gray-400 bg-white dark:bg-gray-700 hover:border-[#0088cc]"
-                        } ${togglingId === act.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                        className={`flex items-center justify-center h-5 w-5 rounded border-2 mx-auto transition-colors focus:outline-none ${act.is_done
+                          ? "bg-green-500 border-green-500 text-white hover:bg-green-600"
+                          : "border-gray-400 bg-white dark:bg-gray-700 hover:border-[#0088cc]"
+                          } ${togglingId === act.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       >
                         {togglingId === act.id ? (
                           <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-gray-400 border-t-transparent" />
@@ -286,9 +294,8 @@ const ActivitiesPage: React.FC = () => {
                         )}
                         {/* Type badge */}
                         <span
-                          className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold capitalize ${
-                            TYPE_BADGE[act.type?.toLowerCase()] || "text-gray-600 bg-gray-100 dark:bg-gray-700"
-                          }`}
+                          className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold capitalize ${TYPE_BADGE[act.type?.toLowerCase()] || "text-gray-600 bg-gray-100 dark:bg-gray-700"
+                            }`}
                         >
                           {act.type}
                         </span>
@@ -326,39 +333,41 @@ const ActivitiesPage: React.FC = () => {
                   </tr>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </tbody >
+          </table >
+        </div >
 
         {/* Bottom Pagination */}
-        {total > perPage && (
-          <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-            <span>
-              {activities.length > 0 ? `${startRow} – ${endRow} of ${total}` : `0 of ${total}`}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                ← Prev
-              </button>
-              <span className="px-2 font-semibold text-gray-800 dark:text-gray-200">
-                {page} / {totalPages || 1}
+        {
+          total > perPage && (
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+              <span>
+                {activities.length > 0 ? `${startRow} – ${endRow} of ${total}` : `0 of ${total}`}
               </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next →
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ← Prev
+                </button>
+                <span className="px-2 font-semibold text-gray-800 dark:text-gray-200">
+                  {page} / {totalPages || 1}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )
+        }
+      </div >
+    </div >
   );
 };
 

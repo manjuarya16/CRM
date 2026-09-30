@@ -32,7 +32,7 @@ const notifications: NotificationItem[] = [
     subText: "Caleb Flakelar commented on Admin",
     icon: "mgc_message_3_line text-lg",
     bgColor: "primary",
-    createdAt: subtractHours(new Date(), 1),
+    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
   },
   {
     id: 2,
@@ -40,7 +40,7 @@ const notifications: NotificationItem[] = [
     subText: "New user registered",
     icon: "mgc_user_add_line text-lg",
     bgColor: "info",
-    createdAt: subtractHours(new Date(), 60),
+    createdAt: new Date(Date.now() - 60 * 60 * 1000),
   },
   {
     id: 3,
@@ -48,7 +48,7 @@ const notifications: NotificationItem[] = [
     subText: "Hi, How are you? What about our next meeting",
     icon: "mgc_chat_2_line text-lg",
     bgColor: "info",
-    createdAt: subtractHours(new Date(), 1440),
+    createdAt: new Date(Date.now() - 1440 * 60 * 1000),
   },
   {
     id: 4,
@@ -56,7 +56,7 @@ const notifications: NotificationItem[] = [
     subText: "Caleb Flakelar commented on Admin",
     icon: "mgc_message_1_line text-lg",
     bgColor: "primary",
-    createdAt: subtractHours(new Date(), 2880),
+    createdAt: new Date(Date.now() - 2880 * 60 * 1000),
   },
   {
     id: 5,
@@ -64,7 +64,7 @@ const notifications: NotificationItem[] = [
     subText: "Wow ! this admin looks good and awesome design",
     icon: "mgc_user_3_line text-lg",
     bgColor: "success",
-    createdAt: subtractHours(new Date(), 2880),
+    createdAt: new Date(Date.now() - 2880 * 60 * 1000),
   },
 ];
 

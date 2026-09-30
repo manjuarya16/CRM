@@ -36,6 +36,9 @@ const CreatePersonPage = React.lazy(
 const EditPersonPage = React.lazy(
   () => import("../pages/apps/Contacts/Persons/edit"),
 );
+const ViewPersonPage = React.lazy(
+  () => import("../pages/apps/Contacts/Persons/view"),
+);
 const OrganizationsPage = React.lazy(
   () => import("../pages/apps/Contacts/Organizations"),
 );
@@ -56,8 +59,14 @@ const MailPage = React.lazy(() => import("../pages/apps/Mail"));
 const MailViewPage = React.lazy(() => import("../pages/apps/Mail/view"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
 const UsersPage = React.lazy(() => import("../pages/apps/Settings/Users"));
+const ViewUserPage = React.lazy(
+  () => import("../pages/apps/Settings/Users/view"),
+);
 const GroupsPage = React.lazy(() => import("../pages/apps/Settings/Groups"));
 const RolesPage = React.lazy(() => import("../pages/apps/Settings/Roles"));
+const AccessManagementPage = React.lazy(
+  () => import("../pages/apps/Settings/AccessManagement"),
+);
 const CreateRolePage = React.lazy(
   () => import("../pages/apps/Settings/Roles/create"),
 );
@@ -317,6 +326,16 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditPersonPage />,
   },
   {
+    path: "/contacts/persons/view/:id",
+    name: "View Person",
+    element: <ViewPersonPage />,
+  },
+  {
+    path: "/contacts/persons/:id/view",
+    name: "View Person",
+    element: <ViewPersonPage />,
+  },
+  {
     path: "/contacts/organizations",
     name: "Organizations",
     element: <OrganizationsPage />,
@@ -374,6 +393,46 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <UsersPage />,
   },
   {
+    path: "/settings/users/create",
+    name: "Create User",
+    element: <UsersPage />,
+  },
+  {
+    path: "/settings/users/edit/:id",
+    name: "Edit User",
+    element: <UsersPage />,
+  },
+  {
+    path: "/settings/users/view/:id",
+    name: "View User",
+    element: <ViewUserPage />,
+  },
+  {
+    path: "/settings/users/:id/view",
+    name: "View User",
+    element: <ViewUserPage />,
+  },
+  {
+    path: "/management/users",
+    name: "Management Users",
+    element: <UserManagement />,
+  },
+  {
+    path: "/management/users/create",
+    name: "Create User",
+    element: <UserManagement />,
+  },
+  {
+    path: "/management/users/edit/:id",
+    name: "Edit User",
+    element: <UserManagement />,
+  },
+  {
+    path: "/management/users/view/:id",
+    name: "View User",
+    element: <ViewUserPage />,
+  },
+  {
     path: "/settings/groups",
     name: "Settings Groups",
     element: <GroupsPage />,
@@ -382,6 +441,11 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/roles",
     name: "Settings Roles",
     element: <RolesPage />,
+  },
+  {
+    path: "/settings/access-management",
+    name: "Access Management",
+    element: <AccessManagementPage />,
   },
   {
     path: "/settings/roles/create",
@@ -619,22 +683,22 @@ const authProtectedRoutes: RoutesProps[] = [
   {
     path: "/users",
     name: "Users",
-    element: <UserManagement />,
+    element: <UsersPage />,
   },
   {
     path: "/users/create",
     name: "Create User",
-    element: <UserCreateForm />,
+    element: <UsersPage />,
   },
   {
     path: "/users/edit/:id",
     name: "Edit User",
-    element: <UserEditForm />,
+    element: <UsersPage />,
   },
   {
     path: "/users/view/:id",
     name: "View User",
-    element: <UserViewForm />,
+    element: <ViewUserPage />,
   },
   {
     path: "/configuration",

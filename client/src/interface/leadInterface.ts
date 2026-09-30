@@ -39,6 +39,7 @@ export interface ILeadPipeline {
   id: number;
   name: string;
   is_default?: boolean;
+  rotten_days?: number;
 }
 
 export interface ILeadStage {

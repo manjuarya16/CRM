@@ -12,15 +12,33 @@ export const fileToBase64 = (file: File | Blob): Promise<string> => {
   });
 };
 
-/**
- * Extracts or resolves a file URL dynamically from given text or path
- */
 export const extractFileUrl = (text?: string | null): string | null => {
   if (!text) return null;
-  if (text.startsWith("data:image/") || text.startsWith("data:")) return text;
-  if (text.startsWith("http://") || text.startsWith("https://")) return text;
-  if (text.startsWith("/uploads/")) return `${SERVER_URL}${text}`;
-  const match = text.match(/\/uploads\/[^\s]+/);
-  if (match) return `${SERVER_URL}${match[0]}`;
+  const trimmed = text.trim();
+
+  // 1. Check for data URL (Base64)
+  if (trimmed.startsWith("data:")) return trimmed;
+  const dataIdx = text.indexOf("data:");
+  if (dataIdx !== -1) {
+    const rawData = text.substring(dataIdx).trim();
+    const endIdx = rawData.search(/[\s]/);
+    return endIdx !== -1 ? rawData.substring(0, endIdx) : rawData;
+  }
+
+  // 2. Check for /uploads/ server path
+  if (trimmed.startsWith("/uploads/")) return `${SERVER_URL}${trimmed}`;
+  const uploadIdx = text.indexOf("/uploads/");
+  if (uploadIdx !== -1) {
+    const rawUpload = text.substring(uploadIdx).trim();
+    const endIdx = rawUpload.search(/[\s]/);
+    const path = endIdx !== -1 ? rawUpload.substring(0, endIdx) : rawUpload;
+    return `${SERVER_URL}${path}`;
+  }
+
+  // 3. Check for absolute HTTP / HTTPS URL
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  const httpMatch = text.match(/https?:\/\/[^\s]+/);
+  if (httpMatch) return httpMatch[0];
+
   return null;
 };

@@ -120,9 +120,20 @@ export const CRM_PERMISSION_TREE: IPermissionTreeNode[] = [
         id: "settings_roles",
         name: "Roles",
         children: [
+          { id: "settings.roles.view", name: "View", key: "settings.roles.view", action: "view" },
           { id: "settings.roles.create", name: "Create", key: "settings.roles.create", action: "create" },
           { id: "settings.roles.edit", name: "Edit", key: "settings.roles.edit", action: "edit" },
           { id: "settings.roles.delete", name: "Delete", key: "settings.roles.delete", action: "delete" },
+        ],
+      },
+      {
+        id: "settings_access_management",
+        name: "User Access Manage",
+        children: [
+          { id: "settings.access_management.view", name: "View", key: "settings.access_management.view", action: "view" },
+          { id: "settings.access_management.create", name: "Create", key: "settings.access_management.create", action: "create" },
+          { id: "settings.access_management.edit", name: "Edit", key: "settings.access_management.edit", action: "edit" },
+          { id: "settings.access_management.delete", name: "Delete", key: "settings.access_management.delete", action: "delete" },
         ],
       },
       {
@@ -403,13 +414,24 @@ export const CRM_PERMISSION_GROUPS: IPermissionGroup[] = [
   },
   {
     id: "settings_roles",
-    name: "Settings - Roles & Permissions",
+    name: "Settings - Roles",
     icon: "mgc_shield_check_line",
     permissions: [
-      { key: "settings.roles.view", name: "View Roles", action: "view", description: "View access roles and permission levels" },
+      { key: "settings.roles.view", name: "View Roles", action: "view", description: "View access roles and hierarchy" },
       { key: "settings.roles.create", name: "Add Roles", action: "create", description: "Create new access roles" },
-      { key: "settings.roles.edit", name: "Update Roles", action: "edit", description: "Edit role permissions and scopes" },
+      { key: "settings.roles.edit", name: "Update Roles", action: "edit", description: "Edit role details and hierarchy" },
       { key: "settings.roles.delete", name: "Delete Roles", action: "delete", description: "Delete access roles" },
+    ],
+  },
+  {
+    id: "settings_access_management",
+    name: "Settings - User Access Manage",
+    icon: "mgc_shield_line",
+    permissions: [
+      { key: "settings.access_management.view", name: "View User Access Manage", action: "view", description: "View permission access matrix" },
+      { key: "settings.access_management.create", name: "Add User Access Manage", action: "create", description: "Create permission assignments" },
+      { key: "settings.access_management.edit", name: "Update User Access Manage", action: "edit", description: "Edit permission access matrix" },
+      { key: "settings.access_management.delete", name: "Delete User Access Manage", action: "delete", description: "Delete permission assignments" },
     ],
   },
   {

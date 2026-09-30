@@ -101,7 +101,7 @@ const EditLeadPage: React.FC = () => {
     if (id) {
       API.get(`/tags/entity/lead/${id}`).then((r) => {
         if (r.data?.data) setSelectedTagIds(r.data.data.map((t: any) => t.id));
-      }).catch(() => {});
+      }).catch(() => { });
       setLoading(true);
       fetchLeadById(Number(id)).then((lead) => {
         if (lead) {
@@ -342,7 +342,7 @@ const EditLeadPage: React.FC = () => {
           entity_type: "lead",
           entity_id: Number(id),
           tag_ids: selectedTagIds,
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       navigate("/leads");
@@ -399,11 +399,10 @@ const EditLeadPage: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
-                activeTab === tab.id
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${activeTab === tab.id
                   ? "text-[#0088cc] border-[#0088cc]"
                   : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
-              }`}
+                }`}
             >
               {tab.label}
             </button>

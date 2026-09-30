@@ -6,6 +6,7 @@ import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import path from "path";
 import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
@@ -189,6 +190,9 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         userId: user_id || null,
         createdBy: (req as any).user?.id || null,
       });
+
+      // Trigger active creation workflows
+      WorkflowService.triggerWorkflows('leads', 'create', lead).catch((e) => logger.error(e));
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -311,6 +315,10 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
           [id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
         );
       }
+    }
+
+    if (updatedLead) {
+      WorkflowService.triggerWorkflows('leads', 'update', updatedLead).catch((e) => logger.error(e));
     }
 
     res.status(HttpStatusCodes.OK).json({
@@ -498,6 +506,9 @@ const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
       actionType: "stage_changed",
       createdBy: (req as any).user?.id || null,
     });
+
+    // Trigger stage_change workflows
+    WorkflowService.triggerWorkflows('leads', 'stage_change', { id: leadId, stage_id, title: leadTitle, status }).catch((e) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({ success: true, message: "Lead stage updated", data: result.rows[0] });
   } catch (error: any) {

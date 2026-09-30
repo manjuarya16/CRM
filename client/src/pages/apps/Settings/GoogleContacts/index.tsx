@@ -3,8 +3,15 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IGoogleContactAccount, IContactExportBatch } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const GoogleContactsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.google_contacts.create") || hasPermission("google_contacts.create");
+  const canExport = hasPermission("settings.google_contacts.export") || hasPermission("google_contacts.export") || canCreate;
+  const canSync = hasPermission("settings.google_contacts.sync") || hasPermission("google_contacts.sync") || hasPermission("settings.google_contacts.edit") || hasPermission("google_contacts.edit");
+  const canDelete = hasPermission("settings.google_contacts.delete") || hasPermission("google_contacts.delete");
+
   const [accounts, setAccounts] = useState<IGoogleContactAccount[]>([]);
   const [batches, setBatches] = useState<IContactExportBatch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,20 +119,24 @@ const GoogleContactsPage: React.FC = () => {
           <p className="text-sm text-gray-500 mt-0.5">Connect Google accounts, sync contacts, and manage batch exports</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleCreateExportBatch}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_upload_line text-lg"></i>
-            Export CRM Contacts
-          </button>
-          <button
-            onClick={() => setIsConnectModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_google_line text-lg"></i>
-            Connect Google Account
-          </button>
+          {canExport && (
+            <button
+              onClick={handleCreateExportBatch}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_upload_line text-lg"></i>
+              Export CRM Contacts
+            </button>
+          )}
+          {canCreate && (
+            <button
+              onClick={() => setIsConnectModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_google_line text-lg"></i>
+              Connect Google Account
+            </button>
+          )}
         </div>
       </div>
 
@@ -138,12 +149,14 @@ const GoogleContactsPage: React.FC = () => {
         {accounts.length === 0 ? (
           <div className="p-6 border border-dashed rounded-xl text-center text-gray-400 text-xs space-y-2">
             <p>No Google accounts connected yet.</p>
-            <button
-              onClick={() => setIsConnectModalOpen(true)}
-              className="text-blue-600 hover:underline font-semibold"
-            >
-              Click here to connect your Google account
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setIsConnectModalOpen(true)}
+                className="text-blue-600 hover:underline font-semibold"
+              >
+                Click here to connect your Google account
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -162,21 +175,25 @@ const GoogleContactsPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleSyncContacts(acc)}
-                    disabled={syncing}
-                    className="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1"
-                  >
-                    <i className="mgc_refresh_2_line"></i>
-                    {syncing ? "Syncing..." : "Sync Contacts"}
-                  </button>
-                  <button
-                    onClick={() => handleDisconnect(acc.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg"
-                    title="Disconnect"
-                  >
-                    <i className="mgc_delete_line text-base"></i>
-                  </button>
+                  {canSync && (
+                    <button
+                      onClick={() => handleSyncContacts(acc)}
+                      disabled={syncing}
+                      className="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1"
+                    >
+                      <i className="mgc_refresh_2_line"></i>
+                      {syncing ? "Syncing..." : "Sync Contacts"}
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDisconnect(acc.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg"
+                      title="Disconnect"
+                    >
+                      <i className="mgc_delete_line text-base"></i>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

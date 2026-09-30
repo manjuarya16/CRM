@@ -1,12 +1,25 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IRole, IGroup, IUserData } from "@/interface";
 import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
 
+import { useAuthorization } from "@/hooks/useAuthorization";
+import { usePermission } from "@/hooks/usePermission";
+
 const UsersPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.users.create");
+  const canEdit = hasPermission("settings.users.edit");
+  const canDelete = hasPermission("settings.users.delete");
+  const canView = hasPermission("settings.users.view");
+  const { user: currentUser } = useAuthorization();
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [users, setUsers] = useState<IUserData[]>([]);
   const [roles, setRoles] = useState<IRole[]>([]);
   const [groups, setGroups] = useState<IGroup[]>([]);
@@ -23,6 +36,15 @@ const UsersPage: React.FC = () => {
   // Modal State for Create / Edit User
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<IUserData | null>(null);
+
+  // Modal State for View User Details
+  const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [viewingUser, setViewingUser] = useState<IUserData | null>(null);
+
+  const openViewModal = (user: IUserData) => {
+    setViewingUser(user);
+    setIsViewModalOpen(true);
+  };
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -40,6 +62,21 @@ const UsersPage: React.FC = () => {
     fetchUsers();
     fetchRolesAndGroups();
   }, []);
+
+  useEffect(() => {
+    if (location.pathname.includes("/create")) {
+      openCreateModal();
+    } else if (id && users.length > 0) {
+      const u = users.find((x) => String(x.id) === String(id));
+      if (u) {
+        if (location.pathname.includes("/view")) {
+          openViewModal(u);
+        } else {
+          openEditModal(u);
+        }
+      }
+    }
+  }, [location.pathname, id, users]);
 
   const fetchUsers = async () => {
     try {
@@ -91,7 +128,7 @@ const UsersPage: React.FC = () => {
       confirm_password: "",
       status: Boolean(user.status),
       role_id: user.role_id || 1,
-      group_ids: user.group_ids || (user.groups || []).map((g) => g.id),
+      group_ids: user.group_ids || (user.groups || []).map((g: any) => g.id),
       view_permission: user.view_permission || "global",
     });
     setErrors({});
@@ -108,7 +145,6 @@ const UsersPage: React.FC = () => {
     });
   };
 
-  // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -136,7 +172,6 @@ const UsersPage: React.FC = () => {
       }
 
       if (editingUser?.id) {
-        // Edit / Update
         await API.put(`/users/${editingUser.id}`, payload);
         Swal.fire({
           icon: "success",
@@ -146,7 +181,6 @@ const UsersPage: React.FC = () => {
           showConfirmButton: false,
         });
       } else {
-        // Add / Create
         await API.post("/users", payload);
         Swal.fire({
           icon: "success",
@@ -206,9 +240,244 @@ const UsersPage: React.FC = () => {
     });
   };
 
+  const matchedUser = useMemo(() => {
+    if (!currentUser) return null;
+    return (users || []).find(
+      (u) => Number(u.id) === Number(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()
+    );
+  }, [currentUser, users]);
+
+  const currentUserRoleId = useMemo(() => {
+    if (currentUser?.role_id != null && Number(currentUser.role_id) > 0) {
+      return Number(currentUser.role_id);
+    }
+    if (matchedUser?.role_id != null && Number(matchedUser.role_id) > 0) {
+      return Number(matchedUser.role_id);
+    }
+    const roleStr = String((currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || "").toLowerCase();
+    if (roleStr) {
+      const found = (roles || []).find((r) => String(r.name).toLowerCase() === roleStr);
+      if (found) return Number(found.id);
+    }
+    return null;
+  }, [currentUser, matchedUser, roles]);
+
+  const currentUserGroups = useMemo(() => {
+    if (!currentUser && !matchedUser) return [] as number[];
+    const gList = (matchedUser as any)?.group_ids || (matchedUser as any)?.groups || (currentUser as any)?.group_ids || (currentUser as any)?.groups || [];
+    return (gList as any[]).map((g: any) => Number(g.id || g)).filter((id: number) => id > 0);
+  }, [currentUser, matchedUser]);
+
+  const currentUserViewPermission = useMemo(() => {
+    const perm = (matchedUser as any)?.view_permission || (currentUser as any)?.view_permission || "global";
+    return String(perm).toLowerCase();
+  }, [currentUser, matchedUser]);
+
+  const isAdministrator = useMemo(() => {
+    const roleName = String(
+      (currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || ""
+    ).toLowerCase();
+    if (roleName === "administrator") return true;
+    if (currentUserRoleId === 1) return true;
+    if (currentUserRoleId) {
+      const found = (roles || []).find((r) => Number(r.id) === Number(currentUserRoleId));
+      if (found && String(found.name).toLowerCase() === "administrator") {
+        return true;
+      }
+    }
+    return false;
+  }, [currentUser, matchedUser, currentUserRoleId, roles]);
+
+  const displayGroups = useMemo(() => {
+    if (isAdministrator || !currentUserGroups || currentUserGroups.length === 0) {
+      return groups;
+    }
+    const userGroupSet = new Set(currentUserGroups);
+    return groups.filter((g) => userGroupSet.has(Number(g.id)));
+  }, [groups, isAdministrator, currentUserGroups]);
+
+  const getEffectiveParentId = useCallback((r: IRole, flatRoles: IRole[]): number | null => {
+    const idNum = Number(r.id);
+    const name = String(r.name || "").toLowerCase();
+
+    if (idNum === 1 || name === "administrator") return null;
+
+    if (r.parent_role_id != null && String(r.parent_role_id).trim() !== "" && Number(r.parent_role_id) > 0) {
+      const explicitParent = Number(r.parent_role_id);
+      if (explicitParent !== idNum) return explicitParent;
+    }
+
+    const adminRole = flatRoles.find(
+      (x) => Number(x.id) === 1 || String(x.name).toLowerCase() === "administrator"
+    );
+    const adminId = adminRole ? Number(adminRole.id) : 1;
+    if (idNum === adminId) return null;
+
+    const managerRole = flatRoles.find((x) => String(x.name).toLowerCase().includes("manager"));
+    const managerId = managerRole ? Number(managerRole.id) : null;
+
+    if (name.includes("manager")) {
+      return adminId;
+    }
+    if (name.includes("user") || name.includes("test") || name.includes("staff") || name.includes("agent") || name.includes("employee")) {
+      return managerId && managerId !== idNum ? managerId : adminId;
+    }
+
+    return adminId;
+  }, []);
+
+  const childrenMap = useMemo(() => {
+    const m: Record<number, number[]> = {};
+    (roles || []).forEach((r) => {
+      const rid = Number(r.id);
+      const rName = String(r.name || "").toLowerCase();
+      if (rName === "administrator" || rid === 1) return;
+
+      const pid = getEffectiveParentId(r, roles);
+      if (pid && pid > 0 && pid !== rid) {
+        if (!m[pid]) m[pid] = [];
+        if (!m[pid].includes(rid)) m[pid].push(rid);
+      }
+
+      // Ensure Manager roles treat all non-administrator user/staff/admin roles as children
+      if (rName.includes("manager")) {
+        (roles || []).forEach((sub) => {
+          const subId = Number(sub.id);
+          const subName = String(sub.name || "").toLowerCase();
+          if (subId !== rid && subId !== 1 && subName !== "administrator") {
+            if (!m[rid]) m[rid] = [];
+            if (!m[rid].includes(subId)) m[rid].push(subId);
+          }
+        });
+      }
+    });
+    return m;
+  }, [roles, getEffectiveParentId]);
+
+  const collectDescendants = useCallback((startId?: number | null) => {
+    if (startId == null || startId === undefined) return [] as number[];
+    const numericStart = Number(startId);
+    if (!numericStart) return [] as number[];
+    const out: number[] = [];
+    const stack = [numericStart];
+    const visited = new Set<number>();
+
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur === undefined || visited.has(cur)) continue;
+      visited.add(cur);
+      out.push(cur);
+      const kids = childrenMap[cur];
+      if (kids && kids.length) stack.push(...kids);
+    }
+    return out;
+  }, [childrenMap]);
+
+
+  const allowedRoleIds = useMemo(() => {
+    if (isAdministrator) {
+      return (roles || []).map((r) => Number(r.id));
+    }
+
+    const nonAdminRoleIds = (roles || [])
+      .filter((r) => Number(r.id) !== 1 && String(r.name).toLowerCase() !== "administrator")
+      .map((r) => Number(r.id));
+
+    if (currentUserRoleId) {
+      const descendants = collectDescendants(currentUserRoleId);
+      return Array.from(new Set([...descendants, Number(currentUserRoleId), ...nonAdminRoleIds]));
+    }
+    return nonAdminRoleIds;
+  }, [isAdministrator, currentUserRoleId, roles, collectDescendants]);
+
+  const [selectedGroup, setSelectedGroup] = useState<string>("all");
+
+  const allowedUsers = useMemo(() => {
+    if (!currentUser && (!users || !users.length)) return [] as IUserData[];
+
+    const currentUserId = currentUser?.id != null
+      ? Number(currentUser.id)
+      : (matchedUser?.id != null ? Number(matchedUser.id) : null);
+
+    const normPermission = String(currentUserViewPermission || "global").toLowerCase();
+
+    const isRootAdmin = (u: any) => {
+      const rid = u.role_id != null ? Number(u.role_id) : null;
+      const rname = String(u.role_name || u.role || "").toLowerCase();
+      return rid === 1 || rname === "administrator";
+    };
+
+    // 1. Administrator -> see all users
+    if (isAdministrator) {
+      return users || [];
+    }
+
+    // Filter out Administrator role users for all non-administrators (like Komal)
+    const list = (users || []).filter((u) => !isRootAdmin(u));
+
+    // 2. Individual view permission -> see only self
+    if (normPermission === "individual") {
+      return list.filter((u) => Number(u.id) === currentUserId);
+    }
+
+    // 3. Global view permission -> see all non-administrator users
+    if (normPermission === "global") {
+      return list;
+    }
+
+    const allowedSet = new Set(allowedRoleIds.map(Number));
+
+    // 4. Group / Subordinates / Hierarchical / Default view permission
+    const groupSet = new Set(currentUserGroups);
+    return list.filter((u) => {
+      if (currentUserId && Number(u.id) === currentUserId) return true;
+      // Role hierarchy match
+      if (u.role_id == null || allowedSet.has(Number(u.role_id))) return true;
+      // Group match
+      const uGroups = ((u as any).group_ids || ((u as any).groups || []).map((g: any) => g.id || g)).map(Number);
+      return uGroups.some((gid: number) => groupSet.has(gid));
+    });
+  }, [users, currentUser, matchedUser, isAdministrator, currentUserRoleId, allowedRoleIds, currentUserGroups, currentUserViewPermission]);
+
+
+  const buildRoleTree = (flatRoles: IRole[]) => {
+    const byId: Record<number, any> = {};
+    flatRoles.forEach((r) => {
+      const idNum = Number(r.id);
+      byId[idNum] = { ...r, id: idNum, children: [] };
+    });
+    const roots: any[] = [];
+    flatRoles.forEach((r) => {
+      const idNum = Number(r.id);
+      const pid = getEffectiveParentId(r, flatRoles);
+      if (pid && pid > 0 && byId[pid] && pid !== idNum) {
+        byId[pid].children.push(byId[idNum]);
+      } else {
+        roots.push(byId[idNum]);
+      }
+    });
+    return roots;
+  };
+
+  const flattenWithDepth = (nodes: any[], depth = 0, out: any[] = []) => {
+    for (const n of nodes) {
+      out.push({ ...n, __depth: depth });
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        flattenWithDepth(n.children, depth + 1, out);
+      }
+    }
+    return out;
+  };
+
+  const flattenedRoles = useMemo(() => {
+    const active = (roles || []).filter((r) => (r as any).status !== false);
+    const tree = buildRoleTree(active);
+    return flattenWithDepth(tree);
+  }, [roles]);
+
   // Filtering & Pagination
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
+    const list = allowedUsers.filter((u) => {
       // Search
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -231,9 +500,25 @@ const UsersPage: React.FC = () => {
         if (Boolean(u.status) !== isAct) return false;
       }
 
+      // Group filter
+      if (selectedGroup !== "all") {
+        const uGroups = (u.group_ids || (u.groups || []).map((g: any) => g.id || g)).map(Number);
+        if (!uGroups.includes(Number(selectedGroup))) return false;
+      }
+
       return true;
     });
-  }, [users, search, selectedRole, selectedStatus]);
+
+    const roleOrderMap = new Map<number, number>();
+    flattenedRoles.forEach((r, idx) => roleOrderMap.set(r.id, idx));
+
+    return [...list].sort((a, b) => {
+      const orderA = a.role_id != null ? (roleOrderMap.get(Number(a.role_id)) ?? 999) : 999;
+      const orderB = b.role_id != null ? (roleOrderMap.get(Number(b.role_id)) ?? 999) : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+  }, [allowedUsers, search, selectedRole, selectedStatus, selectedGroup, flattenedRoles]);
 
   const totalPages = Math.ceil(filteredUsers.length / perPage) || 1;
   const paginatedUsers = useMemo(() => {
@@ -283,13 +568,15 @@ const UsersPage: React.FC = () => {
             Users
           </h1>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create User
-        </button>
+        {canCreate && (
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create User
+          </button>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -322,9 +609,26 @@ const UsersPage: React.FC = () => {
               className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0088cc]"
             >
               <option value="all">All Roles</option>
-              {roles.map((r) => (
+              {flattenedRoles.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {"\u00A0\u00A0".repeat(r.__depth)}{r.__depth > 0 ? "└─ " : ""}{r.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Group Filter */}
+            <select
+              value={selectedGroup}
+              onChange={(e) => {
+                setSelectedGroup(e.target.value);
+                setPage(1);
+              }}
+              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0088cc]"
+            >
+              <option value="all">All Groups</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
                 </option>
               ))}
             </select>
@@ -424,8 +728,13 @@ const UsersPage: React.FC = () => {
                       <td className="p-4 font-semibold text-gray-800 dark:text-gray-200">
                         {user.id}
                       </td>
-                      <td className="p-4 font-semibold text-gray-900 dark:text-gray-100">
-                        {user.name}
+                      <td className="p-4 font-bold text-[#0088cc]">
+                        <Link
+                          to={`/settings/users/view/${user.id}`}
+                          className="hover:underline text-left cursor-pointer font-bold"
+                        >
+                          {user.name}
+                        </Link>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-300">
                         {user.email}
@@ -475,21 +784,34 @@ const UsersPage: React.FC = () => {
                           : "-"}
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => openEditModal(user)}
-                            className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                            title="Edit User"
-                          >
-                            <i className="mgc_edit_line text-base"></i>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(user)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
-                            title="Delete User"
-                          >
-                            <i className="mgc_delete_2_line text-base"></i>
-                          </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {canView && (
+                            <Link
+                              to={`/settings/users/view/${user.id}`}
+                              className="p-1.5 rounded-lg text-[#0088cc] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                              title="View User Details"
+                            >
+                              <i className="mgc_eye_line text-base"></i>
+                            </Link>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => openEditModal(user)}
+                              className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                              title="Edit User"
+                            >
+                              <i className="mgc_edit_line text-base"></i>
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(user)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                              title="Delete User"
+                            >
+                              <i className="mgc_delete_2_line text-base"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -660,9 +982,9 @@ const UsersPage: React.FC = () => {
                         : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
                     }`}
                   >
-                    {roles.map((r) => (
+                    {flattenedRoles.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.name}
+                        {"\u00A0\u00A0".repeat(r.__depth)}{r.__depth > 0 ? "└─ " : ""}{r.name}
                       </option>
                     ))}
                   </select>
@@ -766,6 +1088,123 @@ const UsersPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View User Modal */}
+      {isViewModalOpen && viewingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-lg overflow-hidden">
+            {/* Modal Header Banner */}
+            <div className="bg-gradient-to-r from-[#0088cc] to-[#006699] p-6 text-white relative">
+              <button
+                onClick={() => setIsViewModalOpen(false)}
+                className="absolute top-4 right-4 text-white/80 hover:text-white text-xl font-bold"
+              >
+                ✕
+              </button>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-white/40 font-bold text-2xl flex items-center justify-center text-white shrink-0 shadow-inner">
+                  {viewingUser.name ? viewingUser.name.substring(0, 2).toUpperCase() : "US"}
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <h3 className="text-xl font-bold truncate">{viewingUser.name}</h3>
+                  <p className="text-xs text-blue-100 flex items-center gap-1.5 truncate">
+                    <i className="mgc_mail_line text-sm"></i>
+                    {viewingUser.email}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body Details */}
+            <div className="p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                  <span className="text-gray-400 font-semibold block uppercase text-[10px]">User ID</span>
+                  <span className="font-bold text-gray-800 dark:text-gray-200 text-sm">#{viewingUser.id}</span>
+                </div>
+
+                <div className="space-y-1 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                  <span className="text-gray-400 font-semibold block uppercase text-[10px]">Account Status</span>
+                  {viewingUser.status ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Inactive
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                  <span className="text-gray-400 font-semibold block uppercase text-[10px]">Role</span>
+                  <span className="font-bold text-[#0088cc] text-xs block">{viewingUser.role_name || "User"}</span>
+                </div>
+
+                <div className="space-y-1 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                  <span className="text-gray-400 font-semibold block uppercase text-[10px]">View Permission</span>
+                  <span className="font-bold text-gray-800 dark:text-gray-200 capitalize text-xs block">
+                    {viewingUser.view_permission || "Global"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Groups */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Assigned Groups</span>
+                <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-700 min-h-[44px] items-center">
+                  {viewingUser.groups && viewingUser.groups.length > 0 ? (
+                    viewingUser.groups.map((g) => (
+                      <span key={g.id} className="px-2.5 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs font-bold rounded-lg border border-blue-200 dark:border-blue-800">
+                        {g.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">No groups assigned.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Metadata */}
+              <div className="space-y-2 text-xs border-t border-gray-100 dark:border-gray-700 pt-3">
+                <div className="flex justify-between text-gray-500">
+                  <span>Created Date:</span>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    {viewingUser.created_at ? new Date(viewingUser.created_at).toLocaleString() : "-"}
+                  </span>
+                </div>
+                {viewingUser.updated_at && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Last Updated:</span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                      {new Date(viewingUser.updated_at).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    openEditModal(viewingUser);
+                  }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <i className="mgc_edit_line text-sm"></i> Edit User
+                </button>
+                <button
+                  onClick={() => setIsViewModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

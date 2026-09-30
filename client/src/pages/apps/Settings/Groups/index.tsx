@@ -2,12 +2,21 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { IGroup } from "@/interface";
+import { IGroup, IUserData } from "@/interface";
 import { groupSchema } from "@/schemas";
 import { ZodError } from "zod";
+import { useAuthorization } from "@/hooks/useAuthorization";
+import { usePermission } from "@/hooks/usePermission";
 
 const GroupsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.groups.create");
+  const canEdit = hasPermission("settings.groups.edit");
+  const canDelete = hasPermission("settings.groups.delete");
+  const canView = hasPermission("settings.groups.view");
+  const { user: currentUser } = useAuthorization();
   const [groups, setGroups] = useState<IGroup[]>([]);
+  const [users, setUsers] = useState<IUserData[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
@@ -26,6 +35,7 @@ const GroupsPage: React.FC = () => {
 
   useEffect(() => {
     fetchGroups();
+    fetchUsers();
   }, []);
 
   const fetchGroups = async () => {
@@ -39,6 +49,38 @@ const GroupsPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await API.get("/users");
+      setUsers(res.data?.data || []);
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const matchedUser = useMemo(() => {
+    if (!currentUser || !users || !users.length) return null;
+    return (users || []).find(
+      (u) => Number(u.id) === Number(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()
+    );
+  }, [currentUser, users]);
+
+  const currentUserGroups = useMemo(() => {
+    if (!currentUser && !matchedUser) return [] as number[];
+    const gList = (matchedUser as any)?.group_ids || (matchedUser as any)?.groups || (currentUser as any)?.group_ids || (currentUser as any)?.groups || [];
+    return (gList as any[]).map((g: any) => Number(g.id || g)).filter((id: number) => id > 0);
+  }, [currentUser, matchedUser]);
+
+  const isAdministrator = useMemo(() => {
+    const roleName = String(
+      (currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || ""
+    ).toLowerCase();
+    if (roleName === "administrator") return true;
+    const roleId = (currentUser as any)?.role_id || (matchedUser as any)?.role_id;
+    if (Number(roleId) === 1) return true;
+    return false;
+  }, [currentUser, matchedUser]);
 
   const openCreateModal = () => {
     setEditingGroup(null);
@@ -138,15 +180,24 @@ const GroupsPage: React.FC = () => {
 
   // Filter and pagination
   const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groups;
+    let list = groups;
+
+    // For non-administrators (e.g. Komal), filter list to show ONLY assigned groups
+    if (!isAdministrator && currentUserGroups && currentUserGroups.length > 0) {
+      const userGroupSet = new Set(currentUserGroups);
+      list = list.filter((g) => userGroupSet.has(Number(g.id)));
+    }
+
+    if (!search.trim()) return list;
+
     const q = search.toLowerCase();
-    return groups.filter(
+    return list.filter(
       (g) =>
         String(g.id).includes(q) ||
         (g.name && g.name.toLowerCase().includes(q)) ||
         (g.description && g.description.toLowerCase().includes(q))
     );
-  }, [groups, search]);
+  }, [groups, isAdministrator, currentUserGroups, search]);
 
   const totalPages = Math.ceil(filteredGroups.length / perPage) || 1;
   const paginatedGroups = useMemo(() => {
@@ -183,13 +234,15 @@ const GroupsPage: React.FC = () => {
             Groups
           </h1>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create Group
-        </button>
+        {canCreate && (
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create Group
+          </button>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -303,20 +356,24 @@ const GroupsPage: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(group)}
-                          className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                          title="Edit Group"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(group.id)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
-                          title="Delete Group"
-                        >
-                          <i className="mgc_delete_2_line text-base"></i>
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => openEditModal(group)}
+                            className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                            title="Edit Group"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(group.id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                            title="Delete Group"
+                          >
+                            <i className="mgc_delete_2_line text-base"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

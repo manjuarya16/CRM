@@ -57,6 +57,7 @@ export class RoleService {
       description?: string | null;
       permission_type?: string;
       permissions?: any;
+      parent_role_id?: number | null;
       created_by?: number | null;
     },
     id?: number | string
@@ -64,12 +65,15 @@ export class RoleService {
     try {
       const roleId = toNumberParam(id);
       const permType = data.permission_type || 'all';
-      const permsJson = data.permissions ? JSON.stringify(data.permissions) : null;
+      const permsJson = data.permissions ? (typeof data.permissions === 'string' ? data.permissions : JSON.stringify(data.permissions)) : null;
       const createdBy = toNumberParam(data.created_by);
+      const parentRoleId = toNumberParam(data.parent_role_id);
+      const name = data.name.trim();
+      const description = data.description?.trim() || null;
 
       const { rows } = await pool.query(
-        'SELECT save_role($1, $2, $3, $4::jsonb, $5, $6) as result',
-        [data.name.trim(), data.description || null, permType, permsJson, createdBy, roleId]
+        'SELECT save_role($1::varchar, $2::varchar, $3::varchar, $4::jsonb, $5::integer, $6::integer, $7::integer) as result',
+        [name, description, permType, permsJson, createdBy, roleId, parentRoleId]
       );
 
       return rows[0]?.result;

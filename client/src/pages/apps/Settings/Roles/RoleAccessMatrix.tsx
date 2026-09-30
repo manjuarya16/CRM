@@ -3,192 +3,61 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { IRole, MatrixModule } from "@/interface";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
-
-const MATRIX_MODULES: MatrixModule[] = [
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    slug: "dashboards",
-    avatarChar: "D",
-    avatarBg: "bg-blue-600",
-    viewKey: "dashboard.view",
-    addKey: "dashboard.create",
-    updateKey: "dashboard.edit",
-    deleteKey: "dashboard.delete",
-  },
-  {
-    id: "organization",
-    name: "Organization",
-    slug: "organization",
-    avatarChar: "O",
-    avatarBg: "bg-purple-600",
-    viewKey: "organizations.view",
-    addKey: "organizations.create",
-    updateKey: "organizations.edit",
-    deleteKey: "organizations.delete",
-  },
-  {
-    id: "users",
-    name: "Users",
-    slug: "users",
-    avatarChar: "U",
-    avatarBg: "bg-sky-500",
-    viewKey: "settings.users.view",
-    addKey: "settings.users.create",
-    updateKey: "settings.users.edit",
-    deleteKey: "settings.users.delete",
-  },
-  {
-    id: "roles",
-    name: "Roles",
-    slug: "roles",
-    avatarChar: "R",
-    avatarBg: "bg-emerald-600",
-    viewKey: "settings.roles.view",
-    addKey: "settings.roles.create",
-    updateKey: "settings.roles.edit",
-    deleteKey: "settings.roles.delete",
-  },
-  {
-    id: "user_access",
-    name: "User Access Manage",
-    slug: "access-management",
-    avatarChar: "U",
-    avatarBg: "bg-amber-500",
-    viewKey: "settings.roles.view",
-    addKey: "settings.roles.create",
-    updateKey: "settings.roles.edit",
-    deleteKey: "settings.roles.delete",
-  },
-  {
-    id: "branch",
-    name: "Branch",
-    slug: "branch",
-    avatarChar: "B",
-    avatarBg: "bg-rose-500",
-    viewKey: "settings.branch.view",
-    addKey: "settings.branch.create",
-    updateKey: "settings.branch.edit",
-    deleteKey: "settings.branch.delete",
-  },
-  {
-    id: "department",
-    name: "Department",
-    slug: "department",
-    avatarChar: "D",
-    avatarBg: "bg-indigo-600",
-    viewKey: "settings.groups.view",
-    addKey: "settings.groups.create",
-    updateKey: "settings.groups.edit",
-    deleteKey: "settings.groups.delete",
-  },
-  {
-    id: "leads",
-    name: "Leads",
-    slug: "leads",
-    avatarChar: "L",
-    avatarBg: "bg-cyan-600",
-    viewKey: "leads.view",
-    addKey: "leads.create",
-    updateKey: "leads.edit",
-    deleteKey: "leads.delete",
-  },
-  {
-    id: "quotes",
-    name: "Quotes",
-    slug: "quotes",
-    avatarChar: "Q",
-    avatarBg: "bg-violet-600",
-    viewKey: "quotes.view",
-    addKey: "quotes.create",
-    updateKey: "quotes.edit",
-    deleteKey: "quotes.delete",
-  },
-  {
-    id: "products",
-    name: "Products",
-    slug: "products",
-    avatarChar: "P",
-    avatarBg: "bg-teal-600",
-    viewKey: "products.view",
-    addKey: "products.create",
-    updateKey: "products.edit",
-    deleteKey: "products.delete",
-  },
-  {
-    id: "activities",
-    name: "Activities",
-    slug: "activities",
-    avatarChar: "A",
-    avatarBg: "bg-orange-500",
-    viewKey: "activities.view",
-    addKey: "activities.create",
-    updateKey: "activities.edit",
-    deleteKey: "activities.delete",
-  },
-  {
-    id: "mail",
-    name: "Mail",
-    slug: "mail",
-    avatarChar: "M",
-    avatarBg: "bg-blue-500",
-    viewKey: "mail.inbox",
-    addKey: "mail.draft",
-    updateKey: "mail.setting",
-    deleteKey: "mail.trash",
-  },
-  {
-    id: "pipelines",
-    name: "Pipelines",
-    slug: "pipelines",
-    avatarChar: "P",
-    avatarBg: "bg-emerald-500",
-    viewKey: "settings.pipelines.view",
-    addKey: "settings.pipelines.create",
-    updateKey: "settings.pipelines.edit",
-    deleteKey: "settings.pipelines.delete",
-  },
-  {
-    id: "sources",
-    name: "Sources",
-    slug: "sources",
-    avatarChar: "S",
-    avatarBg: "bg-indigo-500",
-    viewKey: "settings.sources.view",
-    addKey: "settings.sources.create",
-    updateKey: "settings.sources.edit",
-    deleteKey: "settings.sources.delete",
-  },
-  {
-    id: "types",
-    name: "Types",
-    slug: "types",
-    avatarChar: "T",
-    avatarBg: "bg-purple-500",
-    viewKey: "settings.types.view",
-    addKey: "settings.types.create",
-    updateKey: "settings.types.edit",
-    deleteKey: "settings.types.delete",
-  },
-  {
-    id: "configuration",
-    name: "Configuration",
-    slug: "configuration",
-    avatarChar: "C",
-    avatarBg: "bg-slate-600",
-    viewKey: "settings.configuration.view",
-    addKey: "settings.configuration.create",
-    updateKey: "settings.configuration.edit",
-    deleteKey: "settings.configuration.delete",
-  },
-];
+import { MATRIX_MODULES } from "@/constants/matrixModules";
+import { usePermission } from "@/hooks/usePermission";
+import { useAuthStore } from "@/store";
 
 export const RoleAccessMatrix: React.FC = () => {
+  const { user } = useAuthStore();
+  const { isAllAccess } = usePermission();
+
   const [roles, setRoles] = useState<IRole[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+
+  const currentUserRole = React.useMemo(() => {
+    if (!user) return null;
+    const rId = (user as any).role_id != null ? Number((user as any).role_id) : null;
+    const rName = String((user as any).role || (user as any).role_name || "").toLowerCase();
+
+    if (rId) {
+      const match = roles.find((r) => Number(r.id) === rId);
+      if (match) return match;
+    }
+    if (rName) {
+      const match = roles.find((r) => String(r.name || "").toLowerCase() === rName);
+      if (match) return match;
+    }
+    return null;
+  }, [user, roles]);
+
+  const visibleRoles = React.useMemo(() => {
+    if (isAllAccess || !currentUserRole) {
+      return roles;
+    }
+
+    const startRoleId = Number(currentUserRole.id);
+    const allowedIds = new Set<number>([startRoleId]);
+
+    let added = true;
+    while (added) {
+      added = false;
+      roles.forEach((r) => {
+        const rId = Number(r.id);
+        if (!allowedIds.has(rId)) {
+          const pid = r.parent_role_id ? Number(r.parent_role_id) : null;
+          if (pid && allowedIds.has(pid)) {
+            allowedIds.add(rId);
+            added = true;
+          }
+        }
+      });
+    }
+
+    return roles.filter((r) => allowedIds.has(Number(r.id)));
+  }, [roles, currentUserRole, isAllAccess]);
 
   useEffect(() => {
     fetchRoles();
@@ -200,15 +69,18 @@ export const RoleAccessMatrix: React.FC = () => {
       const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
       const list: IRole[] = res.data?.data || [];
       setRoles(list);
-      if (list.length > 0) {
-        selectRole(list[0]);
-      }
     } catch {
       setRoles([]);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (visibleRoles.length > 0 && (!selectedRoleId || !visibleRoles.some(r => r.id === selectedRoleId))) {
+      selectRole(visibleRoles[0]);
+    }
+  }, [visibleRoles]);
 
   const selectRole = (role: IRole) => {
     setSelectedRoleId(role.id);
@@ -343,7 +215,7 @@ export const RoleAccessMatrix: React.FC = () => {
               onChange={(e) => handleRoleChange(Number(e.target.value))}
               className="w-full pl-3.5 pr-8 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#4f46e5] cursor-pointer shadow-sm appearance-none"
             >
-              {roles.map((role) => (
+              {visibleRoles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}
                 </option>

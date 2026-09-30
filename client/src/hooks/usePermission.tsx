@@ -4,16 +4,29 @@ import { useAuthStore } from "@/store";
 export const usePermission = () => {
   const { user } = useAuthStore();
 
-  const isAllAccess =
-    !user ||
-    user.role === "admin" ||
-    (user as any).role_name?.toLowerCase() === "admin" ||
-    (user as any).permission_type === "all" ||
-    (user as any).permission_type === "ALL";
+  const isAllAccess = React.useMemo(() => {
+    if (!user) return false;
+    const rId = (user as any).role_id != null ? Number((user as any).role_id) : null;
+    const rName = String((user as any).role || (user as any).role_name || "").toLowerCase();
+    // Only System Administrator (ID 1 or role name "administrator") gets automatic all-access override
+    if (rId === 1 || rName === "administrator") return true;
+    // For other roles, permission_type === "all" grants all access if not set to custom
+    if ((user as any).permission_type === "all" || (user as any).permission_type === "ALL") {
+      return true;
+    }
+    return false;
+  }, [user]);
 
   const userPermissions: string[] = React.useMemo(() => {
     if (!user) return [];
-    const perms = (user as any).permissions;
+    let perms = (user as any).permissions;
+    if (typeof perms === "string") {
+      try {
+        perms = JSON.parse(perms);
+      } catch {
+        perms = [];
+      }
+    }
     if (Array.isArray(perms)) {
       return perms;
     }
