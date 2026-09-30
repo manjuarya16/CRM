@@ -6,6 +6,7 @@ import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import path from "path";
 import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { processWorkflowsForEvent } from "@/utils/workflowEngine";
 
 const logger = pino();
 
@@ -189,6 +190,8 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         userId: user_id || null,
         createdBy: (req as any).user?.id || null,
       });
+      // Fire workflow automations (async, non-blocking)
+      processWorkflowsForEvent('leads', 'created', lead.id, (req as any).user).catch(() => {});
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -311,6 +314,11 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
           [id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
         );
       }
+    }
+
+    // Fire workflow automations (async, non-blocking)
+    if (updatedLead?.id) {
+      processWorkflowsForEvent('leads', 'updated', updatedLead.id, (req as any).user).catch(() => {});
     }
 
     res.status(HttpStatusCodes.OK).json({

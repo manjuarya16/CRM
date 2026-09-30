@@ -5,6 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/activityInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { processWorkflowsForEvent } from "@/utils/workflowEngine";
 
 const logger = pino();
 
@@ -124,6 +125,10 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
       createdBy: (req as any).user?.id || null,
     });
 
+    if (createdActivity?.id) {
+      processWorkflowsForEvent('activities', 'created', createdActivity.id, (req as any).user).catch(() => {});
+    }
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Activity created successfully",
@@ -205,6 +210,10 @@ const updateActivity = async (req: Request, res: Response): Promise<void> => {
         userId: user_id || null,
         createdBy: (req as any).user?.id || null,
       });
+    }
+
+    if (id) {
+      processWorkflowsForEvent('activities', 'updated', id, (req as any).user).catch(() => {});
     }
 
     res.status(HttpStatusCodes.OK).json({

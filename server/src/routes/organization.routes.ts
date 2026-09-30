@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { OrganizationService } from '@/services/organization.service';
 import { createOrganizationSchema, updateOrganizationSchema } from '@/schemas/organization.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { processWorkflowsForEvent } from '@/utils/workflowEngine';
 
 const router = Router();
 
@@ -43,6 +44,9 @@ router.post('/', async (req, res, next) => {
   try {
     const validated = createOrganizationSchema.parse(req.body);
     const org = await OrganizationService.create(validated);
+    if (org?.id) {
+      processWorkflowsForEvent('organizations', 'created', org.id, (req as any).user).catch(() => {});
+    }
     res.status(201).json({ success: true, data: org });
   } catch (err) {
     next(err);
@@ -53,6 +57,9 @@ router.put('/:id', async (req, res, next) => {
   try {
     const validated = updateOrganizationSchema.parse(req.body);
     const org = await OrganizationService.update(String(req.params.id), validated);
+    if (org?.id) {
+      processWorkflowsForEvent('organizations', 'updated', org.id, (req as any).user).catch(() => {});
+    }
     res.json({ success: true, data: org });
   } catch (err) {
     next(err);
