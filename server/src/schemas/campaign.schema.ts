@@ -6,8 +6,14 @@ export const saveCampaignSchema = z.object({
   type: z.string().min(1, 'Type is required').default('general'),
   mail_to: z.string().min(1, 'Audience is required').default('leads'),
   spooling: z.string().nullable().optional(),
-  marketing_template_id: z.coerce.number().nullable().optional(),
-  marketing_event_id: z.coerce.number().nullable().optional(),
+  marketing_template_id: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined || Number(v) <= 0 ? null : Number(v)),
+    z.number().nullable().optional()
+  ),
+  marketing_event_id: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined || Number(v) <= 0 ? null : Number(v)),
+    z.number().nullable().optional()
+  ),
 });
 export const updateCampaignSchema = saveCampaignSchema.partial();
 export type SaveCampaignInput = z.infer<typeof saveCampaignSchema>;

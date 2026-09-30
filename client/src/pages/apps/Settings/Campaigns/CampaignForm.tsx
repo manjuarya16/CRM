@@ -10,46 +10,55 @@ import { ICampaign, IEmailTemplate, IEvent, CampaignFormProps } from "@/interfac
 export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [templates, setTemplates] = useState<IEmailTemplate[]>([]);
   const [events, setEvents] = useState<IEvent[]>([]);
 
   const {
     register,
     handleSubmit,
-    setValue,
+    reset,
     watch,
     formState: { errors },
   } = useForm<CampaignInput>({
     resolver: zodResolver(campaignSchema),
     defaultValues: {
-      name: "",
-      subject: "",
-      status: true,
-      type: "general",
-      mail_to: "leads",
-      spooling: "",
-      marketing_template_id: null,
-      marketing_event_id: null,
+      name: initialData?.name || "",
+      subject: initialData?.subject || "",
+      status: initialData ? Boolean(initialData.status) : true,
+      type: initialData?.type || "general",
+      mail_to: initialData?.mail_to || "leads",
+      spooling: initialData?.spooling || "",
+      marketing_template_id: initialData?.marketing_template_id ? Number(initialData.marketing_template_id) : null,
+      marketing_event_id: initialData?.marketing_event_id ? Number(initialData.marketing_event_id) : null,
     },
   });
 
   useEffect(() => {
-    API.get("/email-templates").then((res) => setTemplates(res.data?.data || [])).catch(() => {});
-    API.get("/events").then((res) => setEvents(res.data?.data || [])).catch(() => {});
+    Promise.all([
+      API.get("/email-templates").catch(() => ({ data: { data: [] } })),
+      API.get("/events").catch(() => ({ data: { data: [] } }))
+    ]).then(([tmplRes, evtRes]) => {
+      setTemplates(tmplRes.data?.data || []);
+      setEvents(evtRes.data?.data || []);
+      setOptionsLoaded(true);
+    });
   }, []);
 
   useEffect(() => {
-    if (initialData) {
-      setValue("name", initialData.name);
-      setValue("subject", initialData.subject);
-      setValue("status", initialData.status);
-      setValue("type", initialData.type || "general");
-      setValue("mail_to", initialData.mail_to || "leads");
-      setValue("spooling", initialData.spooling || "");
-      setValue("marketing_template_id", initialData.marketing_template_id || null);
-      setValue("marketing_event_id", initialData.marketing_event_id || null);
+    if (initialData && optionsLoaded) {
+      reset({
+        name: initialData.name || "",
+        subject: initialData.subject || "",
+        status: Boolean(initialData.status),
+        type: initialData.type || "general",
+        mail_to: initialData.mail_to || "leads",
+        spooling: initialData.spooling || "",
+        marketing_template_id: initialData.marketing_template_id ? Number(initialData.marketing_template_id) : null,
+        marketing_event_id: initialData.marketing_event_id ? Number(initialData.marketing_event_id) : null,
+      });
     }
-  }, [initialData, setValue]);
+  }, [initialData, optionsLoaded, reset]);
 
   const onInvalid = (errs: any) => {
     console.log("Zod validation errors:", errs);
@@ -58,11 +67,18 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit 
   const onSubmit = async (data: CampaignInput) => {
     try {
       setLoading(true);
+      const payload = {
+        ...data,
+        status: Boolean(data.status),
+        marketing_template_id: data.marketing_template_id ? Number(data.marketing_template_id) : null,
+        marketing_event_id: data.marketing_event_id ? Number(data.marketing_event_id) : null,
+      };
+
       if (isEdit && initialData) {
-        await API.put(`/campaigns/${initialData.id}`, data);
+        await API.put(`/campaigns/${initialData.id}`, payload);
         Swal.fire({ icon: "success", title: "Saved!", text: "Marketing campaign updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/campaigns", data);
+        await API.post("/campaigns", payload);
         Swal.fire({ icon: "success", title: "Created!", text: "Marketing campaign created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/campaigns");

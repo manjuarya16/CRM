@@ -14,24 +14,26 @@ export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => 
   const {
     register,
     handleSubmit,
-    setValue,
+    reset,
     formState: { errors },
   } = useForm<EventInput>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
-      name: "",
-      description: "",
-      date: new Date().toISOString().split("T")[0],
+      name: initialData?.name || "",
+      description: initialData?.description || "",
+      date: initialData?.date ? String(initialData.date).split("T")[0] : new Date().toISOString().split("T")[0],
     },
   });
 
   useEffect(() => {
     if (initialData) {
-      setValue("name", initialData.name);
-      setValue("description", initialData.description);
-      setValue("date", initialData.date ? initialData.date.split("T")[0] : "");
+      reset({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        date: initialData.date ? String(initialData.date).split("T")[0] : "",
+      });
     }
-  }, [initialData, setValue]);
+  }, [initialData, reset]);
 
   const onInvalid = (errs: any) => {
     console.log("Zod validation errors:", errs);
@@ -40,11 +42,17 @@ export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => 
   const onSubmit = async (data: EventInput) => {
     try {
       setLoading(true);
+      const payload = {
+        name: data.name.trim(),
+        description: data.description.trim(),
+        date: data.date ? String(data.date).split("T")[0] : "",
+      };
+
       if (isEdit && initialData) {
-        await API.put(`/events/${initialData.id}`, data);
+        await API.put(`/events/${initialData.id}`, payload);
         Swal.fire({ icon: "success", title: "Saved!", text: "Marketing event updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/events", data);
+        await API.post("/events", payload);
         Swal.fire({ icon: "success", title: "Created!", text: "Marketing event created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/events");
