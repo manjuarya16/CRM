@@ -59,4 +59,26 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+router.post('/process-due', async (_req, res, next) => {
+  try {
+    const dispatched = await CampaignService.processDueCampaigns();
+    res.json({ success: true, message: `Processed due campaigns: ${dispatched} campaign(s) launched` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/send', async (req, res, next) => {
+  try {
+    const result = await CampaignService.sendCampaign(String(req.params.id));
+    res.json({
+      success: true,
+      message: `Campaign sent successfully to ${result.sentCount} of ${result.totalRecipients} recipient(s)`,
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
