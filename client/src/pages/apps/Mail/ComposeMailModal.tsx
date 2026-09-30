@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLeadStore, useMailStore } from "@/store";
-import { ComposeMailModalProps } from "@/interface";
+import { ComposeMailModalProps, IEmailTemplate } from "@/interface";
 import API from "@/config";
+import Swal from "sweetalert2";
 import { SearchableLeadSelect } from "@/components/SearchableLeadSelect";
 
 interface PlaceholderItem {
@@ -38,6 +39,7 @@ const PLACEHOLDER_CATEGORIES: PlaceholderCategory[] = [
       { label: "Schedule To", tag: "{%activity.schedule_to%}" },
       { label: "Location", tag: "{%activity.location%}" },
       { label: "Comment", tag: "{%activity.comment%}" },
+      { label: "Participants", tag: "{%activity.participants%}" },
     ],
   },
   {
@@ -86,6 +88,9 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   const { sendEmail, updateDraft } = useMailStore();
   const [persons, setPersons] = useState<{ id: number; name: string; email?: string }[]>([]);
   const [organizations, setOrganizations] = useState<{ id: number; name: string }[]>([]);
+  const [templates, setTemplates] = useState<IEmailTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | string>("");
+  const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
 
   const [toInput, setToInput] = useState<string>("");
   const [toList, setToList] = useState<string[]>([]);
@@ -131,6 +136,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       if (leads.length === 0) fetchLeads(1, 100);
       fetchPersons();
       fetchOrganizations();
+      fetchTemplates();
 
       if (initialData) {
         setToList(initialData.to || []);
@@ -172,6 +178,20 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const fetchTemplates = async () => {
+    try {
+      setLoadingTemplates(true);
+      const res = await API.get("/email-templates");
+      if (res.data?.success && Array.isArray(res.data?.data)) {
+        setTemplates(res.data.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch email templates", e);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
   const fetchPersons = async () => {
     try {
       const res = await API.get("/persons");
@@ -203,6 +223,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     setShowBcc(false);
     setSubject("");
     setReply("");
+    setSelectedTemplateId("");
     if (editorRef.current) {
       editorRef.current.innerHTML = "";
     }
@@ -253,6 +274,61 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   const syncReplyFromEditor = () => {
     if (editorRef.current) {
       setReply(editorRef.current.innerHTML);
+    }
+  };
+
+  // Convert template placeholders like {%lead.title%} into styled badges in the editor
+  const formatContentWithBadges = (html: string) => {
+    if (!html) return "";
+    return html.replace(
+      /(<span[^>]*contenteditable="false"[^>]*>.*?<\/span>)|(\{%\s*([a-zA-Z0-9_.]+)\s*%\})/gi,
+      (match, alreadySpan, _fullTag, tagKey) => {
+        if (alreadySpan) return alreadySpan;
+        const tag = `{%${tagKey}%}`;
+        return `<span style="background-color: #e0f2fe; color: #0088cc; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 11px; font-family: monospace; display: inline-block; margin: 0 2px;" contenteditable="false">${tag}</span>&nbsp;`;
+      }
+    );
+  };
+
+  const handleSelectTemplate = async (templateId: string | number) => {
+    if (!templateId) {
+      setSelectedTemplateId("");
+      return;
+    }
+
+    const template = templates.find((t) => String(t.id) === String(templateId));
+    if (!template) return;
+
+    const currentContent = editorRef.current?.innerHTML?.trim() || "";
+    const hasContent =
+      (currentContent && currentContent !== "<br>" && currentContent !== "<p><br></p>") ||
+      subject.trim().length > 0;
+
+    if (hasContent) {
+      const result = await Swal.fire({
+        title: "Apply Template?",
+        text: "Applying this template will replace your current subject and message body. Do you want to proceed?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#0088cc",
+        cancelButtonColor: "#6b7280",
+        confirmButtonText: "Yes, apply template",
+        cancelButtonText: "Cancel",
+      });
+
+      if (!result.isConfirmed) {
+        return;
+      }
+    }
+
+    setSelectedTemplateId(template.id);
+    if (template.subject) {
+      setSubject(template.subject);
+    }
+    const formatted = formatContentWithBadges(template.content || "");
+    setReply(formatted);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = formatted;
     }
   };
 
@@ -692,72 +768,100 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
           <div className="border border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden shadow-2xs bg-white dark:bg-gray-800">
             {/* Top Toolbar Container */}
             <div className="bg-gray-50 dark:bg-gray-700/80 border-b border-gray-200 dark:border-gray-600 p-2 space-y-2">
-              {/* Row 1: Placeholders & Primary Tools */}
+              {/* Row 1: Templates, Placeholders & Primary Tools */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-1 relative" ref={placeholderRef}>
-                  {/* Placeholders Menu Button */}
-                  <button
-                    type="button"
-                    onClick={() => setShowPlaceholders((v) => !v)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer"
-                  >
-                    <span>Placeholders</span>
-                    <i className={`mgc_down_line text-xs transition-transform ${showPlaceholders ? "rotate-180" : ""}`}></i>
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Email Template Dropdown */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 flex items-center gap-1">
+                      <i className="mgc_file_text_line text-sm text-[#0088cc]"></i>
+                      <span className="hidden sm:inline">Template:</span>
+                    </span>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => handleSelectTemplate(e.target.value)}
+                      disabled={loadingTemplates}
+                      className="px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-[#0088cc] focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition cursor-pointer max-w-[190px] truncate"
+                      title="Select Email Template"
+                    >
+                      <option value="">
+                        {loadingTemplates ? "Loading templates..." : "-- Select Template --"}
+                      </option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id} title={t.subject ? `Subject: ${t.subject}` : undefined}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                  {/* Multi-level Placeholders Dropdown */}
-                  {showPlaceholders && (
-                    <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl flex overflow-hidden min-w-[340px]">
-                      {/* Left Column: Categories */}
-                      <div className="w-36 bg-gray-50 dark:bg-gray-900 border-r border-gray-100 dark:border-gray-700 py-1">
-                        {availableCategories.map((cat) => (
-                          <button
-                            key={cat.name}
-                            type="button"
-                            onMouseEnter={() => setActiveCategory(cat.name)}
-                            onClick={() => setActiveCategory(cat.name)}
-                            className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center justify-between transition-colors ${
-                              effectiveCategory === cat.name
-                                ? "bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] font-semibold"
-                                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                            }`}
-                          >
-                            <span>{cat.name}</span>
-                            <i className="mgc_right_line text-xs"></i>
-                          </button>
-                        ))}
+                  <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-600 mx-0.5 hidden sm:block"></div>
+
+                  <div className="flex items-center gap-1 relative" ref={placeholderRef}>
+                    {/* Placeholders Menu Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPlaceholders((v) => !v)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer"
+                    >
+                      <span>Placeholders</span>
+                      <i className={`mgc_down_line text-xs transition-transform ${showPlaceholders ? "rotate-180" : ""}`}></i>
+                    </button>
+
+                    {/* Multi-level Placeholders Dropdown */}
+                    {showPlaceholders && (
+                      <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl flex overflow-hidden min-w-[340px]">
+                        {/* Left Column: Categories */}
+                        <div className="w-36 bg-gray-50 dark:bg-gray-900 border-r border-gray-100 dark:border-gray-700 py-1">
+                          {availableCategories.map((cat) => (
+                            <button
+                              key={cat.name}
+                              type="button"
+                              onMouseEnter={() => setActiveCategory(cat.name)}
+                              onClick={() => setActiveCategory(cat.name)}
+                              className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center justify-between transition-colors ${
+                                effectiveCategory === cat.name
+                                  ? "bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] font-semibold"
+                                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                              }`}
+                            >
+                              <span>{cat.name}</span>
+                              <i className="mgc_right_line text-xs"></i>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Right Column: Category Items */}
+                        <div className="flex-1 py-1 max-h-64 overflow-y-auto">
+                          {currentCategoryObj?.items.map((item) => (
+                            <button
+                              key={item.tag}
+                              type="button"
+                              onClick={() => insertTag(item.tag)}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors block cursor-pointer"
+                            >
+                              <span className="font-medium text-gray-800 dark:text-gray-200 block">{item.label}</span>
+                              <span className="text-[10px] text-[#0088cc] font-mono">{item.tag}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                    )}
 
-                      {/* Right Column: Category Items */}
-                      <div className="flex-1 py-1 max-h-64 overflow-y-auto">
-                        {currentCategoryObj?.items.map((item) => (
-                          <button
-                            key={item.tag}
-                            type="button"
-                            onClick={() => insertTag(item.tag)}
-                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors block cursor-pointer"
-                          >
-                            <span className="font-medium text-gray-800 dark:text-gray-200 block">{item.label}</span>
-                            <span className="text-[10px] text-[#0088cc] font-mono">{item.tag}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Toggle More Tools Button */}
-                  <button
-                    type="button"
-                    onClick={() => setShowMoreTools((v) => !v)}
-                    className={`p-1.5 text-xs rounded-lg border transition cursor-pointer ${
-                      showMoreTools
-                        ? "bg-blue-50 text-[#0088cc] border-blue-200 dark:bg-blue-900/40 dark:border-blue-800"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600"
-                    }`}
-                    title="Toggle Formatting Toolbar"
-                  >
-                    <i className="mgc_more_3_line text-base"></i>
-                  </button>
+                    {/* Toggle More Tools Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowMoreTools((v) => !v)}
+                      className={`p-1.5 text-xs rounded-lg border transition cursor-pointer ${
+                        showMoreTools
+                          ? "bg-blue-50 text-[#0088cc] border-blue-200 dark:bg-blue-900/40 dark:border-blue-800"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600"
+                      }`}
+                      title="Toggle Formatting Toolbar"
+                    >
+                      <i className="mgc_more_3_line text-base"></i>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Quick Toolbar */}
