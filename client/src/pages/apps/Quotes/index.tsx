@@ -3,14 +3,11 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import { IQuote } from "@/interface";
-<<<<<<< HEAD
 import API from "@/config";
 
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
-=======
 import { usePermission } from "@/hooks/usePermission";
->>>>>>> CRM-24-ma
 
 const QuotesPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -91,7 +88,7 @@ const QuotesPage: React.FC = () => {
       setSelectedQuoteForEmail(fullQuote);
       setEmailTo(fullQuote.person_email || "");
       setEmailSubject(`Quotation #${fullQuote.id} - ${fullQuote.subject}`);
-      
+
       const lines = (fullQuote.items || []).map((it: any) => `- ${it.name} (${it.quantity}x @ $${it.price}) = $${it.total}`).join("\n");
       setEmailBody(
         `Dear Customer,\n\nPlease find attached the quotation details for "${fullQuote.subject}".\n\nGrand Total: $${Number(fullQuote.grand_total || 0).toFixed(2)}\n\nLine Items:\n${lines || "Details available in attachment."}\n\nBest regards,\nCRM Sales Team`
@@ -227,7 +224,6 @@ const QuotesPage: React.FC = () => {
                     <td className="py-3 px-4 text-gray-500">
                       {quote.expired_at ? new Date(quote.expired_at).toLocaleDateString() : "-"}
                     </td>
-<<<<<<< HEAD
                     <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                       {/* PDF Print Button */}
                       <button
@@ -264,30 +260,6 @@ const QuotesPage: React.FC = () => {
                       >
                         <i className="mgc_delete_line text-base"></i>
                       </button>
-=======
-                    <td className="py-3 px-4 text-gray-500">
-                      {quote.created_at ? new Date(quote.created_at).toLocaleDateString() : "-"}
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-2">
-                      {canEdit && (
-                        <Link
-                          to={`/quotes/edit/${quote.id}`}
-                          className="text-gray-500 hover:text-[#0088cc] p-1 inline-block"
-                          title="Edit Quote"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                      )}
-                      {canDelete && (
-                        <button
-                          onClick={() => handleDelete(quote)}
-                          className="text-gray-500 hover:text-red-600 p-1 inline-block"
-                          title="Delete Quote"
-                        >
-                          <i className="mgc_delete_line text-base"></i>
-                        </button>
-                      )}
->>>>>>> CRM-24-ma
                     </td>
                   </tr>
                 ))

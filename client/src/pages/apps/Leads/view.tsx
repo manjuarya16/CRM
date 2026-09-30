@@ -4,11 +4,8 @@ import Swal from "sweetalert2";
 import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
 import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
-<<<<<<< HEAD
 import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
-=======
 import { getRottenInfo } from "@/utils/rottenHelper";
->>>>>>> CRM-24-ma
 
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,11 +67,11 @@ const LeadViewPage: React.FC = () => {
   useEffect(() => {
     API.get("/persons?limit=100").then((res) => {
       if (res.data?.data) setPersonsList(res.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
 
     API.get("/email-templates").then((res) => {
       if (res.data?.data) setEmailTemplates(res.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
 
@@ -88,7 +85,7 @@ const LeadViewPage: React.FC = () => {
           if (lead.person_id) {
             API.get(`/persons/${lead.person_id}`).then((res) => {
               if (res.data?.data) setPerson(res.data.data);
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
         setLoading(false);
@@ -101,7 +98,7 @@ const LeadViewPage: React.FC = () => {
 
       API.get("/products?limit=100").then((res) => {
         if (res.data?.data) setProductsList(res.data.data);
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [leadId]);
 
@@ -251,8 +248,8 @@ const LeadViewPage: React.FC = () => {
     const recipient = person?.email
       ? [person.email]
       : selectedLead?.person_name && selectedLead?.custom_attributes?.email
-      ? [selectedLead.custom_attributes.email]
-      : [];
+        ? [selectedLead.custom_attributes.email]
+        : [];
     return {
       lead_id: leadId,
       person_id: selectedLead?.person_id,
@@ -431,7 +428,7 @@ const LeadViewPage: React.FC = () => {
                     if (typeof selectedLead.custom_attributes === "object") {
                       attrs = selectedLead.custom_attributes;
                     } else if (typeof selectedLead.custom_attributes === "string") {
-                      try { attrs = JSON.parse(selectedLead.custom_attributes); } catch {}
+                      try { attrs = JSON.parse(selectedLead.custom_attributes); } catch { }
                     }
                   }
                   if (Object.keys(attrs).length === 0) return null;
@@ -517,13 +514,12 @@ const LeadViewPage: React.FC = () => {
                         ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
                         : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)"
                     }}
-                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${
-                      isLost
+                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${isLost
                         ? "bg-red-500 text-white"
                         : isPassed
-                        ? "bg-[#10b981] text-white"
-                        : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                    }`}
+                          ? "bg-[#10b981] text-white"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
                   >
                     {stage.name}
                   </button>
@@ -538,13 +534,12 @@ const LeadViewPage: React.FC = () => {
                 style={{
                   clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
                 }}
-                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${
-                  !selectedLead.status
+                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${!selectedLead.status
                     ? "bg-red-500 text-white"
                     : selectedLead.status && selectedLead.stage_name?.toLowerCase() === "won"
-                    ? "bg-[#10b981] text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                }`}
+                      ? "bg-[#10b981] text-white"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                  }`}
               >
                 Won/Lost ▾
               </button>
@@ -558,11 +553,10 @@ const LeadViewPage: React.FC = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${
-                    activeTab === tab
+                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${activeTab === tab
                       ? "bg-[#0088cc] text-white shadow-sm font-bold"
                       : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-                  }`}
+                    }`}
                 >
                   {tab === "changelogs" ? "Changelogs" : tab}
                 </button>
@@ -668,11 +662,10 @@ const LeadViewPage: React.FC = () => {
                                       fetchActivities(1, 100, "", leadId);
                                     }}
                                     title="Click to toggle Done/Pending"
-                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                                      act.is_done
+                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${act.is_done
                                         ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
                                         : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
-                                    }`}
+                                      }`}
                                   >
                                     {act.is_done ? "Done ✓" : "Pending ⏳"}
                                   </button>
@@ -742,9 +735,8 @@ const LeadViewPage: React.FC = () => {
                           setNewProd({ ...newProd, product_id: e.target.value });
                           if (prodError) setProdError("");
                         }}
-                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${
-                          prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
-                        } rounded text-xs`}
+                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
+                          } rounded text-xs`}
                       >
                         <option value="">Select Product</option>
                         {productsList.map((p) => (
@@ -907,9 +899,8 @@ const LeadViewPage: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className={`px-4 py-1.5 text-white rounded text-xs font-bold ${
-                        targetWonLostStage?.code === "won" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
-                      }`}
+                      className={`px-4 py-1.5 text-white rounded text-xs font-bold ${targetWonLostStage?.code === "won" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
+                        }`}
                     >
                       Save & Update Stage
                     </button>
@@ -922,54 +913,6 @@ const LeadViewPage: React.FC = () => {
                   {activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
                 </h3>
                 <form onSubmit={handleQuickActionSubmit} className="space-y-3">
-<<<<<<< HEAD
-=======
-                  {activeModal === "mail" && (
-                    <>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                          Apply Email Template (Optional)
-                        </label>
-                        <select
-                          value={selectedTemplateId}
-                          onChange={(e) => handleSelectEmailTemplate(e.target.value)}
-                          className="w-full px-3 py-1.5 border rounded text-xs bg-emerald-50/60 dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-emerald-300 dark:border-gray-700 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        >
-                          <option value="">-- Choose Email Template --</option>
-                          {emailTemplates.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              📧 {t.name} ({t.subject})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <input
-                        type="email"
-                        required
-                        placeholder="To Email"
-                        value={modalForm.email_to || (person?.emails?.[0]?.value || person?.emails?.[0] || "")}
-                        onChange={(e) => setModalForm({ ...modalForm, email_to: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Subject"
-                        value={modalForm.email_subject}
-                        onChange={(e) => setModalForm({ ...modalForm, email_subject: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
-                      />
-                      <textarea
-                        rows={5}
-                        placeholder="Message..."
-                        value={modalForm.email_body}
-                        onChange={(e) => setModalForm({ ...modalForm, email_body: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs font-sans"
-                      />
-                    </>
-                  )}
->>>>>>> CRM-24-ma
 
                   {activeModal === "file" && (
                     <>

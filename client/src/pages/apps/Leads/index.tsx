@@ -66,13 +66,13 @@ const LeadsPage: React.FC = () => {
           setIsDocGenEnabled(String(docGen) === "1" || docGen === true);
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Fetch lists for filter dropdowns
-    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => {});
-    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => {});
-    API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => {});
-    API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => {});
+    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => { });
+    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => { });
+    API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => { });
+    API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -284,19 +284,17 @@ const LeadsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setOnlyRotten(!onlyRotten)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
-              onlyRotten
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${onlyRotten
                 ? "bg-rose-600 text-white border-rose-600 shadow-sm"
                 : "bg-white dark:bg-gray-900 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-            }`}
+              }`}
             title={`Show only rotten/stale leads exceeding pipeline limit (${currentPipeline?.rotten_days || 30} days)`}
           >
             <span>🍅</span>
             <span>Rotten Leads</span>
             {(viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable) > 0 && (
-              <span className={`ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${
-                onlyRotten ? "bg-white text-rose-700" : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
-              }`}>
+              <span className={`ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${onlyRotten ? "bg-white text-rose-700" : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
+                }`}>
                 {viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable}
               </span>
             )}
@@ -318,11 +316,10 @@ const LeadsPage: React.FC = () => {
             <button
               onClick={() => setViewMode("kanban")}
               title="Kanban Board View"
-              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                viewMode === "kanban"
+              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "kanban"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
+                }`}
             >
               <i className="mgc_layout_grid_line text-base"></i>
               <span className="hidden sm:inline text-xs">Kanban</span>
@@ -330,11 +327,10 @@ const LeadsPage: React.FC = () => {
             <button
               onClick={() => setViewMode("table")}
               title="Table Grid View"
-              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                viewMode === "table"
+              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "table"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
+                }`}
             >
               <i className="mgc_list_check_line text-base"></i>
               <span className="hidden sm:inline text-xs">Table</span>
@@ -428,7 +424,6 @@ const LeadsPage: React.FC = () => {
                         )}
                       </div>
                     ) : (
-<<<<<<< HEAD
                       stageLeads.map((lead) => (
                         <div
                           key={lead.id}
@@ -460,7 +455,7 @@ const LeadsPage: React.FC = () => {
                             <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
                               <span className="text-red-400 opacity-70" title="Lead Alert">
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                 </svg>
                               </span>
                               <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
@@ -551,85 +546,6 @@ const LeadsPage: React.FC = () => {
                           )}
                         </div>
                       ))
-=======
-                      stageLeads.map((lead) => {
-                        const rottenInfo = getRottenInfo(lead, currentPipeline);
-                        return (
-                          <div
-                            key={lead.id}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", String(lead.id));
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            className={`group bg-white dark:bg-gray-800 rounded-xl p-4 border shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing space-y-3 ${
-                              rottenInfo.isRotten
-                                ? "border-rose-300 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/20 hover:border-rose-400"
-                                : "border-gray-200/80 dark:border-gray-700/80 hover:border-[#0088cc]/60"
-                            }`}
-                          >
-                            {/* Rotten Lead Badge */}
-                            {rottenInfo.isRotten && (
-                              <div className="flex items-center justify-between pb-1 border-b border-rose-100 dark:border-rose-900/50">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                  <span>🍅</span> Rotten ({rottenInfo.daysIdle} days idle)
-                                </span>
-                              </div>
-                            )}
-
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="space-y-0.5">
-                                <Link
-                                  to={`/leads/view/${lead.id}`}
-                                  className="font-bold text-sm text-gray-800 dark:text-gray-100 hover:text-[#0088cc] dark:hover:text-[#0088cc] transition-colors line-clamp-1"
-                                >
-                                  {lead.title}
-                                </Link>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {lead.person_name || "No Person"}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {canEdit && (
-                                  <Link
-                                    to={`/leads/edit/${lead.id}`}
-                                    className="p-1 text-gray-400 hover:text-[#0088cc]"
-                                    title="Edit Lead"
-                                  >
-                                    <i className="mgc_edit_line text-sm"></i>
-                                  </Link>
-                                )}
-                                {canDelete && (
-                                  <button
-                                    onClick={() => handleDelete(lead)}
-                                    className="p-1 text-gray-400 hover:text-red-600"
-                                    title="Delete Lead"
-                                  >
-                                    <i className="mgc_delete_line text-sm"></i>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-gray-700/60">
-                              <span className="font-bold text-gray-800 dark:text-gray-200">
-                                ${Number(lead.lead_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </span>
-
-                              {lead.person_name && (
-                                <span
-                                  className={`h-6 w-6 rounded-full border flex items-center justify-center font-bold text-[10px] ${colorClass}`}
-                                  title={lead.person_name}
-                                >
-                                  {getInitials(lead.person_name)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
->>>>>>> CRM-24-ma
                     )}
                   </div>
                 </div>
@@ -688,9 +604,8 @@ const LeadsPage: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 text-xs rounded font-medium ${
-                            lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          }`}>
+                          <span className={`px-2 py-0.5 text-xs rounded font-medium ${lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            }`}>
                             {lead.status ? "Open" : "Lost / Closed"}
                           </span>
                         </td>
