@@ -5,6 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IQuoteCreateInput, IQuoteUpdateInput } from "@/interfaces/quoteInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { processWorkflowsForEvent } from "@/utils/workflowEngine";
 
 const logger = pino();
 
@@ -206,6 +207,8 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         userId: currentUserId || null,
         createdBy: (req as any).user?.id || null,
       });
+
+      processWorkflowsForEvent('quotes', 'created', createdQuote.id, (req as any).user).catch(() => {});
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -316,6 +319,10 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
         updatedQuote.custom_attributes = custom_attributes;
         updatedQuote.items = items;
       }
+    }
+
+    if (id) {
+      processWorkflowsForEvent('quotes', 'updated', id, (req as any).user).catch(() => {});
     }
 
     res.status(HttpStatusCodes.OK).json({

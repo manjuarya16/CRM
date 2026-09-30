@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PersonService } from '@/services/person.service';
 import { personSchema } from '@/schemas/person.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { processWorkflowsForEvent } from '@/utils/workflowEngine';
 
 const router = Router();
 
@@ -34,6 +35,9 @@ router.post('/', async (req, res, next) => {
   try {
     const validated = personSchema.parse(req.body);
     const person = await PersonService.save(validated);
+    if (person?.id) {
+      processWorkflowsForEvent('persons', 'created', person.id, (req as any).user).catch(() => {});
+    }
     res.status(201).json({ success: true, data: person });
   } catch (err) {
     next(err);
@@ -44,6 +48,9 @@ router.put('/:id', async (req, res, next) => {
   try {
     const validated = personSchema.parse(req.body);
     const person = await PersonService.save(validated, String(req.params.id));
+    if (person?.id) {
+      processWorkflowsForEvent('persons', 'updated', person.id, (req as any).user).catch(() => {});
+    }
     res.json({ success: true, data: person });
   } catch (err) {
     next(err);
