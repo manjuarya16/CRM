@@ -1,8 +1,5 @@
-export interface ITag {
-  id: number;
-  name: string;
-  color?: string;
-}
+import { ITag } from "./settingsSubmodulesInterface";
+export type { ITag };
 
 export interface TagPickerProps {
   selectedTagIds: number[];

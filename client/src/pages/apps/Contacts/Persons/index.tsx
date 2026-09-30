@@ -4,8 +4,15 @@ import Swal from "sweetalert2";
 
 import { usePersonStore } from "@/store";
 import { IPerson, PersonEmailItem, ContactItem } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const PersonsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("persons.create");
+  const canEdit = hasPermission("persons.edit");
+  const canDelete = hasPermission("persons.delete");
+  const canView = hasPermission("persons.view");
+
   const { persons, loading, total, fetchPersons, deletePerson, clearAllPersons } = usePersonStore();
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
@@ -280,7 +287,7 @@ const PersonsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
               className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
@@ -296,7 +303,7 @@ const PersonsPage: React.FC = () => {
           >
             Export
           </button>
-          {total > 0 && (
+          {total > 0 && canDelete && (
             <button
               type="button"
               onClick={handleClearAll}
@@ -306,12 +313,14 @@ const PersonsPage: React.FC = () => {
               Clear All
             </button>
           )}
-          <Link
-            to="/contacts/persons/create"
-            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            Create Person
-          </Link>
+          {canCreate && (
+            <Link
+              to="/contacts/persons/create"
+              className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            >
+              Create Person
+            </Link>
+          )}
         </div>
 
       </div>
@@ -444,9 +453,9 @@ const PersonsPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-gray-500 dark:text-gray-400 font-medium">
                         {person.id}
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-[#0088cc]">
+                      <td className="py-3.5 px-4 font-bold text-[#0088cc]">
                         <Link
-                          to={`/contacts/persons/edit/${person.id}`}
+                          to={`/contacts/persons/view/${person.id}`}
                           className="hover:underline"
                         >
                           {person.name}
@@ -462,20 +471,33 @@ const PersonsPage: React.FC = () => {
                         {person.organization_name || "-"}
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
-                        <Link
-                          to={`/contacts/persons/edit/${person.id}`}
-                          className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                          title="Edit"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(person)}
-                          className="inline-flex items-center text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
-                          title="Delete"
-                        >
-                          <i className="mgc_delete_line text-base"></i>
-                        </button>
+                        {canView && (
+                          <Link
+                            to={`/contacts/persons/view/${person.id}`}
+                            className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            title="View Details"
+                          >
+                            <i className="mgc_eye_line text-base"></i>
+                          </Link>
+                        )}
+                        {canEdit && (
+                          <Link
+                            to={`/contacts/persons/edit/${person.id}`}
+                            className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            title="Edit"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(person)}
+                            className="inline-flex items-center text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
+                            title="Delete"
+                          >
+                            <i className="mgc_delete_line text-base"></i>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

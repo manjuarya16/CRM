@@ -6,6 +6,7 @@ export const roleSchema = z.object({
   description: z.string().trim().max(500, "Description must not exceed 500 characters").optional().or(z.literal("")),
   permission_type: z.enum(["all", "custom"]).default("all"),
   permissions: z.any().optional(),
+  parent_role_id: z.coerce.number().optional().nullable(),
 });
 
 export const roleSchemaResolver = zodResolver(roleSchema);

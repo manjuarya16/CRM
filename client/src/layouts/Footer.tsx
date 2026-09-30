@@ -22,7 +22,7 @@ const Footer = () => {
         dangerouslySetInnerHTML={{
           __html:
             footerLabel ||
-            'Powered by <a href="https://krayincrm.com" target="_blank" rel="noreferrer" class="text-[#0088cc] hover:underline font-medium">Krayin</a>, an open-source project by <a href="https://webkul.com" target="_blank" rel="noreferrer" class="text-[#0088cc] hover:underline font-medium">Webkul</a>.',
+            `© ${new Date().getFullYear()} CRM System. All rights reserved.`,
         }}
       />
     </footer>

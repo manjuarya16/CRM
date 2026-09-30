@@ -3,10 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
 import { ILead, ILeadStage } from "@/interface";
+import { getRottenInfo } from "@/utils/rottenHelper";
 import API from "@/config";
+import { usePermission } from "@/hooks/usePermission";
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("leads.create");
+  const canEdit = hasPermission("leads.edit");
+  const canDelete = hasPermission("leads.delete");
+  const canView = hasPermission("leads.view");
   const {
     leads, total, loading, fetchLeads,
     kanbanLeads, fetchKanbanLeads,
@@ -18,6 +25,7 @@ const LeadsPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | "">("");
   const [search, setSearch] = useState<string>("");
+  const [onlyRotten, setOnlyRotten] = useState<boolean>(false);
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
 
@@ -58,13 +66,13 @@ const LeadsPage: React.FC = () => {
           setIsDocGenEnabled(String(docGen) === "1" || docGen === true);
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Fetch lists for filter dropdowns
-    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => {});
-    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => {});
-    API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => {});
-    API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => {});
+    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => { });
+    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => { });
+    API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => { });
+    API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -206,6 +214,19 @@ const LeadsPage: React.FC = () => {
     "bg-[#b5c4d1] text-gray-800",
   ];
 
+  const currentPipeline = pipelines.find((p) => Number(p.id) === Number(selectedPipelineId)) || pipelines[0];
+
+  const totalRottenInKanban = kanbanLeads.filter((l) => getRottenInfo(l, currentPipeline).isRotten).length;
+  const totalRottenInTable = leads.filter((l) => getRottenInfo(l, currentPipeline).isRotten).length;
+
+  const displayKanbanLeads = onlyRotten
+    ? kanbanLeads.filter((l) => getRottenInfo(l, currentPipeline).isRotten)
+    : kanbanLeads;
+
+  const displayLeads = onlyRotten
+    ? leads.filter((l) => getRottenInfo(l, currentPipeline).isRotten)
+    : leads;
+
   return (
     <div className="p-6 space-y-6">
       {/* Top Header Bar */}
@@ -217,7 +238,7 @@ const LeadsPage: React.FC = () => {
 
         <div className="flex items-center gap-3">
           {/* Upload File button (Conditional upon Magic AI / DOC Generation setting) */}
-          {isDocGenEnabled && (
+          {isDocGenEnabled && canCreate && (
             <button
               onClick={() => setShowUploadModal(true)}
               className="px-4 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2"
@@ -227,12 +248,14 @@ const LeadsPage: React.FC = () => {
             </button>
           )}
 
-          <Link
-            to="/leads/create"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            + Create Lead
-          </Link>
+          {canCreate && (
+            <Link
+              to="/leads/create"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            >
+              + Create Lead
+            </Link>
+          )}
         </div>
       </div>
 
@@ -257,6 +280,26 @@ const LeadsPage: React.FC = () => {
         </form>
 
         <div className="flex items-center gap-3">
+          {/* Rotten Leads Quick Filter Toggle */}
+          <button
+            type="button"
+            onClick={() => setOnlyRotten(!onlyRotten)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${onlyRotten
+                ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                : "bg-white dark:bg-gray-900 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              }`}
+            title={`Show only rotten/stale leads exceeding pipeline limit (${currentPipeline?.rotten_days || 30} days)`}
+          >
+            <span>🍅</span>
+            <span>Rotten Leads</span>
+            {(viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable) > 0 && (
+              <span className={`ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${onlyRotten ? "bg-white text-rose-700" : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
+                }`}>
+                {viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable}
+              </span>
+            )}
+          </button>
+
           {/* Pipeline Selector */}
           <select
             value={selectedPipelineId}
@@ -273,11 +316,10 @@ const LeadsPage: React.FC = () => {
             <button
               onClick={() => setViewMode("kanban")}
               title="Kanban Board View"
-              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                viewMode === "kanban"
+              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "kanban"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
+                }`}
             >
               <i className="mgc_layout_grid_line text-base"></i>
               <span className="hidden sm:inline text-xs">Kanban</span>
@@ -285,11 +327,10 @@ const LeadsPage: React.FC = () => {
             <button
               onClick={() => setViewMode("table")}
               title="Table Grid View"
-              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                viewMode === "table"
+              className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "table"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
+                }`}
             >
               <i className="mgc_list_check_line text-base"></i>
               <span className="hidden sm:inline text-xs">Table</span>
@@ -303,7 +344,7 @@ const LeadsPage: React.FC = () => {
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max items-start">
             {stages.map((stage, idx) => {
-              const stageLeads = kanbanLeads.filter((l) => l.lead_pipeline_stage_id === stage.id);
+              const stageLeads = displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === stage.id);
               const stageValueTotal = stageLeads.reduce((acc, l) => acc + Number(l.lead_value || 0), 0);
               const colorClass = avatarColors[idx % avatarColors.length];
 
@@ -335,13 +376,15 @@ const LeadsPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <Link
-                      to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                      className="p-1 text-gray-400 hover:text-[#0088cc] hover:bg-white dark:hover:bg-gray-800 rounded transition-colors"
-                      title={`Quick add lead to ${stage.name}`}
-                    >
-                      <i className="mgc_add_line text-lg"></i>
-                    </Link>
+                    {canCreate && (
+                      <Link
+                        to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
+                        className="p-1 text-gray-400 hover:text-[#0088cc] hover:bg-white dark:hover:bg-gray-800 rounded transition-colors"
+                        title={`Quick add lead to ${stage.name}`}
+                      >
+                        <i className="mgc_add_line text-lg"></i>
+                      </Link>
+                    )}
                   </div>
 
                   <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -364,15 +407,21 @@ const LeadsPage: React.FC = () => {
                           </svg>
                         </div>
                         <div className="space-y-1">
-                          <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">Your Leads List is Empty</h4>
-                          <p className="text-[11px] text-gray-400 leading-tight">Create a lead to organize your goals.</p>
+                          <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">
+                            {onlyRotten ? "No Rotten Leads" : "Your Leads List is Empty"}
+                          </h4>
+                          <p className="text-[11px] text-gray-400 leading-tight">
+                            {onlyRotten ? "No leads have exceeded rotten days limit." : "Create a lead to organize your goals."}
+                          </p>
                         </div>
-                        <Link
-                          to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                          className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
-                        >
-                          Create Lead
-                        </Link>
+                        {!onlyRotten && canCreate && (
+                          <Link
+                            to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
+                            className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                          >
+                            Create Lead
+                          </Link>
+                        )}
                       </div>
                     ) : (
                       stageLeads.map((lead) => (
@@ -406,7 +455,7 @@ const LeadsPage: React.FC = () => {
                             <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
                               <span className="text-red-400 opacity-70" title="Lead Alert">
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                 </svg>
                               </span>
                               <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
@@ -531,49 +580,64 @@ const LeadsPage: React.FC = () => {
                       <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0088cc] border-t-transparent"></div>
                     </td>
                   </tr>
-                ) : leads.length === 0 ? (
+                ) : displayLeads.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="text-center py-14 text-gray-400 dark:text-gray-500 text-sm font-medium">
-                      No Records Available.
+                      {onlyRotten ? "No Rotten Leads Found." : "No Records Available."}
                     </td>
                   </tr>
                 ) : (
-                  leads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60">
-                      <td className="py-3 px-4 font-medium text-[#0088cc]">
-                        <Link to={`/leads/view/${lead.id}`} className="hover:underline font-bold">
-                          {lead.title}
-                        </Link>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 text-xs rounded font-medium ${
-                          lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`}>
-                          {lead.status ? "Open" : "Lost / Closed"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">
-                        ${Number(lead.lead_value || 0).toFixed(2)}
-                      </td>
-                      <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.person_name || "-"}</td>
-                      <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.source_name || "-"}</td>
-                      <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.stage_name || "-"}</td>
-                      <td className="py-3 px-4 text-gray-500">
-                        {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "-"}
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        <Link to={`/leads/view/${lead.id}`} className="text-gray-500 hover:text-[#0088cc] p-1 inline-block" title="View Lead Process">
-                          <i className="mgc_eye_line text-base"></i>
-                        </Link>
-                        <Link to={`/leads/edit/${lead.id}`} className="text-gray-500 hover:text-[#0088cc] p-1 inline-block" title="Edit Lead">
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button onClick={() => handleDelete(lead)} className="text-gray-500 hover:text-red-600 p-1 inline-block" title="Delete Lead">
-                          <i className="mgc_delete_line text-base"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  displayLeads.map((lead) => {
+                    const rottenInfo = getRottenInfo(lead, currentPipeline);
+                    return (
+                      <tr key={lead.id} className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 ${rottenInfo.isRotten ? "bg-rose-50/20 dark:bg-rose-950/10" : ""}`}>
+                        <td className="py-3 px-4 font-medium text-[#0088cc]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Link to={`/leads/view/${lead.id}`} className="hover:underline font-bold">
+                              {lead.title}
+                            </Link>
+                            {rottenInfo.isRotten && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200">
+                                🍅 Rotten ({rottenInfo.daysIdle}d)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 text-xs rounded font-medium ${lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            }`}>
+                            {lead.status ? "Open" : "Lost / Closed"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">
+                          ${Number(lead.lead_value || 0).toFixed(2)}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.person_name || "-"}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.source_name || "-"}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.stage_name || "-"}</td>
+                        <td className="py-3 px-4 text-gray-500">
+                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-2">
+                          {canView && (
+                            <Link to={`/leads/view/${lead.id}`} className="text-gray-500 hover:text-[#0088cc] p-1 inline-block" title="View Lead Process">
+                              <i className="mgc_eye_line text-base"></i>
+                            </Link>
+                          )}
+                          {canEdit && (
+                            <Link to={`/leads/edit/${lead.id}`} className="text-gray-500 hover:text-[#0088cc] p-1 inline-block" title="Edit Lead">
+                              <i className="mgc_edit_line text-base"></i>
+                            </Link>
+                          )}
+                          {canDelete && (
+                            <button onClick={() => handleDelete(lead)} className="text-gray-500 hover:text-red-600 p-1 inline-block" title="Delete Lead">
+                              <i className="mgc_delete_line text-base"></i>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -31,8 +31,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
         }
         const response = await API.get(url);
         if (response.data?.success && response.data.data) {
-          const payload: UsersResponse = response.data.data;
-          set({ users: payload.rows || [], error: null });
+          const payload = response.data.data;
+          const userList = Array.isArray(payload) ? payload : (payload.rows || []);
+          set({ users: userList, error: null });
           return payload;
         }
         set({ error: "Failed to fetch users" });

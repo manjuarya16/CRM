@@ -157,6 +157,25 @@ export async function testSmtpConnection(customConfig?: Partial<SmtpSettingsConf
   }
 }
 
+function parseEmailList(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parseEmailList(parsed);
+      } catch {
+        // Fallthrough
+      }
+    }
+    return trimmed.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 /**
  * Sends a real email via SMTP if transporter is configured and enabled.
  * Does NOT throw errors - logs warnings so database recording is unaffected.
@@ -183,11 +202,20 @@ export async function sendRealMail(options: SendMailOptions): Promise<boolean> {
       };
     });
 
+    const toList = parseEmailList(options.to);
+    const ccList = parseEmailList(options.cc);
+    const bccList = parseEmailList(options.bcc);
+
+    if (toList.length === 0) {
+      logger.warn('[Mailer] No valid recipient email address specified in "to".');
+      return false;
+    }
+
     const mailOptions = {
       from: `"${fromName}" <${fromEmail}>`,
-      to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
-      cc: options.cc ? (Array.isArray(options.cc) ? options.cc.join(', ') : options.cc) : undefined,
-      bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined,
+      to: toList.join(', '),
+      cc: ccList.length ? ccList.join(', ') : undefined,
+      bcc: bccList.length ? bccList.join(', ') : undefined,
       subject: options.subject,
       text: options.text,
       html: options.html || options.text,

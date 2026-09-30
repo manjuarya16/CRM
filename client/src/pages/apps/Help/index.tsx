@@ -6,8 +6,8 @@ const HelpPage: React.FC = () => (
       <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Documentation & Support</h3>
       <p className="text-sm text-gray-500">Access CRM documentation, community forums, and support resources.</p>
       <div className="flex gap-4 pt-2">
-        <a href="https://krayincrm.com/docs" target="_blank" rel="noreferrer" className="text-[#0088cc] hover:underline text-sm font-medium">Krayin Documentation →</a>
-        <a href="https://webkul.uvdesk.com" target="_blank" rel="noreferrer" className="text-[#0088cc] hover:underline text-sm font-medium">Support Desk →</a>
+        <a href="#" className="text-[#0088cc] hover:underline text-sm font-medium">CRM Documentation →</a>
+        <a href="#" className="text-[#0088cc] hover:underline text-sm font-medium">Support Desk →</a>
       </div>
     </div>
   </div>

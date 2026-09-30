@@ -5,6 +5,7 @@ import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
 import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
 import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
+import { getRottenInfo } from "@/utils/rottenHelper";
 
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,7 +14,8 @@ const LeadViewPage: React.FC = () => {
 
   const {
     fetchLeadById, selectedLead, stages, fetchStages,
-    updateLeadStage, leadProducts, fetchLeadProducts, addLeadProduct, deleteLeadProduct, deleteLead
+    updateLeadStage, leadProducts, fetchLeadProducts, addLeadProduct, deleteLeadProduct, deleteLead,
+    pipelines, fetchPipelines
   } = useLeadStore();
 
   const { activities, fetchActivities, addActivity, updateActivity } = useActivityStore();
@@ -24,6 +26,10 @@ const LeadViewPage: React.FC = () => {
     "all" | "planned" | "notes" | "calls" | "meetings" | "lunches" | "files" | "emails" | "changelogs" | "description" | "products" | "quotes"
   >("all");
   const [person, setPerson] = useState<any>(null);
+
+  useEffect(() => {
+    fetchPipelines();
+  }, []);
   const [productsList, setProductsList] = useState<any[]>([]);
 
   // Action Modals: Mail, File, Note, Activity, StageUpdate (Won/Lost)
@@ -55,10 +61,17 @@ const LeadViewPage: React.FC = () => {
   const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "" });
   const [prodError, setProdError] = useState<string>("");
 
+  const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
   useEffect(() => {
     API.get("/persons?limit=100").then((res) => {
       if (res.data?.data) setPersonsList(res.data.data);
-    }).catch(() => {});
+    }).catch(() => { });
+
+    API.get("/email-templates").then((res) => {
+      if (res.data?.data) setEmailTemplates(res.data.data);
+    }).catch(() => { });
   }, []);
 
 
@@ -72,7 +85,7 @@ const LeadViewPage: React.FC = () => {
           if (lead.person_id) {
             API.get(`/persons/${lead.person_id}`).then((res) => {
               if (res.data?.data) setPerson(res.data.data);
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
         setLoading(false);
@@ -85,7 +98,7 @@ const LeadViewPage: React.FC = () => {
 
       API.get("/products?limit=100").then((res) => {
         if (res.data?.data) setProductsList(res.data.data);
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [leadId]);
 
@@ -127,6 +140,33 @@ const LeadViewPage: React.FC = () => {
     );
     setActiveModal(null);
     fetchLeadById(leadId);
+  };
+
+  const handleSelectEmailTemplate = (templateIdStr: string) => {
+    setSelectedTemplateId(templateIdStr);
+    if (!templateIdStr) return;
+    const tmpl = emailTemplates.find((t) => String(t.id) === templateIdStr);
+    if (tmpl) {
+      let body = tmpl.content || "";
+      const personName = person?.name || selectedLead?.person_name || "Customer";
+      const leadTitle = selectedLead?.title || "Lead";
+      const leadValue = selectedLead?.lead_value ? `$${selectedLead.lead_value}` : "$0";
+      const userName = selectedLead?.user_name || "Sales Team";
+
+      body = body
+        .replace(/\{\{\s*name\s*\}\}/gi, personName)
+        .replace(/\{\{\s*person_name\s*\}\}/gi, personName)
+        .replace(/\{\{\s*title\s*\}\}/gi, leadTitle)
+        .replace(/\{\{\s*lead_title\s*\}\}/gi, leadTitle)
+        .replace(/\{\{\s*lead_value\s*\}\}/gi, leadValue)
+        .replace(/\{\{\s*user_name\s*\}\}/gi, userName);
+
+      setModalForm((prev) => ({
+        ...prev,
+        email_subject: tmpl.subject || tmpl.name || "",
+        email_body: body,
+      }));
+    }
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -208,8 +248,8 @@ const LeadViewPage: React.FC = () => {
     const recipient = person?.email
       ? [person.email]
       : selectedLead?.person_name && selectedLead?.custom_attributes?.email
-      ? [selectedLead.custom_attributes.email]
-      : [];
+        ? [selectedLead.custom_attributes.email]
+        : [];
     return {
       lead_id: leadId,
       person_id: selectedLead?.person_id,
@@ -236,6 +276,12 @@ const LeadViewPage: React.FC = () => {
     { id: 6, action: `Created Lead #${selectedLead.id}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
   ];
 
+  // Calculate rotten status
+  const currentPipeline = selectedLead?.lead_pipeline_id
+    ? pipelines.find((p) => Number(p.id) === Number(selectedLead.lead_pipeline_id))
+    : pipelines[0];
+  const rottenInfo = selectedLead ? getRottenInfo(selectedLead, currentPipeline) : { isRotten: false, daysIdle: 0, rottenDaysThreshold: 30 };
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Top Breadcrumb */}
@@ -261,6 +307,44 @@ const LeadViewPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Rotten Lead Alert Banner */}
+      {rottenInfo.isRotten && (
+        <div className="bg-gradient-to-r from-rose-500/10 via-rose-50 to-amber-50 dark:from-rose-950/40 dark:via-rose-900/20 dark:to-amber-950/30 border border-rose-300 dark:border-rose-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 flex items-center justify-center text-xl shrink-0 shadow-inner">
+              🍅
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                Rotten Lead Warning
+                <span className="px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200 text-[10px] font-extrabold uppercase">
+                  {rottenInfo.daysIdle} Days Idle
+                </span>
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
+                This deal has exceeded the pipeline rotting threshold of {rottenInfo.rottenDaysThreshold} days without progress. Log an activity or note to keep it moving forward.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveModal("activity")}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm shrink-0 flex items-center gap-1.5"
+            >
+              <i className="mgc_time_line text-sm"></i>
+              Log Activity
+            </button>
+            <button
+              onClick={() => setActiveModal("note")}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm shrink-0 flex items-center gap-1.5"
+            >
+              <i className="mgc_file_text_line text-sm"></i>
+              Add Note
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main 2-Column Layout matching Krayin Screenshot 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -344,7 +428,7 @@ const LeadViewPage: React.FC = () => {
                     if (typeof selectedLead.custom_attributes === "object") {
                       attrs = selectedLead.custom_attributes;
                     } else if (typeof selectedLead.custom_attributes === "string") {
-                      try { attrs = JSON.parse(selectedLead.custom_attributes); } catch {}
+                      try { attrs = JSON.parse(selectedLead.custom_attributes); } catch { }
                     }
                   }
                   if (Object.keys(attrs).length === 0) return null;
@@ -430,13 +514,12 @@ const LeadViewPage: React.FC = () => {
                         ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
                         : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)"
                     }}
-                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${
-                      isLost
+                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${isLost
                         ? "bg-red-500 text-white"
                         : isPassed
-                        ? "bg-[#10b981] text-white"
-                        : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                    }`}
+                          ? "bg-[#10b981] text-white"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
                   >
                     {stage.name}
                   </button>
@@ -451,13 +534,12 @@ const LeadViewPage: React.FC = () => {
                 style={{
                   clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
                 }}
-                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${
-                  !selectedLead.status
+                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${!selectedLead.status
                     ? "bg-red-500 text-white"
                     : selectedLead.status && selectedLead.stage_name?.toLowerCase() === "won"
-                    ? "bg-[#10b981] text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
-                }`}
+                      ? "bg-[#10b981] text-white"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                  }`}
               >
                 Won/Lost ▾
               </button>
@@ -471,11 +553,10 @@ const LeadViewPage: React.FC = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${
-                    activeTab === tab
+                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${activeTab === tab
                       ? "bg-[#0088cc] text-white shadow-sm font-bold"
                       : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-                  }`}
+                    }`}
                 >
                   {tab === "changelogs" ? "Changelogs" : tab}
                 </button>
@@ -581,11 +662,10 @@ const LeadViewPage: React.FC = () => {
                                       fetchActivities(1, 100, "", leadId);
                                     }}
                                     title="Click to toggle Done/Pending"
-                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                                      act.is_done
+                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${act.is_done
                                         ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
                                         : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
-                                    }`}
+                                      }`}
                                   >
                                     {act.is_done ? "Done ✓" : "Pending ⏳"}
                                   </button>
@@ -655,9 +735,8 @@ const LeadViewPage: React.FC = () => {
                           setNewProd({ ...newProd, product_id: e.target.value });
                           if (prodError) setProdError("");
                         }}
-                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${
-                          prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
-                        } rounded text-xs`}
+                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
+                          } rounded text-xs`}
                       >
                         <option value="">Select Product</option>
                         {productsList.map((p) => (
@@ -820,9 +899,8 @@ const LeadViewPage: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className={`px-4 py-1.5 text-white rounded text-xs font-bold ${
-                        targetWonLostStage?.code === "won" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
-                      }`}
+                      className={`px-4 py-1.5 text-white rounded text-xs font-bold ${targetWonLostStage?.code === "won" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
+                        }`}
                     >
                       Save & Update Stage
                     </button>

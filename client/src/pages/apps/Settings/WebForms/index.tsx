@@ -5,8 +5,14 @@ import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IWebForm, IWebFormSubmission } from "@/interface";
 import { WebFormPreview } from "./WebFormPreview";
+import { usePermission } from "@/hooks/usePermission";
 
 const WebFormsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.web_forms.create");
+  const canEdit = hasPermission("settings.web_forms.edit");
+  const canDelete = hasPermission("settings.web_forms.delete");
+  const canView = hasPermission("settings.web_forms.view");
   const [webForms, setWebForms] = useState<IWebForm[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -90,20 +96,24 @@ const WebFormsPage: React.FC = () => {
           <p className="text-sm text-gray-500 mt-0.5">Embeddable lead capture forms for websites and landing pages</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => openSubmissionsModal()}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_list_check_3_line text-lg"></i>
-            All Form Entries
-          </button>
-          <Link
-            to="/settings/web-forms/create"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-lg"></i>
-            Create Web Form
-          </Link>
+          {canView && (
+            <button
+              onClick={() => openSubmissionsModal()}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_list_check_3_line text-lg"></i>
+              All Form Entries
+            </button>
+          )}
+          {canCreate && (
+            <Link
+              to="/settings/web-forms/create"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_add_line text-lg"></i>
+              Create Web Form
+            </Link>
+          )}
         </div>
       </div>
 
@@ -181,34 +191,42 @@ const WebFormsPage: React.FC = () => {
                       {Array.isArray(item.attributes) ? item.attributes.length : 0} fields
                     </td>
                     <td className="py-3 px-4 text-right space-x-2">
-                      <button
-                        onClick={() => openSubmissionsModal(item)}
-                        className="p-1.5 text-gray-500 hover:text-purple-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="View Form Entries / Submissions"
-                      >
-                        <i className="mgc_inbox_line text-base"></i>
-                      </button>
-                      <button
-                        onClick={() => setPreviewForm(item)}
-                        className="p-1.5 text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="Preview & Embed"
-                      >
-                        <i className="mgc_eye_line text-base"></i>
-                      </button>
-                      <Link
-                        to={`/settings/web-forms/${item.id}/edit`}
-                        className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
-                        title="Edit"
-                      >
-                        <i className="mgc_edit_line text-base"></i>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="Delete"
-                      >
-                        <i className="mgc_delete_line text-base"></i>
-                      </button>
+                      {canView && (
+                        <button
+                          onClick={() => openSubmissionsModal(item)}
+                          className="p-1.5 text-gray-500 hover:text-purple-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="View Form Entries / Submissions"
+                        >
+                          <i className="mgc_inbox_line text-base"></i>
+                        </button>
+                      )}
+                      {canView && (
+                        <button
+                          onClick={() => setPreviewForm(item)}
+                          className="p-1.5 text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="Preview & Embed"
+                        >
+                          <i className="mgc_eye_line text-base"></i>
+                        </button>
+                      )}
+                      {canEdit && (
+                        <Link
+                          to={`/settings/web-forms/${item.id}/edit`}
+                          className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
+                          title="Edit"
+                        >
+                          <i className="mgc_edit_line text-base"></i>
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="Delete"
+                        >
+                          <i className="mgc_delete_line text-base"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

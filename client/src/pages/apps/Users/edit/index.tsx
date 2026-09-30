@@ -57,6 +57,64 @@ const UserEdit = () => {
   const [profileFile, setProfileFile] = useState<File | null>(null);
   const [profilePreview, setProfilePreview] = useState<string>("");
 
+  const childrenMap = React.useMemo(() => {
+    const m: Record<string, number[]> = {};
+    (roles || []).forEach((r) => {
+      const pid = r.parent_role_id ? String(r.parent_role_id) : "__root";
+      if (!m[pid]) m[pid] = [];
+      m[pid].push(r.id);
+    });
+    return m;
+  }, [roles]);
+
+  const collectDescendants = (startId?: number | null) => {
+    if (!startId) return [] as number[];
+    const out: number[] = [];
+    const stack = [startId];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur === undefined) continue;
+      out.push(cur);
+      const kids = childrenMap[String(cur)];
+      if (kids && kids.length) stack.push(...kids);
+    }
+    return out;
+  };
+
+  const allowedRoleIdSet = React.useMemo(() => {
+    if (!currentUser || !currentUser.role_id) return null;
+    return new Set(collectDescendants(currentUser.role_id).map(String));
+  }, [currentUser, roles, childrenMap]);
+
+  const flattenedRoles = React.useMemo(() => {
+    const buildRoleTree = (flatRoles: any[]) => {
+      const byId: Record<number, any> = {};
+      flatRoles.forEach((r) => (byId[r.id] = { ...r, children: [] }));
+      const roots: any[] = [];
+      flatRoles.forEach((r) => {
+        const parentId = (r as any).parent_role_id;
+        if (parentId && byId[parentId]) byId[parentId].children.push(byId[r.id]);
+        else roots.push(byId[r.id]);
+      });
+      return roots;
+    };
+    const flattenWithDepth = (nodes: any[], depth = 0, out: any[] = []) => {
+      for (const n of nodes) {
+        out.push({ ...n, __depth: depth });
+        if (Array.isArray(n.children) && n.children.length)
+          flattenWithDepth(n.children, depth + 1, out);
+      }
+      return out;
+    };
+    let list = (roles || []).filter((r) => r.status !== false);
+    if (allowedRoleIdSet) {
+      list = list.filter((r) => allowedRoleIdSet.has(String(r.id)));
+    }
+    const tree = buildRoleTree(list);
+    return flattenWithDepth(tree);
+  }, [roles, allowedRoleIdSet]);
+
+
   useEffect(() => {
     const loadData = async () => {
       // Clear stale selectedUser before loading new one
@@ -686,9 +744,9 @@ return (
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600 opacity-60 cursor-not-allowed"
                   >
                     <option value="">Select a role</option>
-                    {roles.map((role) => (
+                    {flattenedRoles.map((role) => (
                       <option key={role.id} value={String(role.id)}>
-                        {role.name}
+                        {role.__depth > 0 ? `${"\u00A0\u00A0".repeat(role.__depth)}└─ ` : ""}{role.name}
                       </option>
                     ))}
                   </select>

@@ -7,8 +7,14 @@ import API from "@/config";
 
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+import { usePermission } from "@/hooks/usePermission";
 
 const QuotesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("quotes.create");
+  const canEdit = hasPermission("quotes.edit");
+  const canDelete = hasPermission("quotes.delete");
+  const canView = hasPermission("quotes.view");
   const { quotes, total, loading, fetchQuotes, deleteQuote } = useQuoteStore();
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
@@ -82,7 +88,7 @@ const QuotesPage: React.FC = () => {
       setSelectedQuoteForEmail(fullQuote);
       setEmailTo(fullQuote.person_email || "");
       setEmailSubject(`Quotation #${fullQuote.id} - ${fullQuote.subject}`);
-      
+
       const lines = (fullQuote.items || []).map((it: any) => `- ${it.name} (${it.quantity}x @ $${it.price}) = $${it.total}`).join("\n");
       setEmailBody(
         `Dear Customer,\n\nPlease find attached the quotation details for "${fullQuote.subject}".\n\nGrand Total: $${Number(fullQuote.grand_total || 0).toFixed(2)}\n\nLine Items:\n${lines || "Details available in attachment."}\n\nBest regards,\nCRM Sales Team`
@@ -125,12 +131,14 @@ const QuotesPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Quotes</h1>
-        <Link
-          to="/quotes/create"
-          className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          + Create Quote
-        </Link>
+        {canCreate && (
+          <Link
+            to="/quotes/create"
+            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            + Create Quote
+          </Link>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

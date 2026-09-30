@@ -304,7 +304,7 @@ const CreateLeadPage: React.FC = () => {
           entity_type: "lead",
           entity_id: savedLead.id,
           tag_ids: selectedTagIds,
-        }).catch(() => {});
+        }).catch(() => { });
       }
       navigate("/leads");
     } catch (error: any) {
@@ -351,11 +351,10 @@ const CreateLeadPage: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
-                activeTab === tab.id
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${activeTab === tab.id
                   ? "text-[#0088cc] border-[#0088cc]"
                   : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
-              }`}
+                }`}
             >
               {tab.label}
             </button>
@@ -384,9 +383,8 @@ const CreateLeadPage: React.FC = () => {
                   value={details.title}
                   onChange={(e) => setDetails({ ...details, title: e.target.value })}
                   placeholder="e.g. Enterprise Solution Deal"
-                  className={`${inputCls} ${
-                    errors.title ? "border-red-500 focus:border-red-500" : ""
-                  }`}
+                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500" : ""
+                    }`}
                 />
                 {errors.title && (
                   <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>

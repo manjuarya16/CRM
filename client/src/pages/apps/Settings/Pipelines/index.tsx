@@ -3,8 +3,14 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IPipeline } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const PipelinesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.pipelines.create");
+  const canEdit = hasPermission("settings.pipelines.edit");
+  const canDelete = hasPermission("settings.pipelines.delete");
+  const canView = hasPermission("settings.pipelines.view");
   const [pipelines, setPipelines] = useState<IPipeline[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
@@ -105,13 +111,15 @@ const PipelinesPage: React.FC = () => {
             Pipelines
           </h1>
         </div>
-        <Link
-          to="/settings/pipelines/create"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create Pipeline
-        </Link>
+        {canCreate && (
+          <Link
+            to="/settings/pipelines/create"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create Pipeline
+          </Link>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -260,23 +268,27 @@ const PipelinesPage: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Link
-                          to={`/settings/pipelines/edit/${pipeline.id}`}
-                          className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                          title="Edit Pipeline"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(pipeline)}
-                          className={`p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors ${
-                            pipeline.is_default ? "opacity-30 cursor-not-allowed" : ""
-                          }`}
-                          title="Delete Pipeline"
-                          disabled={pipeline.is_default}
-                        >
-                          <i className="mgc_delete_2_line text-base"></i>
-                        </button>
+                        {canEdit && (
+                          <Link
+                            to={`/settings/pipelines/edit/${pipeline.id}`}
+                            className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                            title="Edit Pipeline"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(pipeline)}
+                            className={`p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors ${
+                              pipeline.is_default ? "opacity-30 cursor-not-allowed" : ""
+                            }`}
+                            title="Delete Pipeline"
+                            disabled={pipeline.is_default}
+                          >
+                            <i className="mgc_delete_2_line text-base"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

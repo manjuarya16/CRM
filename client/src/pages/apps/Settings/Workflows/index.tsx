@@ -4,8 +4,14 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IWorkflow } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const WorkflowsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.workflows.create");
+  const canEdit = hasPermission("settings.workflows.edit");
+  const canDelete = hasPermission("settings.workflows.delete");
+  const canView = hasPermission("settings.workflows.view");
   const [workflows, setWorkflows] = useState<IWorkflow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -66,13 +72,15 @@ const WorkflowsPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Automation Workflows</h1>
           <p className="text-sm text-gray-500 mt-0.5">Automate events, conditional logic, and custom actions</p>
         </div>
-        <Link
-          to="/settings/workflows/create"
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create Workflow
-        </Link>
+        {canCreate && (
+          <Link
+            to="/settings/workflows/create"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create Workflow
+          </Link>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -152,20 +160,24 @@ const WorkflowsPage: React.FC = () => {
                       {Array.isArray(item.actions) ? item.actions.length : 0} actions
                     </td>
                     <td className="py-3 px-4 text-right space-x-2">
-                      <Link
-                        to={`/settings/workflows/${item.id}/edit`}
-                        className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
-                        title="Edit"
-                      >
-                        <i className="mgc_edit_line text-base"></i>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="Delete"
-                      >
-                        <i className="mgc_delete_line text-base"></i>
-                      </button>
+                      {canEdit && (
+                        <Link
+                          to={`/settings/workflows/${item.id}/edit`}
+                          className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
+                          title="Edit"
+                        >
+                          <i className="mgc_edit_line text-base"></i>
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="Delete"
+                        >
+                          <i className="mgc_delete_line text-base"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

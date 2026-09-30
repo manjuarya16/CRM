@@ -150,6 +150,7 @@ BEGIN
         'description', r.description,
         'permission_type', r.permission_type,
         'permissions', r.permissions,
+        'parent_role_id', r.parent_role_id,
         'created_by', r.created_by,
         'created_at', r.created_at,
         'updated_at', r.updated_at,
@@ -177,6 +178,7 @@ BEGIN
             'description', r.description,
             'permission_type', r.permission_type,
             'permissions', r.permissions,
+            'parent_role_id', r.parent_role_id,
             'created_by', r.created_by,
             'created_at', r.created_at,
             'updated_at', r.updated_at,
@@ -185,7 +187,7 @@ BEGIN
         FROM roles r
         LEFT JOIN users u ON u.role_id = r.id
         WHERE (p_search IS NULL OR p_search = '' OR r.name ILIKE '%' || p_search || '%' OR r.description ILIKE '%' || p_search || '%')
-        GROUP BY r.id
+        GROUP BY r.id, r.name, r.description, r.permission_type, r.permissions, r.parent_role_id, r.created_by, r.created_at, r.updated_at
         ORDER BY r.id ASC
     ) sub;
 
@@ -193,13 +195,15 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS save_role CASCADE;
 CREATE OR REPLACE FUNCTION save_role(
     p_name VARCHAR(255),
     p_description VARCHAR(255) DEFAULT NULL,
     p_permission_type VARCHAR(255) DEFAULT 'all',
     p_permissions JSONB DEFAULT NULL,
     p_created_by INTEGER DEFAULT NULL,
-    p_id INTEGER DEFAULT NULL
+    p_id INTEGER DEFAULT NULL,
+    p_parent_role_id INTEGER DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -214,6 +218,7 @@ BEGIN
             description = p_description,
             permission_type = COALESCE(p_permission_type, permission_type),
             permissions = p_permissions,
+            parent_role_id = p_parent_role_id,
             updated_at = NOW()
         WHERE id = p_id
         RETURNING id INTO v_role_id;
@@ -223,8 +228,8 @@ BEGIN
         END IF;
     ELSE
         -- Add new role
-        INSERT INTO roles (name, description, permission_type, permissions, created_by, created_at, updated_at)
-        VALUES (p_name, p_description, COALESCE(p_permission_type, 'all'), p_permissions, p_created_by, NOW(), NOW())
+        INSERT INTO roles (name, description, permission_type, permissions, created_by, parent_role_id, created_at, updated_at)
+        VALUES (p_name, p_description, COALESCE(p_permission_type, 'all'), p_permissions, p_created_by, p_parent_role_id, NOW(), NOW())
         RETURNING id INTO v_role_id;
     END IF;
 
@@ -3137,6 +3142,14 @@ $$;
 
 export async function initDbFunctions(): Promise<void> {
   try {
+    await pool.query("CREATE TABLE IF NOT EXISTS groups (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW());");
+    await pool.query("CREATE TABLE IF NOT EXISTS user_groups (group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (group_id, user_id));");
+    await pool.query("ALTER TABLE roles ADD COLUMN IF NOT EXISTS parent_role_id INTEGER REFERENCES roles(id) ON DELETE SET NULL;");
+    await pool.query("UPDATE roles SET parent_role_id = 1 WHERE LOWER(name) IN ('manager', 'admin') AND parent_role_id IS NULL AND id != 1;");
+    await pool.query("UPDATE roles SET parent_role_id = (SELECT id FROM roles WHERE LOWER(name) = 'manager' LIMIT 1) WHERE LOWER(name) IN ('user', 'test') AND parent_role_id IS NULL AND id != 1;");
+    await pool.query("DROP FUNCTION IF EXISTS save_role(VARCHAR, VARCHAR, VARCHAR, JSONB, INTEGER, INTEGER, INTEGER);");
+    await pool.query("DROP FUNCTION IF EXISTS save_role(VARCHAR, VARCHAR, VARCHAR, JSONB, INTEGER, INTEGER);");
+    await pool.query("DROP FUNCTION IF EXISTS save_role;");
     await pool.query(DB_FUNCTIONS_SQL);
     await pool.query("ALTER TABLE quotes ALTER COLUMN person_id DROP NOT NULL; ALTER TABLE quotes ALTER COLUMN user_id DROP NOT NULL;");
     logger.info('PostgreSQL stored functions for Settings sub-modules initialized successfully.');
