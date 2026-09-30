@@ -5,204 +5,88 @@ import Swal from "sweetalert2";
 import { ZodError } from "zod";
 import { roleSchema } from "@/schemas";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
-import { MatrixModule, RoleFormProps } from "@/interface";
-
-const MATRIX_MODULES: MatrixModule[] = [
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    slug: "dashboards",
-    avatarChar: "D",
-    avatarBg: "bg-blue-600",
-    viewKey: "dashboard.view",
-    addKey: "dashboard.create",
-    updateKey: "dashboard.edit",
-    deleteKey: "dashboard.delete",
-  },
-  {
-    id: "organization",
-    name: "Organization",
-    slug: "organization",
-    avatarChar: "O",
-    avatarBg: "bg-purple-600",
-    viewKey: "organizations.view",
-    addKey: "organizations.create",
-    updateKey: "organizations.edit",
-    deleteKey: "organizations.delete",
-  },
-  {
-    id: "users",
-    name: "Users",
-    slug: "users",
-    avatarChar: "U",
-    avatarBg: "bg-sky-500",
-    viewKey: "settings.users.view",
-    addKey: "settings.users.create",
-    updateKey: "settings.users.edit",
-    deleteKey: "settings.users.delete",
-  },
-  {
-    id: "roles",
-    name: "Roles",
-    slug: "roles",
-    avatarChar: "R",
-    avatarBg: "bg-emerald-600",
-    viewKey: "settings.roles.view",
-    addKey: "settings.roles.create",
-    updateKey: "settings.roles.edit",
-    deleteKey: "settings.roles.delete",
-  },
-  {
-    id: "user_access",
-    name: "User Access Manage",
-    slug: "access-management",
-    avatarChar: "U",
-    avatarBg: "bg-amber-500",
-    viewKey: "settings.roles.view",
-    addKey: "settings.roles.create",
-    updateKey: "settings.roles.edit",
-    deleteKey: "settings.roles.delete",
-  },
-  {
-    id: "branch",
-    name: "Branch",
-    slug: "branch",
-    avatarChar: "B",
-    avatarBg: "bg-rose-500",
-    viewKey: "settings.branch.view",
-    addKey: "settings.branch.create",
-    updateKey: "settings.branch.edit",
-    deleteKey: "settings.branch.delete",
-  },
-  {
-    id: "department",
-    name: "Department",
-    slug: "department",
-    avatarChar: "D",
-    avatarBg: "bg-indigo-600",
-    viewKey: "settings.groups.view",
-    addKey: "settings.groups.create",
-    updateKey: "settings.groups.edit",
-    deleteKey: "settings.groups.delete",
-  },
-  {
-    id: "leads",
-    name: "Leads",
-    slug: "leads",
-    avatarChar: "L",
-    avatarBg: "bg-cyan-600",
-    viewKey: "leads.view",
-    addKey: "leads.create",
-    updateKey: "leads.edit",
-    deleteKey: "leads.delete",
-  },
-  {
-    id: "quotes",
-    name: "Quotes",
-    slug: "quotes",
-    avatarChar: "Q",
-    avatarBg: "bg-violet-600",
-    viewKey: "quotes.view",
-    addKey: "quotes.create",
-    updateKey: "quotes.edit",
-    deleteKey: "quotes.delete",
-  },
-  {
-    id: "products",
-    name: "Products",
-    slug: "products",
-    avatarChar: "P",
-    avatarBg: "bg-teal-600",
-    viewKey: "products.view",
-    addKey: "products.create",
-    updateKey: "products.edit",
-    deleteKey: "products.delete",
-  },
-  {
-    id: "activities",
-    name: "Activities",
-    slug: "activities",
-    avatarChar: "A",
-    avatarBg: "bg-orange-500",
-    viewKey: "activities.view",
-    addKey: "activities.create",
-    updateKey: "activities.edit",
-    deleteKey: "activities.delete",
-  },
-  {
-    id: "mail",
-    name: "Mail",
-    slug: "mail",
-    avatarChar: "M",
-    avatarBg: "bg-blue-500",
-    viewKey: "mail.inbox",
-    addKey: "mail.draft",
-    updateKey: "mail.setting",
-    deleteKey: "mail.trash",
-  },
-  {
-    id: "pipelines",
-    name: "Pipelines",
-    slug: "pipelines",
-    avatarChar: "P",
-    avatarBg: "bg-emerald-500",
-    viewKey: "settings.pipelines.view",
-    addKey: "settings.pipelines.create",
-    updateKey: "settings.pipelines.edit",
-    deleteKey: "settings.pipelines.delete",
-  },
-  {
-    id: "sources",
-    name: "Sources",
-    slug: "sources",
-    avatarChar: "S",
-    avatarBg: "bg-indigo-500",
-    viewKey: "settings.sources.view",
-    addKey: "settings.sources.create",
-    updateKey: "settings.sources.edit",
-    deleteKey: "settings.sources.delete",
-  },
-  {
-    id: "types",
-    name: "Types",
-    slug: "types",
-    avatarChar: "T",
-    avatarBg: "bg-purple-500",
-    viewKey: "settings.types.view",
-    addKey: "settings.types.create",
-    updateKey: "settings.types.edit",
-    deleteKey: "settings.types.delete",
-  },
-  {
-    id: "configuration",
-    name: "Configuration",
-    slug: "configuration",
-    avatarChar: "C",
-    avatarBg: "bg-slate-600",
-    viewKey: "settings.configuration.view",
-    addKey: "settings.configuration.create",
-    updateKey: "settings.configuration.edit",
-    deleteKey: "settings.configuration.delete",
-  },
-];
+import { MATRIX_MODULES } from "@/constants/matrixModules";
+import { IRole, MatrixModule, RoleFormProps } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
+import { useAuthStore } from "@/store";
 
 export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const { user } = useAuthStore();
+  const { isAllAccess, hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.roles.create");
+  const canEdit = hasPermission("settings.roles.edit");
+  const canSave = mode === "create" ? canCreate : canEdit;
+
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const [parentRoleId, setParentRoleId] = useState<number | null>(null);
   const [permissionType, setPermissionType] = useState<"all" | "custom">("custom");
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [allRoles, setAllRoles] = useState<IRole[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<boolean>(mode === "edit");
   const [saving, setSaving] = useState<boolean>(false);
 
+  const currentUserRole = React.useMemo(() => {
+    if (!user) return null;
+    const rId = (user as any).role_id != null ? Number((user as any).role_id) : null;
+    const rName = String((user as any).role || (user as any).role_name || "").toLowerCase();
+
+    if (rId) {
+      const match = allRoles.find((r) => Number(r.id) === rId);
+      if (match) return match;
+    }
+    if (rName) {
+      const match = allRoles.find((r) => String(r.name || "").toLowerCase() === rName);
+      if (match) return match;
+    }
+    return null;
+  }, [user, allRoles]);
+
+  const visibleParentRoles = React.useMemo(() => {
+    if (isAllAccess || !currentUserRole) {
+      return allRoles;
+    }
+
+    const startRoleId = Number(currentUserRole.id);
+    const allowedIds = new Set<number>([startRoleId]);
+
+    let added = true;
+    while (added) {
+      added = false;
+      allRoles.forEach((r) => {
+        const rId = Number(r.id);
+        if (!allowedIds.has(rId)) {
+          const pid = r.parent_role_id ? Number(r.parent_role_id) : null;
+          if (pid && allowedIds.has(pid)) {
+            allowedIds.add(rId);
+            added = true;
+          }
+        }
+      });
+    }
+
+    return allRoles.filter((r) => allowedIds.has(Number(r.id)));
+  }, [allRoles, currentUserRole, isAllAccess]);
+
   useEffect(() => {
+    fetchAllRoles();
     if (mode === "edit" && id) {
       fetchRoleDetails(id);
     }
   }, [mode, id]);
+
+  const fetchAllRoles = async () => {
+    try {
+      const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
+      setAllRoles(res.data?.data || []);
+    } catch {
+      setAllRoles([]);
+    }
+  };
 
   const fetchRoleDetails = async (roleId: string) => {
     try {
@@ -212,6 +96,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       if (data) {
         setName(data.name || "");
         setDescription(data.description || "");
+        setParentRoleId(data.parent_role_id ? Number(data.parent_role_id) : null);
         const type = (data.permission_type as "all" | "custom") || "custom";
         setPermissionType(type);
 
@@ -294,6 +179,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       const payload = {
         name: name.trim(),
         description: description?.trim() || null,
+        parent_role_id: parentRoleId || null,
         permission_type: permissionType,
         permissions: permissionType === "all" ? ALL_CRM_PERMISSION_KEYS : permissions,
       };
@@ -385,28 +271,30 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
           >
             Cancel
           </Link>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white text-sm font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50"
-          >
-            {saving ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                </svg>
-                <span>Save Access</span>
-              </>
-            )}
-          </button>
+          {canSave && (
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white text-sm font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  <span>Save Access</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -416,7 +304,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
           Role Details & Scope
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Role Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
@@ -435,6 +323,27 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
               } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
             />
             {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
+          </div>
+
+          {/* Parent Role */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
+              Parent Role
+            </label>
+            <select
+              value={parentRoleId || ""}
+              onChange={(e) => setParentRoleId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#4f46e5] focus:border-transparent cursor-pointer"
+            >
+              <option value="">-- None (Top-Level Role) --</option>
+              {visibleParentRoles
+                .filter((r) => !id || String(r.id) !== String(id))
+                .map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+            </select>
           </div>
 
           {/* Description */}

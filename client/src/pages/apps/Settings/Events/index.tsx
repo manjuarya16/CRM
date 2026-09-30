@@ -4,8 +4,14 @@ import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IEvent } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const EventsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.events.create");
+  const canEdit = hasPermission("settings.events.edit");
+  const canDelete = hasPermission("settings.events.delete");
+  const canView = hasPermission("settings.events.view");
   const [events, setEvents] = useState<IEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -62,13 +68,15 @@ const EventsPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Marketing Events</h1>
           <p className="text-sm text-gray-500 mt-0.5">Define events to trigger automated campaigns and sequences</p>
         </div>
-        <Link
-          to="/settings/events/create"
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create Event
-        </Link>
+        {canCreate && (
+          <Link
+            to="/settings/events/create"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create Event
+          </Link>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -137,20 +145,24 @@ const EventsPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-600 dark:text-gray-300 max-w-xs truncate">{item.description}</td>
                     <td className="py-3 px-4 text-right space-x-2">
-                      <Link
-                        to={`/settings/events/${item.id}/edit`}
-                        className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
-                        title="Edit"
-                      >
-                        <i className="mgc_edit_line text-base"></i>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="Delete"
-                      >
-                        <i className="mgc_delete_line text-base"></i>
-                      </button>
+                      {canEdit && (
+                        <Link
+                          to={`/settings/events/${item.id}/edit`}
+                          className="p-1.5 text-gray-500 hover:text-green-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 inline-block"
+                          title="Edit"
+                        >
+                          <i className="mgc_edit_line text-base"></i>
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="Delete"
+                        >
+                          <i className="mgc_delete_line text-base"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

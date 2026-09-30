@@ -94,7 +94,7 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
       person_id,
     }: IActivityCreateInput = req.body;
 
-    const currentUserId = (req as any).user?.id || user_id || null;
+    const currentUserId = user_id || (req as any).user?.id || null;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",

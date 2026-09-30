@@ -3,8 +3,14 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useActivityStore } from "@/store";
 import { IActivity } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const ActivitiesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("activities.create");
+  const canEdit = hasPermission("activities.edit");
+  const canDelete = hasPermission("activities.delete");
+  const canView = hasPermission("activities.view");
   const { activities, total, loading, fetchActivities, deleteActivity } = useActivityStore();
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
@@ -45,12 +51,14 @@ const ActivitiesPage: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Activities</h1>
-        <Link
-          to="/activities/create"
-          className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          + Create Activity
-        </Link>
+        {canCreate && (
+          <Link
+            to="/activities/create"
+            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            + Create Activity
+          </Link>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -139,20 +147,24 @@ const ActivitiesPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{act.location || "-"}</td>
                     <td className="py-3 px-4 text-right space-x-2">
-                      <Link
-                        to={`/activities/edit/${act.id}`}
-                        className="text-gray-500 hover:text-[#0088cc] p-1 inline-block"
-                        title="Edit Activity"
-                      >
-                        <i className="mgc_edit_line text-base"></i>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(act)}
-                        className="text-gray-500 hover:text-red-600 p-1 inline-block"
-                        title="Delete Activity"
-                      >
-                        <i className="mgc_delete_line text-base"></i>
-                      </button>
+                      {canEdit && (
+                        <Link
+                          to={`/activities/edit/${act.id}`}
+                          className="text-gray-500 hover:text-[#0088cc] p-1 inline-block"
+                          title="Edit Activity"
+                        >
+                          <i className="mgc_edit_line text-base"></i>
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(act)}
+                          className="text-gray-500 hover:text-red-600 p-1 inline-block"
+                          title="Delete Activity"
+                        >
+                          <i className="mgc_delete_line text-base"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

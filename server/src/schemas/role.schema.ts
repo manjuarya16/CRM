@@ -5,6 +5,7 @@ export const roleSchema = z.object({
   description: z.string().max(500, 'Description is too long').optional().nullable(),
   permission_type: z.enum(['all', 'custom']).optional().default('all'),
   permissions: z.any().optional().nullable(),
+  parent_role_id: z.coerce.number().optional().nullable(),
   created_by: z.coerce.number().optional().nullable(),
 });
 

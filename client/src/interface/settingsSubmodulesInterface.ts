@@ -45,6 +45,6 @@ export interface IType {
 export interface ITag {
   id: number;
   name: string;
-  color: string;
+  color?: string;
   created_at?: string;
 }

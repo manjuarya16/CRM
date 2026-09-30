@@ -3,6 +3,7 @@ import PageBreadcrumb from "@/components/PageBreadcrumb";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { tagSchema } from "@/schemas";
+import { usePermission } from "@/hooks/usePermission";
 
 import { ITag } from "@/interface";
 
@@ -19,6 +20,11 @@ const PRESET_COLORS = [
 ];
 
 const TagsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.tags.create") || hasPermission("tags.create");
+  const canEdit = hasPermission("settings.tags.edit") || hasPermission("tags.edit");
+  const canDelete = hasPermission("settings.tags.delete") || hasPermission("tags.delete");
+
   const [tags, setTags] = useState<ITag[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
@@ -138,14 +144,16 @@ const TagsPage: React.FC = () => {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
-          >
-            <i className="mgc_add_line text-base"></i>
-            <span>Create Tag</span>
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => handleOpenModal()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+            >
+              <i className="mgc_add_line text-base"></i>
+              <span>Create Tag</span>
+            </button>
+          )}
         </div>
 
         {/* Search & Per Page */}
@@ -232,22 +240,26 @@ const TagsPage: React.FC = () => {
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal(tag)}
-                            className="p-1.5 text-gray-500 hover:text-primary rounded-lg transition-colors"
-                            title="Edit Tag"
-                          >
-                            <i className="mgc_edit_line text-base"></i>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(tag)}
-                            className="p-1.5 text-gray-500 hover:text-red-600 rounded-lg transition-colors"
-                            title="Delete Tag"
-                          >
-                            <i className="mgc_delete_2_line text-base"></i>
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenModal(tag)}
+                              className="p-1.5 text-gray-500 hover:text-primary rounded-lg transition-colors"
+                              title="Edit Tag"
+                            >
+                              <i className="mgc_edit_line text-base"></i>
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(tag)}
+                              className="p-1.5 text-gray-500 hover:text-red-600 rounded-lg transition-colors"
+                              title="Delete Tag"
+                            >
+                              <i className="mgc_delete_2_line text-base"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

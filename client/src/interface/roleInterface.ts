@@ -4,6 +4,7 @@ export interface IRole {
   description?: string | null;
   permission_type?: string | null;
   permissions?: any;
+  parent_role_id?: number | null;
   created_by?: number | null;
   created_at?: string;
   updated_at?: string;

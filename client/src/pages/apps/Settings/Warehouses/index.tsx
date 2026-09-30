@@ -3,8 +3,14 @@ import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IWarehouse } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const WarehousesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.warehouses.create");
+  const canEdit = hasPermission("settings.warehouses.edit");
+  const canDelete = hasPermission("settings.warehouses.delete");
+  const canView = hasPermission("settings.warehouses.view");
   const [warehouses, setWarehouses] = useState<IWarehouse[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
@@ -143,13 +149,15 @@ const WarehousesPage: React.FC = () => {
         </div>
 
         <div>
-          <Link
-            to="/settings/warehouses/create"
-            className="inline-flex items-center px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-base mr-1.5"></i>
-            Create Warehouse
-          </Link>
+          {canCreate && (
+            <Link
+              to="/settings/warehouses/create"
+              className="inline-flex items-center px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_add_line text-base mr-1.5"></i>
+              Create Warehouse
+            </Link>
+          )}
         </div>
       </div>
 
@@ -292,27 +300,33 @@ const WarehousesPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
-                        <button
-                          onClick={() => openViewModal(warehouse)}
-                          className="inline-flex items-center text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 p-1.5 rounded-lg transition-colors"
-                          title="View Warehouse Details"
-                        >
-                          <i className="mgc_eye_line text-base"></i>
-                        </button>
-                        <Link
-                          to={"/settings/warehouses/edit/" + warehouse.id}
-                          className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
-                          title="Edit Warehouse"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(warehouse)}
-                          className="inline-flex items-center text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 p-1.5 rounded-lg transition-colors"
-                          title="Delete Warehouse"
-                        >
-                          <i className="mgc_delete_2_line text-base"></i>
-                        </button>
+                        {canView && (
+                          <button
+                            onClick={() => openViewModal(warehouse)}
+                            className="inline-flex items-center text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 p-1.5 rounded-lg transition-colors"
+                            title="View Warehouse Details"
+                          >
+                            <i className="mgc_eye_line text-base"></i>
+                          </button>
+                        )}
+                        {canEdit && (
+                          <Link
+                            to={"/settings/warehouses/edit/" + warehouse.id}
+                            className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
+                            title="Edit Warehouse"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(warehouse)}
+                            className="inline-flex items-center text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 p-1.5 rounded-lg transition-colors"
+                            title="Delete Warehouse"
+                          >
+                            <i className="mgc_delete_2_line text-base"></i>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

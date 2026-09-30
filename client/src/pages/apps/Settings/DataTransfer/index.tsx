@@ -3,8 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { IImport } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const DataTransferPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canImport = hasPermission("settings.data_transfer.import");
+  const canExport = hasPermission("settings.data_transfer.export");
+  const canView = hasPermission("settings.data_transfer.view");
   const navigate = useNavigate();
   const [imports, setImports] = useState<IImport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -85,13 +90,15 @@ const DataTransferPage: React.FC = () => {
         </div>
 
         <div>
-          <button
-            type="button"
-            onClick={() => navigate("/settings/data-transfer/create")}
-            className="inline-flex items-center justify-center px-5 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors"
-          >
-            Create Import
-          </button>
+          {canImport && (
+            <button
+              type="button"
+              onClick={() => navigate("/settings/data-transfer/create")}
+              className="inline-flex items-center justify-center px-5 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors"
+            >
+              Create Import
+            </button>
+          )}
         </div>
       </div>
 

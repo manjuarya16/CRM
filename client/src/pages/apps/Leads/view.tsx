@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
 import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
+import { getRottenInfo } from "@/utils/rottenHelper";
 
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +13,8 @@ const LeadViewPage: React.FC = () => {
 
   const {
     fetchLeadById, selectedLead, stages, fetchStages,
-    updateLeadStage, leadProducts, fetchLeadProducts, addLeadProduct, deleteLeadProduct, deleteLead
+    updateLeadStage, leadProducts, fetchLeadProducts, addLeadProduct, deleteLeadProduct, deleteLead,
+    pipelines, fetchPipelines
   } = useLeadStore();
 
   const { activities, fetchActivities, addActivity, updateActivity } = useActivityStore();
@@ -23,6 +25,10 @@ const LeadViewPage: React.FC = () => {
     "all" | "planned" | "notes" | "calls" | "meetings" | "lunches" | "files" | "emails" | "changelogs" | "description" | "products" | "quotes"
   >("all");
   const [person, setPerson] = useState<any>(null);
+
+  useEffect(() => {
+    fetchPipelines();
+  }, []);
   const [productsList, setProductsList] = useState<any[]>([]);
 
   // Action Modals: Mail, File, Note, Activity, StageUpdate (Won/Lost)
@@ -54,9 +60,16 @@ const LeadViewPage: React.FC = () => {
   const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "" });
   const [prodError, setProdError] = useState<string>("");
 
+  const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
   useEffect(() => {
     API.get("/persons?limit=100").then((res) => {
       if (res.data?.data) setPersonsList(res.data.data);
+    }).catch(() => {});
+
+    API.get("/email-templates").then((res) => {
+      if (res.data?.data) setEmailTemplates(res.data.data);
     }).catch(() => {});
   }, []);
 
@@ -126,6 +139,33 @@ const LeadViewPage: React.FC = () => {
     );
     setActiveModal(null);
     fetchLeadById(leadId);
+  };
+
+  const handleSelectEmailTemplate = (templateIdStr: string) => {
+    setSelectedTemplateId(templateIdStr);
+    if (!templateIdStr) return;
+    const tmpl = emailTemplates.find((t) => String(t.id) === templateIdStr);
+    if (tmpl) {
+      let body = tmpl.content || "";
+      const personName = person?.name || selectedLead?.person_name || "Customer";
+      const leadTitle = selectedLead?.title || "Lead";
+      const leadValue = selectedLead?.lead_value ? `$${selectedLead.lead_value}` : "$0";
+      const userName = selectedLead?.user_name || "Sales Team";
+
+      body = body
+        .replace(/\{\{\s*name\s*\}\}/gi, personName)
+        .replace(/\{\{\s*person_name\s*\}\}/gi, personName)
+        .replace(/\{\{\s*title\s*\}\}/gi, leadTitle)
+        .replace(/\{\{\s*lead_title\s*\}\}/gi, leadTitle)
+        .replace(/\{\{\s*lead_value\s*\}\}/gi, leadValue)
+        .replace(/\{\{\s*user_name\s*\}\}/gi, userName);
+
+      setModalForm((prev) => ({
+        ...prev,
+        email_subject: tmpl.subject || tmpl.name || "",
+        email_body: body,
+      }));
+    }
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -221,6 +261,12 @@ const LeadViewPage: React.FC = () => {
     { id: 6, action: `Created Lead #${selectedLead.id}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
   ];
 
+  // Calculate rotten status
+  const currentPipeline = selectedLead?.lead_pipeline_id
+    ? pipelines.find((p) => Number(p.id) === Number(selectedLead.lead_pipeline_id))
+    : pipelines[0];
+  const rottenInfo = selectedLead ? getRottenInfo(selectedLead, currentPipeline) : { isRotten: false, daysIdle: 0, rottenDaysThreshold: 30 };
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Top Breadcrumb */}
@@ -246,6 +292,44 @@ const LeadViewPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Rotten Lead Alert Banner */}
+      {rottenInfo.isRotten && (
+        <div className="bg-gradient-to-r from-rose-500/10 via-rose-50 to-amber-50 dark:from-rose-950/40 dark:via-rose-900/20 dark:to-amber-950/30 border border-rose-300 dark:border-rose-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 flex items-center justify-center text-xl shrink-0 shadow-inner">
+              🍅
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                Rotten Lead Warning
+                <span className="px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200 text-[10px] font-extrabold uppercase">
+                  {rottenInfo.daysIdle} Days Idle
+                </span>
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
+                This deal has exceeded the pipeline rotting threshold of {rottenInfo.rottenDaysThreshold} days without progress. Log an activity or note to keep it moving forward.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveModal("activity")}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm shrink-0 flex items-center gap-1.5"
+            >
+              <i className="mgc_time_line text-sm"></i>
+              Log Activity
+            </button>
+            <button
+              onClick={() => setActiveModal("note")}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm shrink-0 flex items-center gap-1.5"
+            >
+              <i className="mgc_file_text_line text-sm"></i>
+              Add Note
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main 2-Column Layout matching Krayin Screenshot 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -810,11 +894,29 @@ const LeadViewPage: React.FC = () => {
                 <form onSubmit={handleQuickActionSubmit} className="space-y-3">
                   {activeModal === "mail" && (
                     <>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                          Apply Email Template (Optional)
+                        </label>
+                        <select
+                          value={selectedTemplateId}
+                          onChange={(e) => handleSelectEmailTemplate(e.target.value)}
+                          className="w-full px-3 py-1.5 border rounded text-xs bg-emerald-50/60 dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-emerald-300 dark:border-gray-700 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="">-- Choose Email Template --</option>
+                          {emailTemplates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              📧 {t.name} ({t.subject})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <input
                         type="email"
                         required
                         placeholder="To Email"
-                        value={modalForm.email_to}
+                        value={modalForm.email_to || (person?.emails?.[0]?.value || person?.emails?.[0] || "")}
                         onChange={(e) => setModalForm({ ...modalForm, email_to: e.target.value })}
                         className="w-full px-3 py-1.5 border rounded text-xs"
                       />
@@ -827,11 +929,11 @@ const LeadViewPage: React.FC = () => {
                         className="w-full px-3 py-1.5 border rounded text-xs"
                       />
                       <textarea
-                        rows={4}
+                        rows={5}
                         placeholder="Message..."
                         value={modalForm.email_body}
                         onChange={(e) => setModalForm({ ...modalForm, email_body: e.target.value })}
-                        className="w-full px-3 py-1.5 border rounded text-xs"
+                        className="w-full px-3 py-1.5 border rounded text-xs font-sans"
                       />
                     </>
                   )}

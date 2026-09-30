@@ -5,8 +5,14 @@ import Swal from "sweetalert2";
 import { ISource } from "@/interface";
 import { sourceSchema } from "@/schemas";
 import { ZodError } from "zod";
+import { usePermission } from "@/hooks/usePermission";
 
 const SourcesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.sources.create");
+  const canEdit = hasPermission("settings.sources.edit");
+  const canDelete = hasPermission("settings.sources.delete");
+  const canView = hasPermission("settings.sources.view");
   const [sources, setSources] = useState<ISource[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
@@ -180,13 +186,15 @@ const SourcesPage: React.FC = () => {
             Sources
           </h1>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <i className="mgc_add_line text-lg"></i>
-          Create Source
-        </button>
+        {canCreate && (
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <i className="mgc_add_line text-lg"></i>
+            Create Source
+          </button>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -290,20 +298,24 @@ const SourcesPage: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(source)}
-                          className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                          title="Edit Source"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(source.id)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
-                          title="Delete Source"
-                        >
-                          <i className="mgc_delete_2_line text-base"></i>
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => openEditModal(source)}
+                            className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                            title="Edit Source"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(source.id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                            title="Delete Source"
+                          >
+                            <i className="mgc_delete_2_line text-base"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

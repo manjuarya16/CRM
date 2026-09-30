@@ -13,7 +13,6 @@ interface ProductRow {
   quantity: string;
   price: string;
 }
-import { ProductRow } from "@/interface";
 
 const TABS = [
   { id: "lead-details", label: "Lead Details" },

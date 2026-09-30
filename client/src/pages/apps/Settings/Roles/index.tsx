@@ -7,10 +7,17 @@ import { IRole } from "@/interface";
 import { roleSchema } from "@/schemas";
 import { ZodError } from "zod";
 import { CRM_PERMISSION_GROUPS, ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
-import { RoleAccessMatrix } from "./RoleAccessMatrix";
+import { usePermission } from "@/hooks/usePermission";
+import { useAuthStore } from "@/store";
 
 const RolesPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"matrix" | "list">("matrix");
+  const { user } = useAuthStore();
+  const { isAllAccess, hasPermission } = usePermission();
+  const canCreate = hasPermission("settings.roles.create");
+  const canView = hasPermission("settings.roles.view");
+  const canEdit = hasPermission("settings.roles.edit");
+  const canDelete = hasPermission("settings.roles.delete");
+
   const [roles, setRoles] = useState<IRole[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
@@ -27,11 +34,13 @@ const RolesPage: React.FC = () => {
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
+    parent_role_id: number | null;
     permission_type: "all" | "custom";
     permissions: string[];
   }>({
     name: "",
     description: "",
+    parent_role_id: null,
     permission_type: "all",
     permissions: [],
   });
@@ -61,6 +70,7 @@ const RolesPage: React.FC = () => {
     setFormData({
       name: "",
       description: "",
+      parent_role_id: null,
       permission_type: "all",
       permissions: [...ALL_CRM_PERMISSION_KEYS],
     });
@@ -87,6 +97,7 @@ const RolesPage: React.FC = () => {
     setFormData({
       name: role.name || "",
       description: role.description || "",
+      parent_role_id: role.parent_role_id ? Number(role.parent_role_id) : null,
       permission_type: (role.permission_type as "all" | "custom") || "all",
       permissions: perms,
     });
@@ -150,6 +161,7 @@ const RolesPage: React.FC = () => {
       const payload = {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
+        parent_role_id: formData.parent_role_id || null,
         permission_type: formData.permission_type,
         permissions:
           formData.permission_type === "all"
@@ -244,15 +256,125 @@ const RolesPage: React.FC = () => {
     );
   };
 
-  const filteredRoles = roles.filter((r) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      r.name?.toLowerCase().includes(s) ||
-      r.description?.toLowerCase().includes(s) ||
-      r.permission_type?.toLowerCase().includes(s)
+  const getEffectiveParentId = (r: IRole, flatRoles: IRole[]): number | null => {
+    if (r.parent_role_id != null && String(r.parent_role_id).trim() !== "" && Number(r.parent_role_id) > 0) {
+      return Number(r.parent_role_id);
+    }
+    const idNum = Number(r.id);
+    const name = String(r.name || "").toLowerCase();
+
+    if (idNum === 1 || name === "administrator") return null;
+
+    const adminRole = flatRoles.find(
+      (x) => Number(x.id) === 1 || String(x.name).toLowerCase() === "administrator" || String(x.name).toLowerCase() === "admin"
     );
-  });
+    const adminId = adminRole ? Number(adminRole.id) : 1;
+    if (idNum === adminId) return null;
+
+    const managerRole = flatRoles.find((x) => String(x.name).toLowerCase().includes("manager"));
+    const managerId = managerRole ? Number(managerRole.id) : null;
+
+    if (name.includes("manager")) {
+      return adminId;
+    }
+    if (name.includes("user") || name.includes("test") || name.includes("staff") || name.includes("agent")) {
+      return managerId && managerId !== idNum ? managerId : adminId;
+    }
+
+    return adminId;
+  };
+
+  const buildRoleTree = (flatRoles: IRole[]) => {
+    const byId: Record<number, any> = {};
+    flatRoles.forEach((r) => {
+      const idNum = Number(r.id);
+      byId[idNum] = { ...r, id: idNum, children: [] };
+    });
+    const roots: any[] = [];
+    flatRoles.forEach((r) => {
+      const idNum = Number(r.id);
+      const pid = getEffectiveParentId(r, flatRoles);
+      if (pid && pid > 0 && byId[pid] && pid !== idNum) {
+        byId[pid].children.push(byId[idNum]);
+      } else {
+        roots.push(byId[idNum]);
+      }
+    });
+    return roots;
+  };
+
+  const flattenWithDepth = (nodes: any[], depth = 0, out: any[] = []) => {
+    for (const n of nodes) {
+      out.push({ ...n, __depth: depth });
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        flattenWithDepth(n.children, depth + 1, out);
+      }
+    }
+    return out;
+  };
+
+  // Find the logged-in user's role
+  const currentUserRole = React.useMemo(() => {
+    if (!user) return null;
+    const rId = (user as any).role_id != null ? Number((user as any).role_id) : null;
+    const rName = String((user as any).role || (user as any).role_name || "").toLowerCase();
+
+    if (rId) {
+      const match = roles.find((r) => Number(r.id) === rId);
+      if (match) return match;
+    }
+    if (rName) {
+      const match = roles.find((r) => String(r.name || "").toLowerCase() === rName);
+      if (match) return match;
+    }
+    return null;
+  }, [user, roles]);
+
+  // Determine visible roles (Admin sees all; Manager/others see their role and lower hierarchy)
+  const visibleRoles = React.useMemo(() => {
+    if (isAllAccess || !currentUserRole) {
+      return roles;
+    }
+
+    const startRoleId = Number(currentUserRole.id);
+    const allowedIds = new Set<number>([startRoleId]);
+
+    let added = true;
+    while (added) {
+      added = false;
+      roles.forEach((r) => {
+        const rId = Number(r.id);
+        if (!allowedIds.has(rId)) {
+          const pid = getEffectiveParentId(r, roles);
+          if (pid && allowedIds.has(pid)) {
+            allowedIds.add(rId);
+            added = true;
+          }
+        }
+      });
+    }
+
+    return roles.filter((r) => allowedIds.has(Number(r.id)));
+  }, [roles, currentUserRole, isAllAccess]);
+
+  const filteredRoles = React.useMemo(() => {
+    const matched = visibleRoles.filter((r) => {
+      if (!search) return true;
+      const s = search.toLowerCase();
+      return (
+        r.name?.toLowerCase().includes(s) ||
+        r.description?.toLowerCase().includes(s) ||
+        r.permission_type?.toLowerCase().includes(s)
+      );
+    });
+
+    if (search.trim()) {
+      return matched;
+    }
+
+    const tree = buildRoleTree(matched);
+    return flattenWithDepth(tree);
+  }, [visibleRoles, search]);
 
   const totalPages = Math.ceil(filteredRoles.length / perPage) || 1;
   const paginatedRoles = filteredRoles.slice((page - 1) * perPage, page * perPage);
@@ -298,60 +420,27 @@ const RolesPage: React.FC = () => {
             <Link to="/settings" className="text-[#0088cc] hover:underline">
               Settings
             </Link>{" "}
-            / <span className="text-gray-700 dark:text-gray-300">Roles & Permissions</span>
+            / <span className="text-gray-700 dark:text-gray-300">Roles</span>
           </nav>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-            Roles & Permissions
+            Roles
           </h1>
         </div>
 
-        <div>
-          <Link
-            to="/settings/roles/create"
-            className="inline-flex items-center px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-base mr-1.5"></i>
-            Create Role
-          </Link>
-        </div>
+        {canCreate && (
+          <div>
+            <Link
+              to="/settings/roles/create"
+              className="inline-flex items-center px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            >
+              <i className="mgc_add_line text-base mr-1.5"></i>
+              Create Role
+            </Link>
+          </div>
+        )}
       </div>
 
-      {/* View Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700">
-        <button
-          type="button"
-          onClick={() => setActiveTab("matrix")}
-          className={`flex items-center gap-2 pb-3 px-3 text-sm font-semibold border-b-2 transition-colors ${
-            activeTab === "matrix"
-              ? "border-[#4f46e5] text-[#4f46e5] dark:text-indigo-400"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          Role Access Matrix
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("list")}
-          className={`flex items-center gap-2 pb-3 px-3 text-sm font-semibold border-b-2 transition-colors ${
-            activeTab === "list"
-              ? "border-[#0088cc] text-[#0088cc]"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-          Roles List
-        </button>
-      </div>
-
-      {activeTab === "matrix" ? (
-        <RoleAccessMatrix />
-      ) : (
-      /* Main Card */
+      {/* Main Card */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         {/* Toolbar Header */}
         <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4">
@@ -456,7 +545,13 @@ const RolesPage: React.FC = () => {
                           onClick={() => openViewModal(role)}
                           className="hover:text-[#0088cc] transition-colors font-semibold text-left flex items-center gap-1.5"
                         >
-                          {role.name}
+                          {(role as any).__depth > 0 && (
+                            <span className="text-[#0088cc] font-mono text-xs font-bold inline-flex items-center">
+                              {"\u00A0\u00A0\u00A0\u00A0".repeat((role as any).__depth - 1)}
+                              └──{"\u00A0"}
+                            </span>
+                          )}
+                          <span>{role.name}</span>
                           <i className="mgc_information_line text-gray-400 hover:text-[#0088cc] text-xs"></i>
                         </button>
                       </td>
@@ -482,27 +577,33 @@ const RolesPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
-                        <button
-                          onClick={() => openViewModal(role)}
-                          className="inline-flex items-center text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 p-1.5 rounded-lg transition-colors"
-                          title="View Role & Permissions Details"
-                        >
-                          <i className="mgc_eye_line text-base"></i>
-                        </button>
-                        <Link
-                          to={`/settings/roles/edit/${role.id}`}
-                          className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
-                          title="Edit Role & Permissions"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(role)}
-                          className="inline-flex items-center text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 p-1.5 rounded-lg transition-colors"
-                          title="Delete Role"
-                        >
-                          <i className="mgc_delete_2_line text-base"></i>
-                        </button>
+                        {canView && (
+                          <button
+                            onClick={() => openViewModal(role)}
+                            className="inline-flex items-center text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 p-1.5 rounded-lg transition-colors"
+                            title="View Role & Permissions Details"
+                          >
+                            <i className="mgc_eye_line text-base"></i>
+                          </button>
+                        )}
+                        {canEdit && (
+                          <Link
+                            to={`/settings/roles/edit/${role.id}`}
+                            className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
+                            title="Edit Role & Permissions"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(role)}
+                            className="inline-flex items-center text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 p-1.5 rounded-lg transition-colors"
+                            title="Delete Role"
+                          >
+                            <i className="mgc_delete_2_line text-base"></i>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -539,7 +640,6 @@ const RolesPage: React.FC = () => {
           </div>
         </div>
       </div>
-      )}
 
       {/* 1. VIEW ROLE DETAILS MODAL */}
       {isViewModalOpen && viewingRole && (
@@ -656,17 +756,19 @@ const RolesPage: React.FC = () => {
             </div>
 
             <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2 bg-gray-50/50 dark:bg-gray-900/50">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsViewModalOpen(false);
-                  openEditModal(viewingRole);
-                }}
-                className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
-              >
-                <i className="mgc_edit_line text-sm"></i>
-                Edit This Role
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    openEditModal(viewingRole);
+                  }}
+                  className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <i className="mgc_edit_line text-sm"></i>
+                  Edit This Role
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsViewModalOpen(false)}
@@ -704,7 +806,7 @@ const RolesPage: React.FC = () => {
             {/* Modal Body */}
             <form noValidate onSubmit={handleSaveRole} className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Basic Role Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
                     Role Name <span className="text-red-500">*</span>
@@ -723,6 +825,31 @@ const RolesPage: React.FC = () => {
                   {errors.name && (
                     <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
+                    Parent Role
+                  </label>
+                  <select
+                    value={formData.parent_role_id || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        parent_role_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-[#0088cc]"
+                  >
+                    <option value="">-- None (Top-Level Role) --</option>
+                    {roles
+                      .filter((r) => !editingRole || String(r.id) !== String(editingRole.id))
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div>

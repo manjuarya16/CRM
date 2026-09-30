@@ -56,13 +56,14 @@ export const useActivityStore = create<ActivityStore>((set, get) => ({
     try {
       const response = await API.post("/activities/create", data);
       if (response.data?.success) {
+        const newItem = { id: Date.now(), ...data, ...(response.data.data || {}) };
         set((state) => ({
-          activities: [response.data.data, ...state.activities],
+          activities: [newItem, ...state.activities],
           total: state.total + 1,
           error: null,
         }));
         handleSuccessResponse("Activity", "created", null);
-        return response.data.data;
+        return newItem;
       } else {
         throw new Error(response.data?.message || "Failed to create activity");
       }

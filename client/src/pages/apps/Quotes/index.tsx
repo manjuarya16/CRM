@@ -3,8 +3,14 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import { IQuote } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const QuotesPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("quotes.create");
+  const canEdit = hasPermission("quotes.edit");
+  const canDelete = hasPermission("quotes.delete");
+  const canView = hasPermission("quotes.view");
   const { quotes, total, loading, fetchQuotes, deleteQuote } = useQuoteStore();
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
@@ -45,12 +51,14 @@ const QuotesPage: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Quotes</h1>
-        <Link
-          to="/quotes/create"
-          className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          + Create Quote
-        </Link>
+        {canCreate && (
+          <Link
+            to="/quotes/create"
+            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            + Create Quote
+          </Link>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -139,20 +147,24 @@ const QuotesPage: React.FC = () => {
                       {quote.created_at ? new Date(quote.created_at).toLocaleDateString() : "-"}
                     </td>
                     <td className="py-3 px-4 text-right space-x-2">
-                      <Link
-                        to={`/quotes/edit/${quote.id}`}
-                        className="text-gray-500 hover:text-[#0088cc] p-1 inline-block"
-                        title="Edit Quote"
-                      >
-                        <i className="mgc_edit_line text-base"></i>
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(quote)}
-                        className="text-gray-500 hover:text-red-600 p-1 inline-block"
-                        title="Delete Quote"
-                      >
-                        <i className="mgc_delete_line text-base"></i>
-                      </button>
+                      {canEdit && (
+                        <Link
+                          to={`/quotes/edit/${quote.id}`}
+                          className="text-gray-500 hover:text-[#0088cc] p-1 inline-block"
+                          title="Edit Quote"
+                        >
+                          <i className="mgc_edit_line text-base"></i>
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(quote)}
+                          className="text-gray-500 hover:text-red-600 p-1 inline-block"
+                          title="Delete Quote"
+                        >
+                          <i className="mgc_delete_line text-base"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

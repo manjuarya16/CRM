@@ -4,8 +4,14 @@ import API from "@/config";
 import Swal from "sweetalert2";
 
 import { IOrganization } from "@/interface";
+import { usePermission } from "@/hooks/usePermission";
 
 const OrganizationsPage: React.FC = () => {
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("organizations.create");
+  const canEdit = hasPermission("organizations.edit");
+  const canDelete = hasPermission("organizations.delete");
+  const canView = hasPermission("organizations.view");
   const [organizations, setOrganizations] = useState<IOrganization[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
@@ -169,7 +175,7 @@ const OrganizationsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
               className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
@@ -178,12 +184,14 @@ const OrganizationsPage: React.FC = () => {
               Delete ({selectedIds.length})
             </button>
           )}
-          <Link
-            to="/contacts/organizations/create"
-            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            Create Organization
-          </Link>
+          {canCreate && (
+            <Link
+              to="/contacts/organizations/create"
+              className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            >
+              Create Organization
+            </Link>
+          )}
         </div>
       </div>
 
@@ -329,20 +337,24 @@ const OrganizationsPage: React.FC = () => {
                         {formatDate(org.created_at)}
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
-                        <Link
-                          to={`/contacts/organizations/edit/${org.id}`}
-                          className="inline-flex items-center text-gray-500 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                          title="Edit"
-                        >
-                          <i className="mgc_edit_line text-base"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(org.id, org.name)}
-                          className="inline-flex items-center text-gray-500 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
-                          title="Delete"
-                        >
-                          <i className="mgc_delete_line text-base"></i>
-                        </button>
+                        {canEdit && (
+                          <Link
+                            to={`/contacts/organizations/edit/${org.id}`}
+                            className="inline-flex items-center text-gray-500 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            title="Edit"
+                          >
+                            <i className="mgc_edit_line text-base"></i>
+                          </Link>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(org.id, org.name)}
+                            className="inline-flex items-center text-gray-500 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
+                            title="Delete"
+                          >
+                            <i className="mgc_delete_line text-base"></i>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -54,26 +54,51 @@ const SideBarContent = () => {
   // null = not loaded yet, Set = loaded (may be empty)
   const allowedKeys = useMemo(() => {
     if (isAdmin) return null;
-    // userAccess is empty AND roles have loaded = access fetched, just no permissions
-    // userAccess is empty AND roles not loaded = still loading
-    if (roles.length === 0) return undefined; // signal: still loading
-    return new Set(
-      userAccess.filter((a) => a.can_view).map((a) => a.module_key),
-    );
-  }, [userAccess, isAdmin, roles.length]);
+    const keySet = new Set<string>();
+
+    // 1. Add keys from user.permissions array (e.g. 'dashboard.view', 'organizations.view', 'settings.users.view')
+    const perms: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
+    if (perms.length > 0) {
+      perms.forEach((p) => {
+        const parts = p.toLowerCase().split(".");
+        const mod = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+        const act = parts[parts.length - 1];
+        if (act === "view" || act === "read" || parts.length === 1) {
+          const cleanMod = mod.trim();
+          keySet.add(cleanMod);
+          if (cleanMod.endsWith("s")) keySet.add(cleanMod.slice(0, -1));
+          else keySet.add(`${cleanMod}s`);
+        }
+      });
+    }
+
+    // 2. Add keys from userAccess table
+    userAccess.filter((a) => a.can_view).forEach((a) => {
+      const k = a.module_key.toLowerCase().trim();
+      keySet.add(k);
+      if (k.endsWith("s")) {
+        keySet.add(k.slice(0, -1));
+      } else {
+        keySet.add(`${k}s`);
+      }
+    });
+
+    if (keySet.size === 0 && roles.length === 0) return undefined;
+    return keySet;
+  }, [user, userAccess, isAdmin, roles.length]);
 
   const filterMenuItems = useCallback(
     (items: MenuItemTypes[]): MenuItemTypes[] => {
       if (isAdmin) return items;
-      // Still loading roles/access — render nothing to avoid flash
       if (allowedKeys === undefined) return [];
 
       const filtered = items
         .filter((item) => {
           if (item.isTitle) return true;
           if (!item.children) {
-            // Leaf: show if explicitly granted — adminOnly does NOT block granted items
-            return allowedKeys?.has(item.key) ?? true;
+            const itemKeyLower = item.key.toLowerCase().trim();
+            const singularKey = itemKeyLower.endsWith("s") ? itemKeyLower.slice(0, -1) : itemKeyLower;
+            return allowedKeys?.has(item.key) || allowedKeys?.has(itemKeyLower) || allowedKeys?.has(singularKey) || false;
           }
           return true;
         })
@@ -148,7 +173,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
                 <path d="M18 6L25 13L18 20L11 13L18 6Z" fill="#0088cc" />
                 <path d="M12.5 17.5L19.5 24.5L12.5 31.5L5.5 24.5L12.5 17.5Z" fill="#38bdf8" />
               </svg>
-              <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Krayin</span>
+              <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">CRM</span>
             </div>
           )}
         </Link>

@@ -6,6 +6,8 @@ import useRoleStore from "@/store/roleStore";
 import { useDepartmentStore } from "@/store";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { PageBreadcrumb } from "@/components";
+import API from "@/config";
+import { IGroup } from "@/interface";
 import { handleErrorResponse, handleSuccessResponse } from "@/utils/swalAlert";
 import useModuleAccess from "@/hooks/useModuleAccess";
 
@@ -104,41 +106,132 @@ export const UserManagement: React.FC = () => {
   const { can_add, can_update, can_delete } = useModuleAccess("users");
   const { users, loading, deleteUser, fetchUsers } = useUserStore();
   const { branches } = useBranchStore();
-  const { roles } = useRoleStore();
+  const { roles, fetchRoles } = useRoleStore();
   const { departments, fetchDepartments } = useDepartmentStore();
   const activeRoles = React.useMemo(
     () => (roles || []).filter((r) => r.status !== false),
     [roles],
   );
+  const [groups, setGroups] = useState<IGroup[]>([]);
   const [pendingRole, setPendingRole] = React.useState<string>("all");
+  const [pendingGroup, setPendingGroup] = React.useState<string>("all");
   const [pendingSearchUser, setPendingSearchUser] = React.useState<string>("");
   const [pendingDateFrom, setPendingDateFrom] = React.useState<string>("");
   const [pendingDateTo, setPendingDateTo] = React.useState<string>("");
   const [activeRole, setActiveRole] = React.useState<string>("all");
+  const [activeGroup, setActiveGroup] = React.useState<string>("all");
   const [activeSearchUser, setActiveSearchUser] = React.useState<string>("");
   const [activeDateFrom, setActiveDateFrom] = React.useState<string>("");
   const [activeDateTo, setActiveDateTo] = React.useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
 
+  const matchedUser = useMemo(() => {
+    if (!currentUser) return null;
+    return (users || []).find(
+      (u) => Number(u.id) === Number(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()
+    );
+  }, [currentUser, users]);
+
+  const currentUserRoleId = useMemo(() => {
+    if (currentUser?.role_id != null && Number(currentUser.role_id) > 0) {
+      return Number(currentUser.role_id);
+    }
+    if (matchedUser?.role_id != null && Number(matchedUser.role_id) > 0) {
+      return Number(matchedUser.role_id);
+    }
+    const roleStr = String((currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || "").toLowerCase();
+    if (roleStr) {
+      const found = (roles || []).find((r) => String(r.name).toLowerCase() === roleStr);
+      if (found) return Number(found.id);
+    }
+    return null;
+  }, [currentUser, matchedUser, roles]);
+
+  const currentUserGroups = useMemo(() => {
+    if (!currentUser && !matchedUser) return [] as number[];
+    const gList = (matchedUser as any)?.group_ids || (matchedUser as any)?.groups || (currentUser as any)?.group_ids || (currentUser as any)?.groups || [];
+    return (gList as any[]).map((g: any) => Number(g.id || g)).filter((id: number) => id > 0);
+  }, [currentUser, matchedUser]);
+
+  const currentUserViewPermission = useMemo(() => {
+    const perm = (matchedUser as any)?.view_permission || (currentUser as any)?.view_permission || "global";
+    return String(perm).toLowerCase();
+  }, [currentUser, matchedUser]);
+
+  const getEffectiveParentId = (r: any, flatRoles: any[]): number | null => {
+    const idNum = Number(r.id);
+    const name = String(r.name || "").toLowerCase();
+
+    // Only root Administrator (ID 1 or exact name 'administrator') has null parent
+    if (idNum === 1 || name === "administrator") return null;
+
+    // 1. Explicit parent_role_id from database takes top priority
+    if (r.parent_role_id != null && String(r.parent_role_id).trim() !== "" && Number(r.parent_role_id) > 0) {
+      const explicitParent = Number(r.parent_role_id);
+      if (explicitParent !== idNum) return explicitParent;
+    }
+
+    const adminRole = flatRoles.find(
+      (x) => Number(x.id) === 1 || String(x.name).toLowerCase() === "administrator"
+    );
+    const adminId = adminRole ? Number(adminRole.id) : 1;
+    if (idNum === adminId) return null;
+
+    const managerRole = flatRoles.find((x) => String(x.name).toLowerCase().includes("manager"));
+    const managerId = managerRole ? Number(managerRole.id) : null;
+
+    if (name.includes("manager")) {
+      return adminId;
+    }
+    if (name.includes("user") || name.includes("test") || name.includes("staff") || name.includes("agent") || name.includes("employee")) {
+      return managerId && managerId !== idNum ? managerId : adminId;
+    }
+
+    return adminId;
+  };
+
   const childrenMap = useMemo(() => {
-    const m: Record<string, number[]> = {};
+    const m: Record<number, number[]> = {};
     (activeRoles || []).forEach((r) => {
-      const pid = r.parent_role_id ? String(r.parent_role_id) : "__root";
-      if (!m[pid]) m[pid] = [];
-      m[pid].push(r.id);
+      const rid = Number(r.id);
+      const rName = String(r.name || "").toLowerCase();
+      if (rName === "administrator" || rid === 1) return;
+
+      const pid = getEffectiveParentId(r, activeRoles);
+      if (pid && pid > 0 && pid !== rid) {
+        if (!m[pid]) m[pid] = [];
+        if (!m[pid].includes(rid)) m[pid].push(rid);
+      }
+
+      // Ensure Manager roles treat all non-administrator user/staff roles as children
+      if (rName.includes("manager")) {
+        (activeRoles || []).forEach((sub) => {
+          const subId = Number(sub.id);
+          const subName = String(sub.name || "").toLowerCase();
+          if (subId !== rid && subId !== 1 && subName !== "administrator") {
+            if (!m[rid]) m[rid] = [];
+            if (!m[rid].includes(subId)) m[rid].push(subId);
+          }
+        });
+      }
     });
     return m;
-  }, [roles]);
+  }, [roles, activeRoles]);
 
   const collectDescendants = (startId?: number | null) => {
-    if (!startId) return [] as number[];
+    if (startId == null || startId === undefined) return [] as number[];
+    const numericStart = Number(startId);
+    if (!numericStart) return [] as number[];
     const out: number[] = [];
-    const stack = [startId];
+    const stack = [numericStart];
+    const visited = new Set<number>();
+
     while (stack.length) {
       const cur = stack.pop();
-      if (cur === undefined) continue;
+      if (cur === undefined || visited.has(cur)) continue;
+      visited.add(cur);
       out.push(cur);
-      const kids = childrenMap[String(cur)];
+      const kids = childrenMap[cur];
       if (kids && kids.length) stack.push(...kids);
     }
     return out;
@@ -155,36 +248,105 @@ export const UserManagement: React.FC = () => {
             !name.includes("cordinator")
           );
         })
-        .map((r) => r.id),
+        .map((r) => Number(r.id)),
     );
   }, [roles]);
 
+  const isAdministrator = useMemo(() => {
+    const roleName = String(
+      (currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || ""
+    ).toLowerCase();
+    if (roleName === "administrator") return true;
+    if (currentUserRoleId === 1) return true;
+    if (currentUserRoleId) {
+      const found = (roles || []).find((r) => Number(r.id) === Number(currentUserRoleId));
+      if (found && String(found.name).toLowerCase() === "administrator") {
+        return true;
+      }
+    }
+    return false;
+  }, [currentUser, matchedUser, currentUserRoleId, roles]);
+
   const allowedRoleIds = useMemo(() => {
-    if (!currentUser) return [] as number[];
-    const currRole = activeRoles.find((r) => r.id === currentUser.role_id);
-    if (currRole && String(currRole.name).toLowerCase() === "admin")
-      return (roles || []).map((r) => r.id);
-    if (!currentUser.role_id) return [] as number[];
-    return collectDescendants(currentUser.role_id);
-  }, [currentUser, roles, childrenMap]);
+    if (isAdministrator) {
+      return (roles || []).map((r) => Number(r.id));
+    }
+    const matchedRole = (roles || []).find((r) => Number(r.id) === Number(currentUserRoleId));
+    const userRoleStr = String(
+      (currentUser as any)?.role || (currentUser as any)?.role_name || (matchedUser as any)?.role_name || (matchedUser as any)?.role || matchedRole?.name || ""
+    ).toLowerCase();
+
+    // Any non-administrator role (like Manager) gets access to all non-administrator subordinate roles (Manager, Admin, User, test, etc.)
+    const nonAdminRoleIds = (roles || [])
+      .filter((r) => Number(r.id) !== 1 && String(r.name).toLowerCase() !== "administrator")
+      .map((r) => Number(r.id));
+
+    if (currentUserRoleId) {
+      const descendants = collectDescendants(currentUserRoleId);
+      return Array.from(new Set([...descendants, Number(currentUserRoleId), ...nonAdminRoleIds]));
+    }
+    return nonAdminRoleIds;
+  }, [isAdministrator, currentUserRoleId, currentUser, matchedUser, roles, childrenMap]);
 
   const allowedUsers = useMemo(() => {
-    if (!currentUser) return [] as any[];
-    const currRole = activeRoles.find((r) => r.id === currentUser.role_id);
-    const baseList =
-      currRole && String(currRole.name).toLowerCase() === "admin"
-        ? users
-        : !currentUser.role_id
-          ? users.filter((u) => u.id === currentUser.id)
-          : (users || []).filter(
-            (u) =>
-              u.id === currentUser.id ||
-              (u.role_id && new Set(allowedRoleIds).has(u.role_id)),
-          );
-    return baseList.filter(
-      (u) => u.role_id == null || !volunteerRoleIds.has(u.role_id),
+    if (!currentUser && (!users || !users.length)) return [] as any[];
+
+    const currentUserId = currentUser?.id != null
+      ? Number(currentUser.id)
+      : (matchedUser?.id != null ? Number(matchedUser.id) : null);
+
+    const normPermission = String(currentUserViewPermission || "global").toLowerCase();
+
+    const isRootAdmin = (u: any) => {
+      const rid = u.role_id != null ? Number(u.role_id) : null;
+      const rname = String(u.role_name || u.role || "").toLowerCase();
+      return rid === 1 || rname === "administrator";
+    };
+
+    // 1. Administrator -> see all non-volunteer users
+    if (isAdministrator) {
+      return (users || []).filter(
+        (u) => u.role_id == null || !volunteerRoleIds.has(Number(u.role_id)),
+      );
+    }
+
+    // Filter out Administrator role users & volunteer users for all non-administrators
+    const list = (users || []).filter(
+      (u) => !isRootAdmin(u) && (u.role_id == null || !volunteerRoleIds.has(Number(u.role_id))),
     );
-  }, [users, currentUser, roles, allowedRoleIds, volunteerRoleIds]);
+
+    // 2. Individual view permission -> see only self
+    if (normPermission === "individual") {
+      return list.filter((u) => Number(u.id) === currentUserId);
+    }
+
+    // 3. Global view permission -> see all non-administrator users
+    if (normPermission === "global") {
+      return list;
+    }
+
+    const allowedSet = new Set(allowedRoleIds.map(Number));
+
+    // 4. Group / Subordinates / Hierarchical / Default view permission
+    const groupSet = new Set(currentUserGroups);
+    return list.filter((u) => {
+      if (currentUserId && Number(u.id) === currentUserId) return true;
+      if (volunteerRoleIds.has(Number(u.role_id))) return false;
+      // Role hierarchy match (subordinates)
+      if (u.role_id == null || allowedSet.has(Number(u.role_id))) return true;
+      // Group match
+      const uGroups = ((u as any).group_ids || ((u as any).groups || []).map((g: any) => g.id || g)).map(Number);
+      return uGroups.some((gid: number) => groupSet.has(gid));
+    });
+  }, [users, currentUser, matchedUser, isAdministrator, currentUserRoleId, allowedRoleIds, volunteerRoleIds, currentUserGroups, currentUserViewPermission]);
+
+  const displayGroups = useMemo(() => {
+    if (isAdministrator || currentUserGroups.length === 0) {
+      return groups;
+    }
+    const userGroupSet = new Set(currentUserGroups);
+    return groups.filter((g) => userGroupSet.has(Number(g.id)));
+  }, [groups, isAdministrator, currentUserGroups]);
 
   const stats = useMemo(
     () => ({
@@ -202,10 +364,15 @@ export const UserManagement: React.FC = () => {
   useEffect(() => {
     const force = useUserStore.getState().users.length === 0;
     Promise.all([
+      fetchRoles(),
       fetchDepartments(),
       fetchUsers(1, 99999, force),
-    ]).then(([, payload]) => {
-      if ((payload as any)?.rows) setCurrentPage(1);
+      API.get("/groups").catch(() => ({ data: { data: [] } })),
+    ]).then(([, , payload, groupsRes]) => {
+      if ((payload as any)?.rows || Array.isArray(payload)) setCurrentPage(1);
+      if (groupsRes?.data?.data) {
+        setGroups(groupsRes.data.data);
+      }
     }).catch(() => { });
   }, []);
 
@@ -220,12 +387,19 @@ export const UserManagement: React.FC = () => {
 
   const buildRoleTree = (flatRoles: any[]) => {
     const byId: Record<number, any> = {};
-    flatRoles.forEach((r) => (byId[r.id] = { ...r, children: [] }));
+    flatRoles.forEach((r) => {
+      const idNum = Number(r.id);
+      byId[idNum] = { ...r, id: idNum, children: [] };
+    });
     const roots: any[] = [];
     flatRoles.forEach((r) => {
-      const parentId = (r as any).parent_role_id;
-      if (parentId && byId[parentId]) byId[parentId].children.push(byId[r.id]);
-      else roots.push(byId[r.id]);
+      const idNum = Number(r.id);
+      const pid = getEffectiveParentId(r, flatRoles);
+      if (pid && pid > 0 && byId[pid] && pid !== idNum) {
+        byId[pid].children.push(byId[idNum]);
+      } else {
+        roots.push(byId[idNum]);
+      }
     });
     return roots;
   };
@@ -246,15 +420,14 @@ export const UserManagement: React.FC = () => {
 
   const flattenedRoles = React.useMemo(() => {
     if (!currentUser) return [];
-    const currRole = roles.find((r) => r.id === currentUser.role_id);
     let list = activeRoles || [];
     // Hide all volunteer roles from the role selector.
     list = list.filter((r) => !volunteerRoleIds.has(r.id));
-    if (!(currRole && String(currRole.name).toLowerCase() === "admin")) {
+    if (!isAdministrator) {
       list = list.filter((r) => allowedRoleIdSet.has(String(r.id)));
     }
     return [...list].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [roles, currentUser, allowedRoleIdSet, volunteerRoleIds]);
+  }, [currentUser, isAdministrator, allowedRoleIdSet, volunteerRoleIds, activeRoles]);
 
   React.useEffect(() => {
     if (pendingRole === "all" || pendingRole === "__unassigned") return;
@@ -267,6 +440,13 @@ export const UserManagement: React.FC = () => {
     if (activeRole === "__unassigned") list = list.filter((u) => !u.role_id);
     else if (activeRole !== "all")
       list = list.filter((u) => String(u.role_id) === activeRole);
+    if (activeGroup !== "all") {
+      const gid = Number(activeGroup);
+      list = list.filter((u) => {
+        const uGroups = ((u as any).group_ids || ((u as any).groups || []).map((g: any) => g.id || g)).map(Number);
+        return uGroups.includes(gid);
+      });
+    }
     if (activeSearchUser.trim()) {
       const q = activeSearchUser.trim().toLowerCase();
       list = list.filter(
@@ -292,10 +472,12 @@ export const UserManagement: React.FC = () => {
     list = list.filter(
       (u) => u && (u.status === true || Number(u.status) === 1),
     );
-    return [...list].sort((a, b) => b.id - a.id);
+
+    return [...list].sort((a, b) => Number(b.id) - Number(a.id));
   }, [
     allowedUsers,
     activeRole,
+    activeGroup,
     activeSearchUser,
     activeDateFrom,
     activeDateTo,
@@ -303,6 +485,7 @@ export const UserManagement: React.FC = () => {
 
   const handleSearchClick = () => {
     setActiveRole(pendingRole);
+    setActiveGroup(pendingGroup);
     setActiveSearchUser(pendingSearchUser);
     setActiveDateFrom(pendingDateFrom);
     setActiveDateTo(pendingDateTo);
@@ -311,10 +494,12 @@ export const UserManagement: React.FC = () => {
 
   const handleResetFilters = () => {
     setPendingRole("all");
+    setPendingGroup("all");
     setPendingSearchUser("");
     setPendingDateFrom("");
     setPendingDateTo("");
     setActiveRole("all");
+    setActiveGroup("all");
     setActiveSearchUser("");
     setActiveDateFrom("");
     setActiveDateTo("");
