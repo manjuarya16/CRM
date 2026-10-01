@@ -5,7 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/activityInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
-import { processWorkflowsForEvent } from "@/utils/workflowEngine";
+import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();

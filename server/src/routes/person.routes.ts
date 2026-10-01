@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PersonService } from '@/services/person.service';
 import { personSchema } from '@/schemas/person.schema';
 import { ApiError } from '@/middleware/errorHandler';
-import { processWorkflowsForEvent } from '@/utils/workflowEngine';
+import { processWorkflowsForEvent } from '@/services/workflowEngine';
 
 const router = Router();
 
