@@ -18,6 +18,7 @@ export * from './event.service';
 export * from './campaign.service';
 export * from './webhook.service';
 export * from './workflow.service';
+export * from './workflowEngine';
 export * from './webform.service';
 export * from './dataTransfer.service';
 export * from './googleContact.service';
