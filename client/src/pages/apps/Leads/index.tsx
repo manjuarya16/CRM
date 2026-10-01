@@ -69,8 +69,15 @@ const LeadsPage: React.FC = () => {
     }).catch(() => { });
 
     // Fetch lists for filter dropdowns
-    API.get("/users").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => { });
-    API.get("/persons?limit=100").then((res) => { if (res.data?.data) setPersonsList(res.data.data); }).catch(() => { });
+    API.get("/users?limit=200&per_page=200").then((res) => { if (res.data?.data) setUsersList(res.data.data); }).catch(() => { });
+    API.get("/persons?limit=500&per_page=500").then((res) => {
+      if (res.data?.data) {
+        const sorted = (res.data.data || []).sort((a: any, b: any) =>
+          (a.name || "").localeCompare(b.name || "")
+        );
+        setPersonsList(sorted);
+      }
+    }).catch(() => { });
     API.get("/leads/sources").then((res) => { if (res.data?.data) setSourcesList(res.data.data); }).catch(() => { });
     API.get("/leads/types").then((res) => { if (res.data?.data) setTypesList(res.data.data); }).catch(() => { });
   }, []);

@@ -65,8 +65,13 @@ const LeadViewPage: React.FC = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   useEffect(() => {
-    API.get("/persons?limit=100").then((res) => {
-      if (res.data?.data) setPersonsList(res.data.data);
+    API.get("/persons?limit=500&per_page=500").then((res) => {
+      if (res.data?.data) {
+        const sorted = (res.data.data || []).sort((a: any, b: any) =>
+          (a.name || "").localeCompare(b.name || "")
+        );
+        setPersonsList(sorted);
+      }
     }).catch(() => { });
 
     API.get("/email-templates").then((res) => {

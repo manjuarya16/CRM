@@ -119,10 +119,10 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
       price,
       custom_attributes,
       inventories,
-    }: IProductCreateInput & { custom_attributes?: any; inventories?: any[] } = req.body;
+    } = validation.data;
 
     // Calculate total quantity from warehouse inventories if provided and > 0
-    let effectiveQuantity = quantity || 0;
+    let effectiveQuantity = Number(quantity) || 0;
     if (Array.isArray(inventories) && inventories.length > 0) {
       const totalInvStock = inventories.reduce((sum, inv) => sum + (Number(inv.in_stock) || 0), 0);
       if (totalInvStock > 0 || (quantity === undefined || quantity === null || quantity === 0)) {
@@ -137,7 +137,7 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
         name || null,
         description || null,
         effectiveQuantity,
-        price || null,
+        price !== undefined && price !== null ? Number(price) : null,
       ]
     );
 
@@ -180,9 +180,16 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     logger.error(error);
+    if (error.code === '23505') {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "A product with this SKU already exists. Please choose a different SKU.",
+      });
+      return;
+    }
     res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to create product",
     });
   } finally {
     connection?.release();
@@ -220,10 +227,10 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
       price,
       custom_attributes,
       inventories,
-    }: IProductUpdateInput & { custom_attributes?: any; inventories?: any[] } = req.body;
+    } = validation.data;
 
     // Calculate total quantity from warehouse inventories if provided
-    let effectiveQuantity = quantity;
+    let effectiveQuantity = quantity !== undefined && quantity !== null ? Number(quantity) : undefined;
     if (Array.isArray(inventories) && inventories.length > 0) {
       const totalInvStock = inventories.reduce((sum, inv) => sum + (Number(inv.in_stock) || 0), 0);
       if (totalInvStock > 0 || quantity === undefined) {
@@ -239,7 +246,7 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
         name ?? null,
         description ?? null,
         effectiveQuantity ?? null,
-        price ?? null,
+        price !== undefined && price !== null ? Number(price) : null,
       ]
     );
 
@@ -283,9 +290,16 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     logger.error(error);
+    if (error.code === '23505') {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "A product with this SKU already exists. Please choose a different SKU.",
+      });
+      return;
+    }
     res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to update product",
     });
   } finally {
     connection?.release();

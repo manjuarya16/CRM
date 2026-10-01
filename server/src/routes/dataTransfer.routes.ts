@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { Router } from 'express';
 import { DataTransferService } from '@/services/dataTransfer.service';
 import { importRequestSchema } from '@/schemas/dataTransfer.schema';
