@@ -108,6 +108,12 @@ const handleSendEmail = async (req: Request, res: Response, next: NextFunction) 
     if (!payload.reply_to && payload.to) {
       payload.reply_to = payload.to;
     }
+    if (!payload.reply && payload.body) {
+      payload.reply = payload.body;
+    } else if (!payload.reply && payload.message) {
+      payload.reply = payload.message;
+    }
+
     if (typeof payload.reply_to === 'string' && payload.reply_to.startsWith('[')) {
       try { payload.reply_to = JSON.parse(payload.reply_to); } catch (e) {}
     }
@@ -125,6 +131,14 @@ const handleSendEmail = async (req: Request, res: Response, next: NextFunction) 
     }
 
     const parsed = createMailSchema.parse(payload);
+    // If reply_to is empty but to is present, sync
+    if ((!parsed.reply_to || parsed.reply_to.length === 0) && parsed.to && parsed.to.length > 0) {
+      parsed.reply_to = parsed.to;
+    }
+    if (!parsed.reply && parsed.body) {
+      parsed.reply = parsed.body;
+    }
+
     const files = (req.files as Express.Multer.File[]) || [];
     const created = await mailService.createEmail(parsed, files, (req as any).user);
 

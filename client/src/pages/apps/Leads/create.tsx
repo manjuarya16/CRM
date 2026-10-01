@@ -19,11 +19,14 @@ const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
 
 const getPersonEmail = (person: any): string => {
-  if (!person || !person.emails) return "";
+  if (!person) return "";
+  if (person.email) return person.email;
+  if (!person.emails) return "";
   try {
     const emails = typeof person.emails === "string" ? JSON.parse(person.emails) : person.emails;
-    if (Array.isArray(emails) && emails[0]?.value) {
-      return emails[0].value;
+    if (Array.isArray(emails) && emails.length > 0) {
+      const first = emails[0];
+      return typeof first === "object" ? (first.value || first.email || "") : String(first);
     }
     if (typeof emails === "string") return emails;
   } catch (e) { }
@@ -131,16 +134,21 @@ const CreateLeadPage: React.FC = () => {
       }
     });
 
-    API.get("/users?limit=100").then((r) => {
+    API.get("/users?limit=200&per_page=200").then((r) => {
       if (r.data?.data) setUsers(r.data.data);
     }).catch(() => { });
-    API.get("/persons?limit=100").then((r) => {
-      if (r.data?.data) setPersons(r.data.data);
+    API.get("/persons?limit=500&per_page=500").then((r) => {
+      if (r.data?.data) {
+        const sorted = (r.data.data || []).sort((a: any, b: any) =>
+          (a.name || "").localeCompare(b.name || "")
+        );
+        setPersons(sorted);
+      }
     }).catch(() => { });
-    API.get("/organizations?limit=100").then((r) => {
+    API.get("/organizations?limit=200&per_page=200").then((r) => {
       if (r.data?.data) setOrganizations(r.data.data);
     }).catch(() => { });
-    API.get("/products?limit=200").then((r) => {
+    API.get("/products?limit=500&per_page=500").then((r) => {
       if (r.data?.data) setProducts(r.data.data);
     }).catch(() => { });
   }, []);
@@ -286,7 +294,8 @@ const CreateLeadPage: React.FC = () => {
 
   const filteredPersons = persons.filter((p) => {
     if (!personSearch) return true;
-    const q = personSearch.toLowerCase();
+    if (personId && personName && personSearch === personName) return true;
+    const q = personSearch.toLowerCase().trim();
     const name = (p.name || "").toLowerCase();
     const email = getPersonEmail(p).toLowerCase();
     return name.includes(q) || email.includes(q);

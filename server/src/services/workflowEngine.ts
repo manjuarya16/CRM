@@ -131,6 +131,10 @@ async function fetchEntityData(entityType: WorkflowEntityType, entityId: number)
 // ACTION EXECUTOR
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION EXECUTOR
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function executeActions(
   actions: any[],
   entityType: WorkflowEntityType,
@@ -140,32 +144,58 @@ async function executeActions(
   for (const action of actions) {
     try {
       const actionKey = (action.id || action.action_type || '').toLowerCase();
-      const actionVal = action.value || action.target;
 
       switch (actionKey) {
         // ── Send email via email template ─────────────────────────────────────
         case 'send_email':
         case 'send_email_to_person':
         case 'send_email_to_sales_owner':
-        case 'send_email_to_participants': {
-          const templateId = actionVal;
-          if (!templateId) break;
+        case 'send_email_to_participants':
+        case 'email':
+        case 'send_mail': {
+          // Template ID can be in action.target or action.value or action.template_id
+          let templateId: number | null = null;
+          if (action.target && !isNaN(Number(action.target)) && Number(action.target) > 0) {
+            templateId = Number(action.target);
+          } else if (action.value && !isNaN(Number(action.value)) && Number(action.value) > 0) {
+            templateId = Number(action.value);
+          } else if (action.template_id && !isNaN(Number(action.template_id))) {
+            templateId = Number(action.template_id);
+          }
+
+          if (!templateId) {
+            logger.warn({ action, entityType, entityId: entity.id }, '[WorkflowEngine] No valid template ID found in action');
+            break;
+          }
 
           const { rows: tRows } = await pool.query(
             `SELECT id, name, subject, content FROM public.email_templates WHERE id = $1`,
-            [Number(templateId)]
+            [templateId]
           );
           const tmpl = tRows[0];
-          if (!tmpl) break;
+          if (!tmpl) {
+            logger.warn({ templateId }, '[WorkflowEngine] Email template not found in DB');
+            break;
+          }
 
           // Build context from entity
           const ctxParams: any = { user };
           if (entityType === 'leads') {
             ctxParams.lead_id = entity.id;
             ctxParams.person_id = entity.person_id;
+            ctxParams.organization_id = entity.organization_id;
           } else if (entityType === 'persons') {
             ctxParams.person_id = entity.id;
+            ctxParams.organization_id = entity.organization_id;
+          } else if (entityType === 'quotes') {
+            ctxParams.quote_id = entity.id;
+            ctxParams.person_id = entity.person_id;
+            ctxParams.lead_id = entity.lead_id;
+            ctxParams.organization_id = entity.organization_id;
+          } else if (entityType === 'organizations') {
+            ctxParams.organization_id = entity.id;
           } else if (entityType === 'activities') {
+            ctxParams.activity_id = entity.id;
             // Look up which lead this activity belongs to
             const { rows: laRows } = await pool.query(
               `SELECT lead_id FROM public.lead_activities WHERE activity_id = $1 LIMIT 1`,
@@ -175,18 +205,32 @@ async function executeActions(
           }
 
           const ctx = await fetchTemplateContext(ctxParams);
-          const parsedSubject = parsePlaceholders(tmpl.subject, ctx);
-          const parsedBody = parsePlaceholders(tmpl.content, ctx);
+          const parsedSubject = parsePlaceholders(tmpl.subject || '(No Subject)', ctx);
+          const parsedBody = parsePlaceholders(tmpl.content || '', ctx);
+
+          // Resolve recipient specification
+          let recipientSpec = '';
+          if (action.value && isNaN(Number(action.value))) {
+            recipientSpec = String(action.value).trim();
+          } else if (action.target && isNaN(Number(action.target))) {
+            recipientSpec = String(action.target).trim();
+          }
+          const recLower = recipientSpec.toLowerCase();
 
           // Resolve recipient email
           let toEmail: string | null = null;
-          if (actionKey === 'send_email_to_sales_owner') {
+          if (actionKey === 'send_email_to_sales_owner' || recLower === 'sales_owner' || recLower === 'sales_person' || recLower === 'user_email') {
             toEmail = entity.user_email || ctx.user?.email || null;
-          } else if (actionKey === 'send_email_to_participants') {
+          } else if (actionKey === 'send_email_to_participants' || recLower === 'participants') {
             // For activities: send to all participants via their emails
             if (entity.id) {
               const { rows: pRows } = await pool.query(
-                `SELECT COALESCE(u.email, p.emails->>0) as email
+                `SELECT COALESCE(u.email, (
+                   CASE 
+                     WHEN jsonb_typeof(p.emails::jsonb) = 'array' THEN p.emails->0->>'value'
+                     ELSE p.emails::text 
+                   END
+                 )) as email
                  FROM public.activity_participants ap
                  LEFT JOIN public.users u ON u.id = ap.user_id
                  LEFT JOIN public.persons p ON p.id = ap.person_id
@@ -195,18 +239,41 @@ async function executeActions(
               );
               for (const pr of pRows) {
                 if (!pr.email) continue;
-                await sendWorkflowEmail(pr.email, parsedSubject, parsedBody);
+                await sendWorkflowEmail(pr.email, parsedSubject, parsedBody, {
+                  lead_id: ctxParams.lead_id,
+                  person_id: ctxParams.person_id,
+                  quote_id: ctxParams.quote_id,
+                });
               }
             }
             continue;
+          } else if (recipientSpec.includes('@')) {
+            toEmail = recipientSpec;
           } else {
-            // send_email_to_person or send_email
-            const rawEmails = entity.emails || ctx.person?.emails;
+            // Default: Contact / Person email
+            const rawEmails = entity.person_emails || entity.emails || (ctx.person?.emails ? ctx.person.emails : null);
             if (rawEmails) {
-              try {
-                const parsed = typeof rawEmails === 'string' ? JSON.parse(rawEmails) : rawEmails;
-                toEmail = Array.isArray(parsed) ? parsed[0]?.value : null;
-              } catch { toEmail = null; }
+              if (typeof rawEmails === 'string') {
+                try {
+                  const parsed = JSON.parse(rawEmails);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    toEmail = typeof parsed[0] === 'object' ? (parsed[0].value || parsed[0].email) : String(parsed[0]);
+                  } else {
+                    toEmail = rawEmails;
+                  }
+                } catch {
+                  toEmail = rawEmails.replace(/[\[\]"']/g, '').trim();
+                }
+              } else if (Array.isArray(rawEmails) && rawEmails.length > 0) {
+                toEmail = typeof rawEmails[0] === 'object' ? (rawEmails[0].value || rawEmails[0].email) : String(rawEmails[0]);
+              }
+            }
+
+            if (!toEmail && entity.person_email) {
+              toEmail = entity.person_email;
+            }
+            if (!toEmail && ctx.person?.email) {
+              toEmail = ctx.person.email;
             }
             if (!toEmail && (entity.user_email || ctx.user?.email)) {
               toEmail = entity.user_email || ctx.user?.email || null;
@@ -214,7 +281,43 @@ async function executeActions(
           }
 
           if (toEmail) {
-            await sendWorkflowEmail(toEmail, parsedSubject, parsedBody);
+            await sendWorkflowEmail(toEmail, parsedSubject, parsedBody, {
+              lead_id: ctxParams.lead_id,
+              person_id: ctxParams.person_id,
+              quote_id: ctxParams.quote_id,
+            });
+          } else {
+            logger.warn({ entityType, entityId: entity.id, action }, '[WorkflowEngine] Could not resolve recipient email for workflow send_email');
+          }
+          break;
+        }
+
+        // ── Assign User ───────────────────────────────────────────────────────
+        case 'assign_user': {
+          let assignedUserId: number | null = null;
+          if (action.target && !isNaN(Number(action.target))) assignedUserId = Number(action.target);
+          else if (action.value && !isNaN(Number(action.value))) assignedUserId = Number(action.value);
+
+          if (assignedUserId && entity.id) {
+            const table = entityType.toLowerCase();
+            if (['leads', 'persons', 'organizations', 'quotes', 'activities'].includes(table)) {
+              await pool.query(`UPDATE public.${table} SET user_id = $1, updated_at = NOW() WHERE id = $2`, [assignedUserId, entity.id]);
+              logger.info({ table, entityId: entity.id, assignedUserId }, '[WorkflowEngine] assign_user done');
+            }
+          }
+          break;
+        }
+
+        // ── Update Attribute ─────────────────────────────────────────────────
+        case 'update_attribute': {
+          const field = action.target;
+          const val = action.value;
+          if (field && val !== undefined && entity.id) {
+            const table = entityType.toLowerCase();
+            if (['leads', 'persons', 'organizations', 'quotes'].includes(table)) {
+              await pool.query(`UPDATE public.${table} SET ${field} = $1, updated_at = NOW() WHERE id = $2`, [val, entity.id]);
+              logger.info({ table, entityId: entity.id, field, val }, '[WorkflowEngine] update_attribute done');
+            }
           }
           break;
         }
@@ -222,36 +325,59 @@ async function executeActions(
         // ── Add a note activity ────────────────────────────────────────────────
         case 'add_note_as_activity':
         case 'create_activity': {
-          if (entityType !== 'leads') break;
-          const comment = String(actionVal || 'Activity created by workflow automation');
+          const comment = String(action.value || action.target || 'Activity created by workflow automation');
+          const actType = (action.target && !action.target.startsWith('http') && action.target.length < 20) ? action.target : 'note';
+
           const { rows: actRows } = await pool.query(
             `INSERT INTO public.activities (title, type, comment, is_done, user_id, created_at, updated_at)
-             VALUES ($1, 'note', $2, true, $3, NOW(), NOW())
+             VALUES ($1, $2, $3, true, $4, NOW(), NOW())
              RETURNING id`,
-            [`Workflow: ${comment.slice(0, 60)}`, comment, user?.id || null]
+            [`Workflow: ${comment.slice(0, 60)}`, actType, comment, user?.id || null]
           );
           const actId = actRows[0]?.id;
           if (actId && entity.id) {
-            await pool.query(
-              `INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [entity.id, actId]
-            );
+            if (entityType === 'leads') {
+              await pool.query(
+                `INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                [entity.id, actId]
+              );
+            } else if (entityType === 'persons') {
+              await pool.query(
+                `INSERT INTO public.person_activities (person_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                [entity.id, actId]
+              );
+            }
           }
-          logger.info({ leadId: entity.id, actId }, '[WorkflowEngine] add_note_as_activity done');
+          logger.info({ entityType, entityId: entity.id, actId }, '[WorkflowEngine] create_activity done');
           break;
         }
 
         // ── Fire Webhook ─────────────────────────────────────────────────────
         case 'trigger_webhook': {
-          const webhookId = actionVal;
+          const webhookId = action.target || action.value;
           if (!webhookId) break;
 
-          const { rows: wRows } = await pool.query(
-            `SELECT id, name, method, end_point, headers, query_params, payload_type, raw_payload_type, payload
-             FROM public.webhooks WHERE id = $1`,
-            [Number(webhookId)]
-          );
-          const wh = wRows[0];
+          let wh: any = null;
+          if (!isNaN(Number(webhookId))) {
+            const { rows: wRows } = await pool.query(
+              `SELECT id, name, method, end_point, headers, query_params, payload_type, raw_payload_type, payload
+               FROM public.webhooks WHERE id = $1`,
+              [Number(webhookId)]
+            );
+            wh = wRows[0];
+          } else if (typeof webhookId === 'string' && webhookId.startsWith('http')) {
+            wh = {
+              name: 'Direct URL Webhook',
+              method: 'POST',
+              end_point: webhookId,
+              headers: [],
+              query_params: [],
+              payload_type: 'default',
+              raw_payload_type: 'json',
+              payload: {},
+            };
+          }
+
           if (!wh) {
             logger.warn({ webhookId }, '[WorkflowEngine] Webhook not found');
             break;
@@ -268,7 +394,7 @@ async function executeActions(
 
           const resolvedEndpoint = replacePlaceholdersSimple(wh.end_point, entityCtx);
           const resolvedPayload = wh.payload_type === 'default'
-            ? { ...entityCtx, ...basePayload }   // default: entity data + custom overrides
+            ? { ...entityCtx, ...basePayload }
             : basePayload;
 
           const result = await fireWebhook({
@@ -315,12 +441,47 @@ function replacePlaceholdersSimple(str: string, ctx: Record<string, string>): st
   return str.replace(/\{%\s*([a-zA-Z0-9_.]+)\s*%\}/g, (_, key) => ctx[key] ?? '');
 }
 
-/** Send email via the existing mailer utility */
-async function sendWorkflowEmail(to: string, subject: string, body: string): Promise<void> {
+/** Send email via the existing mailer utility and log to emails table */
+async function sendWorkflowEmail(
+  to: string,
+  subject: string,
+  body: string,
+  meta?: { lead_id?: number | null; person_id?: number | null; quote_id?: number | null }
+): Promise<void> {
   try {
     const { sendRealMail } = await import('@/utils/mailer');
-    await sendRealMail({ to, subject, html: body });
-    logger.info({ to, subject }, '[WorkflowEngine] Email sent');
+    const sent = await sendRealMail({ to, subject, html: body, text: body });
+    logger.info({ to, subject, sent }, '[WorkflowEngine] Workflow email dispatch attempted');
+
+    // Record in database emails table
+    try {
+      const fromEmail = { name: 'CRM Automation', email: 'automation@crm.local' };
+      const uniqueId = `wf_email_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      await pool.query(
+        `INSERT INTO public.emails (
+          subject, source, user_type, name, reply, is_read, folders,
+          from_email, sender, reply_to, unique_id, message_id,
+          person_id, lead_id, created_at, updated_at
+        ) VALUES (
+          $1, 'workflow', 'admin', $2, $3, true, '["sent"]'::jsonb,
+          $4, $4, $5, $6, $7,
+          $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )`,
+        [
+          subject,
+          'Workflow Automation',
+          body,
+          JSON.stringify(fromEmail),
+          JSON.stringify([to]),
+          uniqueId,
+          `<${uniqueId}@crm.local>`,
+          meta?.person_id || null,
+          meta?.lead_id || null,
+        ]
+      );
+    } catch (dbErr: any) {
+      logger.warn('[WorkflowEngine] Could not record email to DB: ' + dbErr?.message);
+    }
   } catch (err: any) {
     logger.error({ err: err?.message, to }, '[WorkflowEngine] sendWorkflowEmail failed');
   }

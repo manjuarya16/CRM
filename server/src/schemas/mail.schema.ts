@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 export const createMailSchema = z.object({
   subject: z.string().optional().default(''),
+  to: z.union([
+    z.string(),
+    z.array(z.string()),
+  ]).optional().transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
   reply_to: z.union([
     z.string(),
     z.array(z.string()),
@@ -14,16 +18,23 @@ export const createMailSchema = z.object({
     z.string(),
     z.array(z.string()),
   ]).optional().transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
-  reply: z.string().min(1, 'Message body is required'),
+  reply: z.string().optional().default(''),
+  body: z.string().optional(),
+  message: z.string().optional(),
   is_draft: z.union([z.boolean(), z.string()]).optional().transform((v) => v === true || v === 'true' || v === '1'),
   lead_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   person_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
+  quote_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   organization_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   parent_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
 });
 
 export const updateMailSchema = z.object({
   subject: z.string().optional(),
+  to: z.union([
+    z.string(),
+    z.array(z.string()),
+  ]).optional().transform((val) => (val ? (Array.isArray(val) ? val : [val]) : undefined)),
   reply_to: z.union([
     z.string(),
     z.array(z.string()),
@@ -37,10 +48,13 @@ export const updateMailSchema = z.object({
     z.array(z.string()),
   ]).optional().transform((val) => (val ? (Array.isArray(val) ? val : [val]) : undefined)),
   reply: z.string().optional(),
+  body: z.string().optional(),
+  message: z.string().optional(),
   is_draft: z.union([z.boolean(), z.string()]).optional().transform((v) => (v !== undefined ? v === true || v === 'true' || v === '1' : undefined)),
   folders: z.array(z.string()).optional(),
   lead_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   person_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
+  quote_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   organization_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
 });
 
