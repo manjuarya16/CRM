@@ -150,6 +150,62 @@ export class PersonService {
     }
   }
 
+  public static async checkDuplicate(params: {
+    email?: string;
+    phone?: string;
+    excludeId?: number | string | null;
+  }): Promise<{ isDuplicate: boolean; field?: 'email' | 'phone'; message?: string; existingPerson?: any }> {
+    let client: PoolClient | undefined;
+    try {
+      client = await pool.connect();
+      const personId = toNumberParam(params.excludeId);
+
+      if (params.email && params.email.trim().includes('@')) {
+        const emailVal = params.email.trim().toLowerCase();
+        const { rows } = await client.query(
+          `SELECT id, name FROM public.persons 
+           WHERE ($1::int IS NULL OR id != $1) 
+             AND emails::text ILIKE $2 
+           LIMIT 1`,
+          [personId, `%${emailVal}%`]
+        );
+        if (rows.length > 0) {
+          return {
+            isDuplicate: true,
+            field: 'email',
+            message: `Email address "${emailVal}" is already registered to another contact (${rows[0].name}).`,
+            existingPerson: rows[0],
+          };
+        }
+      }
+
+      if (params.phone && params.phone.trim().length >= 3) {
+        const phoneVal = params.phone.trim();
+        const cleanPhone = phoneVal.replace(/[^0-9+]/g, '');
+        const searchPattern = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${phoneVal}%`;
+        const { rows } = await client.query(
+          `SELECT id, name FROM public.persons 
+           WHERE ($1::int IS NULL OR id != $1) 
+             AND (contact_numbers::text ILIKE $2 OR contact_numbers::text ILIKE $3) 
+           LIMIT 1`,
+          [personId, `%${phoneVal}%`, searchPattern]
+        );
+        if (rows.length > 0) {
+          return {
+            isDuplicate: true,
+            field: 'phone',
+            message: `Contact number "${phoneVal}" is already registered to another contact (${rows[0].name}).`,
+            existingPerson: rows[0],
+          };
+        }
+      }
+
+      return { isDuplicate: false };
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   // Unified DB Function call: save_person(...)
   public static async save(
     data: {
@@ -166,13 +222,95 @@ export class PersonService {
     let client: PoolClient | undefined;
     try {
       const personId = toNumberParam(id);
+
+      // Extract emails for duplicate validation
+      const emailList: string[] = [];
+      if (Array.isArray(data.emails)) {
+        data.emails.forEach((item: any) => {
+          const val = typeof item === 'object' ? (item.value || item.email) : String(item);
+          if (val && typeof val === 'string' && val.trim().includes('@')) {
+            emailList.push(val.trim().toLowerCase());
+          }
+        });
+      } else if (typeof data.emails === 'string' && data.emails.includes('@')) {
+        try {
+          const parsed = JSON.parse(data.emails);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              const val = typeof item === 'object' ? (item.value || item.email) : String(item);
+              if (val && typeof val === 'string' && val.trim().includes('@')) {
+                emailList.push(val.trim().toLowerCase());
+              }
+            });
+          }
+        } catch {
+          if (data.emails.includes('@')) emailList.push(data.emails.trim().toLowerCase());
+        }
+      }
+
+      // Extract phone numbers for duplicate validation
+      const phoneList: string[] = [];
+      if (Array.isArray(data.contact_numbers)) {
+        data.contact_numbers.forEach((item: any) => {
+          const val = typeof item === 'object' ? (item.value || item.number || item.phone) : String(item);
+          if (val && typeof val === 'string' && val.trim().length >= 3) {
+            phoneList.push(val.trim());
+          }
+        });
+      } else if (typeof data.contact_numbers === 'string' && data.contact_numbers.trim().length >= 3) {
+        try {
+          const parsed = JSON.parse(data.contact_numbers);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              const val = typeof item === 'object' ? (item.value || item.number || item.phone) : String(item);
+              if (val && typeof val === 'string' && val.trim().length >= 3) {
+                phoneList.push(val.trim());
+              }
+            });
+          }
+        } catch {
+          if (data.contact_numbers.trim().length >= 3) phoneList.push(data.contact_numbers.trim());
+        }
+      }
+
+      client = await pool.connect();
+
+      // Validate Duplicate Emails
+      for (const emailVal of emailList) {
+        const { rows: dupEmails } = await client.query(
+          `SELECT id, name FROM public.persons 
+           WHERE ($1::int IS NULL OR id != $1) 
+             AND emails::text ILIKE $2 
+           LIMIT 1`,
+          [personId, `%${emailVal}%`]
+        );
+        if (dupEmails.length > 0) {
+          throw new ApiError(400, `Email address "${emailVal}" is already registered to another contact (${dupEmails[0].name}).`);
+        }
+      }
+
+      // Validate Duplicate Phones
+      for (const phoneVal of phoneList) {
+        const cleanPhone = phoneVal.replace(/[^0-9+]/g, '');
+        const searchPattern = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${phoneVal}%`;
+        const { rows: dupPhones } = await client.query(
+          `SELECT id, name FROM public.persons 
+           WHERE ($1::int IS NULL OR id != $1) 
+             AND (contact_numbers::text ILIKE $2 OR contact_numbers::text ILIKE $3) 
+           LIMIT 1`,
+          [personId, `%${phoneVal}%`, searchPattern]
+        );
+        if (dupPhones.length > 0) {
+          throw new ApiError(400, `Contact number "${phoneVal}" is already registered to another contact (${dupPhones[0].name}).`);
+        }
+      }
+
       const emailsJson = typeof data.emails === 'object' ? JSON.stringify(data.emails) : (data.emails || '[]');
       const contactsJson = typeof data.contact_numbers === 'object' ? JSON.stringify(data.contact_numbers) : (data.contact_numbers || '[]');
       const customAttrsJson = typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : (data.custom_attributes || '{}');
       const orgId = toNumberParam(data.organization_id);
       const userId = toNumberParam(data.user_id);
 
-      client = await pool.connect();
       const { rows } = await client.query(
         'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb, $8) as result',
         [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]

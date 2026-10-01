@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IProductCreateInput, IProductUpdateInput } from "@/interfaces/productInterface";
+import { productSchema } from "@/schemas/product.schema";
 
 const logger = pino();
 
@@ -99,6 +100,16 @@ const getProductById = async (req: Request, res: Response): Promise<void> => {
 const createProduct = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
+    const validation = productSchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Validation failed",
+        errors: validation.error.format(),
+      });
+      return;
+    }
+
     connection = await pool.connect();
     const {
       sku,
@@ -181,8 +192,26 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
 const updateProduct = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
     const id = Number(req.params.id || req.body.id);
+    if (!id || isNaN(id)) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid product ID",
+      });
+      return;
+    }
+
+    const validation = productSchema.partial().safeParse(req.body);
+    if (!validation.success) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Validation failed",
+        errors: validation.error.format(),
+      });
+      return;
+    }
+
+    connection = await pool.connect();
     const {
       sku,
       name,

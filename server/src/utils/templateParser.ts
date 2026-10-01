@@ -31,6 +31,9 @@ export async function fetchTemplateContext(params: {
   lead_id?: number | string | null;
   person_id?: number | string | null;
   organization_id?: number | string | null;
+  activity_id?: number | string | null;
+  quote_id?: number | string | null;
+  product_id?: number | string | null;
   to_email?: string | string[] | null;
   user?: any;
 }): Promise<Record<string, any>> {
@@ -41,11 +44,51 @@ export async function fetchTemplateContext(params: {
     organization: {},
     activity: {},
     quote: {},
+    product: {},
   };
 
   let leadId = params.lead_id ? Number(params.lead_id) : null;
   let personId = params.person_id ? Number(params.person_id) : null;
   let organizationId = params.organization_id ? Number(params.organization_id) : null;
+  let activityId = params.activity_id ? Number(params.activity_id) : null;
+  let quoteId = params.quote_id ? Number(params.quote_id) : null;
+  let productId = params.product_id ? Number(params.product_id) : null;
+
+  // Direct fetch Activity using DB function fn_get_activity_by_id
+  if (activityId) {
+    try {
+      const actRes = await pool.query(`SELECT * FROM fn_get_activity_by_id($1)`, [activityId]);
+      if (actRes.rows[0]) {
+        context.activity = actRes.rows[0];
+      }
+    } catch (err) {
+      logger.error({ err, activityId }, 'fetchTemplateContext: fn_get_activity_by_id failed');
+    }
+  }
+
+  // Direct fetch Quote using DB function fn_get_quote_by_id
+  if (quoteId) {
+    try {
+      const qRes = await pool.query(`SELECT * FROM fn_get_quote_by_id($1)`, [quoteId]);
+      if (qRes.rows[0]) {
+        context.quote = qRes.rows[0];
+      }
+    } catch (err) {
+      logger.error({ err, quoteId }, 'fetchTemplateContext: fn_get_quote_by_id failed');
+    }
+  }
+
+  // Direct fetch Product using DB function fn_get_product_by_id
+  if (productId) {
+    try {
+      const pRes = await pool.query(`SELECT * FROM fn_get_product_by_id($1)`, [productId]);
+      if (pRes.rows[0]) {
+        context.product = pRes.rows[0];
+      }
+    } catch (err) {
+      logger.error({ err, productId }, 'fetchTemplateContext: fn_get_product_by_id failed');
+    }
+  }
 
   // Auto-discover Person from recipient email if person_id was not explicitly provided
   if (!personId && params.to_email) {
@@ -66,34 +109,10 @@ export async function fetchTemplateContext(params: {
     }
   }
 
-  // ─── Fetch LEAD ─────────────────────────────────────────────────────────────
+  // ─── Fetch LEAD using DB function fn_get_lead_by_id ──────────────────────────
   if (leadId) {
     try {
-      const { rows } = await pool.query(
-        `SELECT
-          l.id, l.title, l.description, l.lead_value, l.status,
-          l.expected_close_date, l.created_at, l.person_id, l.user_id,
-          p.name  AS person_name,
-          p.emails AS person_emails,
-          p.contact_numbers AS person_contact_numbers,
-          org.name AS organization_name,
-          s.name  AS source_name,
-          t.name  AS type_name,
-          pipe.name AS pipeline_name,
-          stg.name  AS stage_name,
-          u.name  AS user_name,
-          u.email AS user_email
-        FROM public.leads l
-        LEFT JOIN public.persons        p    ON p.id   = l.person_id
-        LEFT JOIN public.organizations  org  ON org.id = p.organization_id
-        LEFT JOIN public.lead_sources   s    ON s.id   = l.lead_source_id
-        LEFT JOIN public.lead_types     t    ON t.id   = l.lead_type_id
-        LEFT JOIN public.lead_pipelines pipe ON pipe.id = l.lead_pipeline_id
-        LEFT JOIN public.lead_pipeline_stages stg ON stg.id = l.lead_pipeline_stage_id
-        LEFT JOIN public.users          u    ON u.id   = l.user_id
-        WHERE l.id = $1`,
-        [leadId]
-      );
+      const { rows } = await pool.query(`SELECT * FROM fn_get_lead_by_id($1)`, [leadId]);
       if (rows[0]) {
         context.lead = rows[0];
         if (!personId && rows[0].person_id) {
@@ -101,66 +120,64 @@ export async function fetchTemplateContext(params: {
         }
       }
     } catch (err) {
-      logger.error({ err, leadId }, 'fetchTemplateContext: lead query failed');
+      logger.error({ err, leadId }, 'fetchTemplateContext: fn_get_lead_by_id failed');
     }
 
-    // ─── Fetch latest ACTIVITY linked to this lead ───────────────────────────
-    try {
-      const actRes = await pool.query(
-        `SELECT a.id, a.title, a.type, a.comment, a.schedule_from, a.schedule_to,
-                a.location, a.is_done, a.created_at, a.user_id,
-                u.name AS user_name
-         FROM public.activities a
-         LEFT JOIN public.users u ON u.id = a.user_id
-         JOIN public.lead_activities la ON la.activity_id = a.id
-         WHERE la.lead_id = $1
-           AND a.type NOT IN ('email', 'file', 'system')
-         ORDER BY a.id DESC LIMIT 1`,
-        [leadId]
-      );
-      if (actRes.rows[0]) {
-        context.activity = actRes.rows[0];
+    // Fetch latest ACTIVITY linked to this lead if not direct
+    if (!context.activity?.id) {
+      try {
+        const actRes = await pool.query(
+          `SELECT a.id, a.title, a.type, a.comment, a.schedule_from, a.schedule_to,
+                  a.location, a.is_done, a.created_at, a.user_id,
+                  u.name AS user_name
+           FROM public.activities a
+           LEFT JOIN public.users u ON u.id = a.user_id
+           JOIN public.lead_activities la ON la.activity_id = a.id
+           WHERE la.lead_id = $1
+             AND a.type NOT IN ('email', 'file', 'system')
+           ORDER BY a.id DESC LIMIT 1`,
+          [leadId]
+        );
+        if (actRes.rows[0]) {
+          context.activity = actRes.rows[0];
+        }
+      } catch (err) {
+        logger.warn({ err, leadId }, 'fetchTemplateContext: lead activity query failed');
       }
-    } catch (err) {
-      logger.warn({ err, leadId }, 'fetchTemplateContext: lead activity query failed');
     }
 
-    // ─── Fetch latest QUOTE linked to this lead ──────────────────────────────
-    try {
-      const qRes = await pool.query(
-        `SELECT q.id, q.subject, q.description, q.grand_total, q.sub_total,
-                q.expired_at, q.billing_address, q.shipping_address,
-                u.name AS user_name
-         FROM public.quotes q
-         LEFT JOIN public.users u ON u.id = q.user_id
-         WHERE q.lead_id = $1
-         ORDER BY q.id DESC LIMIT 1`,
-        [leadId]
-      );
-      if (qRes.rows[0]) {
-        context.quote = qRes.rows[0];
+    // Fetch latest QUOTE linked to this lead if not direct
+    if (!context.quote?.id) {
+      try {
+        const qRes = await pool.query(
+          `SELECT q.id, q.subject, q.description, q.grand_total, q.sub_total,
+                  q.expired_at, q.billing_address, q.shipping_address,
+                  u.name AS user_name
+           FROM public.quotes q
+           LEFT JOIN public.users u ON u.id = q.user_id
+           WHERE q.lead_id = $1
+           ORDER BY q.id DESC LIMIT 1`,
+          [leadId]
+        );
+        if (qRes.rows[0]) {
+          context.quote = qRes.rows[0];
+        }
+      } catch (err) {
+        logger.error({ err, leadId }, 'fetchTemplateContext: quote query failed');
       }
-    } catch (err) {
-      logger.error({ err, leadId }, 'fetchTemplateContext: quote query failed');
     }
   }
 
-  // ─── Fetch PERSON ────────────────────────────────────────────────────────────
+  // ─── Fetch PERSON using DB function get_person ───────────────────────────────
   if (personId) {
     try {
-      const { rows } = await pool.query(
-        `SELECT p.id, p.name, p.emails, p.contact_numbers,
-                org.name AS organization_name
-         FROM public.persons p
-         LEFT JOIN public.organizations org ON org.id = p.organization_id
-         WHERE p.id = $1`,
-        [personId]
-      );
-      if (rows[0]) {
-        context.person = rows[0];
+      const { rows } = await pool.query(`SELECT get_person($1) AS data`, [personId]);
+      if (rows[0]?.data) {
+        const pData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+        context.person = pData;
       }
     } catch (err) {
-      logger.error({ err, personId }, 'fetchTemplateContext: person query failed');
+      logger.error({ err, personId }, 'fetchTemplateContext: get_person failed');
     }
   }
 
@@ -256,7 +273,7 @@ export async function fetchTemplateContext(params: {
     }
   }
 
-  // ─── Fetch ORGANIZATION ──────────────────────────────────────────────────────
+  // ─── Fetch ORGANIZATION using DB function get_organization ──────────────────
   if (!organizationId && context.person?.organization_id) {
     organizationId = context.person.organization_id;
   }
@@ -266,25 +283,24 @@ export async function fetchTemplateContext(params: {
 
   if (organizationId) {
     try {
-      const { rows } = await pool.query(
-        `SELECT id, name, address, created_at FROM public.organizations WHERE id = $1`,
-        [organizationId]
-      );
-      if (rows[0]) {
-        context.organization = rows[0];
+      const { rows } = await pool.query(`SELECT get_organization($1) AS data`, [organizationId]);
+      if (rows[0]?.data) {
+        const orgData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+        context.organization = orgData;
       }
     } catch (err) {
-      logger.error({ err, organizationId }, 'fetchTemplateContext: organization query failed');
+      logger.error({ err, organizationId }, 'fetchTemplateContext: get_organization failed');
     }
   }
 
   logger.info({
-    leadId, personId, organizationId,
+    leadId, personId, organizationId, activityId, quoteId, productId,
     lead_title: context.lead?.title,
     person_name: context.person?.name,
     org_name: context.organization?.name,
     activity_title: context.activity?.title,
     quote_subject: context.quote?.subject,
+    product_name: context.product?.name,
   }, '[TemplateParser] Context resolved');
 
   return context;
@@ -298,6 +314,7 @@ function getValueForTag(key: string, context: Record<string, any>): string {
   const user         = context.user         || {};
   const activity     = context.activity     || {};
   const quote        = context.quote        || {};
+  const product      = context.product      || {};
 
   switch (cleanKey) {
     // ── Lead / Leads ──────────────────────────────────────────────────────────
@@ -392,19 +409,20 @@ function getValueForTag(key: string, context: Record<string, any>): string {
     // ── User / Users ──────────────────────────────────────────────────────────
     case 'user.name':
     case 'users.name':
-      return user.name || lead.user_name || '';
+      return user.name || lead.user_name || activity.user_name || quote.user_name || '';
     case 'user.email':
     case 'users.email':
       return user.email || lead.user_email || '';
 
     // ── Activity / Activities ─────────────────────────────────────────────────
     case 'activity.title':
-    case 'activities.title': {
-      let title = (activity.title || lead.title || 'New Activity').trim();
-      title = title.replace(/\{%.*?%\}/gi, '').trim();
-      if (!title) title = lead.title || 'New Activity';
-      return title;
-    }
+    case 'activities.title':
+    case 'activity.name':
+    case 'activities.name':
+      return activity.title || lead.title || '';
+    case 'activity.id':
+    case 'activities.id':
+      return activity.id != null ? String(activity.id) : '';
     case 'activity.type':
     case 'activities.type': {
       const typeMap: Record<string, string> = {
@@ -437,6 +455,8 @@ function getValueForTag(key: string, context: Record<string, any>): string {
       return activity.location || 'Office / Online';
     case 'activity.comment':
     case 'activities.comment':
+    case 'activity.description':
+    case 'activities.description':
       return activity.comment || '';
     case 'activity.participants':
     case 'activities.participants':
@@ -451,7 +471,12 @@ function getValueForTag(key: string, context: Record<string, any>): string {
     // ── Quote / Quotes ────────────────────────────────────────────────────────
     case 'quote.subject':
     case 'quotes.subject':
+    case 'quote.title':
+    case 'quotes.title':
       return quote.subject || '';
+    case 'quote.id':
+    case 'quotes.id':
+      return quote.id != null ? String(quote.id) : '';
     case 'quote.grand_total':
     case 'quotes.grand_total':
       return quote.grand_total != null
@@ -462,6 +487,9 @@ function getValueForTag(key: string, context: Record<string, any>): string {
       return quote.sub_total != null
         ? `$${Number(quote.sub_total).toFixed(2)}`
         : '';
+    case 'quote.description':
+    case 'quotes.description':
+      return quote.description || '';
     case 'quote.expired_at':
     case 'quotes.expired_at':
       return quote.expired_at
@@ -481,8 +509,27 @@ function getValueForTag(key: string, context: Record<string, any>): string {
         ? JSON.stringify(quote.shipping_address)
         : quote.shipping_address || '';
 
+    // ── Product / Products ───────────────────────────────────────────────────
+    case 'product.name':
+    case 'products.name':
+    case 'product.title':
+    case 'products.title':
+      return product.name || '';
+    case 'product.sku':
+    case 'products.sku':
+      return product.sku || '';
+    case 'product.price':
+    case 'products.price':
+      return product.price != null ? `$${Number(product.price).toFixed(2)}` : '';
+    case 'product.quantity':
+    case 'products.quantity':
+      return product.quantity != null ? String(product.quantity) : '';
+    case 'product.description':
+    case 'products.description':
+      return product.description || '';
+
     default:
-      // Strip any other placeholder tag so raw code doesn't leak into sent emails
+      // Return empty string for unknown tags
       return '';
   }
 }

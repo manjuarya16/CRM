@@ -2,6 +2,7 @@ import { pool } from '@/config/db';
 import { IWorkflow } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
 import { sendRealMail } from '@/utils/mailer';
+import { fetchTemplateContext, parsePlaceholders } from '@/utils/templateParser';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -94,29 +95,51 @@ export class WorkflowService {
 
       // Enhance payload with complete details from DB for accurate condition evaluation
       if ((lowerType === 'leads' || lowerType === 'lead') && entityId) {
-        const fullLeadRes = await pool.query('SELECT * FROM public.fn_get_lead_by_id($1)', [entityId]);
-        if (fullLeadRes.rows[0]) {
-          data = { ...data, ...fullLeadRes.rows[0] };
+        try {
+          const fullLeadRes = await pool.query('SELECT * FROM public.fn_get_lead_by_id($1)', [entityId]);
+          if (fullLeadRes.rows[0]) {
+            data = { ...data, ...fullLeadRes.rows[0] };
+          }
+        } catch (e) {
+          logger.warn({ e, entityId }, 'WorkflowService lead fetch warning');
         }
       } else if ((lowerType === 'persons' || lowerType === 'person' || lowerType === 'contacts' || lowerType === 'contact') && entityId) {
-        const fullPersonRes = await pool.query('SELECT * FROM public.fn_get_person_by_id($1)', [entityId]);
-        if (fullPersonRes.rows[0]) {
-          data = { ...data, ...fullPersonRes.rows[0] };
+        try {
+          const fullPersonRes = await pool.query('SELECT get_person($1) as result', [entityId]);
+          const personObj = fullPersonRes.rows[0]?.result || fullPersonRes.rows[0];
+          if (personObj) {
+            data = { ...data, ...personObj };
+          }
+        } catch (e) {
+          logger.warn({ e, entityId }, 'WorkflowService person fetch warning');
         }
       } else if ((lowerType === 'organizations' || lowerType === 'organization') && entityId) {
-        const fullOrgRes = await pool.query('SELECT * FROM public.fn_get_organization_by_id($1)', [entityId]);
-        if (fullOrgRes.rows[0]) {
-          data = { ...data, ...fullOrgRes.rows[0] };
+        try {
+          const fullOrgRes = await pool.query('SELECT get_organization($1) as result', [entityId]);
+          const orgObj = fullOrgRes.rows[0]?.result || fullOrgRes.rows[0];
+          if (orgObj) {
+            data = { ...data, ...orgObj };
+          }
+        } catch (e) {
+          logger.warn({ e, entityId }, 'WorkflowService organization fetch warning');
         }
       } else if ((lowerType === 'quotes' || lowerType === 'quote') && entityId) {
-        const fullQuoteRes = await pool.query('SELECT * FROM public.fn_get_quote_by_id($1)', [entityId]);
-        if (fullQuoteRes.rows[0]) {
-          data = { ...data, ...fullQuoteRes.rows[0] };
+        try {
+          const fullQuoteRes = await pool.query('SELECT * FROM public.fn_get_quote_by_id($1)', [entityId]);
+          if (fullQuoteRes.rows[0]) {
+            data = { ...data, ...fullQuoteRes.rows[0] };
+          }
+        } catch (e) {
+          logger.warn({ e, entityId }, 'WorkflowService quote fetch warning');
         }
       } else if ((lowerType === 'activities' || lowerType === 'activity') && entityId) {
-        const fullActRes = await pool.query('SELECT * FROM public.fn_get_activity_by_id($1)', [entityId]);
-        if (fullActRes.rows[0]) {
-          data = { ...data, ...fullActRes.rows[0] };
+        try {
+          const fullActRes = await pool.query('SELECT * FROM public.fn_get_activity_by_id($1)', [entityId]);
+          if (fullActRes.rows[0]) {
+            data = { ...data, ...fullActRes.rows[0] };
+          }
+        } catch (e) {
+          logger.warn({ e, entityId }, 'WorkflowService activity fetch warning');
         }
       }
 
@@ -177,8 +200,8 @@ export class WorkflowService {
           fieldVal = data['pipeline_id'] ?? data['lead_pipeline_id'] ?? data['pipeline_name'];
         } else if (fieldName === 'type_id' || fieldName === 'lead_type_id' || fieldName === 'type') {
           fieldVal = data['type_id'] ?? data['lead_type_id'] ?? data['type_name'] ?? data['type'];
-        } else if (fieldName === 'lead_value' || fieldName === 'value') {
-          fieldVal = data['lead_value'] ?? data['value'] ?? data['grand_total'];
+        } else if (fieldName === 'lead_value' || fieldName === 'value' || fieldName === 'grand_total' || fieldName === 'sub_total') {
+          fieldVal = data['lead_value'] ?? data['value'] ?? data['grand_total'] ?? data['sub_total'];
         } else if (fieldName === 'user_id' || fieldName === 'assigned_to') {
           fieldVal = data['user_id'] ?? data['assigned_to'] ?? data['user_name'];
         } else if (fieldName === 'name' || fieldName === 'title' || fieldName === 'subject') {
@@ -187,6 +210,29 @@ export class WorkflowService {
           fieldVal = data['emails'] ?? data['email'];
         } else if (fieldName === 'contact_numbers' || fieldName === 'phone') {
           fieldVal = data['contact_numbers'] ?? data['phone'];
+        } else if (fieldName === 'comment' || fieldName === 'description') {
+          fieldVal = data['comment'] ?? data['description'];
+        } else if (fieldName === 'job_title') {
+          fieldVal = data['job_title'];
+        } else if (fieldName === 'is_vip' || fieldName === 'vip' || fieldName === 'is_vip_person') {
+          // VIP check: direct property, custom attributes, job title executive match, or name/tags VIP label
+          const customAttrs = typeof data.custom_attributes === 'object' ? data.custom_attributes : {};
+          const isVipAttr = data.is_vip ?? data.vip ?? customAttrs.is_vip ?? customAttrs.vip;
+          if (isVipAttr !== undefined && isVipAttr !== null) {
+            fieldVal = isVipAttr;
+          } else {
+            const jobTitle = String(data.job_title || '').toLowerCase();
+            const nameStr = String(data.name || '').toLowerCase();
+            const tagStr = JSON.stringify(data.tags || '').toLowerCase();
+            const isExecTitle = ['ceo', 'cto', 'cfo', 'coo', 'vp', 'vice president', 'director', 'founder', 'owner', 'partner', 'head', 'chief', 'president'].some(t => jobTitle.includes(t));
+            const hasVipLabel = nameStr.includes('vip') || tagStr.includes('vip') || JSON.stringify(customAttrs).toLowerCase().includes('vip');
+            fieldVal = isExecTitle || hasVipLabel;
+          }
+        }
+
+        // Check custom_attributes JSON object if still unresolved
+        if ((fieldVal === undefined || fieldVal === null) && data.custom_attributes && typeof data.custom_attributes === 'object') {
+          fieldVal = data.custom_attributes[fieldName] ?? data.custom_attributes[c.field];
         }
       }
 
@@ -380,43 +426,112 @@ export class WorkflowService {
           const { rows } = await pool.query(`SELECT * FROM email_templates WHERE id = $1`, [templateId]);
           if (rows[0]) {
             const template = rows[0];
-            let recipientEmail = value?.trim();
+            const lowerEntity = entityType.toLowerCase();
 
-            if (!recipientEmail || recipientEmail === 'contact_email' || recipientEmail === 'person_email') {
-              if (data.person_id) {
-                const personRes = await pool.query(`SELECT emails FROM persons WHERE id = $1`, [data.person_id]);
-                if (personRes.rows[0]?.emails) {
-                  let emailsArr = personRes.rows[0].emails;
-                  if (typeof emailsArr === 'string') {
-                    try { emailsArr = JSON.parse(emailsArr); } catch {}
-                  }
-                  if (Array.isArray(emailsArr) && emailsArr[0]) {
-                    recipientEmail = emailsArr[0].value || emailsArr[0];
+            // Extract email address helper
+            const extractEmailAddress = (val: any): string | null => {
+              if (!val) return null;
+              let parsed = val;
+              if (typeof val === 'string') {
+                const trimmed = val.trim();
+                if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return trimmed;
+                try { parsed = JSON.parse(val); } catch {}
+              }
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                for (const item of parsed) {
+                  const emailStr = typeof item === 'object' ? (item.value || item.email || item.contact_email) : String(item);
+                  if (emailStr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailStr).trim())) {
+                    return String(emailStr).trim();
                   }
                 }
               }
-              if (!recipientEmail && data.emails) {
-                let emailsArr = data.emails;
-                if (typeof emailsArr === 'string') {
-                  try { emailsArr = JSON.parse(emailsArr); } catch {}
-                }
-                if (Array.isArray(emailsArr) && emailsArr[0]) {
-                  recipientEmail = emailsArr[0].value || emailsArr[0];
+              if (typeof parsed === 'object' && parsed !== null) {
+                const emailStr = parsed.value || parsed.email || parsed.contact_email;
+                if (emailStr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailStr).trim())) {
+                  return String(emailStr).trim();
                 }
               }
-              if (!recipientEmail && data.user_id) {
-                const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [data.user_id]);
-                if (userRes.rows[0]?.email) {
-                  recipientEmail = userRes.rows[0].email;
-                }
+              return null;
+            };
+
+            let recipientEmail: string | null = null;
+            const cleanVal = (value || '').trim();
+
+            // 1. Direct email address match
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanVal)) {
+              recipientEmail = cleanVal;
+            } else {
+              // 2. Extract from entity payload fields
+              recipientEmail = extractEmailAddress(data.emails) ||
+                               extractEmailAddress(data.person_emails) ||
+                               extractEmailAddress(data.email) ||
+                               extractEmailAddress(data.contact_email) ||
+                               extractEmailAddress(data.user_email);
+
+              // 3. Fallback DB lookup for Person entity or related person
+              const targetPersonId = (lowerEntity.includes('person') || lowerEntity.includes('contact'))
+                ? entityId
+                : (data.person_id || null);
+
+              if (!recipientEmail && targetPersonId) {
+                try {
+                  const personRes = await pool.query(`SELECT emails FROM persons WHERE id = $1`, [targetPersonId]);
+                  if (personRes.rows[0]?.emails) {
+                    recipientEmail = extractEmailAddress(personRes.rows[0].emails);
+                  }
+                } catch {}
+              }
+
+              // 4. Fallback DB lookup for Lead entity related person
+              const targetLeadId = lowerEntity.includes('lead') ? entityId : (data.lead_id || null);
+              if (!recipientEmail && targetLeadId) {
+                try {
+                  const leadRes = await pool.query(
+                    `SELECT p.emails FROM leads l JOIN persons p ON p.id = l.person_id WHERE l.id = $1`,
+                    [targetLeadId]
+                  );
+                  if (leadRes.rows[0]?.emails) {
+                    recipientEmail = extractEmailAddress(leadRes.rows[0].emails);
+                  }
+                } catch {}
+              }
+
+              // 5. Fallback DB lookup for owner user
+              const targetUserId = data.user_id || data.assigned_to;
+              if (!recipientEmail && targetUserId) {
+                try {
+                  const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetUserId]);
+                  if (userRes.rows[0]?.email) {
+                    recipientEmail = extractEmailAddress(userRes.rows[0].email);
+                  }
+                } catch {}
               }
             }
 
             if (recipientEmail) {
+              const targetPersonId = (lowerEntity.includes('person') || lowerEntity.includes('contact'))
+                ? entityId
+                : (data.person_id || null);
+              const targetLeadId = lowerEntity.includes('lead') ? entityId : (data.lead_id || null);
+
+              const templateContext = await fetchTemplateContext({
+                lead_id: targetLeadId,
+                person_id: targetPersonId,
+                organization_id: lowerEntity.includes('organization') ? entityId : (data.organization_id || null),
+                activity_id: lowerEntity.includes('activit') ? entityId : (data.activity_id || data.id || null),
+                quote_id: lowerEntity.includes('quote') ? entityId : (data.quote_id || data.id || null),
+                product_id: lowerEntity.includes('product') ? entityId : (data.product_id || data.id || null),
+                to_email: recipientEmail,
+              });
+
+              const rawSubject = template.name || template.subject || 'Automated CRM Notification';
+              const rawBody = template.content || template.subject || 'Automated CRM Notification';
+
+              const subject = parsePlaceholders(rawSubject, templateContext);
+              const body = parsePlaceholders(rawBody, templateContext);
+
               const uniqueId = `email_wf_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
               const messageId = `<${uniqueId}@crm.local>`;
-              const subject = template.name || template.subject || 'Automated CRM Notification';
-              const body = template.content || template.subject || 'Automated CRM Notification';
 
               // 1. Record email in database
               await pool.query(
@@ -437,8 +552,8 @@ export class WorkflowService {
                   JSON.stringify([recipientEmail]),
                   uniqueId,
                   messageId,
-                  data.person_id || null,
-                  entityType.toLowerCase().startsWith('lead') ? entityId : (data.lead_id || null),
+                  targetPersonId,
+                  targetLeadId,
                   data.user_id || 1,
                 ]
               );
@@ -450,6 +565,8 @@ export class WorkflowService {
                 text: body,
                 html: body,
               }).catch((err) => logger.error({ err }, '[WorkflowService] sendRealMail failed'));
+            } else {
+              logger.warn({ entityType, entityId, value }, '[WorkflowService] Unable to resolve recipient email address');
             }
           }
         }

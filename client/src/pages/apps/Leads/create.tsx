@@ -170,6 +170,20 @@ const CreateLeadPage: React.FC = () => {
     }
   };
 
+  const clearError = (...fields: string[]) => {
+    setErrors((prev) => {
+      let hasChange = false;
+      const updated = { ...prev };
+      fields.forEach((f) => {
+        if (updated[f]) {
+          delete updated[f];
+          hasChange = true;
+        }
+      });
+      return hasChange ? updated : prev;
+    });
+  };
+
   const handleSelectPerson = (p: any) => {
     setPersonId(String(p.id));
     setPersonName(p.name || "");
@@ -181,6 +195,7 @@ const CreateLeadPage: React.FC = () => {
     } else {
       setOrganizationId("");
     }
+    clearError("personName", "contactEmail");
     setIsPersonDropdownOpen(false);
   };
 
@@ -218,9 +233,10 @@ const CreateLeadPage: React.FC = () => {
   };
 
   const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
+    const cleanVal = field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
     setContactPhones((prev) => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: val };
+      updated[index] = { ...updated[index], [field]: cleanVal };
       return updated;
     });
   };
@@ -243,6 +259,7 @@ const CreateLeadPage: React.FC = () => {
 
   const handleRemoveProductRow = (idx: number) => {
     setProductRows((rows) => rows.filter((_, i) => i !== idx));
+    clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
   const handleProductRowChange = (idx: number, field: keyof ProductRow, val: string) => {
@@ -258,6 +275,7 @@ const CreateLeadPage: React.FC = () => {
       }
       return next;
     });
+    clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
   const totalLeadValue = productRows.reduce((sum, r) => {
@@ -277,28 +295,53 @@ const CreateLeadPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validation = leadSchema.safeParse({
-      title: details.title.trim(),
-      description: details.description || undefined,
-      lead_value: details.lead_value ? Number(details.lead_value) : undefined,
-      lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
-      lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
-      lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
-      lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
+    const fieldErrors: Record<string, string> = {};
+
+    if (!details.title.trim()) {
+      fieldErrors.title = "Title is required";
+    }
+
+    if (!personId && !personName.trim()) {
+      fieldErrors.personName = "Contact Person Name is required";
+    }
+
+    const firstEmail = contactEmails[0]?.value?.trim();
+    if (!firstEmail) {
+      fieldErrors.contactEmail = "Contact Person Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address";
+    }
+
+    // Product rows validation
+    productRows.forEach((row, idx) => {
+      const hasAnyInput = row.product_id || (row.quantity && row.quantity !== "1") || (row.price && row.price !== "0") || productRows.length > 1;
+      if (hasAnyInput) {
+        if (!row.product_id) {
+          fieldErrors[`product_${idx}`] = "Please select a product";
+        }
+        const qty = Number(row.quantity);
+        if (isNaN(qty) || qty <= 0) {
+          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+        }
+        const price = Number(row.price);
+        if (isNaN(price) || price < 0) {
+          fieldErrors[`price_${idx}`] = "Price cannot be negative";
+        }
+      }
     });
 
-    if (!validation.success) {
-      const fieldErrors: Record<string, string> = {};
-      validation.error.issues.forEach((issue) => {
-        const field = issue.path[0];
-        if (field) {
-          fieldErrors[String(field)] = issue.message;
-        }
-      });
+    if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
-      scrollToSection("lead-details");
+      if (fieldErrors.title) {
+        scrollToSection("lead-details");
+      } else if (fieldErrors.personName || fieldErrors.contactEmail) {
+        scrollToSection("contact-person");
+      } else {
+        scrollToSection("products");
+      }
       return;
     }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -423,14 +466,18 @@ const CreateLeadPage: React.FC = () => {
             <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Title */}
               <div className="md:col-span-2">
-                <label className={labelCls}>Title *</label>
+                <label className={labelCls}>
+                  Title <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={details.title}
-                  onChange={(e) => setDetails({ ...details, title: e.target.value })}
+                  onChange={(e) => {
+                    setDetails({ ...details, title: e.target.value });
+                    clearError("title");
+                  }}
                   placeholder="e.g. Enterprise Solution Deal"
-                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500" : ""
-                    }`}
+                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                 />
                 {errors.title && (
                   <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>
@@ -581,7 +628,9 @@ const CreateLeadPage: React.FC = () => {
             <div className="w-full md:w-2/3 flex flex-col gap-4">
               {/* Name * Searchable Dropdown */}
               <div className="relative" ref={personDropdownRef}>
-                <label className={labelCls}>Name *</label>
+                <label className={labelCls}>
+                  Name <span className="text-red-500">*</span>
+                </label>
                 <div className="relative flex items-center">
                   <input
                     type="text"
@@ -591,10 +640,11 @@ const CreateLeadPage: React.FC = () => {
                       setPersonSearch(e.target.value);
                       setPersonName(e.target.value);
                       if (personId) setPersonId("");
+                      clearError("personName");
                       setIsPersonDropdownOpen(true);
                     }}
                     placeholder="Click to Add"
-                    className={`${inputCls} pr-8`}
+                    className={`${inputCls} pr-8 ${errors.personName ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                   />
                   {personSearch ? (
                     <button
@@ -608,6 +658,9 @@ const CreateLeadPage: React.FC = () => {
                     <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
                   )}
                 </div>
+                {errors.personName && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.personName}</p>
+                )}
 
                 {/* Dropdown popup */}
                 {isPersonDropdownOpen && (
@@ -637,14 +690,21 @@ const CreateLeadPage: React.FC = () => {
 
               {/* Email * */}
               <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Email *</label>
+                <label className={labelCls}>
+                  Email <span className="text-red-500">*</span>
+                </label>
                 {contactEmails.map((em, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
+                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${
+                      errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
+                    }`}>
                       <input
                         type="email"
                         value={em.value}
-                        onChange={(e) => handleEmailChange(idx, "value", e.target.value)}
+                        onChange={(e) => {
+                          handleEmailChange(idx, "value", e.target.value);
+                          clearError("contactEmail");
+                        }}
                         placeholder=""
                         className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                       />
@@ -669,6 +729,9 @@ const CreateLeadPage: React.FC = () => {
                     )}
                   </div>
                 ))}
+                {errors.contactEmail && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactEmail}</p>
+                )}
                 <button
                   type="button"
                   onClick={handleAddEmailRow}
@@ -756,7 +819,9 @@ const CreateLeadPage: React.FC = () => {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                    <th className="py-2.5 px-3">Product *</th>
+                    <th className="py-2.5 px-3">
+                      Product <span className="text-red-500">*</span>
+                    </th>
                     <th className="py-2.5 px-3 w-28">Quantity</th>
                     <th className="py-2.5 px-3 w-36">Price ($)</th>
                     <th className="py-2.5 px-3 w-36">Amount</th>
@@ -766,13 +831,17 @@ const CreateLeadPage: React.FC = () => {
                 <tbody>
                   {productRows.map((row, idx) => {
                     const rowAmount = (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
+                    const prodErr = errors[`product_${idx}`];
+                    const qtyErr = errors[`quantity_${idx}`];
+                    const priceErr = errors[`price_${idx}`];
+
                     return (
                       <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <select
                             value={row.product_id}
                             onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           >
                             <option value="">Select a product...</option>
                             {products.map((p) => (
@@ -781,26 +850,29 @@ const CreateLeadPage: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                          {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <input
                             type="number"
                             min="1"
                             value={row.quantity}
                             onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${qtyErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           />
+                          {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <input
                             type="number"
                             step="0.01"
                             value={row.price}
                             onChange={(e) => handleProductRowChange(idx, "price", e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           />
+                          {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                        <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
                           {fmtCurrency(rowAmount)}
                         </td>
                         <td className="py-2 px-3 text-center">
