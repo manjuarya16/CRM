@@ -5,6 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/activityInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
@@ -124,6 +125,10 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
       createdBy: (req as any).user?.id || null,
     });
 
+    if (createdActivity) {
+      WorkflowService.triggerWorkflows('activities', 'create', createdActivity).catch((e) => logger.error(e));
+    }
+
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "Activity created successfully",
@@ -207,6 +212,9 @@ const updateActivity = async (req: Request, res: Response): Promise<void> => {
       });
     }
 
+    const updatedActivity = result.rows[0];
+    WorkflowService.triggerWorkflows('activities', 'update', updatedActivity || { id }).catch((e) => logger.error(e));
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: "Activity updated successfully",
@@ -232,6 +240,8 @@ const deleteActivity = async (req: Request, res: Response): Promise<void> => {
       "SELECT public.fn_delete_activity($1) AS deleted",
       [id]
     );
+
+    WorkflowService.triggerWorkflows('activities', 'delete', { id }).catch((e) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({
       success: true,

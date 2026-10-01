@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useLeadStore } from "@/store";
 
 interface QuickCreateModalProps {
   isOpen: boolean;
@@ -55,7 +56,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
     e.preventDefault();
     try {
       setLoading(true);
-      await API.post("/leads", {
+      await useLeadStore.getState().addLead({
         title: leadTitle.trim(),
         lead_value: leadValue ? Number(leadValue) : null,
         lead_pipeline_id: leadPipelineId ? Number(leadPipelineId) : null,
@@ -67,7 +68,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
       onClose();
       onSuccess?.();
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to create lead" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to create lead" });
     } finally {
       setLoading(false);
     }

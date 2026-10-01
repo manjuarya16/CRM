@@ -3,6 +3,7 @@ import { IPerson } from '@/interfaces/crm.interface';
 import { ApiError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { PoolClient } from 'pg';
+import { WorkflowService } from './workflow.service';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -180,7 +181,10 @@ export class PersonService {
       if (!rows[0]?.result) {
         throw new ApiError(404, 'Person not found or save failed');
       }
-      return rows[0]?.result;
+      const savedPerson = rows[0].result;
+      const isUpdate = Boolean(personId && personId > 0);
+      WorkflowService.triggerWorkflows('persons', isUpdate ? 'update' : 'create', savedPerson).catch((e) => logger.error(e));
+      return savedPerson;
     } catch (error: any) {
       logger.error({ error, data, id }, 'PersonService.save failed');
       throw error;
@@ -201,7 +205,11 @@ export class PersonService {
         'SELECT delete_person($1) as result',
         [personId]
       );
-      return Boolean(rows[0]?.result);
+      const isDeleted = Boolean(rows[0]?.result);
+      if (isDeleted) {
+        WorkflowService.triggerWorkflows('persons', 'delete', { id: personId }).catch((e) => logger.error(e));
+      }
+      return isDeleted;
     } catch (error: any) {
       logger.error({ error, id }, 'PersonService.delete failed');
       throw error;

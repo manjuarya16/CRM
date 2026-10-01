@@ -5,6 +5,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IQuoteCreateInput, IQuoteUpdateInput } from "@/interfaces/quoteInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
+import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
@@ -206,6 +207,8 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         userId: currentUserId || null,
         createdBy: (req as any).user?.id || null,
       });
+
+      WorkflowService.triggerWorkflows('quotes', 'create', createdQuote).catch((e) => logger.error(e));
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -316,6 +319,7 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
         updatedQuote.custom_attributes = custom_attributes;
         updatedQuote.items = items;
       }
+      WorkflowService.triggerWorkflows('quotes', 'update', updatedQuote || { id }).catch((e) => logger.error(e));
     }
 
     res.status(HttpStatusCodes.OK).json({
@@ -343,6 +347,8 @@ const deleteQuote = async (req: Request, res: Response): Promise<void> => {
       "SELECT public.fn_delete_quote($1) AS deleted",
       [id]
     );
+
+    WorkflowService.triggerWorkflows('quotes', 'delete', { id }).catch((e) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
