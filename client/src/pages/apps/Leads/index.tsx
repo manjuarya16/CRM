@@ -87,11 +87,8 @@ const LeadsPage: React.FC = () => {
   useEffect(() => {
     if (selectedPipelineId !== "") {
       fetchStages(Number(selectedPipelineId));
-      if (viewMode === "kanban") {
-        fetchKanbanLeads(Number(selectedPipelineId), search, filterForm);
-      } else {
-        fetchLeads(page, perPage, search, filterForm);
-      }
+      fetchKanbanLeads(Number(selectedPipelineId), search, filterForm);
+      fetchLeads(page, perPage, search, filterForm);
     }
   }, [selectedPipelineId, viewMode, page, perPage]);
 

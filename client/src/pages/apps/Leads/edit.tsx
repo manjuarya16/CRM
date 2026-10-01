@@ -35,6 +35,28 @@ interface ContactItem {
   value: string;
 }
 
+const parseContactItems = (data: any, defaultLabel: string = "Work"): ContactItem[] => {
+  if (!data) return [{ label: defaultLabel, value: "" }];
+  let parsed = data;
+  if (typeof data === "string") {
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return [{ label: defaultLabel, value: data }];
+    }
+  }
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed.map((item: any) => {
+      if (typeof item === "string") return { label: defaultLabel, value: item };
+      return {
+        label: item.label || defaultLabel,
+        value: item.value || item.email || item.number || item.phone || "",
+      };
+    });
+  }
+  return [{ label: defaultLabel, value: "" }];
+};
+
 const EditLeadPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -71,17 +93,16 @@ const EditLeadPage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Tab 2 – Contact Person
-  const [personMode, setPersonMode] = useState<"existing" | "new">("existing");
   const [persons, setPersons] = useState<any[]>([]);
-  const [personSearch, setPersonSearch] = useState("");
   const [personId, setPersonId] = useState("");
+  const [personName, setPersonName] = useState("");
+  const [personSearch, setPersonSearch] = useState("");
+  const [isPersonDropdownOpen, setIsPersonDropdownOpen] = useState(false);
+  const [contactEmails, setContactEmails] = useState<ContactItem[]>([{ label: "Work", value: "" }]);
+  const [contactPhones, setContactPhones] = useState<ContactItem[]>([{ label: "Work", value: "" }]);
+  const [organizationId, setOrganizationId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
-  const [newPerson, setNewPerson] = useState({
-    name: "",
-    emails: [{ label: "work", value: "" }] as ContactItem[],
-    contact_numbers: [{ label: "work", value: "" }] as ContactItem[],
-    organization_id: "",
-  });
+  const personDropdownRef = useRef<HTMLDivElement>(null);
 
   // Tab 3 – Products
   const [products, setProducts] = useState<any[]>([]);
@@ -118,9 +139,11 @@ const EditLeadPage: React.FC = () => {
             lead_pipeline_stage_id: lead.lead_pipeline_stage_id ? String(lead.lead_pipeline_stage_id) : "",
             expected_close_date: lead.expected_close_date ? lead.expected_close_date.substring(0, 10) : "",
           });
+          if (lead.organization_id) {
+            setOrganizationId(String(lead.organization_id));
+          }
           if (lead.person_id) {
             setPersonId(String(lead.person_id));
-            setPersonMode("existing");
           }
           if (lead.custom_attributes) {
             if (typeof lead.custom_attributes === "object") {
@@ -159,6 +182,31 @@ const EditLeadPage: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (personDropdownRef.current && !personDropdownRef.current.contains(e.target as Node)) {
+        setIsPersonDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (personId && persons.length > 0) {
+      const p = persons.find((item) => String(item.id) === String(personId));
+      if (p) {
+        setPersonName(p.name || "");
+        setPersonSearch(p.name || "");
+        setContactEmails(parseContactItems(p.emails, "Work"));
+        setContactPhones(parseContactItems(p.contact_numbers, "Work"));
+        if (!organizationId && p.organization_id) {
+          setOrganizationId(String(p.organization_id));
+        }
+      }
+    }
+  }, [personId, persons]);
+
+  useEffect(() => {
     if (details.lead_pipeline_id) {
       fetchStages(Number(details.lead_pipeline_id));
     }
@@ -170,52 +218,82 @@ const EditLeadPage: React.FC = () => {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // Multiple Emails & Phones handlers for New Contact
+  const clearError = (...fields: string[]) => {
+    setErrors((prev) => {
+      let hasChange = false;
+      const updated = { ...prev };
+      fields.forEach((f) => {
+        if (updated[f]) {
+          delete updated[f];
+          hasChange = true;
+        }
+      });
+      return hasChange ? updated : prev;
+    });
+  };
+
+  const handleSelectPerson = (p: any) => {
+    setPersonId(String(p.id));
+    setPersonName(p.name || "");
+    setPersonSearch(p.name || "");
+    setContactEmails(parseContactItems(p.emails, "Work"));
+    setContactPhones(parseContactItems(p.contact_numbers, "Work"));
+    if (p.organization_id) {
+      setOrganizationId(String(p.organization_id));
+    } else {
+      setOrganizationId("");
+    }
+    clearError("personName", "contactEmail");
+    setIsPersonDropdownOpen(false);
+  };
+
+  const handleClearPerson = () => {
+    setPersonId("");
+    setPersonName("");
+    setPersonSearch("");
+    setContactEmails([{ label: "Work", value: "" }]);
+    setContactPhones([{ label: "Work", value: "" }]);
+    setOrganizationId("");
+  };
+
   const handleAddEmailRow = () => {
-    setNewPerson((prev) => ({
-      ...prev,
-      emails: [...prev.emails, { label: "work", value: "" }],
-    }));
+    setContactEmails((prev) => [...prev, { label: "Work", value: "" }]);
   };
 
   const handleEmailChange = (index: number, field: "label" | "value", val: string) => {
-    const updated = [...newPerson.emails];
-    updated[index][field] = val;
-    setNewPerson((prev) => ({ ...prev, emails: updated }));
+    setContactEmails((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: val };
+      return updated;
+    });
   };
 
   const handleRemoveEmailRow = (index: number) => {
-    if (newPerson.emails.length <= 1) {
-      setNewPerson((prev) => ({ ...prev, emails: [{ label: "work", value: "" }] }));
+    if (contactEmails.length <= 1) {
+      setContactEmails([{ label: "Work", value: "" }]);
     } else {
-      setNewPerson((prev) => ({
-        ...prev,
-        emails: prev.emails.filter((_, i) => i !== index),
-      }));
+      setContactEmails((prev) => prev.filter((_, i) => i !== index));
     }
   };
 
   const handleAddPhoneRow = () => {
-    setNewPerson((prev) => ({
-      ...prev,
-      contact_numbers: [...prev.contact_numbers, { label: "mobile", value: "" }],
-    }));
+    setContactPhones((prev) => [...prev, { label: "Work", value: "" }]);
   };
 
   const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
-    const updated = [...newPerson.contact_numbers];
-    updated[index][field] = val;
-    setNewPerson((prev) => ({ ...prev, contact_numbers: updated }));
+    const cleanVal = field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
+    setContactPhones((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: cleanVal };
+      return updated;
+    });
   };
 
   const handleRemovePhoneRow = (index: number) => {
-    if (newPerson.contact_numbers.length <= 1) {
-      setNewPerson((prev) => ({ ...prev, contact_numbers: [{ label: "mobile", value: "" }] }));
+    if (contactPhones.length <= 1) {
+      setContactPhones([{ label: "Work", value: "" }]);
     } else {
-      setNewPerson((prev) => ({
-        ...prev,
-        contact_numbers: prev.contact_numbers.filter((_, i) => i !== index),
-      }));
+      setContactPhones((prev) => prev.filter((_, i) => i !== index));
     }
   };
 
@@ -223,8 +301,10 @@ const EditLeadPage: React.FC = () => {
   const addProductRow = () =>
     setProductRows((rows) => [...rows, { product_id: "", product_name: "", quantity: "1", price: "0" }]);
 
-  const removeProductRow = (index: number) =>
+  const removeProductRow = (index: number) => {
     setProductRows((rows) => rows.filter((_, i) => i !== index));
+    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+  };
 
   const updateProductRow = (index: number, field: keyof ProductRow, value: string) => {
     setProductRows((rows) => {
@@ -232,6 +312,7 @@ const EditLeadPage: React.FC = () => {
       updated[index] = { ...updated[index], [field]: value };
       return updated;
     });
+    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const selectProduct = (index: number, productId: string) => {
@@ -248,6 +329,7 @@ const EditLeadPage: React.FC = () => {
         return updated;
       });
     }
+    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const totalLeadValue = productRows.reduce((sum, r) => {
@@ -267,28 +349,53 @@ const EditLeadPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validation = leadSchema.safeParse({
-      title: details.title.trim(),
-      description: details.description || undefined,
-      lead_value: details.lead_value ? Number(details.lead_value) : undefined,
-      lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
-      lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
-      lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
-      lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
+    const fieldErrors: Record<string, string> = {};
+
+    if (!details.title.trim()) {
+      fieldErrors.title = "Title is required";
+    }
+
+    if (!personId && !personName.trim()) {
+      fieldErrors.personName = "Contact Person Name is required";
+    }
+
+    const firstEmail = contactEmails[0]?.value?.trim();
+    if (!firstEmail) {
+      fieldErrors.contactEmail = "Contact Person Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address";
+    }
+
+    // Product rows validation
+    productRows.forEach((row, idx) => {
+      const hasAnyInput = row.product_id || (row.quantity && row.quantity !== "1") || (row.price && row.price !== "0") || productRows.length > 1;
+      if (hasAnyInput) {
+        if (!row.product_id) {
+          fieldErrors[`product_${idx}`] = "Please select a product";
+        }
+        const qty = Number(row.quantity);
+        if (isNaN(qty) || qty <= 0) {
+          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+        }
+        const price = Number(row.price);
+        if (isNaN(price) || price < 0) {
+          fieldErrors[`price_${idx}`] = "Price cannot be negative";
+        }
+      }
     });
 
-    if (!validation.success) {
-      const fieldErrors: Record<string, string> = {};
-      validation.error.issues.forEach((issue) => {
-        const field = issue.path[0];
-        if (field) {
-          fieldErrors[String(field)] = issue.message;
-        }
-      });
+    if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
-      scrollToSection("lead-details");
+      if (fieldErrors.title) {
+        scrollToSection("lead-details");
+      } else if (fieldErrors.personName || fieldErrors.contactEmail) {
+        scrollToSection("contact-person");
+      } else {
+        scrollToSection("products");
+      }
       return;
     }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -318,20 +425,21 @@ const EditLeadPage: React.FC = () => {
         lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
         lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
         expected_close_date: details.expected_close_date || undefined,
+        organization_id: organizationId ? Number(organizationId) : undefined,
         products: validProducts,
         custom_attributes: customAttributes,
       };
 
-      if (personMode === "existing" && personId) {
+      if (personId) {
         payload.person_id = Number(personId);
-      } else if (personMode === "new" && newPerson.name.trim()) {
-        const validEmails = newPerson.emails.filter((e) => e.value.trim());
-        const validPhones = newPerson.contact_numbers.filter((p) => p.value.trim());
+      } else if (personName.trim()) {
+        const validEmails = contactEmails.filter((e) => e.value.trim());
+        const validPhones = contactPhones.filter((p) => p.value.trim());
         payload.person = {
-          name: newPerson.name.trim(),
+          name: personName.trim(),
           emails: validEmails.length > 0 ? validEmails : undefined,
           contact_numbers: validPhones.length > 0 ? validPhones : undefined,
-          organization_id: newPerson.organization_id ? Number(newPerson.organization_id) : undefined,
+          organization_id: organizationId ? Number(organizationId) : undefined,
         };
       }
 
@@ -425,12 +533,17 @@ const EditLeadPage: React.FC = () => {
             <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Title */}
               <div className="md:col-span-2">
-                <label className={labelCls}>Title *</label>
+                <label className={labelCls}>
+                  Title <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={details.title}
-                  onChange={(e) => setDetails({ ...details, title: e.target.value })}
-                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500" : ""}`}
+                  onChange={(e) => {
+                    setDetails({ ...details, title: e.target.value });
+                    clearError("title");
+                  }}
+                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                 />
                 {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
               </div>
@@ -571,186 +684,183 @@ const EditLeadPage: React.FC = () => {
           >
             <div>
               <p className="text-base font-semibold text-gray-800 dark:text-white">Contact Person</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Search for an existing contact or create a new contact with multiple emails/numbers.
-              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Information About the Contact Person</p>
             </div>
 
-            {/* Toggle: existing / new */}
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="radio"
-                  checked={personMode === "existing"}
-                  onChange={() => setPersonMode("existing")}
-                  className="accent-[#0088cc]"
-                />
-                <span className="text-gray-700 dark:text-gray-300">Select Existing Contact</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="radio"
-                  checked={personMode === "new"}
-                  onChange={() => setPersonMode("new")}
-                  className="accent-[#0088cc]"
-                />
-                <span className="text-gray-700 dark:text-gray-300">Create New Contact</span>
-              </label>
-            </div>
-
-            <div className="w-full md:w-2/3">
-              {personMode === "existing" ? (
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <label className={labelCls}>Search Contact</label>
-                    <input
-                      type="text"
-                      value={personSearch}
-                      onChange={(e) => setPersonSearch(e.target.value)}
-                      placeholder="Search by name or email..."
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Select Person *</label>
-                    <select
-                      value={personId}
-                      onChange={(e) => setPersonId(e.target.value)}
-                      className={inputCls}
+            <div className="w-full md:w-2/3 flex flex-col gap-4">
+              {/* Name * Searchable Dropdown */}
+              <div className="relative" ref={personDropdownRef}>
+                <label className={labelCls}>
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={personSearch}
+                    onFocus={() => setIsPersonDropdownOpen(true)}
+                    onChange={(e) => {
+                      setPersonSearch(e.target.value);
+                      setPersonName(e.target.value);
+                      if (personId) setPersonId("");
+                      clearError("personName");
+                      setIsPersonDropdownOpen(true);
+                    }}
+                    placeholder="Click to Add"
+                    className={`${inputCls} pr-8 ${errors.personName ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  />
+                  {personSearch ? (
+                    <button
+                      type="button"
+                      onClick={handleClearPerson}
+                      className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold"
                     >
-                      <option value="">-- Select Person --</option>
-                      {filteredPersons.map((p) => {
-                        const email = getPersonEmail(p);
-                        return (
-                          <option key={p.id} value={p.id}>
-                            {p.name}{email ? ` (${email})` : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                  {personId && (
-                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                      <span>✓</span>
-                      <span>{persons.find((p) => String(p.id) === personId)?.name} selected</span>
-                    </div>
+                      ✕
+                    </button>
+                  ) : (
+                    <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
                   )}
                 </div>
-              ) : (
-                <div className="bg-gray-50/50 dark:bg-gray-800/50 p-4 border border-gray-200 dark:border-gray-700 rounded-xl space-y-4">
-                  <div>
-                    <label className={labelCls}>Name *</label>
-                    <input
-                      type="text"
-                      value={newPerson.name}
-                      onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                      placeholder="Full name"
-                      className={inputCls}
-                    />
-                  </div>
+                {errors.personName && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.personName}</p>
+                )}
 
-                  {/* Multiple Email Rows */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Email Addresses</label>
+                {/* Dropdown popup */}
+                {isPersonDropdownOpen && (
+                  <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {filteredPersons.length > 0 ? (
+                      filteredPersons.map((p) => {
+                        const email = getPersonEmail(p);
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => handleSelectPerson(p)}
+                            className="px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex flex-col border-b last:border-b-0 border-gray-100 dark:border-gray-700"
+                          >
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.name}</span>
+                            {email && <span className="text-xs text-gray-500 dark:text-gray-400">{email}</span>}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                        No contacts found. Type a name to create a new contact.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Email * */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>
+                  Email <span className="text-red-500">*</span>
+                </label>
+                {contactEmails.map((em, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${
+                      errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
+                    }`}>
+                      <input
+                        type="email"
+                        value={em.value}
+                        onChange={(e) => {
+                          handleEmailChange(idx, "value", e.target.value);
+                          clearError("contactEmail");
+                        }}
+                        placeholder=""
+                        className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
+                      />
+                      <select
+                        value={em.label}
+                        onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
+                        className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Work">Work</option>
+                        <option value="Home">Home</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    {contactEmails.length > 1 && (
                       <button
                         type="button"
-                        onClick={handleAddEmailRow}
-                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                        onClick={() => handleRemoveEmailRow(idx)}
+                        className="text-red-500 hover:text-red-700 p-1 text-base font-bold"
                       >
-                        + Add Email
+                        ✕
                       </button>
-                    </div>
-                    {newPerson.emails.map((em, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <select
-                          value={em.label}
-                          onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
-                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
-                        >
-                          <option value="work">Work</option>
-                          <option value="home">Home</option>
-                          <option value="other">Other</option>
-                        </select>
-                        <input
-                          type="email"
-                          value={em.value}
-                          onChange={(e) => handleEmailChange(idx, "value", e.target.value)}
-                          placeholder="email@example.com"
-                          className={inputCls}
-                        />
-                        {newPerson.emails.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEmailRow(idx)}
-                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
-                          >
-                            &times;
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    )}
                   </div>
+                ))}
+                {errors.contactEmail && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactEmail}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleAddEmailRow}
+                  className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
+                >
+                  + Add More
+                </button>
+              </div>
 
-                  {/* Multiple Phone Rows */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Numbers</label>
+              {/* Contact Number */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Contact Number</label>
+                {contactPhones.map((pn, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
+                      <input
+                        type="tel"
+                        value={pn.value}
+                        onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                        placeholder=""
+                        className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
+                      />
+                      <select
+                        value={pn.label}
+                        onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
+                        className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Work">Work</option>
+                        <option value="Mobile">Mobile</option>
+                        <option value="Home">Home</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    {contactPhones.length > 1 && (
                       <button
                         type="button"
-                        onClick={handleAddPhoneRow}
-                        className="text-xs text-[#0088cc] hover:underline font-semibold flex items-center gap-1"
+                        onClick={() => handleRemovePhoneRow(idx)}
+                        className="text-red-500 hover:text-red-700 p-1 text-base font-bold"
                       >
-                        + Add Phone
+                        ✕
                       </button>
-                    </div>
-                    {newPerson.contact_numbers.map((pn, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <select
-                          value={pn.label}
-                          onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
-                          className="w-28 px-2.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
-                        >
-                          <option value="mobile">Mobile</option>
-                          <option value="work">Work</option>
-                          <option value="home">Home</option>
-                          <option value="other">Other</option>
-                        </select>
-                        <input
-                          type="tel"
-                          value={pn.value}
-                          onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
-                          placeholder="+1 234 567 890"
-                          className={inputCls}
-                        />
-                        {newPerson.contact_numbers.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoneRow(idx)}
-                            className="text-red-500 hover:text-red-700 p-1 text-sm font-bold"
-                          >
-                            &times;
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    )}
                   </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleAddPhoneRow}
+                  className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
+                >
+                  + Add More
+                </button>
+              </div>
 
-                  <div>
-                    <label className={labelCls}>Organization</label>
-                    <select
-                      value={newPerson.organization_id}
-                      onChange={(e) => setNewPerson({ ...newPerson, organization_id: e.target.value })}
-                      className={inputCls}
-                    >
-                      <option value="">-- None / Select Organization --</option>
-                      {organizations.map((o) => (
-                        <option key={o.id} value={o.id}>{o.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
+              {/* Organization */}
+              <div>
+                <label className={labelCls}>Organization</label>
+                <select
+                  value={organizationId}
+                  onChange={(e) => setOrganizationId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Click to add</option>
+                  {organizations.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -771,7 +881,9 @@ const EditLeadPage: React.FC = () => {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                    <th className="py-2.5 px-3">Product *</th>
+                    <th className="py-2.5 px-3">
+                      Product <span className="text-red-500">*</span>
+                    </th>
                     <th className="py-2.5 px-3 w-28">Quantity</th>
                     <th className="py-2.5 px-3 w-36">Price ($)</th>
                     <th className="py-2.5 px-3 w-36">Amount</th>
@@ -781,13 +893,17 @@ const EditLeadPage: React.FC = () => {
                 <tbody>
                   {productRows.map((row, index) => {
                     const rowAmount = (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
+                    const prodErr = errors[`product_${index}`];
+                    const qtyErr = errors[`quantity_${index}`];
+                    const priceErr = errors[`price_${index}`];
+
                     return (
                       <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <select
                             value={row.product_id}
                             onChange={(e) => selectProduct(index, e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           >
                             <option value="">Select a product...</option>
                             {products.map((p) => (
@@ -796,26 +912,29 @@ const EditLeadPage: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                          {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <input
                             type="number"
                             min="1"
                             value={row.quantity}
                             onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${qtyErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           />
+                          {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 align-top">
                           <input
                             type="number"
                             step="0.01"
                             value={row.price}
                             onChange={(e) => updateProductRow(index, "price", e.target.value)}
-                            className={inputCls}
+                            className={`${inputCls} ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           />
+                          {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                        <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
                           {fmtCurrency(rowAmount)}
                         </td>
                         <td className="py-2 px-3 text-center">

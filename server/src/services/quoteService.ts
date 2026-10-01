@@ -6,6 +6,7 @@ import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import type { IQuoteCreateInput, IQuoteUpdateInput } from "@/interfaces/quoteInterface";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/utils/workflowEngine";
+import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
@@ -61,7 +62,7 @@ const getQuoteById = async (req: Request, res: Response): Promise<void> => {
     }
 
     const quoteData = result.rows[0];
-    
+
     // Fetch full quote columns (addresses, lead_id, custom attributes)
     const qRes = await connection.query(
       "SELECT billing_address, shipping_address, lead_id, user_id, custom_attributes FROM quotes WHERE id = $1",
@@ -164,7 +165,7 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         await connection.query(
           "INSERT INTO lead_quotes (quote_id, lead_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
           [createdQuote.id, Number(lead_id)]
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
       // Insert line items
@@ -208,7 +209,8 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         createdBy: (req as any).user?.id || null,
       });
 
-      processWorkflowsForEvent('quotes', 'created', createdQuote.id, (req as any).user).catch(() => {});
+      processWorkflowsForEvent('quotes', 'created', createdQuote.id, (req as any).user).catch(() => { });
+      WorkflowService.triggerWorkflows('quotes', 'create', createdQuote).catch((e) => logger.error(e));
     }
 
     res.status(HttpStatusCodes.CREATED).json({
@@ -319,10 +321,11 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
         updatedQuote.custom_attributes = custom_attributes;
         updatedQuote.items = items;
       }
+      WorkflowService.triggerWorkflows('quotes', 'update', updatedQuote || { id }).catch((e) => logger.error(e));
     }
 
     if (id) {
-      processWorkflowsForEvent('quotes', 'updated', id, (req as any).user).catch(() => {});
+      processWorkflowsForEvent('quotes', 'updated', id, (req as any).user).catch(() => { });
     }
 
     res.status(HttpStatusCodes.OK).json({
@@ -350,6 +353,8 @@ const deleteQuote = async (req: Request, res: Response): Promise<void> => {
       "SELECT public.fn_delete_quote($1) AS deleted",
       [id]
     );
+
+    WorkflowService.triggerWorkflows('quotes', 'delete', { id }).catch((e) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({
       success: true,

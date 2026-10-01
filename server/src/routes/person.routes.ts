@@ -19,6 +19,19 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+router.get('/check-duplicate', async (req, res, next) => {
+  try {
+    const email = req.query.email ? String(req.query.email).trim() : undefined;
+    const phone = req.query.phone ? String(req.query.phone).trim() : undefined;
+    const excludeId = req.query.exclude_id ? Number(req.query.exclude_id) : undefined;
+
+    const result = await PersonService.checkDuplicate({ email, phone, excludeId });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const person = await PersonService.getById(String(req.params.id));

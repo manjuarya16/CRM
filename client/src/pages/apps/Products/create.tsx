@@ -107,8 +107,8 @@ const CreateProductPage: React.FC = () => {
       sku: formData.sku.trim(),
       name: formData.name.trim(),
       description: formData.description || undefined,
-      quantity: Number(formData.quantity) || 0,
-      price: formData.price ? Number(formData.price) : undefined,
+      quantity: formData.quantity,
+      price: formData.price,
     });
 
     if (!validation.success) {
@@ -134,11 +134,11 @@ const CreateProductPage: React.FC = () => {
         }));
 
       const res: any = await addProduct({
-        sku: formData.sku.trim(),
-        name: formData.name.trim() || undefined,
-        description: formData.description || undefined,
-        quantity: Number(formData.quantity) || 0,
-        price: formData.price ? Number(formData.price) : undefined,
+        sku: validation.data.sku,
+        name: validation.data.name,
+        description: validation.data.description || undefined,
+        quantity: validation.data.quantity,
+        price: validation.data.price,
         custom_attributes: customAttributes,
         inventories: payloadInventories.length > 0 ? payloadInventories : undefined,
       } as any);
@@ -265,7 +265,11 @@ const CreateProductPage: React.FC = () => {
             <DynamicAttributeFields
               entityType="products"
               values={customAttributes}
-              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+              onChange={(code, val) => {
+                setCustomAttributes((prev) => ({ ...prev, [code]: val }));
+                if (errors[code]) setErrors((prev) => ({ ...prev, [code]: "" }));
+              }}
+              errors={errors}
             />
           </div>
 

@@ -8,6 +8,8 @@ export interface ILead {
   closed_at?: string;
   user_id?: number;
   person_id?: number;
+  organization_id?: number;
+  organization_name?: string;
   lead_source_id?: number;
   lead_type_id?: number;
   lead_pipeline_id?: number;
