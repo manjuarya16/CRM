@@ -97,13 +97,15 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     try {
       const response = await API.post("/leads/create", leadData);
       if (response.data?.success) {
+        const newLead = response.data.data;
         set((state) => ({
-          leads: [response.data.data, ...state.leads],
+          leads: [newLead, ...state.leads.filter((l) => l.id !== newLead.id)],
+          kanbanLeads: [newLead, ...state.kanbanLeads.filter((k) => k.id !== newLead.id)],
           total: state.total + 1,
           error: null,
         }));
         handleSuccessResponse("Lead", "created", null);
-        return response.data.data;
+        return newLead;
       } else {
         throw new Error(response.data?.message || "Failed to create lead");
       }

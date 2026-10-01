@@ -20,6 +20,8 @@ const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: strin
     { label: "Person Name", value: "name" },
     { label: "Email Address", value: "emails" },
     { label: "Phone Number", value: "contact_numbers" },
+    { label: "Job Title", value: "job_title" },
+    { label: "Is VIP / Person Tag", value: "is_vip" },
     { label: "Organization ID", value: "organization_id" },
   ],
   organizations: [

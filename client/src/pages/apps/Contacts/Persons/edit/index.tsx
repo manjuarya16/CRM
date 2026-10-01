@@ -177,6 +177,9 @@ const EditPersonPage: React.FC = () => {
       updated[index] = { ...updated[index], [field]: val };
       return { ...prev, emails: updated };
     });
+    if (errors.emails || errors.email) {
+      setErrors((prev) => ({ ...prev, emails: "", email: "" }));
+    }
   };
 
   const handleAddContact = () => {
@@ -198,11 +201,82 @@ const EditPersonPage: React.FC = () => {
     field: "label" | "value",
     val: string
   ) => {
+    let errorMsg = "";
+    let cleanVal = val;
+    if (field === "value") {
+      if (/[a-zA-Z]/.test(val)) {
+        errorMsg = "Text characters are not allowed. Mobile number must contain digits only.";
+      } else if (val.includes("+") && !val.trim().startsWith("+")) {
+        errorMsg = "Country code '+' is only allowed at the beginning of the mobile number.";
+      } else if ((val.match(/\+/g) || []).length > 1) {
+        errorMsg = "Only one '+' is allowed at the beginning of the mobile number.";
+      }
+
+      const startsWithPlus = val.trim().startsWith("+");
+      const digitsAndSymbols = val.replace(/[^0-9\-\s()]/g, "");
+      cleanVal = startsWithPlus ? "+" + digitsAndSymbols : digitsAndSymbols;
+
+      const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
+      if (digitsOnly.length > 15) {
+        errorMsg = "Mobile number cannot exceed 15 digits.";
+      }
+    }
+
     setFormData((prev) => {
       const updated = [...prev.contact_numbers];
-      updated[index] = { ...updated[index], [field]: val };
+      updated[index] = { ...updated[index], [field]: cleanVal };
       return { ...prev, contact_numbers: updated };
     });
+
+    if (errorMsg) {
+      setErrors((prev) => ({ ...prev, contact_numbers: errorMsg }));
+    } else if (errors.contact_numbers || errors.phone) {
+      setErrors((prev) => ({ ...prev, contact_numbers: "", phone: "" }));
+    }
+  };
+
+  const checkDuplicateEmail = async (val: string) => {
+    if (!val || !val.trim().includes("@")) return;
+    try {
+      const res = await API.get("/persons/check-duplicate", {
+        params: { email: val.trim(), exclude_id: id },
+      });
+      if (res.data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, emails: res.data.message }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const checkDuplicateContact = async (val: string) => {
+    if (!val || val.trim() === "") return;
+    const cleanVal = val.trim();
+    const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
+    if (digitsOnly.length < 7) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: "Please enter a valid mobile number (at least 7 digits).",
+      }));
+      return;
+    }
+    if (digitsOnly.length > 15) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: "Mobile number cannot exceed 15 digits.",
+      }));
+      return;
+    }
+    try {
+      const res = await API.get("/persons/check-duplicate", {
+        params: { phone: cleanVal, exclude_id: id },
+      });
+      if (res.data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, contact_numbers: res.data.message }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -255,10 +329,16 @@ const EditPersonPage: React.FC = () => {
       });
       navigate("/contacts/persons");
     } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message || "Failed to update person";
+      if (errMsg.toLowerCase().includes("email")) {
+        setErrors((prev) => ({ ...prev, emails: errMsg }));
+      } else if (errMsg.toLowerCase().includes("contact") || errMsg.toLowerCase().includes("phone")) {
+        setErrors((prev) => ({ ...prev, contact_numbers: errMsg }));
+      }
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: err.response?.data?.message || "Failed to update person",
+        text: errMsg,
       });
     } finally {
       setSaving(false);
@@ -332,9 +412,10 @@ const EditPersonPage: React.FC = () => {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+              }}
               className={`w-full px-3.5 py-2.5 bg-white dark:bg-gray-900 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 ${
                 errors.name
                   ? "border-red-500 focus:border-red-500"
@@ -380,7 +461,12 @@ const EditPersonPage: React.FC = () => {
                     onChange={(e) =>
                       handleEmailChange(index, "value", e.target.value)
                     }
-                    className="flex-1 px-3.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 focus:border-[#0088cc]"
+                    onBlur={() => checkDuplicateEmail(emailItem.value)}
+                    className={`flex-1 px-3.5 py-2 bg-white dark:bg-gray-900 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 ${
+                      errors.emails || errors.email
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-300 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
                   {formData.emails.length > 1 && (
                     <button
@@ -395,6 +481,9 @@ const EditPersonPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            {(errors.emails || errors.email) && (
+              <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.emails || errors.email}</p>
+            )}
           </div>
 
           {/* Contact Numbers */}
@@ -436,7 +525,12 @@ const EditPersonPage: React.FC = () => {
                     onChange={(e) =>
                       handleContactChange(index, "value", e.target.value)
                     }
-                    className="flex-1 px-3.5 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 focus:border-[#0088cc]"
+                    onBlur={() => checkDuplicateContact(contactItem.value)}
+                    className={`flex-1 px-3.5 py-2 bg-white dark:bg-gray-900 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 ${
+                      errors.contact_numbers || errors.phone
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-300 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
                   />
                   {formData.contact_numbers.length > 1 && (
                     <button
@@ -451,6 +545,9 @@ const EditPersonPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            {(errors.contact_numbers || errors.phone) && (
+              <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.contact_numbers || errors.phone}</p>
+            )}
           </div>
 
           {/* Job Title & Organization Grid */}

@@ -437,7 +437,9 @@ const UserEdit = () => {
       [name]:
         name === "role_id" || name === "branch_id" || name === "department_id"
           ? parseInt(value) || undefined
-          : value,
+          : name === "phone"
+            ? value.replace(/[^0-9+\-\s()]/g, "")
+            : value,
     };
     // Trim strings to remove pre/post spaces except `name` to allow typing spaces
     Object.keys(next).forEach((k) => {

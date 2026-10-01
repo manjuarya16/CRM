@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useLeadStore } from "@/store";
 
 interface QuickCreateModalProps {
   isOpen: boolean;
@@ -55,7 +56,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
     e.preventDefault();
     try {
       setLoading(true);
-      await API.post("/leads", {
+      await useLeadStore.getState().addLead({
         title: leadTitle.trim(),
         lead_value: leadValue ? Number(leadValue) : null,
         lead_pipeline_id: leadPipelineId ? Number(leadPipelineId) : null,
@@ -67,7 +68,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
       onClose();
       onSuccess?.();
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to create lead" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to create lead" });
     } finally {
       setLoading(false);
     }
@@ -310,7 +311,7 @@ export const QuickCreateModal: React.FC<QuickCreateModalProps> = ({
                 type="tel"
                 placeholder="+1 555-123-4567"
                 value={personPhone}
-                onChange={(e) => setPersonPhone(e.target.value)}
+                onChange={(e) => setPersonPhone(e.target.value.replace(/[^0-9+\-\s()]/g, ""))}
                 className="w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
               />
             </div>

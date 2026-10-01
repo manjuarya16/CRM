@@ -8,7 +8,56 @@ export const emailItemSchema = z.object({
 
 export const contactItemSchema = z.object({
   label: z.string().optional().default("work"),
-  value: z.string().trim().or(z.literal("")),
+  value: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      if (/[a-zA-Z]/.test(val)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Text characters are not allowed. Mobile number must contain digits only.",
+        });
+        return;
+      }
+      if (val.includes("+") && !val.startsWith("+")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Country code '+' is only allowed at the beginning of the mobile number.",
+        });
+        return;
+      }
+      if ((val.match(/\+/g) || []).length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Only one '+' is allowed at the beginning of the mobile number.",
+        });
+        return;
+      }
+      if (!/^\+?[0-9\-\s()]+$/.test(val)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Mobile number can only contain numbers and standard phone symbols (+, -, ()).",
+        });
+        return;
+      }
+      const digitsOnly = val.replace(/[^0-9]/g, "");
+      if (digitsOnly.length < 7) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Please enter a valid mobile number (at least 7 digits).",
+        });
+        return;
+      }
+      if (digitsOnly.length > 15) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Mobile number cannot exceed 15 digits.",
+        });
+        return;
+      }
+    })
+    .or(z.literal("")),
 });
 
 export const personSchema = z.object({

@@ -3,6 +3,7 @@ import { IOrganization } from '@/interfaces/crm.interface';
 import { CreateOrganizationInput, UpdateOrganizationInput } from '@/schemas/organization.schema';
 import { ApiError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
+import { WorkflowService } from './workflow.service';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -58,7 +59,11 @@ export class OrganizationService {
         'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result',
         [data.name.trim(), addressJson || null, userId, customAttrsJson]
       );
-      return rows[0]?.result;
+      const createdOrg = rows[0]?.result;
+      if (createdOrg) {
+        WorkflowService.triggerWorkflows('organizations', 'create', createdOrg).catch((e) => logger.error(e));
+      }
+      return createdOrg;
     } catch (error: any) {
       logger.error({ error, data }, 'OrganizationService.create failed');
       throw error;
@@ -91,7 +96,11 @@ export class OrganizationService {
         'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb, $5) as result',
         [name, addressJson, userId, customAttrsJson, orgId]
       );
-      return rows[0]?.result;
+      const updatedOrg = rows[0]?.result;
+      if (updatedOrg) {
+        WorkflowService.triggerWorkflows('organizations', 'update', updatedOrg).catch((e) => logger.error(e));
+      }
+      return updatedOrg;
     } catch (error: any) {
       logger.error({ error, id, data }, 'OrganizationService.update failed');
       throw error;
@@ -104,7 +113,11 @@ export class OrganizationService {
       if (!orgId) return false;
 
       const { rows } = await pool.query('SELECT delete_organization($1) as result', [orgId]);
-      return Boolean(rows[0]?.result);
+      const isDeleted = Boolean(rows[0]?.result);
+      if (isDeleted) {
+        WorkflowService.triggerWorkflows('organizations', 'delete', { id: orgId }).catch((e) => logger.error(e));
+      }
+      return isDeleted;
     } catch (error: any) {
       logger.error({ error, id }, 'OrganizationService.delete failed');
       throw error;
