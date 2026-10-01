@@ -54,6 +54,39 @@ const WebhooksPage: React.FC = () => {
     }
   };
 
+  const handleTest = async (item: IWebhook) => {
+    try {
+      Swal.fire({
+        title: "Firing Webhook...",
+        text: `Sending sample ${item.entity_type} payload to ${item.end_point}`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+      const res = await API.post(`/webhooks/${item.id}/test`);
+      const payloadStr = JSON.stringify(res.data?.sent_payload, null, 2);
+      Swal.fire({
+        icon: "success",
+        title: "Webhook Fired Successfully!",
+        html: `
+          <div style="text-align: left; font-size: 13px;">
+            <p><strong>HTTP Status:</strong> <span style="color: green; font-weight: bold;">${res.data?.result?.status_code || 200} OK</span></p>
+            <p><strong>Endpoint:</strong> <code style="word-break: break-all; font-size: 11px;">${item.end_point}</code></p>
+            <p style="margin-top: 10px;"><strong>Sent Real CRM Payload:</strong></p>
+            <pre style="background: #f4f4f4; padding: 10px; border-radius: 6px; max-height: 180px; overflow-y: auto; font-size: 11px; color: #111;">${payloadStr}</pre>
+          </div>
+        `,
+        confirmButtonColor: "#0088cc",
+        confirmButtonText: "Done",
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Test Failed",
+        text: err.response?.data?.message || err.message || "Failed to trigger webhook",
+      });
+    }
+  };
+
   const filtered = webhooks.filter(
     (w) =>
       w.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -160,6 +193,13 @@ const WebhooksPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-xs font-mono text-gray-600 dark:text-gray-300 max-w-xs truncate">{item.end_point}</td>
                     <td className="py-3 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleTest(item)}
+                        className="p-1.5 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-md inline-block font-semibold transition-colors"
+                        title="Test Fire Webhook (Send Live CRM Payload)"
+                      >
+                        <i className="mgc_send_line text-base"></i>
+                      </button>
                       {canEdit && (
                         <Link
                           to={`/settings/webhooks/${item.id}/edit`}

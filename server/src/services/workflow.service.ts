@@ -314,9 +314,9 @@ export class WorkflowService {
         if (!webhookUrl.startsWith('http://') && !webhookUrl.startsWith('https://')) {
           const webhookId = Number(webhookUrl);
           if (Number.isFinite(webhookId)) {
-            const webhookRes = await pool.query('SELECT url FROM webhooks WHERE id = $1', [webhookId]);
-            if (webhookRes.rows[0]?.url) {
-              webhookUrl = webhookRes.rows[0].url;
+            const webhookRes = await pool.query('SELECT end_point FROM webhooks WHERE id = $1', [webhookId]);
+            if (webhookRes.rows[0]?.end_point) {
+              webhookUrl = webhookRes.rows[0].end_point;
             }
           }
         }

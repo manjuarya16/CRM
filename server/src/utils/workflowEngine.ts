@@ -292,17 +292,32 @@ async function executeActions(
 
         // ── Fire Webhook ─────────────────────────────────────────────────────
         case 'trigger_webhook': {
-          const webhookId = actionVal;
-          if (!webhookId) break;
+          const webhookTarget = String(action.target || action.value || actionVal || '').trim();
+          if (!webhookTarget) break;
 
-          const { rows: wRows } = await pool.query(
-            `SELECT id, name, method, end_point, headers, query_params, payload_type, raw_payload_type, payload
-             FROM public.webhooks WHERE id = $1`,
-            [Number(webhookId)]
-          );
-          const wh = wRows[0];
+          let wh: any = null;
+          if (/^\d+$/.test(webhookTarget)) {
+            const { rows: wRows } = await pool.query(
+              `SELECT id, name, method, end_point, headers, query_params, payload_type, raw_payload_type, payload
+               FROM public.webhooks WHERE id = $1`,
+              [Number(webhookTarget)]
+            );
+            wh = wRows[0];
+          } else if (webhookTarget.startsWith('http://') || webhookTarget.startsWith('https://')) {
+            wh = {
+              id: 'direct',
+              name: 'Direct URL Webhook',
+              method: 'POST',
+              end_point: webhookTarget,
+              headers: [{ key: 'Content-Type', value: 'application/json' }],
+              payload_type: 'default',
+              raw_payload_type: 'json',
+              payload: {},
+            };
+          }
+
           if (!wh) {
-            logger.warn({ webhookId }, '[WorkflowEngine] Webhook not found');
+            logger.warn({ webhookTarget }, '[WorkflowEngine] Webhook not found');
             break;
           }
 
@@ -330,7 +345,7 @@ async function executeActions(
             payload: resolvedPayload,
           });
 
-          logger.info({ webhookId, webhookName: wh.name, result }, '[WorkflowEngine] trigger_webhook done');
+          logger.info({ webhookTarget, webhookName: wh.name, result }, '[WorkflowEngine] trigger_webhook done');
           break;
         }
 
