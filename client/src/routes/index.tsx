@@ -10,7 +10,7 @@ const Login = React.lazy(() => import("../pages/auth/Login"));
 const PublicFormPage = React.lazy(() => import("../pages/public/PublicFormPage"));
 
 // dashboard
-const Dashboard = React.lazy(() => import("../pages/dashboard/"));
+const Dashboard = React.lazy(() => import("../pages/dashboard/index"));
 
 // Users
 const UserManagement = React.lazy(

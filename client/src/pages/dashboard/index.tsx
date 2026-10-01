@@ -9,23 +9,53 @@ interface IPipeline {
 }
 
 interface IFunnelStage {
-  stage_id: number;
+  stage_id?: number;
   stage_name: string;
-  code: string;
+  code?: string;
   count: number;
   total_value: number;
 }
 
 interface ITimelinePoint {
   date: string;
+  label?: string;
   won_revenue: number;
   lost_revenue: number;
+  won_count: number;
+  lost_count: number;
   leads_count: number;
+}
+
+interface ITopProduct {
+  id: number;
+  name: string;
+  price: number;
+  revenue: number;
+  quantity_sold: number;
+}
+
+interface ITopPerson {
+  id: number;
+  name: string;
+  email: string;
+  deals_count: number;
+  revenue: number;
+}
+
+interface IProgress {
+  won_revenue?: number;
+  lost_revenue?: number;
+  total_leads?: number;
+  avg_lead_value?: number;
+  avg_leads_per_day?: number;
+  total_quotations?: number;
+  total_persons?: number;
+  total_organizations?: number;
 }
 
 interface IDashboardData {
   pipelines: IPipeline[];
-  selected_pipeline_id: number;
+  selected_pipeline_id: number | string;
   start_date: string;
   end_date: string;
   won_revenue: number;
@@ -41,7 +71,10 @@ interface IDashboardData {
   funnel: IFunnelStage[];
   revenue_by_source: { name: string; count: number; total_value: number }[];
   revenue_by_type: { name: string; count: number; total_value: number }[];
+  top_products: ITopProduct[];
+  top_persons: ITopPerson[];
   timeline: ITimelinePoint[];
+  progress: IProgress;
 }
 
 const formatCurrency = (val: number) => {
@@ -53,11 +86,29 @@ const formatCurrency = (val: number) => {
   }).format(val || 0);
 };
 
-const defaultInitialData: IDashboardData = {
-  pipelines: [{ id: 1, name: "Default Pipeline", is_default: true }],
-  selected_pipeline_id: 1,
-  start_date: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
-  end_date: new Date().toISOString().split("T")[0],
+const getInitials = (name: string) => {
+  if (!name) return "U";
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const pastelAvatarStyles = [
+  { bg: "#FED7AA", text: "#9A3412" }, // Orange pastel
+  { bg: "#FEF08A", text: "#854D0E" }, // Yellow pastel
+  { bg: "#FECDD3", text: "#9F1239" }, // Rose pastel
+  { bg: "#BFDBFE", text: "#1E40AF" }, // Blue pastel
+  { bg: "#D9F99D", text: "#3F6212" }, // Lime pastel
+];
+
+const sourcePalette = ["#8979FF", "#FF928A", "#3CC3DF", "#D4E157", "#BA68C8", "#FBC02D"];
+const typePalette = ["#8979FF", "#FF928A", "#3CC3DF", "#BA68C8"];
+
+const emptyInitialData: IDashboardData = {
+  pipelines: [],
+  selected_pipeline_id: "all",
+  start_date: "2024-06-01",
+  end_date: "2026-09-30",
   won_revenue: 0,
   won_count: 0,
   lost_revenue: 0,
@@ -68,16 +119,13 @@ const defaultInitialData: IDashboardData = {
   total_quotations: 0,
   total_persons: 0,
   total_organizations: 0,
-  funnel: [
-    { stage_id: 1, stage_name: "Qualified", code: "qualified", count: 0, total_value: 0 },
-    { stage_id: 2, stage_name: "New Inquiry", code: "new_inquiry", count: 0, total_value: 0 },
-    { stage_id: 3, stage_name: "Proposal Sent", code: "proposal_sent", count: 0, total_value: 0 },
-    { stage_id: 4, stage_name: "Negotiation", code: "negotiation", count: 0, total_value: 0 },
-    { stage_id: 5, stage_name: "Won", code: "won", count: 0, total_value: 0 },
-  ],
+  funnel: [],
   revenue_by_source: [],
   revenue_by_type: [],
+  top_products: [],
+  top_persons: [],
   timeline: [],
+  progress: {},
 };
 
 const SafeApexChart: React.FC<any> = (props) => {
@@ -99,18 +147,11 @@ const SafeApexChart: React.FC<any> = (props) => {
 };
 
 export const DashboardPage: React.FC = () => {
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const thirtyDaysAgoStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  }, []);
-
-  const [startDate, setStartDate] = useState<string>(thirtyDaysAgoStr);
-  const [endDate, setEndDate] = useState<string>(todayStr);
+  const [startDate, setStartDate] = useState<string>("2024-06-01");
+  const [endDate, setEndDate] = useState<string>("2026-09-30");
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | number>("all");
   const [loading, setLoading] = useState<boolean>(false);
-  const [data, setData] = useState<IDashboardData>(defaultInitialData);
+  const [data, setData] = useState<IDashboardData>(emptyInitialData);
 
   const fetchDashboardStats = async () => {
     try {
@@ -158,7 +199,7 @@ export const DashboardPage: React.FC = () => {
           ["Lost Revenue", formatCurrency(data.lost_revenue)],
           ["Average Lead Value", formatCurrency(data.avg_lead_value)],
           ["Total Leads", String(data.total_leads)],
-          ["Average Leads / Day", data.avg_leads_per_day.toFixed(2)],
+          ["Average Leads / Day", (data.avg_leads_per_day || 0).toFixed(2)],
           ["Total Quotations", String(data.total_quotations)],
           ["Total Persons", String(data.total_persons)],
           ["Total Organizations", String(data.total_organizations)],
@@ -182,91 +223,178 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  // Won vs Lost Revenue Chart Options
-  const revenueChartOptions: ApexCharts.ApexOptions = {
+  // 1. Won vs Lost Revenue Horizontal Bar Chart
+  const revenueBarChartOptions: ApexCharts.ApexOptions = {
     chart: {
-      type: "area",
+      type: "bar",
       toolbar: { show: false },
-      sparkline: { enabled: false },
     },
-    colors: ["#10b981", "#ef4444"],
-    stroke: { curve: "smooth", width: 2 },
-    fill: {
-      type: "gradient",
-      gradient: { opacityFrom: 0.35, opacityTo: 0.05 },
-    },
-    xaxis: {
-      categories: (data.timeline || []).map((t) => t.date),
-      labels: { style: { colors: "#64748b", fontSize: "11px" } },
-    },
-    yaxis: {
-      labels: {
-        formatter: (val) => `$${val}`,
-        style: { colors: "#64748b", fontSize: "11px" },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        barHeight: "36%",
+        distributed: true,
+        borderRadius: 2,
       },
     },
-    legend: { position: "bottom", horizontalAlign: "center" },
-    grid: { borderColor: "#f1f5f9" },
+    colors: ["#22c55e", "#ef4444"],
+    dataLabels: { enabled: false },
+    xaxis: {
+      categories: ["Won Revenue", "Lost Revenue"],
+      labels: {
+        formatter: (val) => "$" + Number(val).toLocaleString(),
+        rotate: -45,
+        style: { colors: "#64748b", fontSize: "11px" },
+      },
+      axisBorder: { show: true },
+    },
+    yaxis: {
+      show: false,
+    },
+    grid: {
+      borderColor: "#e2e8f0",
+      strokeDashArray: 4,
+    },
+    legend: {
+      show: false,
+    },
+    tooltip: {
+      y: {
+        formatter: (val) => formatCurrency(Number(val)),
+      },
+    },
   };
 
-  const revenueChartSeries = [
+  const revenueBarChartSeries = [
     {
-      name: "Won Revenue",
-      data: (data.timeline || []).map((t) => t.won_revenue),
-    },
-    {
-      name: "Lost Revenue",
-      data: (data.timeline || []).map((t) => t.lost_revenue),
+      name: "Revenue",
+      data: [data.won_revenue || 0, data.lost_revenue || 0],
     },
   ];
 
-  // Leads Timeline Chart Options
-  const leadsTimelineChartOptions: ApexCharts.ApexOptions = {
+  // 2. Leads Velocity Grouped Bar Chart
+  const timelinePoints = data.timeline || [];
+
+  const leadsBarChartOptions: ApexCharts.ApexOptions = {
     chart: {
-      type: "line",
+      type: "bar",
       toolbar: { show: false },
     },
-    colors: ["#0088cc"],
-    stroke: { curve: "smooth", width: 3 },
+    colors: ["#8979FF", "#63CFE5", "#FFA8A1"],
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        columnWidth: "60%",
+        borderRadius: 2,
+      },
+    },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 2, colors: ["transparent"] },
     xaxis: {
-      categories: (data.timeline || []).map((t) => t.date),
-      labels: { style: { colors: "#64748b", fontSize: "11px" } },
+      categories: timelinePoints.map((t) => t.label || t.date),
+      labels: {
+        rotate: -45,
+        style: { colors: "#64748b", fontSize: "10px" },
+      },
     },
     yaxis: {
       labels: { style: { colors: "#64748b", fontSize: "11px" } },
     },
-    grid: { borderColor: "#f1f5f9" },
+    legend: { show: false },
+    grid: {
+      borderColor: "#e2e8f0",
+      strokeDashArray: 4,
+    },
+    tooltip: {
+      y: {
+        formatter: (val) => `${val} leads`,
+      },
+    },
   };
 
-  const leadsTimelineChartSeries = [
+  const leadsBarChartSeries = [
     {
-      name: "Leads Count",
-      data: (data.timeline || []).map((t) => t.leads_count),
+      name: "Total Leads",
+      data: timelinePoints.map((t) => t.leads_count),
+    },
+    {
+      name: "Won Leads",
+      data: timelinePoints.map((t) => t.won_count || 0),
+    },
+    {
+      name: "Lost Leads",
+      data: timelinePoints.map((t) => t.lost_count || 0),
     },
   ];
 
+  // 3. Revenue by Sources Donut Chart
+  const sourceSeries = useMemo(() => {
+    if (!data.revenue_by_source || data.revenue_by_source.length === 0) return [];
+    const values = data.revenue_by_source.map((s) => s.total_value);
+    const sum = values.reduce((a, b) => a + b, 0);
+    return sum > 0 ? values : data.revenue_by_source.map((s) => s.count);
+  }, [data.revenue_by_source]);
+
+  const sourceChartOptions: ApexCharts.ApexOptions = {
+    chart: { type: "donut" },
+    labels: data.revenue_by_source.map((s) => s.name),
+    colors: sourcePalette,
+    legend: { show: false },
+    dataLabels: { enabled: false },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: "65%",
+        },
+      },
+    },
+  };
+
+  // 4. Revenue by Types Donut Chart
+  const typeSeries = useMemo(() => {
+    if (!data.revenue_by_type || data.revenue_by_type.length === 0) return [];
+    const values = data.revenue_by_type.map((t) => t.total_value);
+    const sum = values.reduce((a, b) => a + b, 0);
+    return sum > 0 ? values : data.revenue_by_type.map((t) => t.count);
+  }, [data.revenue_by_type]);
+
+  const typeChartOptions: ApexCharts.ApexOptions = {
+    chart: { type: "donut" },
+    labels: data.revenue_by_type.map((t) => t.name),
+    colors: typePalette,
+    legend: { show: false },
+    dataLabels: { enabled: false },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: "65%",
+        },
+      },
+    },
+  };
+
+  // 5. Dynamic Funnel Calculations
+  const funnelStages = data.funnel && data.funnel.length > 0 ? data.funnel.slice(0, 5) : [];
+  const maxFunnelCount = Math.max(...funnelStages.map((f) => f.count), 1);
+
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-[1700px] mx-auto text-gray-800 dark:text-gray-100">
-      {/* Dashboard Top Header Bar */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
-            {loading && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>}
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Real-time sales performance, pipeline stages, and revenue metrics
-          </p>
+    <div className="p-4 sm:p-6 space-y-5 max-w-[1700px] mx-auto text-gray-800 dark:text-gray-100 font-sans">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
+          {loading && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>}
         </div>
 
-        {/* Filter Controls */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Date Filter & Export Button */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Pipeline selector */}
           <select
             value={selectedPipelineId}
             onChange={(e) => setSelectedPipelineId(e.target.value)}
-            className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-200"
+            className="h-[38px] px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-gray-200"
           >
-            <option value="all">Default Pipeline</option>
+            <option value="all">All Pipelines</option>
             {(data.pipelines || []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -274,267 +402,426 @@ export const DashboardPage: React.FC = () => {
             ))}
           </select>
 
-          <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 shadow-sm">
+          {/* Start Date */}
+          <div className="flex items-center gap-2 h-[38px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 shadow-sm">
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="text-xs bg-transparent focus:outline-none dark:text-gray-200"
+              className="text-xs bg-transparent focus:outline-none text-gray-700 dark:text-gray-200"
             />
-            <i className="mgc_calendar_line text-gray-400"></i>
+            <i className="mgc_calendar_line text-gray-400 text-sm"></i>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 shadow-sm">
+          {/* End Date */}
+          <div className="flex items-center gap-2 h-[38px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 shadow-sm">
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="text-xs bg-transparent focus:outline-none dark:text-gray-200"
+              className="text-xs bg-transparent focus:outline-none text-gray-700 dark:text-gray-200"
             />
-            <i className="mgc_calendar_line text-gray-400"></i>
+            <i className="mgc_calendar_line text-gray-400 text-sm"></i>
           </div>
 
+          {/* Export PDF Button */}
           <button
             onClick={handleExportPDF}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 rounded-lg shadow-sm transition-all cursor-pointer"
+            className="h-[38px] px-4 text-xs font-semibold text-blue-600 bg-white dark:bg-gray-800 border border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-md shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
           >
-            <i className="mgc_pdf_line text-sm"></i>
             Export PDF
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT 8 COLUMNS */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* Won / Lost Revenue Chart Container */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm space-y-4">
-            <div className="grid grid-cols-2 gap-4 max-w-xs">
-              {/* Won Revenue Card */}
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-800/40">
-                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Won Revenue</span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+      {/* Row 1: Won/Lost Revenue & Open Leads By Stages */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Won/Lost Revenue Card (Left ~flex-1) */}
+        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Won & Lost Stat Cards */}
+            <div className="flex flex-col gap-2.5 w-full md:w-56 shrink-0">
+              {/* Won Revenue */}
+              <div className="border border-gray-300 dark:border-gray-800 rounded-lg px-4 py-3">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 block">
+                  Won Revenue
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xl font-bold text-green-600 dark:text-green-500">
                     {formatCurrency(data.won_revenue || 0)}
                   </span>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center">
-                    ↑ 0%
+                  <span className="text-xs font-semibold text-green-500 flex items-center">
+                    ↑ {data.won_revenue > 0 ? "100" : "0"}%
                   </span>
                 </div>
               </div>
 
-              {/* Lost Revenue Card */}
-              <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/40">
-                <span className="text-[11px] font-semibold text-red-700 dark:text-red-400">Lost Revenue</span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {/* Lost Revenue */}
+              <div className="border border-gray-300 dark:border-gray-800 rounded-lg px-4 py-3">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 block">
+                  Lost Revenue
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xl font-bold text-red-500">
                     {formatCurrency(data.lost_revenue || 0)}
                   </span>
-                  <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 flex items-center">
-                    ↓ 0%
+                  <span className="text-xs font-semibold text-red-500 flex items-center">
+                    ↓ {data.lost_revenue > 0 ? "100" : "0"}%
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Area Chart */}
-            <div className="h-[260px] w-full pt-2">
-              <SafeApexChart
-                options={revenueChartOptions}
-                series={revenueChartSeries}
-                type="area"
-                height="100%"
-              />
-            </div>
-          </div>
-
-          {/* 6 Middle KPI Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Card 1: Average Lead Value */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Average Lead Value</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {formatCurrency(data.avg_lead_value || 0)}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 0%
-                </span>
+            {/* Horizontal Bar Chart (Won vs Lost Revenue) */}
+            <div className="flex-1 flex flex-col justify-between pt-1">
+              <div className="h-[140px] w-full">
+                <SafeApexChart
+                  options={revenueBarChartOptions}
+                  series={revenueBarChartSeries}
+                  type="bar"
+                  height="100%"
+                />
               </div>
-            </div>
 
-            {/* Card 2: Total Leads */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Leads</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {data.total_leads || 0}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 0%
-                </span>
+              {/* Legend Below Revenue Chart */}
+              <div className="flex justify-center gap-6 mt-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 rounded-sm bg-green-500 opacity-80"></span>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">Won Revenue</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 rounded-sm bg-red-500 opacity-80"></span>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">Lost Revenue</p>
+                </div>
               </div>
-            </div>
-
-            {/* Card 3: Average Leads Per Day */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Average Leads Per Day</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {(data.avg_leads_per_day || 0).toFixed(2)}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 0%
-                </span>
-              </div>
-            </div>
-
-            {/* Card 4: Total Quotations */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Quotations</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {data.total_quotations || 0}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 100%
-                </span>
-              </div>
-            </div>
-
-            {/* Card 5: Total Persons */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Persons</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {data.total_persons || 0}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 100%
-                </span>
-              </div>
-            </div>
-
-            {/* Card 6: Total Organizations */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Organizations</span>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {data.total_organizations || 0}
-                </h3>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                  ↑ 100%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Leads Trend Chart */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm space-y-3">
-            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Leads Creation Velocity</h3>
-            <div className="h-[220px] w-full">
-              <SafeApexChart
-                options={leadsTimelineChartOptions}
-                series={leadsTimelineChartSeries}
-                type="line"
-                height="100%"
-              />
             </div>
           </div>
         </div>
 
-        {/* RIGHT 4 COLUMNS SIDEBAR */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Open Leads By Stages (Funnel Diagram) */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Open Leads By Stages</h3>
+        {/* Open Leads By Stages Funnel (Right ~378px) */}
+        <div className="w-full lg:w-[378px] shrink-0 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm flex flex-col justify-between">
+          <p className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            Open Leads By Stages
+          </p>
 
-            {(!data.funnel || data.funnel.length === 0) ? (
-              <p className="text-xs text-gray-400 italic py-6 text-center">No pipeline stages available</p>
-            ) : (
-              <div className="space-y-2 py-1">
-                {data.funnel.map((stage, idx) => {
-                  const maxCount = Math.max(...data.funnel.map((f) => f.count), 1);
-                  const widthPct = Math.max(30, Math.min(100, Math.round((stage.count / maxCount) * 100)));
+          <div className="flex items-center justify-between gap-4 mt-2">
+            {/* Left Stages List */}
+            <div className="flex-1 flex flex-col justify-around py-1">
+              {funnelStages.map((st, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-col border-b border-gray-200 dark:border-gray-800 pb-2 pt-1 last:border-b-0"
+                >
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    {st.count}
+                  </span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    {st.stage_name}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Right Funnel SVG Graphic (Dynamically Sized to Counts) */}
+            <div className="w-[180px] h-[190px] flex items-center justify-center">
+              <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-sm">
+                <defs>
+                  <linearGradient id="funnelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#90f7ec" stopOpacity="0.85" />
+                    <stop offset="100%" stopColor="#32ccbc" stopOpacity="1" />
+                  </linearGradient>
+                </defs>
+                {funnelStages.map((st, idx) => {
+                  const n = funnelStages.length;
+                  const totalH = 180;
+                  const gap = 4;
+                  const sliceH = (totalH - (n - 1) * gap) / Math.max(n, 1);
+                  const yTop = 10 + idx * (sliceH + gap);
+                  const yBottom = yTop + sliceH;
+
+                  // Proportional widths
+                  const topW = Math.max(50, Math.round((st.count / maxFunnelCount) * 180));
+                  const nextStage = funnelStages[idx + 1];
+                  const rawNextW = nextStage
+                    ? Math.max(40, Math.round((nextStage.count / maxFunnelCount) * 180))
+                    : topW * 0.85;
+                  const botW = Math.min(topW, rawNextW);
+
+                  const x1 = 100 - topW / 2;
+                  const x2 = 100 + topW / 2;
+                  const x3 = 100 + botW / 2;
+                  const x4 = 100 - botW / 2;
 
                   return (
-                    <div key={idx} className="space-y-1">
-                      <div className="flex justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-teal-400"></span>
-                          {stage.stage_name}
-                        </span>
-                        <span className="font-bold">{stage.count}</span>
-                      </div>
-                      {/* Styled Funnel Bar */}
-                      <div className="w-full bg-gray-100 dark:bg-gray-700/60 h-6 rounded-lg overflow-hidden relative flex items-center justify-center">
-                        <div
-                          className="bg-gradient-to-r from-teal-400 to-emerald-400 h-full rounded-lg transition-all duration-500 shadow-sm"
-                          style={{ width: `${widthPct}%` }}
-                        ></div>
-                        <span className="absolute text-[10px] font-bold text-gray-700 dark:text-gray-200 drop-shadow-sm">
-                          {stage.count} leads ({formatCurrency(stage.total_value)})
-                        </span>
-                      </div>
-                    </div>
+                    <polygon
+                      key={idx}
+                      points={`${x1},${yTop} ${x2},${yTop} ${x3},${yBottom} ${x4},${yBottom}`}
+                      fill="url(#funnelGrad)"
+                    />
                   );
                 })}
-              </div>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: 6 KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Card 1: Average Lead Value */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Average Lead Value</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {formatCurrency(data.avg_lead_value || 0)}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.avg_lead_value > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Total Leads */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Leads</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {data.total_leads || 0}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.total_leads > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Average Leads Per Day */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Average Leads Per Day</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {(data.avg_leads_per_day || 0).toFixed(2)}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.avg_leads_per_day > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Total Quotations */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Quotations</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {data.total_quotations || 0}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.total_quotations > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Total Persons */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Persons</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {data.total_persons || 0}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.total_persons > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 6: Total Organizations */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Organizations</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              {data.total_organizations || 0}
+            </h3>
+            <span className="text-xs font-semibold text-green-500">
+              ↑ {data.total_organizations > 0 ? "100" : "0"}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Leads Velocity Bar Chart & Revenue By Sources Donut */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Leads Velocity Chart (Left flex-1) */}
+        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-3">
+          <p className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            Leads
+          </p>
+
+          <div className="h-[260px] w-full">
+            <SafeApexChart
+              options={leadsBarChartOptions}
+              series={leadsBarChartSeries}
+              type="bar"
+              height="100%"
+            />
+          </div>
+
+          {/* Legend Below Leads Chart */}
+          <div className="flex justify-center gap-6 pt-2">
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-3.5 rounded-sm bg-[#8979FF]"></span>
+              <p className="text-xs text-gray-600 dark:text-gray-300">Total Leads</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-3.5 rounded-sm bg-[#63CFE5]"></span>
+              <p className="text-xs text-gray-600 dark:text-gray-300">Won Leads</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-3.5 rounded-sm bg-[#FFA8A1]"></span>
+              <p className="text-xs text-gray-600 dark:text-gray-300">Lost Leads</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Revenue By Sources Donut (Right ~378px) */}
+        <div className="w-full lg:w-[378px] shrink-0 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm flex flex-col justify-between">
+          <p className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            Revenue By Sources
+          </p>
+
+          <div className="h-[210px] w-full flex items-center justify-center my-auto">
+            {sourceSeries.length > 0 ? (
+              <SafeApexChart
+                options={sourceChartOptions}
+                series={sourceSeries}
+                type="donut"
+                height="100%"
+              />
+            ) : (
+              <p className="text-xs text-gray-400">No source data</p>
             )}
           </div>
 
-          {/* Revenue By Sources Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Revenue By Sources</h3>
-
-            {(!data.revenue_by_source || data.revenue_by_source.length === 0) ? (
-              <div className="py-8 text-center space-y-2">
-                <div className="w-14 h-14 bg-gray-100 dark:bg-gray-700/50 rounded-2xl flex items-center justify-center mx-auto text-gray-400">
-                  <i className="mgc_layout_grid_line text-2xl"></i>
-                </div>
-                <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400">No Data Available</h4>
-                <p className="text-[11px] text-gray-400">No data available for selected interval</p>
+          {/* Legend Grid Below Donut */}
+          <div className="grid grid-cols-3 gap-2.5 pt-2">
+            {(data.revenue_by_source || []).map((src, i) => (
+              <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
+                <span
+                  className="h-3.5 w-3.5 rounded-sm shrink-0"
+                  style={{ backgroundColor: sourcePalette[i % sourcePalette.length] }}
+                ></span>
+                <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{src.name}</p>
               </div>
-            ) : (
-              <div className="space-y-2.5">
-                {data.revenue_by_source.map((src, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-700/40 rounded-xl text-xs">
-                    <span className="font-medium text-gray-700 dark:text-gray-200">{src.name}</span>
-                    <div className="text-right">
-                      <span className="font-bold text-gray-900 dark:text-gray-100 block">{formatCurrency(src.total_value)}</span>
-                      <span className="text-[10px] text-gray-400">{src.count} leads</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4: Top Products, Top Persons, Revenue By Types */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Top Products (flex-1) */}
+        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-2">
+              Top Products
+            </p>
+
+            <div className="flex flex-col">
+              {(data.top_products || []).slice(0, 5).map((p, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-col gap-1.5 py-3 border-b border-gray-200 dark:border-gray-800 last:border-b-0 hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition-all rounded px-1"
+                >
+                  <p className="text-sm font-normal text-gray-600 dark:text-gray-300 truncate">
+                    {p.name}
+                  </p>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm font-bold text-gray-800 dark:text-white">
+                      {formatCurrency(p.price)}
+                    </p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-white">
+                      {formatCurrency(p.revenue)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {(!data.top_products || data.top_products.length === 0) && (
+                <p className="text-xs text-gray-400 py-6 text-center">No products found</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Top Persons (flex-1) */}
+        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-2">
+              Top Persons
+            </p>
+
+            <div className="flex flex-col">
+              {(data.top_persons || []).slice(0, 5).map((person, idx) => {
+                const avatarStyle = pastelAvatarStyles[idx % pastelAvatarStyles.length];
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 py-3 border-b border-gray-200 dark:border-gray-800 last:border-b-0 hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition-all rounded px-1"
+                  >
+                    {/* Pastel Avatar */}
+                    <div
+                      className="w-9 h-9 rounded-full font-bold text-xs flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: avatarStyle.bg, color: avatarStyle.text }}
+                    >
+                      {getInitials(person.name)}
+                    </div>
+
+                    {/* Person Details */}
+                    <div className="flex flex-col truncate">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
+                        {person.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {person.email || "No email"}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+              {(!data.top_persons || data.top_persons.length === 0) && (
+                <p className="text-xs text-gray-400 py-6 text-center">No persons found</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Revenue By Types (Right ~378px) */}
+        <div className="w-full lg:w-[378px] shrink-0 bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm flex flex-col justify-between">
+          <p className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            Revenue By Types
+          </p>
+
+          <div className="h-[210px] w-full flex items-center justify-center my-auto">
+            {typeSeries.length > 0 ? (
+              <SafeApexChart
+                options={typeChartOptions}
+                series={typeSeries}
+                type="donut"
+                height="100%"
+              />
+            ) : (
+              <p className="text-xs text-gray-400">No type data</p>
             )}
           </div>
 
-          {/* Revenue By Types Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Revenue By Types</h3>
-
-            {(!data.revenue_by_type || data.revenue_by_type.length === 0) ? (
-              <div className="py-8 text-center space-y-2">
-                <div className="w-14 h-14 bg-gray-100 dark:bg-gray-700/50 rounded-2xl flex items-center justify-center mx-auto text-gray-400">
-                  <i className="mgc_chart_pie_line text-2xl"></i>
-                </div>
-                <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400">No Data Available</h4>
-                <p className="text-[11px] text-gray-400">No data available for selected interval</p>
+          {/* Legend Grid Below Donut */}
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 pt-2">
+            {(data.revenue_by_type || []).map((t, i) => (
+              <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
+                <span
+                  className="h-3.5 w-3.5 rounded-sm shrink-0"
+                  style={{ backgroundColor: typePalette[i % typePalette.length] }}
+                ></span>
+                <p className="text-xs text-gray-600 dark:text-gray-300">{t.name}</p>
               </div>
-            ) : (
-              <div className="space-y-2.5">
-                {data.revenue_by_type.map((t, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-700/40 rounded-xl text-xs">
-                    <span className="font-medium text-gray-700 dark:text-gray-200">{t.name}</span>
-                    <div className="text-right">
-                      <span className="font-bold text-gray-900 dark:text-gray-100 block">{formatCurrency(t.total_value)}</span>
-                      <span className="text-[10px] text-gray-400">{t.count} leads</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         </div>
       </div>
