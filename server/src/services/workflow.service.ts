@@ -3,6 +3,7 @@ import { IWorkflow } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
 import { sendRealMail } from '@/utils/mailer';
 import { fetchTemplateContext, parsePlaceholders } from '@/utils/templateParser';
+import { TagService } from './tag.service';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -306,11 +307,10 @@ export class WorkflowService {
   private static async executeAction(action: any, entityType: string, data: any): Promise<void> {
     try {
       const { action_type, target, value } = action;
-      const entityId = data.id || data.lead_id || data.person_id || data.organization_id;
+      const entityId = data.id || data.lead_id || data.person_id || data.organization_id || data.quote_id || data.activity_id;
 
-      if (action_type === 'trigger_webhook' && target) {
-        let webhookUrl = String(target).trim();
-        // If target is a numeric ID (e.g. "2"), resolve URL from webhooks table
+      if (action_type === 'trigger_webhook' && (target || value)) {
+        let webhookUrl = String(target || value).trim();
         if (!webhookUrl.startsWith('http://') && !webhookUrl.startsWith('https://')) {
           const webhookId = Number(webhookUrl);
           if (Number.isFinite(webhookId)) {
@@ -327,6 +327,45 @@ export class WorkflowService {
             body: JSON.stringify({ event_type: entityType, event_data: data, triggered_at: new Date().toISOString() }),
           }).catch(() => {});
         }
+      } else if (action_type === 'add_tag' && (target || value) && entityId) {
+        const tagVal = String(target || value || '').trim();
+        if (tagVal) {
+          let tagId = Number(tagVal);
+          if (!Number.isFinite(tagId)) {
+            const tagRes = await pool.query('SELECT id FROM tags WHERE LOWER(name) = LOWER($1)', [tagVal]);
+            if (tagRes.rows[0]) {
+              tagId = tagRes.rows[0].id;
+            } else {
+              const newTagRes = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [tagVal, '#0088cc', null, null]);
+              tagId = newTagRes.rows[0]?.data?.id;
+            }
+          }
+          if (tagId) {
+            const targetEntityType = entityType.toLowerCase().startsWith('person') ? 'person' : 'lead';
+            const targetEntId = entityType.toLowerCase().startsWith('person') ? entityId : (data.lead_id || entityId);
+            const existingTags = await TagService.getEntityTags(targetEntityType, targetEntId);
+            const existingIds = (existingTags || []).map((t: any) => Number(t.id)).filter(Boolean);
+            if (!existingIds.includes(tagId)) {
+              await TagService.saveEntityTags(targetEntityType, targetEntId, [...existingIds, tagId]);
+            }
+          }
+        }
+      } else if (action_type === 'add_note_activity' && (target || value) && entityId) {
+        const noteText = String(target || value || '').trim();
+        const isLead = entityType.toLowerCase().startsWith('lead');
+        const isPerson = entityType.toLowerCase().startsWith('person');
+        const leadId = isLead ? entityId : (data.lead_id || null);
+        const personId = isPerson ? entityId : (data.person_id || null);
+        const userId = data.user_id || 1;
+
+        await pool.query(
+          `SELECT * FROM public.fn_create_activity(
+            $1::varchar, $2::varchar, $3::text,
+            NOW()::timestamp, (NOW() + INTERVAL '15 minutes')::timestamp,
+            true::boolean, $4::integer, null::varchar, $5::integer, $6::integer
+          )`,
+          ['Workflow Note', 'note', noteText, userId, leadId, personId]
+        );
       } else if (action_type === 'create_activity' && entityId) {
         const isLead = entityType.toLowerCase().startsWith('lead');
         const isPerson = entityType.toLowerCase().startsWith('person');
@@ -363,64 +402,58 @@ export class WorkflowService {
             await pool.query(`UPDATE leads SET user_id = $1, updated_at = NOW() WHERE id = $2`, [userId, entityId]);
           } else if (lowerEntity.startsWith('person') || lowerEntity.startsWith('contact')) {
             await pool.query(`UPDATE persons SET user_id = $1, updated_at = NOW() WHERE id = $2`, [userId, entityId]);
-          } else if (lowerEntity.startsWith('organization')) {
-            await pool.query(`UPDATE organizations SET user_id = $1, updated_at = NOW() WHERE id = $2`, [userId, entityId]);
           } else if (lowerEntity.startsWith('quote')) {
             await pool.query(`UPDATE quotes SET user_id = $1, updated_at = NOW() WHERE id = $2`, [userId, entityId]);
           } else if (lowerEntity.startsWith('activit')) {
             await pool.query(`UPDATE activities SET user_id = $1, updated_at = NOW() WHERE id = $2`, [userId, entityId]);
           }
         }
-      } else if (action_type === 'update_attribute' && target && value !== undefined && entityId) {
-        const targetCol = target.toLowerCase().trim();
-        if (targetCol === 'stage_id' || targetCol === 'lead_pipeline_stage_id') {
-          const stageId = Number(value);
-          if (Number.isFinite(stageId)) {
-            await pool.query(`SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)`, [entityId, stageId]);
-          }
-        } else {
-          const lowerEntity = entityType.toLowerCase();
-          let colName = targetCol;
-          if (colName === 'source_id') colName = 'lead_source_id';
-          if (colName === 'type_id') colName = 'lead_type_id';
-          if (colName === 'pipeline_id') colName = 'lead_pipeline_id';
+      } else if ((action_type === 'update_lead' || action_type === 'update_related_leads' || action_type === 'update_attribute') && target && value !== undefined) {
+        const leadId = entityType.toLowerCase().startsWith('lead') ? entityId : (data.lead_id || null);
+        if (leadId) {
+          const targetCol = target.toLowerCase().trim();
+          if (targetCol === 'stage_id' || targetCol === 'lead_pipeline_stage_id') {
+            const stageId = Number(value);
+            if (Number.isFinite(stageId)) {
+              await pool.query(`SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)`, [leadId, stageId]);
+            }
+          } else {
+            let colName = targetCol;
+            if (colName === 'source_id') colName = 'lead_source_id';
+            if (colName === 'type_id') colName = 'lead_type_id';
+            if (colName === 'pipeline_id') colName = 'lead_pipeline_id';
 
-          if (lowerEntity.startsWith('lead')) {
             const leadCols = ['status', 'lead_source_id', 'lead_type_id', 'lead_pipeline_id', 'lead_value', 'title', 'description', 'user_id', 'organization_id', 'person_id'];
             if (leadCols.includes(colName)) {
               let valToSet: any = value;
               if (colName === 'status') {
                 valToSet = value === 'open' || value === 'true' || value === true || value === 1;
               }
-              await pool.query(`UPDATE leads SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [valToSet, entityId]);
-            }
-          } else if (lowerEntity.startsWith('person') || lowerEntity.startsWith('contact')) {
-            const personCols = ['name', 'user_id', 'organization_id', 'job_title'];
-            if (personCols.includes(colName)) {
-              await pool.query(`UPDATE persons SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, entityId]);
-            }
-          } else if (lowerEntity.startsWith('organization')) {
-            const orgCols = ['name', 'address', 'user_id'];
-            if (orgCols.includes(colName)) {
-              await pool.query(`UPDATE organizations SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, entityId]);
-            }
-          } else if (lowerEntity.startsWith('quote')) {
-            const quoteCols = ['subject', 'description', 'user_id', 'person_id', 'lead_id', 'grand_total', 'sub_total', 'tax_amount', 'discount_amount'];
-            if (quoteCols.includes(colName)) {
-              await pool.query(`UPDATE quotes SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, entityId]);
-            }
-          } else if (lowerEntity.startsWith('activit')) {
-            const actCols = ['title', 'type', 'comment', 'user_id', 'location', 'is_done'];
-            if (actCols.includes(colName)) {
-              let valToSet: any = value;
-              if (colName === 'is_done') {
-                valToSet = value === 'true' || value === true || value === 1;
-              }
-              await pool.query(`UPDATE activities SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [valToSet, entityId]);
+              await pool.query(`UPDATE leads SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [valToSet, leadId]);
             }
           }
         }
-      } else if (action_type === 'send_email' && target) {
+      } else if (action_type === 'update_person' && target && value !== undefined) {
+        const personId = (entityType.toLowerCase().startsWith('person') || entityType.toLowerCase().startsWith('contact'))
+          ? entityId
+          : (data.person_id || null);
+        if (personId) {
+          const colName = target.toLowerCase().trim();
+          const personCols = ['name', 'user_id', 'organization_id', 'job_title', 'is_vip'];
+          if (personCols.includes(colName)) {
+            await pool.query(`UPDATE persons SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, personId]);
+          }
+        }
+      } else if (action_type === 'update_quote' && target && value !== undefined) {
+        const quoteId = entityType.toLowerCase().startsWith('quote') ? entityId : (data.quote_id || null);
+        if (quoteId) {
+          const colName = target.toLowerCase().trim();
+          const quoteCols = ['subject', 'description', 'user_id', 'person_id', 'lead_id', 'grand_total', 'sub_total', 'tax_amount', 'discount_amount'];
+          if (quoteCols.includes(colName)) {
+            await pool.query(`UPDATE quotes SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, quoteId]);
+          }
+        }
+      } else if ((action_type === 'send_email_person' || action_type === 'send_email_owner' || action_type === 'send_email_participants' || action_type === 'send_email') && target) {
         const templateId = Number(target);
         if (Number.isFinite(templateId)) {
           const { rows } = await pool.query(`SELECT * FROM email_templates WHERE id = $1`, [templateId]);
@@ -457,18 +490,18 @@ export class WorkflowService {
             let recipientEmail: string | null = null;
             const cleanVal = (value || '').trim();
 
-            // 1. Direct email address match
-            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanVal)) {
-              recipientEmail = cleanVal;
-            } else {
-              // 2. Extract from entity payload fields
+            if (action_type === 'send_email_owner') {
+              const targetUserId = data.user_id || data.assigned_to;
+              if (targetUserId) {
+                const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetUserId]);
+                if (userRes.rows[0]?.email) recipientEmail = extractEmailAddress(userRes.rows[0].email);
+              }
+            } else if (action_type === 'send_email_participants' || action_type === 'send_email_person') {
               recipientEmail = extractEmailAddress(data.emails) ||
                                extractEmailAddress(data.person_emails) ||
                                extractEmailAddress(data.email) ||
-                               extractEmailAddress(data.contact_email) ||
-                               extractEmailAddress(data.user_email);
+                               extractEmailAddress(data.contact_email);
 
-              // 3. Fallback DB lookup for Person entity or related person
               const targetPersonId = (lowerEntity.includes('person') || lowerEntity.includes('contact'))
                 ? entityId
                 : (data.person_id || null);
@@ -476,36 +509,17 @@ export class WorkflowService {
               if (!recipientEmail && targetPersonId) {
                 try {
                   const personRes = await pool.query(`SELECT emails FROM persons WHERE id = $1`, [targetPersonId]);
-                  if (personRes.rows[0]?.emails) {
-                    recipientEmail = extractEmailAddress(personRes.rows[0].emails);
-                  }
+                  if (personRes.rows[0]?.emails) recipientEmail = extractEmailAddress(personRes.rows[0].emails);
                 } catch {}
               }
-
-              // 4. Fallback DB lookup for Lead entity related person
-              const targetLeadId = lowerEntity.includes('lead') ? entityId : (data.lead_id || null);
-              if (!recipientEmail && targetLeadId) {
-                try {
-                  const leadRes = await pool.query(
-                    `SELECT p.emails FROM leads l JOIN persons p ON p.id = l.person_id WHERE l.id = $1`,
-                    [targetLeadId]
-                  );
-                  if (leadRes.rows[0]?.emails) {
-                    recipientEmail = extractEmailAddress(leadRes.rows[0].emails);
-                  }
-                } catch {}
-              }
-
-              // 5. Fallback DB lookup for owner user
-              const targetUserId = data.user_id || data.assigned_to;
-              if (!recipientEmail && targetUserId) {
-                try {
-                  const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetUserId]);
-                  if (userRes.rows[0]?.email) {
-                    recipientEmail = extractEmailAddress(userRes.rows[0].email);
-                  }
-                } catch {}
-              }
+            } else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanVal)) {
+              recipientEmail = cleanVal;
+            } else {
+              recipientEmail = extractEmailAddress(data.emails) ||
+                               extractEmailAddress(data.person_emails) ||
+                               extractEmailAddress(data.email) ||
+                               extractEmailAddress(data.contact_email) ||
+                               extractEmailAddress(data.user_email);
             }
 
             if (recipientEmail) {
@@ -576,3 +590,4 @@ export class WorkflowService {
     }
   }
 }
+

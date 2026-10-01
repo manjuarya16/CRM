@@ -9,7 +9,7 @@ const getNotifications = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
     const isReadParam = req.query.is_read;
     const isRead = isReadParam !== undefined && isReadParam !== "" ? isReadParam === "true" : null;
     const moduleName = req.query.module ? String(req.query.module) : null;
@@ -59,7 +59,7 @@ const getUnreadCount = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
 
     // Safely generate reminders
     try {
@@ -96,7 +96,7 @@ const markAsRead = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const id = Number(req.params.id);
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
 
     await connection.query(
       "SELECT public.fn_mark_notification_as_read($1, $2)",
@@ -122,7 +122,7 @@ const markAllAsRead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
 
     const result = await connection.query(
       "SELECT public.fn_mark_all_notifications_as_read($1) as updated_count",
@@ -152,7 +152,7 @@ const deleteNotification = async (req: Request, res: Response): Promise<void> =>
   try {
     connection = await pool.connect();
     const id = Number(req.params.id);
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
 
     await connection.query(
       "SELECT public.fn_delete_notification($1, $2)",
@@ -178,7 +178,7 @@ const clearAllNotifications = async (req: Request, res: Response): Promise<void>
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const userId = req.user?.id || null;
+    const userId = (req as any).user?.id || null;
 
     const result = await connection.query(
       "SELECT public.fn_clear_all_notifications($1) as deleted_count",
