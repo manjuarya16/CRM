@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/utils/workflowEngine";
+import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
@@ -347,6 +348,11 @@ const deleteLead = async (req: Request, res: Response): Promise<void> => {
       [id]
     );
 
+<<<<<<< HEAD
+=======
+    WorkflowService.triggerWorkflows('leads', 'delete', { id }).catch((e: any) => logger.error(e));
+
+>>>>>>> CRM-26-ma
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: "Lead deleted successfully",
