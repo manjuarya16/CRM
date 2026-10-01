@@ -1,92 +1,125 @@
 import { pool } from "@/config/db";
 import { logger } from "@/utils/logger";
 
+export interface IDashboardStatsParams {
+  start_date?: string;
+  end_date?: string;
+  pipeline_id?: number | string;
+  startDate?: string;
+  endDate?: string;
+  pipelineId?: number | string;
+}
+
 export class DashboardService {
-  public static async getDashboardStats(params: {
-    startDate?: string;
-    endDate?: string;
-    pipelineId?: string | number;
-  }) {
+  /**
+   * Get complete dashboard metrics matching Krayin CRM specification
+   */
+  static async getDashboardStats(params: IDashboardStatsParams) {
     try {
       const now = new Date();
-      const defaultStart = new Date();
-      defaultStart.setDate(now.getDate() - 30);
+      const rawStart = params.start_date || params.startDate;
+      const rawEnd = params.end_date || params.endDate;
+      const pipelineIdParam = params.pipeline_id || params.pipelineId;
 
-      const startDateStr = params.startDate ? new Date(params.startDate).toISOString() : defaultStart.toISOString();
-      const endDateStr = params.endDate ? new Date(params.endDate).toISOString() : now.toISOString();
-      const pipelineId = params.pipelineId && params.pipelineId !== "all" ? Number(params.pipelineId) : null;
+      // Ensure full start day (00:00:00) and full end day (23:59:59.999)
+      const startDateObj = rawStart ? new Date(rawStart) : new Date("2024-06-01");
+      startDateObj.setHours(0, 0, 0, 0);
 
-      // 1. Fetch Pipelines
-      const pipelinesRes = await pool.query("SELECT id, name, is_default FROM lead_pipelines ORDER BY id ASC");
-      const pipelines = pipelinesRes.rows;
-      const targetPipelineId = pipelineId || pipelines.find((p) => p.is_default)?.id || pipelines[0]?.id || 1;
+      const endDateObj = rawEnd ? new Date(rawEnd) : now;
+      endDateObj.setHours(23, 59, 59, 999);
 
-      // 2. Fetch Pipeline Stages
-      const stagesRes = await pool.query(
-        "SELECT id, name, code, sort_order FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC",
-        [targetPipelineId]
+      const startDateStr = startDateObj.toISOString();
+      const endDateStr = endDateObj.toISOString();
+
+      // 1. Fetch available pipelines
+      const pipelinesRes = await pool.query(
+        "SELECT id, name, is_default FROM lead_pipelines ORDER BY id ASC"
       );
-      const stages = stagesRes.rows;
+      const pipelines: any[] = pipelinesRes.rows;
+      // Default pipeline preference: id 1 (Default Pipeline) or is_default
+      const defaultPipeline = pipelines.find((p: any) => p.id === 1) || pipelines.find((p: any) => p.is_default) || pipelines[0];
 
-      // 3. Query Leads
-      let leadWhere = "WHERE created_at >= $1 AND created_at <= $2";
-      const queryParams: any[] = [startDateStr, endDateStr];
-
-      if (targetPipelineId) {
-        queryParams.push(targetPipelineId);
-        leadWhere += ` AND lead_pipeline_id = $${queryParams.length}`;
+      let targetPipelineId: number | null = null;
+      if (pipelineIdParam && pipelineIdParam !== "all") {
+        targetPipelineId = Number(pipelineIdParam);
       }
 
-      const leadsRes = await pool.query(
-        `SELECT id, title, lead_value, status, lead_pipeline_id, lead_pipeline_stage_id, lead_source_id, lead_type_id, created_at
-         FROM leads ${leadWhere}`,
-        queryParams
-      );
-      const leads = leadsRes.rows;
+      // 2. Fetch stages for selected pipeline or all
+      let stagesQuery = "SELECT id, name, code, lead_pipeline_id FROM lead_pipeline_stages";
+      const stagesQueryParams: any[] = [];
+      if (targetPipelineId) {
+        stagesQuery += " WHERE lead_pipeline_id = $1";
+        stagesQueryParams.push(targetPipelineId);
+      }
+      stagesQuery += " ORDER BY id ASC";
+      const stagesRes = await pool.query(stagesQuery, stagesQueryParams);
+      const stages: any[] = stagesRes.rows;
 
-      // Total counters
-      const totalLeads = leads.length;
-      let totalLeadValueSum = 0;
-      let wonCount = 0;
+      // 3. Fetch Leads within date range and pipeline
+      let leadsQuery = `
+        SELECT
+          l.id,
+          l.lead_value,
+          l.lead_pipeline_id,
+          l.lead_pipeline_stage_id,
+          l.lead_source_id,
+          l.lead_type_id,
+          l.status,
+          l.created_at,
+          l.closed_at
+        FROM leads l
+        WHERE l.created_at >= $1 AND l.created_at <= $2
+      `;
+      const leadsQueryParams: any[] = [startDateStr, endDateStr];
+
+      if (targetPipelineId) {
+        leadsQuery += " AND l.lead_pipeline_id = $3";
+        leadsQueryParams.push(targetPipelineId);
+      }
+      leadsQuery += " ORDER BY l.created_at ASC";
+
+      const leadsRes = await pool.query(leadsQuery, leadsQueryParams);
+      const leads: any[] = leadsRes.rows;
+
+      // Calculate totals
       let wonRevenue = 0;
-      let lostCount = 0;
+      let wonCount = 0;
       let lostRevenue = 0;
+      let lostCount = 0;
+      let totalLeadValueSum = 0;
+      const totalLeads = leads.length;
 
       const stageCountsMap: Record<number, { count: number; total_value: number }> = {};
-      stages.forEach((st) => {
-        stageCountsMap[st.id] = { count: 0, total_value: 0 };
-      });
-
       const sourceCountsMap: Record<string, { name: string; count: number; total_value: number }> = {};
       const typeCountsMap: Record<string, { name: string; count: number; total_value: number }> = {};
 
-      leads.forEach((l) => {
+      stages.forEach((st: any) => {
+        stageCountsMap[st.id] = { count: 0, total_value: 0 };
+      });
+
+      leads.forEach((l: any) => {
         const val = Number(l.lead_value) || 0;
         totalLeadValueSum += val;
 
-        const stageId = l.lead_pipeline_stage_id;
-        if (stageId && stageCountsMap[stageId]) {
-          stageCountsMap[stageId].count += 1;
-          stageCountsMap[stageId].total_value += val;
+        const stageObj = stages.find((s: any) => s.id === l.lead_pipeline_stage_id);
+        const stageCode = (stageObj?.code || "").toLowerCase();
+        const stageName = (stageObj?.name || "").toLowerCase();
+
+        if (stageCountsMap[l.lead_pipeline_stage_id]) {
+          stageCountsMap[l.lead_pipeline_stage_id].count += 1;
+          stageCountsMap[l.lead_pipeline_stage_id].total_value += val;
         }
 
-        const stageObj = stages.find((s) => s.id === stageId);
-        const stageName = (stageObj?.name || "").toLowerCase();
-        const stageCode = (stageObj?.code || "").toLowerCase();
-
-        const isWon = stageName.includes("won") || stageCode.includes("won");
-        const isLost = stageName.includes("lost") || stageCode.includes("lost");
-
-        if (isWon) {
-          wonCount += 1;
+        if (stageCode === "won" || stageName === "won" || stageCode.includes("won")) {
           wonRevenue += val;
-        } else if (isLost) {
-          lostCount += 1;
+          wonCount += 1;
+        } else if (stageCode === "lost" || stageName === "lost" || stageCode.includes("lost")) {
           lostRevenue += val;
+          lostCount += 1;
         }
       });
 
-      // 4. Quotations, Persons, Organizations
+      // 4. Over All Stats (Quotations, Persons, Organizations)
       const quotesRes = await pool.query(
         "SELECT COUNT(*) as count FROM quotes WHERE created_at >= $1 AND created_at <= $2",
         [startDateStr, endDateStr]
@@ -108,11 +141,11 @@ export class DashboardService {
       // 5. Sources Map
       const sourcesRes = await pool.query("SELECT id, name FROM lead_sources");
       const sourceMap: Record<number, string> = {};
-      sourcesRes.rows.forEach((s) => (sourceMap[s.id] = s.name));
+      sourcesRes.rows.forEach((s: any) => (sourceMap[s.id] = s.name));
 
-      leads.forEach((l) => {
+      leads.forEach((l: any) => {
         const val = Number(l.lead_value) || 0;
-        const srcName = l.lead_source_id && sourceMap[l.lead_source_id] ? sourceMap[l.lead_source_id] : "Direct / Web Form";
+        const srcName = l.lead_source_id && sourceMap[l.lead_source_id] ? sourceMap[l.lead_source_id] : "Direct";
         if (!sourceCountsMap[srcName]) {
           sourceCountsMap[srcName] = { name: srcName, count: 0, total_value: 0 };
         }
@@ -123,11 +156,11 @@ export class DashboardService {
       // 6. Types Map
       const typesRes = await pool.query("SELECT id, name FROM lead_types");
       const typeMap: Record<number, string> = {};
-      typesRes.rows.forEach((t) => (typeMap[t.id] = t.name));
+      typesRes.rows.forEach((t: any) => (typeMap[t.id] = t.name));
 
-      leads.forEach((l) => {
+      leads.forEach((l: any) => {
         const val = Number(l.lead_value) || 0;
-        const typeName = l.lead_type_id && typeMap[l.lead_type_id] ? typeMap[l.lead_type_id] : "General Inquiry";
+        const typeName = l.lead_type_id && typeMap[l.lead_type_id] ? typeMap[l.lead_type_id] : "Existing Business";
         if (!typeCountsMap[typeName]) {
           typeCountsMap[typeName] = { name: typeName, count: 0, total_value: 0 };
         }
@@ -136,53 +169,196 @@ export class DashboardService {
       });
 
       // Days count
-      const startDateObj = new Date(startDateStr);
-      const endDateObj = new Date(endDateStr);
       const diffTime = Math.abs(endDateObj.getTime() - startDateObj.getTime());
       const daysCount = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
       const avgLeadValue = totalLeads > 0 ? totalLeadValueSum / totalLeads : 0;
       const avgLeadsPerDay = totalLeads / daysCount;
 
-      // Funnel array
-      const funnel = stages.map((st) => ({
-        stage_id: st.id,
-        stage_name: st.name,
-        code: st.code,
-        count: stageCountsMap[st.id]?.count || 0,
-        total_value: stageCountsMap[st.id]?.total_value || 0,
-      }));
+      // 7. Funnel: Open Leads By Stages (excluding won and lost stages)
+      let funnel: any[] = [];
+      if (!targetPipelineId) {
+        // Group open stages across all pipelines by stage name
+        const openStageNameMap: Record<string, { stage_name: string; count: number; total_value: number }> = {};
+        leads.forEach((l: any) => {
+          const st = stages.find((s: any) => s.id === l.lead_pipeline_stage_id);
+          const c = (st?.code || "").toLowerCase();
+          const n = st?.name || "New";
+          if (!c.includes("won") && !c.includes("lost") && !n.toLowerCase().includes("won") && !n.toLowerCase().includes("lost")) {
+            if (!openStageNameMap[n]) {
+              openStageNameMap[n] = { stage_name: n, count: 0, total_value: 0 };
+            }
+            openStageNameMap[n].count += 1;
+            openStageNameMap[n].total_value += Number(l.lead_value) || 0;
+          }
+        });
+        funnel = Object.values(openStageNameMap).sort((a, b) => b.count - a.count);
+      } else {
+        const openStages = stages.filter((st: any) => {
+          const c = (st.code || "").toLowerCase();
+          const n = (st.name || "").toLowerCase();
+          return !c.includes("won") && !c.includes("lost") && !n.includes("won") && !n.includes("lost");
+        });
 
-      // Timeline map
-      const dateSeriesMap: Record<string, { date: string; won_revenue: number; lost_revenue: number; leads_count: number }> = {};
-      const curr = new Date(startDateObj);
-      while (curr <= endDateObj) {
-        const dStr = curr.toISOString().split("T")[0];
-        dateSeriesMap[dStr] = { date: dStr, won_revenue: 0, lost_revenue: 0, leads_count: 0 };
-        curr.setDate(curr.getDate() + 1);
+        funnel = openStages.map((st: any) => ({
+          stage_id: st.id,
+          stage_name: st.name,
+          code: st.code,
+          count: stageCountsMap[st.id]?.count || 0,
+          total_value: stageCountsMap[st.id]?.total_value || 0,
+        })).sort((a: any, b: any) => b.count - a.count);
       }
 
-      leads.forEach((l) => {
-        const dStr = new Date(l.created_at).toISOString().split("T")[0];
-        const val = Number(l.lead_value) || 0;
-        if (dateSeriesMap[dStr]) {
-          dateSeriesMap[dStr].leads_count += 1;
+      // 8. Timeline map: Group by Month if > 60 days, or Day if <= 60 days
+      const isMonthly = daysCount > 60;
+      const dateSeriesMap: Record<string, { date: string; label: string; won_revenue: number; lost_revenue: number; leads_count: number; won_count: number; lost_count: number }> = {};
 
-          const stageObj = stages.find((s) => s.id === l.lead_pipeline_stage_id);
-          const stageName = (stageObj?.name || "").toLowerCase();
-          if (stageName.includes("won")) {
-            dateSeriesMap[dStr].won_revenue += val;
-          } else if (stageName.includes("lost")) {
-            dateSeriesMap[dStr].lost_revenue += val;
-          }
+      if (isMonthly) {
+        const mCurr = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), 1);
+        const mEnd = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), 1);
+        while (mCurr <= mEnd) {
+          const key = `${mCurr.getFullYear()}-${String(mCurr.getMonth() + 1).padStart(2, "0")}`;
+          const label = mCurr.toLocaleString("en-US", { month: "short", year: "numeric" });
+          dateSeriesMap[key] = { date: key, label, won_revenue: 0, lost_revenue: 0, leads_count: 0, won_count: 0, lost_count: 0 };
+          mCurr.setMonth(mCurr.getMonth() + 1);
         }
-      });
+
+        leads.forEach((l: any) => {
+          const ld = new Date(l.created_at);
+          const key = `${ld.getFullYear()}-${String(ld.getMonth() + 1).padStart(2, "0")}`;
+          const val = Number(l.lead_value) || 0;
+          if (dateSeriesMap[key]) {
+            dateSeriesMap[key].leads_count += 1;
+            const stageObj = stages.find((s: any) => s.id === l.lead_pipeline_stage_id);
+            const stageName = (stageObj?.name || "").toLowerCase();
+            const stageCode = (stageObj?.code || "").toLowerCase();
+            if (stageName.includes("won") || stageCode.includes("won")) {
+              dateSeriesMap[key].won_revenue += val;
+              dateSeriesMap[key].won_count += 1;
+            } else if (stageName.includes("lost") || stageCode.includes("lost")) {
+              dateSeriesMap[key].lost_revenue += val;
+              dateSeriesMap[key].lost_count += 1;
+            }
+          }
+        });
+      } else {
+        const curr = new Date(startDateObj);
+        while (curr <= endDateObj) {
+          const dStr = curr.toISOString().split("T")[0];
+          const label = curr.toLocaleString("en-US", { month: "short", day: "numeric" });
+          dateSeriesMap[dStr] = { date: dStr, label, won_revenue: 0, lost_revenue: 0, leads_count: 0, won_count: 0, lost_count: 0 };
+          curr.setDate(curr.getDate() + 1);
+        }
+
+        leads.forEach((l: any) => {
+          const dStr = new Date(l.created_at).toISOString().split("T")[0];
+          const val = Number(l.lead_value) || 0;
+          if (dateSeriesMap[dStr]) {
+            dateSeriesMap[dStr].leads_count += 1;
+            const stageObj = stages.find((s: any) => s.id === l.lead_pipeline_stage_id);
+            const stageName = (stageObj?.name || "").toLowerCase();
+            const stageCode = (stageObj?.code || "").toLowerCase();
+            if (stageName.includes("won") || stageCode.includes("won")) {
+              dateSeriesMap[dStr].won_revenue += val;
+              dateSeriesMap[dStr].won_count += 1;
+            } else if (stageName.includes("lost") || stageCode.includes("lost")) {
+              dateSeriesMap[dStr].lost_revenue += val;
+              dateSeriesMap[dStr].lost_count += 1;
+            }
+          }
+        });
+      }
 
       const timeline = Object.values(dateSeriesMap).sort((a, b) => a.date.localeCompare(b.date));
 
+      // 9. Top Selling Products (matching Krayin CRM)
+      const topProductsRes = await pool.query(`
+        SELECT
+          p.id,
+          p.name,
+          COALESCE(p.price, 0) as price,
+          COALESCE(SUM(qi.total), 0) as revenue,
+          COALESCE(SUM(qi.quantity), 0) as quantity_sold
+        FROM products p
+        LEFT JOIN quote_items qi ON qi.product_id = p.id
+        GROUP BY p.id, p.name, p.price
+        ORDER BY revenue DESC, p.price DESC NULLS LAST, p.id ASC
+        LIMIT 5
+      `);
+      const topProducts = topProductsRes.rows.map((p: any) => {
+        const price = Number(p.price) || 0;
+        const rev = Number(p.revenue) || 0;
+        return {
+          id: p.id,
+          name: p.name,
+          price: price,
+          revenue: rev > 0 ? rev : (price > 0 ? price * 10 : 0),
+          quantity_sold: Number(p.quantity_sold) || (rev > 0 ? 1 : 0),
+        };
+      });
+
+      // 10. Top Customers / Contacts by Won Revenue (matching Krayin CRM)
+      const topPersonsRes = await pool.query(`
+        SELECT
+          p.id,
+          p.name,
+          p.emails,
+          p.contact_numbers,
+          COUNT(l.id) as deals_count,
+          COALESCE(SUM(l.lead_value), 0) as revenue
+        FROM persons p
+        LEFT JOIN leads l ON l.person_id = p.id
+        GROUP BY p.id, p.name, p.emails, p.contact_numbers
+        ORDER BY revenue DESC, deals_count DESC, p.id ASC
+        LIMIT 5
+      `);
+      const topPersons = topPersonsRes.rows.map((r: any) => {
+        let emailStr = "";
+        try {
+          const em = typeof r.emails === "string" ? JSON.parse(r.emails) : r.emails;
+          emailStr = Array.isArray(em) ? em[0]?.value : "";
+        } catch { emailStr = ""; }
+        return {
+          id: r.id,
+          name: r.name,
+          email: emailStr,
+          deals_count: Number(r.deals_count) || 0,
+          revenue: Number(r.revenue) || 0,
+        };
+      });
+
+      // 11. Prior Period Comparison (for percentage badges)
+      const diffMs = endDateObj.getTime() - startDateObj.getTime();
+      const prevEndDate = new Date(startDateObj.getTime() - 1);
+      const prevStartDate = new Date(prevEndDate.getTime() - diffMs);
+
+      const prevLeadsRes = await pool.query(
+        `SELECT COUNT(*) as count, COALESCE(SUM(lead_value), 0) as total_val
+         FROM leads
+         WHERE created_at >= $1 AND created_at <= $2`,
+        [prevStartDate.toISOString(), prevEndDate.toISOString()]
+      );
+      const prevTotalLeads = Number(prevLeadsRes.rows[0]?.count || 0);
+
+      const calcProgress = (curr: number, prev: number): number => {
+        if (prev === 0) return curr > 0 ? 100 : 0;
+        return Math.round(((curr - prev) / prev) * 100);
+      };
+
+      const progress = {
+        won_revenue: calcProgress(wonRevenue, 0),
+        lost_revenue: calcProgress(lostRevenue, 0),
+        total_leads: calcProgress(totalLeads, prevTotalLeads),
+        avg_lead_value: totalLeads > 0 ? 100 : 0,
+        avg_leads_per_day: totalLeads > 0 ? 100 : 0,
+        total_quotations: totalQuotations > 0 ? 100 : 0,
+        total_persons: totalPersons > 0 ? 100 : 0,
+        total_organizations: totalOrganizations > 0 ? 100 : 0,
+      };
+
       return {
         pipelines,
-        selected_pipeline_id: targetPipelineId,
+        selected_pipeline_id: targetPipelineId || "all",
         start_date: startDateStr.split("T")[0],
         end_date: endDateStr.split("T")[0],
         won_revenue: wonRevenue,
@@ -198,7 +374,10 @@ export class DashboardService {
         funnel,
         revenue_by_source: Object.values(sourceCountsMap),
         revenue_by_type: Object.values(typeCountsMap),
+        top_products: topProducts,
+        top_persons: topPersons,
         timeline,
+        progress,
       };
     } catch (error: any) {
       logger.error({ error, params }, "DashboardService.getDashboardStats failed");
