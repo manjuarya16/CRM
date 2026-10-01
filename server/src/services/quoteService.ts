@@ -16,11 +16,41 @@ const getQuotes = async (req: Request, res: Response): Promise<void> => {
     const search = String(req.query.search || "");
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Number(req.query.limit || req.query.per_page) || 10);
+    const leadId = req.query.lead_id ? Number(req.query.lead_id) : null;
 
-    const result = await connection.query(
-      "SELECT * FROM public.fn_get_all_quotes($1, $2, $3)",
-      [search, page, limit]
-    );
+    let result;
+    if (leadId) {
+      result = await connection.query(
+        `SELECT q.id, q.subject, q.description, q.lead_id, q.person_id, q.user_id,
+                q.discount_percent, q.discount_amount, q.tax_amount, q.adjustment_amount,
+                q.sub_total, q.grand_total, q.expired_at, q.created_at, q.updated_at,
+                p.name AS person_name, u.name AS user_name,
+                COUNT(*) OVER() AS total_count
+         FROM quotes q
+         LEFT JOIN persons p ON p.id = q.person_id
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE q.lead_id = $1 
+            OR q.id IN (SELECT quote_id FROM lead_quotes WHERE lead_id = $1)
+         ORDER BY q.id DESC
+         LIMIT $2 OFFSET $3`,
+        [leadId, limit, (page - 1) * limit]
+      );
+    } else {
+      result = await connection.query(
+        `SELECT q.id, q.subject, q.description, q.lead_id, q.person_id, q.user_id,
+                q.discount_percent, q.discount_amount, q.tax_amount, q.adjustment_amount,
+                q.sub_total, q.grand_total, q.expired_at, q.created_at, q.updated_at,
+                p.name AS person_name, u.name AS user_name,
+                COUNT(*) OVER() AS total_count
+         FROM quotes q
+         LEFT JOIN persons p ON p.id = q.person_id
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE ($1 = '' OR q.subject ILIKE '%' || $1 || '%' OR p.name ILIKE '%' || $1 || '%')
+         ORDER BY q.id DESC
+         LIMIT $2 OFFSET $3`,
+        [search, limit, (page - 1) * limit]
+      );
+    }
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
 

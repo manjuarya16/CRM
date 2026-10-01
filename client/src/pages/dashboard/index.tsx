@@ -104,11 +104,22 @@ const pastelAvatarStyles = [
 const sourcePalette = ["#8979FF", "#FF928A", "#3CC3DF", "#D4E157", "#BA68C8", "#FBC02D"];
 const typePalette = ["#8979FF", "#FF928A", "#3CC3DF", "#BA68C8"];
 
+const getTodayDateStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const getDefaultStartDateStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const emptyInitialData: IDashboardData = {
   pipelines: [],
   selected_pipeline_id: "all",
-  start_date: "2024-06-01",
-  end_date: "2026-09-30",
+  start_date: getDefaultStartDateStr(),
+  end_date: getTodayDateStr(),
   won_revenue: 0,
   won_count: 0,
   lost_revenue: 0,
@@ -147,8 +158,8 @@ const SafeApexChart: React.FC<any> = (props) => {
 };
 
 export const DashboardPage: React.FC = () => {
-  const [startDate, setStartDate] = useState<string>("2024-06-01");
-  const [endDate, setEndDate] = useState<string>("2026-09-30");
+  const [startDate, setStartDate] = useState<string>(getDefaultStartDateStr);
+  const [endDate, setEndDate] = useState<string>(getTodayDateStr);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | number>("all");
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<IDashboardData>(emptyInitialData);
@@ -341,6 +352,11 @@ export const DashboardPage: React.FC = () => {
     colors: sourcePalette,
     legend: { show: false },
     dataLabels: { enabled: false },
+    tooltip: {
+      y: {
+        formatter: (val) => formatCurrency(Number(val)),
+      },
+    },
     plotOptions: {
       pie: {
         donut: {
@@ -364,6 +380,11 @@ export const DashboardPage: React.FC = () => {
     colors: typePalette,
     legend: { show: false },
     dataLabels: { enabled: false },
+    tooltip: {
+      y: {
+        formatter: (val) => formatCurrency(Number(val)),
+      },
+    },
     plotOptions: {
       pie: {
         donut: {
@@ -374,7 +395,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   // 5. Dynamic Funnel Calculations
-  const funnelStages = data.funnel && data.funnel.length > 0 ? data.funnel.slice(0, 5) : [];
+  const funnelStages = data.funnel && data.funnel.length > 0 ? data.funnel : [];
   const maxFunnelCount = Math.max(...funnelStages.map((f) => f.count), 1);
 
   return (
@@ -512,9 +533,14 @@ export const DashboardPage: React.FC = () => {
                   key={idx}
                   className="flex flex-col border-b border-gray-200 dark:border-gray-800 pb-2 pt-1 last:border-b-0"
                 >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                    {st.count}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                      {st.count}
+                    </span>
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                      {formatCurrency(st.total_value)}
+                    </span>
+                  </div>
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                     {st.stage_name}
                   </span>
@@ -540,10 +566,10 @@ export const DashboardPage: React.FC = () => {
                   const yBottom = yTop + sliceH;
 
                   // Proportional widths
-                  const topW = Math.max(50, Math.round((st.count / maxFunnelCount) * 180));
+                  const topW = Math.max(st.count > 0 ? 35 : 14, Math.round((st.count / maxFunnelCount) * 180));
                   const nextStage = funnelStages[idx + 1];
                   const rawNextW = nextStage
-                    ? Math.max(40, Math.round((nextStage.count / maxFunnelCount) * 180))
+                    ? Math.max(nextStage.count > 0 ? 30 : 12, Math.round((nextStage.count / maxFunnelCount) * 180))
                     : topW * 0.85;
                   const botW = Math.min(topW, rawNextW);
 
@@ -701,14 +727,16 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {/* Legend Grid Below Donut */}
-          <div className="grid grid-cols-3 gap-2.5 pt-2">
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 pt-2">
             {(data.revenue_by_source || []).map((src, i) => (
               <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
                 <span
                   className="h-3.5 w-3.5 rounded-sm shrink-0"
                   style={{ backgroundColor: sourcePalette[i % sourcePalette.length] }}
                 ></span>
-                <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{src.name}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  {src.name} <span className="text-gray-400 font-medium">({formatCurrency(src.total_value)})</span>
+                </p>
               </div>
             ))}
           </div>
@@ -819,7 +847,9 @@ export const DashboardPage: React.FC = () => {
                   className="h-3.5 w-3.5 rounded-sm shrink-0"
                   style={{ backgroundColor: typePalette[i % typePalette.length] }}
                 ></span>
-                <p className="text-xs text-gray-600 dark:text-gray-300">{t.name}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  {t.name} <span className="text-gray-400 font-medium">({formatCurrency(t.total_value)})</span>
+                </p>
               </div>
             ))}
           </div>

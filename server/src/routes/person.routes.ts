@@ -9,7 +9,8 @@ const router = Router();
 router.get('/', async (req, res, next) => {
   try {
     const page = req.query.page ? Number(req.query.page) : 1;
-    const perPage = req.query.per_page ? Number(req.query.per_page) : 10;
+    const limitParam = req.query.per_page || req.query.limit;
+    const perPage = limitParam ? Number(limitParam) : 200;
     const search = req.query.search ? String(req.query.search) : undefined;
 
     const result = await PersonService.getAll({ page, perPage, search });

@@ -93,7 +93,7 @@ const LeadViewPage: React.FC = () => {
 
       fetchLeadProducts(leadId);
       fetchActivities(1, 100, "", leadId);
-      fetchQuotes(1, 50, "");
+      fetchQuotes(1, 50, "", leadId);
 
 
       API.get("/products?limit=100").then((res) => {
@@ -800,7 +800,7 @@ const LeadViewPage: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center pb-2 border-b">
                     <h4 className="font-bold text-xs">Associated Quotes</h4>
-                    <Link to="/quotes/create" className="px-3 py-1 bg-[#0088cc] text-white rounded text-xs font-semibold">
+                    <Link to={`/quotes/create?lead_id=${leadId}`} className="px-3 py-1 bg-[#0088cc] text-white rounded text-xs font-semibold">
                       + Create Quote
                     </Link>
                   </div>

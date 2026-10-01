@@ -3,6 +3,7 @@ import { IPerson } from '@/interfaces/crm.interface';
 import { ApiError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { PoolClient } from 'pg';
+import { saveEntityAttributeValues } from './dataTransfer.service';
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -177,10 +178,14 @@ export class PersonService {
         [data.name.trim(), emailsJson, contactsJson, orgId, data.job_title || null, userId, customAttrsJson, personId]
       );
 
-      if (!rows[0]?.result) {
+      const savedPerson = rows[0]?.result;
+      if (!savedPerson) {
         throw new ApiError(404, 'Person not found or save failed');
       }
-      return rows[0]?.result;
+      if (savedPerson.id && data.custom_attributes) {
+        await saveEntityAttributeValues(client, 'persons', savedPerson.id, data.custom_attributes);
+      }
+      return savedPerson;
     } catch (error: any) {
       logger.error({ error, data, id }, 'PersonService.save failed');
       throw error;

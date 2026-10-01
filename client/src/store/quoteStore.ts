@@ -11,10 +11,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   selectedQuote: null,
   quoteItems: [],
 
-  fetchQuotes: async (page = 1, limit = 10, search = "") => {
+  fetchQuotes: async (page = 1, limit = 10, search = "", leadId?: number) => {
     set({ loading: true });
     try {
-      const response = await API.get(`/quotes?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`);
+      let url = `/quotes?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+      if (leadId) {
+        url += `&lead_id=${leadId}`;
+      }
+      const response = await API.get(url);
       if (response.data?.success) {
         set({
           quotes: response.data.data || [],

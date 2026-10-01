@@ -14,6 +14,35 @@ router.get('/imports', async (_req, res, next) => {
   }
 });
 
+router.delete('/imports/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || isNaN(id)) {
+      throw new ApiError(400, 'Invalid import ID');
+    }
+    const deleted = await DataTransferService.deleteImport(id);
+    res.json({ success: true, deleted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/validate', async (req, res, next) => {
+  try {
+    const validated = importRequestSchema.parse(req.body);
+    const result = await DataTransferService.validateImport(
+      validated.type,
+      validated.action,
+      validated.validation_strategy,
+      validated.allowed_errors,
+      validated.rows
+    );
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/import', async (req, res, next) => {
   try {
     const validated = importRequestSchema.parse(req.body);
@@ -47,31 +76,58 @@ router.get('/export/:type', async (req, res, next) => {
   }
 });
 
-router.get('/sample/:type', (req, res) => {
-  const type = req.params.type;
-  let sample: any[] = [];
-  if (type === 'leads') {
-    sample = [
-      { title: 'Enterprise Software Deal', description: 'Interested in CRM integration', lead_value: 50000 },
-      { title: 'Website Lead', description: 'Requested product demo', lead_value: 15000 }
-    ];
-  } else if (type === 'persons') {
-    sample = [
-      { name: 'Wilson Fisk', emails: '[{"label": "work", "value": "contact@wilson.com"}, {"label": "home", "value": "contact.home@wilson.com"}]', contact_numbers: '[{"label": "work", "value": "5454445454"}]', organization_id: 1, job_title: 'Sales Executive', user_id: 1 },
-      { name: 'Sasha Calle', emails: '[{"label": "work", "value": "contact@sasha.com"}]', contact_numbers: '[{"label": "work", "value": "15454445454"}]', organization_id: 1, job_title: 'Sales Representatives', user_id: 1 }
-    ];
-  } else if (type === 'organizations') {
-    sample = [
-      { name: 'Acme Corporation', address: '123 Tech Boulevard', city: 'San Francisco', country: 'USA' },
-      { name: 'Global Logistics Ltd', address: '456 Freight Way', city: 'London', country: 'UK' }
-    ];
-  } else if (type === 'products') {
-    sample = [
-      { sku: 'PROD-101', name: 'Enterprise License', description: 'Annual license', quantity: 50, price: 999.00 },
-      { sku: 'PROD-102', name: 'Standard Support', description: 'Support package', quantity: 10, price: 299.00 }
-    ];
+router.get('/sample/:type', async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    const allowed = ['leads', 'persons', 'organizations', 'products'];
+    if (!allowed.includes(type.toLowerCase())) {
+      throw new ApiError(400, 'Invalid sample entity type');
+    }
+
+    const sample = await DataTransferService.getSample(type);
+
+    // If client requested XLSX file download:
+    if (req.query.format === 'xlsx') {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(sample.sampleRows, { header: sample.headers });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="sample_${type.toLowerCase()}_import.xlsx"`
+      );
+      return res.send(buffer);
+    }
+
+    // If client requested CSV string directly:
+    if (req.query.format === 'csv') {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(sample.sampleRows, { header: sample.headers });
+      const csvContent = XLSX.utils.sheet_to_csv(ws);
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="sample_${type.toLowerCase()}_import.csv"`
+      );
+      return res.send('\uFEFF' + csvContent);
+    }
+
+    res.json({
+      success: true,
+      data: sample.sampleRows,
+      headers: sample.headers,
+      customAttributes: sample.customAttributes,
+    });
+  } catch (err) {
+    next(err);
   }
-  res.json({ success: true, data: sample });
 });
 
 export default router;
