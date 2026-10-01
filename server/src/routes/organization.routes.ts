@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { OrganizationService } from '@/services/organization.service';
 import { createOrganizationSchema, updateOrganizationSchema } from '@/schemas/organization.schema';
 import { ApiError } from '@/middleware/errorHandler';
-import { processWorkflowsForEvent } from '@/utils/workflowEngine';
+import { processWorkflowsForEvent } from '@/services/workflowEngine';
 
 const router = Router();
 
