@@ -144,33 +144,8 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       person_id = personRes.rows[0]?.result?.id || null;
     }
 
-    let resolvedPipelineId = lead_pipeline_id ? Number(lead_pipeline_id) : null;
-    let resolvedStageId = lead_pipeline_stage_id ? Number(lead_pipeline_stage_id) : null;
-
-    if (!resolvedPipelineId) {
-      const defaultPipeRes = await connection.query(`SELECT id FROM lead_pipelines WHERE is_default = true LIMIT 1`);
-      if (defaultPipeRes.rows[0]?.id) {
-        resolvedPipelineId = defaultPipeRes.rows[0].id;
-      } else {
-        const firstPipeRes = await connection.query(`SELECT id FROM lead_pipelines ORDER BY id ASC LIMIT 1`);
-        resolvedPipelineId = firstPipeRes.rows[0]?.id || 1;
-      }
-    }
-
-    if (!resolvedStageId && resolvedPipelineId) {
-      const firstStageRes = await connection.query(
-        `SELECT id FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY id ASC LIMIT 1`,
-        [resolvedPipelineId]
-      );
-      if (firstStageRes.rows[0]?.id) {
-        resolvedStageId = firstStageRes.rows[0].id;
-      }
-    }
-
-    const organization_id = req.body.organization_id ? Number(req.body.organization_id) : (person?.organization_id ? Number(person.organization_id) : null);
-
     const result = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       [
         title,
         description || null,
@@ -179,21 +154,19 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         person_id,
         lead_source_id || null,
         lead_type_id || null,
-        resolvedPipelineId,
+        lead_pipeline_id || null,
         expected_close_date || null,
-        organization_id,
       ]
     );
 
     const lead = result.rows[0];
 
-    // Set stage via fn_update_lead_stage
-    if (lead && resolvedStageId) {
+    // Optionally set stage via fn_update_lead_stage
+    if (lead && lead_pipeline_stage_id) {
       await connection.query(
         "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
-        [lead.id, resolvedStageId]
+        [lead.id, Number(lead_pipeline_stage_id)]
       );
-      lead.lead_pipeline_stage_id = resolvedStageId;
     }
 
     // Save products via fn_add_lead_product
@@ -314,12 +287,6 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     const updatedLead = result.rows[0];
 
-    const organization_id = req.body.organization_id ? Number(req.body.organization_id) : (person?.organization_id ? Number(person.organization_id) : null);
-
-    if (id && organization_id !== null) {
-      await connection.query(`UPDATE leads SET organization_id = $1, updated_at = NOW() WHERE id = $2`, [organization_id, id]);
-    }
-
     if (id && custom_attributes !== undefined) {
       const customAttrsJson = JSON.stringify(custom_attributes || {});
       await connection.query(
@@ -379,8 +346,6 @@ const deleteLead = async (req: Request, res: Response): Promise<void> => {
       "SELECT public.fn_delete_lead($1) AS deleted",
       [id]
     );
-
-    WorkflowService.triggerWorkflows('leads', 'delete', { id }).catch((e) => logger.error(e));
 
     res.status(HttpStatusCodes.OK).json({
       success: true,

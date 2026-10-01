@@ -340,10 +340,14 @@ const LeadsPage: React.FC = () => {
       {viewMode === "kanban" && (
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max items-start">
-            {stages.map((stage, idx) => {
-              const stageLeads = displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === stage.id);
-              const stageValueTotal = stageLeads.reduce((acc, l) => acc + Number(l.lead_value || 0), 0);
-              const colorClass = avatarColors[idx % avatarColors.length];
+            {(() => {
+              const validStageIds = new Set(stages.map((s) => s.id));
+              return stages.map((stage, idx) => {
+                const stageLeads = displayKanbanLeads.filter(
+                  (l) => l.lead_pipeline_stage_id === stage.id || (idx === 0 && (!l.lead_pipeline_stage_id || !validStageIds.has(l.lead_pipeline_stage_id)))
+                );
+                const stageValueTotal = stageLeads.reduce((acc, l) => acc + Number(l.lead_value || 0), 0);
+                const colorClass = avatarColors[idx % avatarColors.length];
 
               return (
                 <div
@@ -547,8 +551,9 @@ const LeadsPage: React.FC = () => {
                   </div>
                 </div>
               );
-            })}
-          </div>
+            });
+          })()}
+        </div>
         </div>
       )}
 

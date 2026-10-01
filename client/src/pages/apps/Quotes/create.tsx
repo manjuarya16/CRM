@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore } from "@/store";
 import API from "@/config";
@@ -13,6 +13,8 @@ const fmtCurrency = (n: number) =>
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlLeadId = searchParams.get("lead_id");
   const { addQuote } = useQuoteStore();
 
   const [persons, setPersons] = useState<any[]>([]);
@@ -65,8 +67,100 @@ const CreateQuotePage: React.FC = () => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const handleLeadChange = async (leadIdStr: string) => {
+    setFormData((prev) => ({ ...prev, lead_id: leadIdStr }));
+    if (!leadIdStr) return;
+
+    try {
+      // 1. Fetch Lead details
+      const leadRes = await API.get(`/leads/${leadIdStr}`);
+      const leadData = leadRes.data?.data;
+      if (leadData) {
+        // Ensure lead is in leads list so dropdown displays proper label
+        setLeads((prev) => {
+          if (!prev.some((l) => String(l.id) === String(leadData.id))) {
+            return [leadData, ...prev];
+          }
+          return prev;
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          lead_id: leadIdStr,
+          person_id: leadData.person_id ? String(leadData.person_id) : prev.person_id,
+          user_id: leadData.user_id ? String(leadData.user_id) : prev.user_id,
+          subject: prev.subject.trim() ? prev.subject : `Quote for ${leadData.title || `Lead #${leadIdStr}`}`,
+        }));
+
+        if (errors.person_id) setErrors((prev) => ({ ...prev, person_id: "" }));
+
+        // Auto-fetch person details for addresses if person is linked
+        if (leadData.person_id) {
+          try {
+            const personRes = await API.get(`/persons/${leadData.person_id}`);
+            const p = personRes.data?.data;
+            if (p) {
+              let addr: any = p.address || p.billing_address || {};
+              if (typeof addr === "string") {
+                try { addr = JSON.parse(addr); } catch {}
+              }
+              if (typeof addr === "object" && addr) {
+                const street = addr.street_address || addr.address || "";
+                const city = addr.city || "";
+                const state = addr.state || "";
+                const country = addr.country || "";
+                const postcode = addr.postcode || "";
+
+                if (street || city || country) {
+                  setBillingAddress((prev) => ({
+                    street_address: street || prev.street_address,
+                    city: city || prev.city,
+                    state: state || prev.state,
+                    country: country || prev.country,
+                    postcode: postcode || prev.postcode,
+                  }));
+                  setShippingAddress((prev) => ({
+                    street_address: street || prev.street_address,
+                    city: city || prev.city,
+                    state: state || prev.state,
+                    country: country || prev.country,
+                    postcode: postcode || prev.postcode,
+                  }));
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+
+      // 2. Fetch Lead Products
+      const prodRes = await API.get(`/leads/${leadIdStr}/products`);
+      const leadProds = prodRes.data?.data || [];
+      if (Array.isArray(leadProds) && leadProds.length > 0) {
+        const mappedItems: ITempQuoteItem[] = leadProds.map((lp: any) => {
+          const qty = Number(lp.quantity) || 1;
+          const price = Number(lp.price) || 0;
+          return {
+            product_id: Number(lp.product_id),
+            sku: lp.sku || "",
+            name: lp.product_name || lp.name || "Product",
+            quantity: qty,
+            price: price,
+            discount_percent: 0,
+            tax_percent: 0,
+            total: qty * price,
+          };
+        });
+        setItems(mappedItems);
+        setErrors((prev) => ({ ...prev, items: "" }));
+      }
+    } catch (err) {
+      console.error("Error auto-filling from lead:", err);
+    }
+  };
+
   useEffect(() => {
-    API.get("/persons?limit=100").then((res) => {
+    API.get("/persons?per_page=500&limit=500").then((res) => {
       if (res.data?.data) setPersons(res.data.data);
     }).catch(() => {});
 
@@ -81,7 +175,11 @@ const CreateQuotePage: React.FC = () => {
     API.get("/products?limit=200").then((res) => {
       if (res.data?.data) setProducts(res.data.data);
     }).catch(() => {});
-  }, []);
+
+    if (urlLeadId) {
+      handleLeadChange(urlLeadId);
+    }
+  }, [urlLeadId]);
 
   // When selected product changes in item row, pre-fill price/sku/name
   const handleProductSelect = (productIdStr: string) => {
@@ -315,11 +413,17 @@ const CreateQuotePage: React.FC = () => {
                 className={`${inputCls} ${errors.person_id ? "border-red-500" : ""}`}
               >
                 <option value="">-- Select Contact Person --</option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                {persons
+                  .slice()
+                  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                  .map((p) => {
+                    const email = Array.isArray(p.emails) && p.emails[0]?.value ? p.emails[0].value : "";
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{email ? ` (${email})` : ""}
+                      </option>
+                    );
+                  })}
               </select>
               {errors.person_id && <p className="mt-1 text-xs text-red-500 font-medium">{errors.person_id}</p>}
             </div>
@@ -343,7 +447,7 @@ const CreateQuotePage: React.FC = () => {
             <div>
               <SearchableLeadSelect
                 value={formData.lead_id}
-                onChange={(val) => setFormData({ ...formData, lead_id: val })}
+                onChange={(val) => handleLeadChange(val)}
                 leads={leads}
                 label="Link to lead"
                 placeholder="Click to add"

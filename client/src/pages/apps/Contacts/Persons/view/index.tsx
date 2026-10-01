@@ -300,7 +300,9 @@ const ViewPersonPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Job Title</span>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">--</span>
+                  <span className="font-medium text-gray-800 dark:text-gray-200">
+                    {selectedPerson.job_title || "--"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Sales Owner</span>
@@ -311,11 +313,65 @@ const ViewPersonPage: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Organization</span>
                   <span className="font-medium text-gray-800 dark:text-gray-200">
-                    {selectedPerson.organization_name || "ShieldGuard Security"}
+                    {selectedPerson.organization_name || "--"}
                   </span>
                 </div>
               </div>
             </div>
+
+            {/* Custom Attributes Section */}
+            {(() => {
+              const attrs =
+                typeof selectedPerson.custom_attributes === "string"
+                  ? (() => {
+                      try {
+                        return JSON.parse(selectedPerson.custom_attributes);
+                      } catch {
+                        return {};
+                      }
+                    })()
+                  : selectedPerson.custom_attributes || {};
+              const entries = Object.entries(attrs).filter(
+                ([_, v]) => v !== undefined && v !== null && v !== ""
+              );
+              if (entries.length === 0) return null;
+
+              return (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-4 space-y-3">
+                  <div className="flex items-center justify-between text-gray-800 dark:text-gray-100 font-bold text-sm">
+                    <span>Custom Attributes</span>
+                    <i className="mgc_tag_line text-gray-400"></i>
+                  </div>
+                  <div className="space-y-2.5 text-xs text-gray-600 dark:text-gray-300">
+                    {entries.map(([key, val]) => {
+                      const label = key
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      let valDisplay: string;
+                      if (typeof val === "boolean") {
+                        valDisplay = val ? "Yes" : "No";
+                      } else if (typeof val === "object") {
+                        valDisplay = JSON.stringify(val);
+                      } else {
+                        valDisplay = String(val);
+                      }
+
+                      return (
+                        <div key={key} className="flex justify-between items-center gap-2">
+                          <span className="text-gray-500 capitalize">{label}</span>
+                          <span
+                            className="font-medium text-gray-800 dark:text-gray-200 text-right truncate max-w-[200px]"
+                            title={valDisplay}
+                          >
+                            {valDisplay}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* About Organization Section */}
             <div className="border-t border-gray-100 dark:border-gray-800 pt-4 flex items-center justify-between">

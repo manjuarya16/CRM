@@ -67,7 +67,7 @@ const EditQuotePage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    API.get("/persons?limit=100").then((res) => {
+    API.get("/persons?per_page=500&limit=500").then((res) => {
       if (res.data?.data) setPersons(res.data.data);
     }).catch(() => {});
 
@@ -132,6 +132,20 @@ const EditQuotePage: React.FC = () => {
             });
           }
 
+          if (q.lead_id) {
+            API.get(`/leads/${q.lead_id}`).then((leadRes) => {
+              if (leadRes.data?.data) {
+                const leadData = leadRes.data.data;
+                setLeads((prev) => {
+                  if (!prev.some((l) => String(l.id) === String(leadData.id))) {
+                    return [leadData, ...prev];
+                  }
+                  return prev;
+                });
+              }
+            }).catch(() => {});
+          }
+
           if (q.custom_attributes) {
             if (typeof q.custom_attributes === "object") {
               setCustomAttributes(q.custom_attributes);
@@ -166,6 +180,56 @@ const EditQuotePage: React.FC = () => {
       });
     }
   }, [id]);
+
+  const handleLeadChange = async (leadIdStr: string) => {
+    setFormData((prev) => ({ ...prev, lead_id: leadIdStr }));
+    if (!leadIdStr) return;
+
+    try {
+      const leadRes = await API.get(`/leads/${leadIdStr}`);
+      const leadData = leadRes.data?.data;
+      if (leadData) {
+        setLeads((prev) => {
+          if (!prev.some((l) => String(l.id) === String(leadData.id))) {
+            return [leadData, ...prev];
+          }
+          return prev;
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          lead_id: leadIdStr,
+          person_id: prev.person_id || (leadData.person_id ? String(leadData.person_id) : ""),
+          user_id: prev.user_id || (leadData.user_id ? String(leadData.user_id) : ""),
+        }));
+      }
+
+      // If items is empty, automatically populate with lead products
+      if (items.length === 0) {
+        const prodRes = await API.get(`/leads/${leadIdStr}/products`);
+        const leadProds = prodRes.data?.data || [];
+        if (Array.isArray(leadProds) && leadProds.length > 0) {
+          const mappedItems: ITempQuoteItem[] = leadProds.map((lp: any) => {
+            const qty = Number(lp.quantity) || 1;
+            const price = Number(lp.price) || 0;
+            return {
+              product_id: Number(lp.product_id),
+              sku: lp.sku || "",
+              name: lp.product_name || lp.name || "Product",
+              quantity: qty,
+              price: price,
+              discount_percent: 0,
+              tax_percent: 0,
+              total: qty * price,
+            };
+          });
+          setItems(mappedItems);
+        }
+      }
+    } catch (err) {
+      console.error("Error linking lead to quote:", err);
+    }
+  };
 
   const handleProductSelect = (productIdStr: string) => {
     if (errors.item_product) setErrors((prev) => ({ ...prev, item_product: "" }));
@@ -405,11 +469,17 @@ const EditQuotePage: React.FC = () => {
                 className={`${inputCls} ${errors.person_id ? "border-red-500" : ""}`}
               >
                 <option value="">-- Select Contact Person --</option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                {persons
+                  .slice()
+                  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                  .map((p) => {
+                    const email = Array.isArray(p.emails) && p.emails[0]?.value ? p.emails[0].value : "";
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{email ? ` (${email})` : ""}
+                      </option>
+                    );
+                  })}
               </select>
               {errors.person_id && <p className="mt-1 text-xs text-red-500 font-medium">{errors.person_id}</p>}
             </div>
@@ -433,7 +503,7 @@ const EditQuotePage: React.FC = () => {
             <div>
               <SearchableLeadSelect
                 value={formData.lead_id}
-                onChange={(val) => setFormData({ ...formData, lead_id: val })}
+                onChange={(val) => handleLeadChange(val)}
                 leads={leads}
                 label="Link to lead"
                 placeholder="Click to add"

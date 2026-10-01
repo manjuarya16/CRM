@@ -36,6 +36,97 @@ const BUILT_IN_FIELD_CODES = new Set([
 
 const DEFAULT_EXCLUDE_CODES: string[] = [];
 
+const matchOptionValue = (valToMatch: any, options: any[]): string => {
+  if (valToMatch === undefined || valToMatch === null || valToMatch === "") return "";
+  const str = String(valToMatch).trim();
+  const strLower = str.toLowerCase();
+
+  if (!Array.isArray(options) || options.length === 0) return str;
+
+  // 1. Direct match by option name
+  for (const opt of options) {
+    const optName = typeof opt === "object" ? opt.name : String(opt);
+    if (optName === str || optName.toLowerCase() === strLower) {
+      return optName;
+    }
+  }
+
+  // 2. Match by option id
+  for (const opt of options) {
+    if (typeof opt === "object" && opt.id !== undefined && opt.id !== null) {
+      if (String(opt.id) === str) {
+        return opt.name;
+      }
+    }
+  }
+
+  // 3. Match by "Option X" (e.g. Option 1 -> options[0], Option 2 -> options[1])
+  const optMatch = strLower.match(/option\s*(\d+)/);
+  if (optMatch) {
+    const idx = parseInt(optMatch[1], 10) - 1;
+    if (idx >= 0 && idx < options.length) {
+      const opt = options[idx];
+      return typeof opt === "object" ? opt.name : String(opt);
+    }
+  }
+
+  // 4. Fallback numeric index (1-based index)
+  const num = parseInt(str, 10);
+  if (!isNaN(num) && num >= 1 && num <= options.length) {
+    const opt = options[num - 1];
+    return typeof opt === "object" ? opt.name : String(opt);
+  }
+
+  return str;
+};
+
+const matchMultiselectValues = (valToMatch: any, options: any[]): string[] => {
+  if (valToMatch === undefined || valToMatch === null || valToMatch === "") return [];
+  let rawList: string[] = [];
+
+  if (Array.isArray(valToMatch)) {
+    rawList = valToMatch.map(String);
+  } else if (typeof valToMatch === "string") {
+    const trimmed = valToMatch.trim();
+    if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) rawList = parsed.map(String);
+        else rawList = [String(parsed)];
+      } catch {
+        rawList = trimmed.split(",").map((s) => s.trim());
+      }
+    } else if (trimmed.includes(",")) {
+      rawList = trimmed.split(",").map((s) => s.trim());
+    } else {
+      rawList = [trimmed];
+    }
+  } else {
+    rawList = [String(valToMatch)];
+  }
+
+  const selectedNames: string[] = [];
+  for (const item of rawList) {
+    if (!item) continue;
+    const matched = matchOptionValue(item, options);
+    if (matched) {
+      selectedNames.push(matched);
+    } else {
+      selectedNames.push(item);
+    }
+  }
+  return selectedNames;
+};
+
+const isBooleanTrue = (v: any): boolean => {
+  if (v === true || v === 1) return true;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y" || s === "t";
+  }
+  return false;
+};
+
 export interface DynamicAttributeFieldsProps {
   entityType: "leads" | "persons" | "organizations" | "products" | "quotes" | "warehouses";
   quickAddOnly?: boolean;
@@ -75,8 +166,8 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
           const filtered = (res.data.data as IAttribute[]).filter(
             (attr, index, self) => {
               const codeLower = (attr.code || "").toLowerCase();
-              // 1. Exclude standard built-in form field codes
-              if (BUILT_IN_FIELD_CODES.has(codeLower)) return false;
+              // 1. Exclude standard built-in form field codes only if not user-defined
+              if (!attr.is_user_defined && BUILT_IN_FIELD_CODES.has(codeLower)) return false;
               // 2. Exclude explicitly passed excludeCodes
               if (excludeSet.has(codeLower)) return false;
               // 3. Exclude non-user-defined system attributes if explicitly marked false
@@ -126,7 +217,13 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {attributes.map((attr) => {
-          const val = values[attr.code] ?? "";
+          const rawVal =
+            values[attr.code] ??
+            values[attr.code.toLowerCase()] ??
+            values[attr.name] ??
+            values[attr.name.toLowerCase()] ??
+            "";
+          const val = rawVal;
           const err = errors[attr.code];
 
           return (
@@ -177,86 +274,94 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
               )}
 
               {/* Select & Lookup */}
-              {["select", "lookup"].includes(attr.type) && (
-                <select
-                  value={val}
-                  onChange={(e) => onChange(attr.code, e.target.value)}
-                  className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-gray-200 ${
-                    err
-                      ? "border-red-500 focus:border-red-500"
-                      : "border-gray-300 dark:border-gray-600 focus:border-primary"
-                  }`}
-                >
-                  <option value="">Select {attr.name}</option>
-                  {Array.isArray(attr.options) &&
-                    attr.options.map((opt: any, idx: number) => {
-                      const optVal = typeof opt === "object" ? opt.name : opt;
-                      return (
-                        <option key={idx} value={optVal}>
-                          {optVal}
-                        </option>
-                      );
-                    })}
-                </select>
-              )}
-
-              {/* Multiselect / Checkbox */}
-              {["multiselect", "checkbox"].includes(attr.type) && (
-                <div className="flex flex-wrap gap-3 pt-1">
-                  {Array.isArray(attr.options) &&
-                    attr.options.map((opt: any, idx: number) => {
-                      const optName = typeof opt === "object" ? opt.name : opt;
-                      const selectedList: string[] = Array.isArray(val) ? val : [];
-                      const isChecked = selectedList.includes(optName);
-
-                      return (
-                        <label
-                          key={idx}
-                          className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                onChange(attr.code, [...selectedList, optName]);
-                              } else {
-                                onChange(
-                                  attr.code,
-                                  selectedList.filter((item) => item !== optName)
-                                );
-                              }
-                            }}
-                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
-                          />
-                          <span>{optName}</span>
-                        </label>
-                      );
-                    })}
-                </div>
-              )}
-
-              {/* Boolean */}
-              {attr.type === "boolean" && (
-                <div className="flex items-center gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => onChange(attr.code, !val)}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                      val ? "bg-primary" : "bg-gray-200 dark:bg-gray-700"
+              {["select", "lookup"].includes(attr.type) && (() => {
+                const currentOpt = matchOptionValue(rawVal, attr.options || []);
+                return (
+                  <select
+                    value={currentOpt}
+                    onChange={(e) => onChange(attr.code, e.target.value)}
+                    className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-gray-200 ${
+                      err
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-300 dark:border-gray-600 focus:border-primary"
                     }`}
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        val ? "translate-x-5" : "translate-x-0"
+                    <option value="">Select {attr.name}</option>
+                    {Array.isArray(attr.options) &&
+                      attr.options.map((opt: any, idx: number) => {
+                        const optVal = typeof opt === "object" ? opt.name : String(opt);
+                        return (
+                          <option key={idx} value={optVal}>
+                            {optVal}
+                          </option>
+                        );
+                      })}
+                  </select>
+                );
+              })()}
+
+              {/* Multiselect / Checkbox */}
+              {["multiselect", "checkbox"].includes(attr.type) && (() => {
+                const selectedList = matchMultiselectValues(rawVal, attr.options || []);
+                return (
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    {Array.isArray(attr.options) &&
+                      attr.options.map((opt: any, idx: number) => {
+                        const optName = typeof opt === "object" ? opt.name : String(opt);
+                        const isChecked = selectedList.includes(optName);
+
+                        return (
+                          <label
+                            key={idx}
+                            className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  onChange(attr.code, [...selectedList, optName]);
+                                } else {
+                                  onChange(
+                                    attr.code,
+                                    selectedList.filter((item) => item !== optName)
+                                  );
+                                }
+                              }}
+                              className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                            />
+                            <span>{optName}</span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                );
+              })()}
+
+              {/* Boolean */}
+              {attr.type === "boolean" && (() => {
+                const boolVal = isBooleanTrue(rawVal);
+                return (
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => onChange(attr.code, !boolVal)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                        boolVal ? "bg-primary" : "bg-gray-200 dark:bg-gray-700"
                       }`}
-                    />
-                  </button>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    {val ? "Yes" : "No"}
-                  </span>
-                </div>
-              )}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          boolVal ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      {boolVal ? "Yes" : "No"}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Date & DateTime */}
               {["date", "datetime"].includes(attr.type) && (
