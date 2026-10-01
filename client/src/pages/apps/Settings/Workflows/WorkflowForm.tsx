@@ -7,6 +7,40 @@ import Swal from "sweetalert2";
 import { workflowSchema, WorkflowInput } from "@/schemas";
 import { IWorkflow, IWorkflowCondition, IWorkflowAction, WorkflowFormProps } from "@/interface";
 
+const ENTITY_ACTION_OPTIONS: Record<string, { label: string; value: string }[]> = {
+  leads: [
+    { label: "Update Lead", value: "update_lead" },
+    { label: "Update Person", value: "update_person" },
+    { label: "Send email to person", value: "send_email_person" },
+    { label: "Send email to sales owner", value: "send_email_owner" },
+    { label: "Add Tag", value: "add_tag" },
+    { label: "Add Note as Activity", value: "add_note_activity" },
+    { label: "Add Webhook", value: "trigger_webhook" },
+    { label: "Assign Record to User", value: "assign_user" },
+    { label: "Create Task / Activity", value: "create_activity" },
+  ],
+  activities: [
+    { label: "Update related leads", value: "update_related_leads" },
+    { label: "Send email to sales owner", value: "send_email_owner" },
+    { label: "Send email to participants", value: "send_email_participants" },
+    { label: "Add Webhook", value: "trigger_webhook" },
+  ],
+  persons: [
+    { label: "Update Person", value: "update_person" },
+    { label: "Update related leads", value: "update_related_leads" },
+    { label: "Send email to person", value: "send_email_person" },
+    { label: "Add Webhook", value: "trigger_webhook" },
+  ],
+  quotes: [
+    { label: "Update Quote", value: "update_quote" },
+    { label: "Update Person", value: "update_person" },
+    { label: "Update related leads", value: "update_related_leads" },
+    { label: "Send email to person", value: "send_email_person" },
+    { label: "Send email to sales owner", value: "send_email_owner" },
+    { label: "Add Webhook", value: "trigger_webhook" },
+  ],
+};
+
 const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: string }[]> = {
   leads: [
     { label: "Lead Title", value: "title" },
@@ -16,6 +50,11 @@ const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: strin
     { label: "Lead Source ID", value: "source_id" },
     { label: "Assigned User ID", value: "user_id" },
   ],
+  activities: [
+    { label: "Activity Title", value: "title" },
+    { label: "Activity Type (call/task/meeting)", value: "type" },
+    { label: "Comment", value: "comment" },
+  ],
   persons: [
     { label: "Person Name", value: "name" },
     { label: "Email Address", value: "emails" },
@@ -24,19 +63,10 @@ const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: strin
     { label: "Is VIP / Person Tag", value: "is_vip" },
     { label: "Organization ID", value: "organization_id" },
   ],
-  organizations: [
-    { label: "Organization Name", value: "name" },
-    { label: "Address", value: "address" },
-  ],
   quotes: [
     { label: "Quote Subject", value: "subject" },
     { label: "Grand Total ($)", value: "grand_total", type: "number" },
     { label: "User ID", value: "user_id" },
-  ],
-  activities: [
-    { label: "Activity Title", value: "title" },
-    { label: "Activity Type (call/task/meeting)", value: "type" },
-    { label: "Comment", value: "comment" },
   ],
 };
 
@@ -47,6 +77,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
   const [actions, setActions] = useState<IWorkflowAction[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<{ id: number; name: string; subject: string }[]>([]);
   const [users, setUsers] = useState<{ id: number; name: string; email: string }[]>([]);
+  const [tags, setTags] = useState<{ id: number; name: string; color: string }[]>([]);
 
   const {
     register,
@@ -68,17 +99,20 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
   });
 
   const selectedEntityType = watch("entity_type") || "leads";
+  const currentActionOptions = ENTITY_ACTION_OPTIONS[selectedEntityType] || ENTITY_ACTION_OPTIONS.leads;
 
   useEffect(() => {
     // Fetch helper data for dropdowns
     const fetchHelperData = async () => {
       try {
-        const [templatesRes, usersRes] = await Promise.all([
+        const [templatesRes, usersRes, tagsRes] = await Promise.all([
           API.get("/email-templates").catch(() => ({ data: { data: [] } })),
           API.get("/users").catch(() => ({ data: { data: [] } })),
+          API.get("/tags").catch(() => ({ data: { data: [] } })),
         ]);
         if (templatesRes.data?.data) setEmailTemplates(templatesRes.data.data);
         if (usersRes.data?.data) setUsers(usersRes.data.data);
+        if (tagsRes.data?.data) setTags(tagsRes.data.data);
       } catch (err) {
         console.error("Failed to load helper options", err);
       }
@@ -126,7 +160,16 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
   };
 
   const addAction = () => {
-    const updated = [...actions, { action_type: "send_email", target: emailTemplates[0]?.id ? String(emailTemplates[0].id) : "", value: "contact_email" }];
+    const defaultActionType = currentActionOptions[0]?.value || "update_lead";
+    const defaultTarget = defaultActionType === "update_lead" || defaultActionType === "update_related_leads"
+      ? ENTITY_FIELDS.leads[0]?.value || "title"
+      : defaultActionType === "update_person"
+      ? ENTITY_FIELDS.persons[0]?.value || "name"
+      : defaultActionType === "update_quote"
+      ? ENTITY_FIELDS.quotes[0]?.value || "subject"
+      : "";
+
+    const updated = [...actions, { action_type: defaultActionType, target: defaultTarget, value: "" }];
     setActions(updated);
     setValue("actions", updated);
   };
@@ -187,32 +230,30 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Event Entity <span className="text-red-500">*</span>
+            Event <span className="text-red-500">*</span>
           </label>
           <select
             {...register("entity_type")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-gray-100 font-medium"
           >
-            <option value="leads">Leads / Deals</option>
-            <option value="persons">Persons / Contacts</option>
-            <option value="organizations">Organizations</option>
-            <option value="quotes">Quotes</option>
+            <option value="leads">Leads</option>
             <option value="activities">Activities</option>
+            <option value="persons">Persons</option>
+            <option value="quotes">Quotes</option>
           </select>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Event Trigger <span className="text-red-500">*</span>
+            Trigger <span className="text-red-500">*</span>
           </label>
           <select
             {...register("event")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-gray-100 font-medium"
           >
-            <option value="create">When Created</option>
-            <option value="update">When Updated</option>
-            <option value="stage_change">When Stage Changes</option>
-            <option value="delete">When Deleted</option>
+            <option value="create">Created</option>
+            <option value="update">Updated</option>
+            <option value="delete">Deleted</option>
           </select>
         </div>
 
@@ -335,11 +376,11 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
                   onChange={(e) => updateAction(idx, e.target.value, "", "")}
                   className="flex-1 px-2.5 py-1.5 text-xs border rounded-md focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 font-semibold"
                 >
-                  <option value="send_email">📧 Send Email Template</option>
-                  <option value="assign_user">👤 Assign Record to User</option>
-                  <option value="update_attribute">✏️ Update Field / Stage</option>
-                  <option value="create_activity">📋 Create Task / Activity</option>
-                  <option value="trigger_webhook">🌐 Trigger Webhook</option>
+                  {currentActionOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
 
                 <button
@@ -354,9 +395,99 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
 
               {/* Dynamic Target & Value Fields based on Action Type */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-18">
-                {a.action_type === "send_email" && (
+                {(a.action_type === "update_lead" || a.action_type === "update_related_leads" || a.action_type === "update_attribute") && (
                   <>
                     <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Target Lead Field</label>
+                      <select
+                        value={a.target || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, a.value || "")}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="">Select Field to Update</option>
+                        {ENTITY_FIELDS.leads.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">New Value</label>
+                      <input
+                        type="text"
+                        placeholder="Enter new value"
+                        value={a.value || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, a.target || "", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {a.action_type === "update_person" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Target Person Field</label>
+                      <select
+                        value={a.target || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, a.value || "")}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="">Select Field to Update</option>
+                        {ENTITY_FIELDS.persons.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">New Value</label>
+                      <input
+                        type="text"
+                        placeholder="Enter new value"
+                        value={a.value || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, a.target || "", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {a.action_type === "update_quote" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Target Quote Field</label>
+                      <select
+                        value={a.target || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, a.value || "")}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="">Select Field to Update</option>
+                        {ENTITY_FIELDS.quotes.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">New Value</label>
+                      <input
+                        type="text"
+                        placeholder="Enter new value"
+                        value={a.value || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, a.target || "", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {(a.action_type === "send_email_person" || a.action_type === "send_email_owner" || a.action_type === "send_email_participants" || a.action_type === "send_email") && (
+                  <>
+                    <div className="md:col-span-2">
                       <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Email Template</label>
                       <select
                         value={a.target || ""}
@@ -371,13 +502,50 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Recipient Email / Field</label>
+                  </>
+                )}
+
+                {a.action_type === "add_tag" && (
+                  <>
+                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Select Tag</label>
+                        <select
+                          value={a.target || ""}
+                          onChange={(e) => updateAction(idx, a.action_type, e.target.value, e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                        >
+                          <option value="">Select Existing Tag</option>
+                          {tags.map((t) => (
+                            <option key={t.id} value={t.name}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Or Custom Tag Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Hot Lead or VIP"
+                          value={a.value || a.target || ""}
+                          onChange={(e) => updateAction(idx, a.action_type, e.target.value, e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {a.action_type === "add_note_activity" && (
+                  <>
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Note Content</label>
                       <input
                         type="text"
-                        placeholder="e.g. contact_email or custom@domain.com"
-                        value={a.value || ""}
-                        onChange={(e) => updateAction(idx, a.action_type, a.target || "", e.target.value)}
+                        placeholder="Enter note text to add as an activity..."
+                        value={a.value || a.target || ""}
+                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, e.target.value)}
                         className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                       />
                     </div>
@@ -400,36 +568,6 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
                           </option>
                         ))}
                       </select>
-                    </div>
-                  </>
-                )}
-
-                {a.action_type === "update_attribute" && (
-                  <>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Target Field</label>
-                      <select
-                        value={a.target || ""}
-                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, a.value || "")}
-                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                      >
-                        <option value="">Select Field to Update</option>
-                        {availableFields.map((f) => (
-                          <option key={f.value} value={f.value}>
-                            {f.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">New Value</label>
-                      <input
-                        type="text"
-                        placeholder="Enter new value"
-                        value={a.value || ""}
-                        onChange={(e) => updateAction(idx, a.action_type, a.target || "", e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                      />
                     </div>
                   </>
                 )}
@@ -501,4 +639,5 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
     </form>
   );
 };
+
 
