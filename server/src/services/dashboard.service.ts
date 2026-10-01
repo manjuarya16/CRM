@@ -22,10 +22,17 @@ export class DashboardService {
       const pipelineIdParam = params.pipeline_id || params.pipelineId;
 
       // Ensure full start day (00:00:00) and full end day (23:59:59.999)
-      const startDateObj = rawStart ? new Date(rawStart) : new Date("2024-06-01");
+      // Default to last 30 days if start_date is not specified
+      let startDateObj: Date;
+      if (rawStart) {
+        startDateObj = new Date(rawStart);
+      } else {
+        startDateObj = new Date(now);
+        startDateObj.setDate(startDateObj.getDate() - 30);
+      }
       startDateObj.setHours(0, 0, 0, 0);
 
-      const endDateObj = rawEnd ? new Date(rawEnd) : now;
+      const endDateObj = rawEnd ? new Date(rawEnd) : new Date(now);
       endDateObj.setHours(23, 59, 59, 999);
 
       const startDateStr = startDateObj.toISOString();
@@ -44,14 +51,14 @@ export class DashboardService {
         targetPipelineId = Number(pipelineIdParam);
       }
 
-      // 2. Fetch stages for selected pipeline or all
-      let stagesQuery = "SELECT id, name, code, lead_pipeline_id FROM lead_pipeline_stages";
+      // 2. Fetch stages for selected pipeline or all (with sort_order)
+      let stagesQuery = "SELECT id, name, code, sort_order, lead_pipeline_id FROM lead_pipeline_stages";
       const stagesQueryParams: any[] = [];
       if (targetPipelineId) {
         stagesQuery += " WHERE lead_pipeline_id = $1";
         stagesQueryParams.push(targetPipelineId);
       }
-      stagesQuery += " ORDER BY id ASC";
+      stagesQuery += " ORDER BY sort_order ASC, id ASC";
       const stagesRes = await pool.query(stagesQuery, stagesQueryParams);
       const stages: any[] = stagesRes.rows;
 
@@ -113,7 +120,7 @@ export class DashboardService {
         if (stageCode === "won" || stageName === "won" || stageCode.includes("won")) {
           wonRevenue += val;
           wonCount += 1;
-        } else if (stageCode === "lost" || stageName === "lost" || stageCode.includes("lost")) {
+        } else if (stageCode === "lost" || stageName === "lost" || stageCode.includes("lost") || l.status === false) {
           lostRevenue += val;
           lostCount += 1;
         }
@@ -139,7 +146,7 @@ export class DashboardService {
       const totalOrganizations = Number(orgsRes.rows[0]?.count || 0);
 
       // 5. Sources Map
-      const sourcesRes = await pool.query("SELECT id, name FROM lead_sources");
+      const sourcesRes = await pool.query("SELECT id, name FROM lead_sources ORDER BY id ASC");
       const sourceMap: Record<number, string> = {};
       sourcesRes.rows.forEach((s: any) => (sourceMap[s.id] = s.name));
 
@@ -154,13 +161,13 @@ export class DashboardService {
       });
 
       // 6. Types Map
-      const typesRes = await pool.query("SELECT id, name FROM lead_types");
+      const typesRes = await pool.query("SELECT id, name FROM lead_types ORDER BY id ASC");
       const typeMap: Record<number, string> = {};
       typesRes.rows.forEach((t: any) => (typeMap[t.id] = t.name));
 
       leads.forEach((l: any) => {
         const val = Number(l.lead_value) || 0;
-        const typeName = l.lead_type_id && typeMap[l.lead_type_id] ? typeMap[l.lead_type_id] : "Existing Business";
+        const typeName = l.lead_type_id && typeMap[l.lead_type_id] ? typeMap[l.lead_type_id] : "New Business";
         if (!typeCountsMap[typeName]) {
           typeCountsMap[typeName] = { name: typeName, count: 0, total_value: 0 };
         }
@@ -175,38 +182,61 @@ export class DashboardService {
       const avgLeadValue = totalLeads > 0 ? totalLeadValueSum / totalLeads : 0;
       const avgLeadsPerDay = totalLeads / daysCount;
 
-      // 7. Funnel: Open Leads By Stages (excluding won and lost stages)
+      // 7. Funnel: Open Leads By Stages (strictly open leads, excluding won and lost)
       let funnel: any[] = [];
       if (!targetPipelineId) {
-        // Group open stages across all pipelines by stage name
-        const openStageNameMap: Record<string, { stage_name: string; count: number; total_value: number }> = {};
+        // Group open stages across all pipelines by standard stage progression
+        const stageOrderMap: Record<string, { name: string; sort_order: number }> = {
+          new: { name: 'New', sort_order: 1 },
+          follow_up: { name: 'Follow Up', sort_order: 2 },
+          'follow-up': { name: 'Follow Up', sort_order: 2 },
+          prospect: { name: 'Prospect', sort_order: 3 },
+          negotiation: { name: 'Negotiation', sort_order: 4 },
+        };
+
+        const openStageMap: Record<string, { stage_name: string; count: number; total_value: number; sort_order: number }> = {};
+
         leads.forEach((l: any) => {
           const st = stages.find((s: any) => s.id === l.lead_pipeline_stage_id);
-          const c = (st?.code || "").toLowerCase();
-          const n = st?.name || "New";
-          if (!c.includes("won") && !c.includes("lost") && !n.toLowerCase().includes("won") && !n.toLowerCase().includes("lost")) {
-            if (!openStageNameMap[n]) {
-              openStageNameMap[n] = { stage_name: n, count: 0, total_value: 0 };
+          const c = (st?.code || '').toLowerCase();
+          const n = (st?.name || '').trim();
+          const isWon = c.includes('won') || n.toLowerCase().includes('won');
+          const isLost = c.includes('lost') || n.toLowerCase().includes('lost') || l.status === false;
+
+          if (!isWon && !isLost) {
+            const mapped = stageOrderMap[c] || { name: n || 'New', sort_order: st?.sort_order || 99 };
+            const displayName = mapped.name;
+            if (!openStageMap[displayName]) {
+              openStageMap[displayName] = {
+                stage_name: displayName,
+                count: 0,
+                total_value: 0,
+                sort_order: mapped.sort_order,
+              };
             }
-            openStageNameMap[n].count += 1;
-            openStageNameMap[n].total_value += Number(l.lead_value) || 0;
+            openStageMap[displayName].count += 1;
+            openStageMap[displayName].total_value += Number(l.lead_value) || 0;
           }
         });
-        funnel = Object.values(openStageNameMap).sort((a, b) => b.count - a.count);
+
+        funnel = Object.values(openStageMap).sort((a, b) => a.sort_order - b.sort_order);
       } else {
         const openStages = stages.filter((st: any) => {
-          const c = (st.code || "").toLowerCase();
-          const n = (st.name || "").toLowerCase();
-          return !c.includes("won") && !c.includes("lost") && !n.includes("won") && !n.includes("lost");
+          const c = (st.code || '').toLowerCase();
+          const n = (st.name || '').toLowerCase();
+          return !c.includes('won') && !c.includes('lost') && !n.includes('won') && !n.includes('lost');
         });
 
-        funnel = openStages.map((st: any) => ({
-          stage_id: st.id,
-          stage_name: st.name,
-          code: st.code,
-          count: stageCountsMap[st.id]?.count || 0,
-          total_value: stageCountsMap[st.id]?.total_value || 0,
-        })).sort((a: any, b: any) => b.count - a.count);
+        funnel = openStages
+          .map((st: any) => ({
+            stage_id: st.id,
+            stage_name: st.name,
+            code: st.code,
+            count: stageCountsMap[st.id]?.count || 0,
+            total_value: stageCountsMap[st.id]?.total_value || 0,
+            sort_order: st.sort_order || st.id,
+          }))
+          .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
       }
 
       // 8. Timeline map: Group by Month if > 60 days, or Day if <= 60 days
@@ -235,7 +265,7 @@ export class DashboardService {
             if (stageName.includes("won") || stageCode.includes("won")) {
               dateSeriesMap[key].won_revenue += val;
               dateSeriesMap[key].won_count += 1;
-            } else if (stageName.includes("lost") || stageCode.includes("lost")) {
+            } else if (stageName.includes("lost") || stageCode.includes("lost") || l.status === false) {
               dateSeriesMap[key].lost_revenue += val;
               dateSeriesMap[key].lost_count += 1;
             }
@@ -244,14 +274,15 @@ export class DashboardService {
       } else {
         const curr = new Date(startDateObj);
         while (curr <= endDateObj) {
-          const dStr = curr.toISOString().split("T")[0];
+          const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, "0")}-${String(curr.getDate()).padStart(2, "0")}`;
           const label = curr.toLocaleString("en-US", { month: "short", day: "numeric" });
           dateSeriesMap[dStr] = { date: dStr, label, won_revenue: 0, lost_revenue: 0, leads_count: 0, won_count: 0, lost_count: 0 };
           curr.setDate(curr.getDate() + 1);
         }
 
         leads.forEach((l: any) => {
-          const dStr = new Date(l.created_at).toISOString().split("T")[0];
+          const ld = new Date(l.created_at);
+          const dStr = `${ld.getFullYear()}-${String(ld.getMonth() + 1).padStart(2, "0")}-${String(ld.getDate()).padStart(2, "0")}`;
           const val = Number(l.lead_value) || 0;
           if (dateSeriesMap[dStr]) {
             dateSeriesMap[dStr].leads_count += 1;
@@ -261,7 +292,7 @@ export class DashboardService {
             if (stageName.includes("won") || stageCode.includes("won")) {
               dateSeriesMap[dStr].won_revenue += val;
               dateSeriesMap[dStr].won_count += 1;
-            } else if (stageName.includes("lost") || stageCode.includes("lost")) {
+            } else if (stageName.includes("lost") || stageCode.includes("lost") || l.status === false) {
               dateSeriesMap[dStr].lost_revenue += val;
               dateSeriesMap[dStr].lost_count += 1;
             }
@@ -271,35 +302,48 @@ export class DashboardService {
 
       const timeline = Object.values(dateSeriesMap).sort((a, b) => a.date.localeCompare(b.date));
 
-      // 9. Top Selling Products (matching Krayin CRM)
-      const topProductsRes = await pool.query(`
-        SELECT
+      // 9. Top Selling Products (combining real sales from lead_products and quote_items within date range)
+      const topProductsRes = await pool.query(
+        `SELECT
           p.id,
           p.name,
           COALESCE(p.price, 0) as price,
-          COALESCE(SUM(qi.total), 0) as revenue,
-          COALESCE(SUM(qi.quantity), 0) as quantity_sold
+          COALESCE(sales.total_revenue, 0) as revenue,
+          COALESCE(sales.total_qty, 0) as quantity_sold
         FROM products p
-        LEFT JOIN quote_items qi ON qi.product_id = p.id
-        GROUP BY p.id, p.name, p.price
+        LEFT JOIN (
+          SELECT
+            product_id,
+            SUM(amount) as total_revenue,
+            SUM(quantity) as total_qty
+          FROM (
+            SELECT lp.product_id, lp.amount, lp.quantity
+            FROM lead_products lp
+            JOIN leads l ON l.id = lp.lead_id
+            WHERE l.created_at >= $1 AND l.created_at <= $2
+            UNION ALL
+            SELECT qi.product_id, qi.total as amount, qi.quantity
+            FROM quote_items qi
+            JOIN quotes q ON q.id = qi.quote_id
+            WHERE q.created_at >= $1 AND q.created_at <= $2
+          ) combined
+          GROUP BY product_id
+        ) sales ON sales.product_id = p.id
         ORDER BY revenue DESC, p.price DESC NULLS LAST, p.id ASC
-        LIMIT 5
-      `);
-      const topProducts = topProductsRes.rows.map((p: any) => {
-        const price = Number(p.price) || 0;
-        const rev = Number(p.revenue) || 0;
-        return {
-          id: p.id,
-          name: p.name,
-          price: price,
-          revenue: rev > 0 ? rev : (price > 0 ? price * 10 : 0),
-          quantity_sold: Number(p.quantity_sold) || (rev > 0 ? 1 : 0),
-        };
-      });
+        LIMIT 5`,
+        [startDateStr, endDateStr]
+      );
+      const topProducts = topProductsRes.rows.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        revenue: Number(p.revenue) || 0,
+        quantity_sold: Number(p.quantity_sold) || 0,
+      }));
 
-      // 10. Top Customers / Contacts by Won Revenue (matching Krayin CRM)
-      const topPersonsRes = await pool.query(`
-        SELECT
+      // 10. Top Customers / Contacts by Revenue within date range
+      const topPersonsRes = await pool.query(
+        `SELECT
           p.id,
           p.name,
           p.emails,
@@ -307,11 +351,12 @@ export class DashboardService {
           COUNT(l.id) as deals_count,
           COALESCE(SUM(l.lead_value), 0) as revenue
         FROM persons p
-        LEFT JOIN leads l ON l.person_id = p.id
+        LEFT JOIN leads l ON l.person_id = p.id AND l.created_at >= $1 AND l.created_at <= $2
         GROUP BY p.id, p.name, p.emails, p.contact_numbers
         ORDER BY revenue DESC, deals_count DESC, p.id ASC
-        LIMIT 5
-      `);
+        LIMIT 5`,
+        [startDateStr, endDateStr]
+      );
       const topPersons = topPersonsRes.rows.map((r: any) => {
         let emailStr = "";
         try {

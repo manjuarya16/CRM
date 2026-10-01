@@ -65,7 +65,7 @@ export interface QuoteStore {
   error: string | null;
   selectedQuote: IQuote | null;
   quoteItems: IQuoteItem[];
-  fetchQuotes: (page?: number, limit?: number, search?: string) => Promise<void>;
+  fetchQuotes: (page?: number, limit?: number, search?: string, leadId?: number) => Promise<void>;
   fetchQuoteById: (id: number) => Promise<IQuote | null>;
   addQuote: (data: any) => Promise<any>;
   updateQuote: (id: number, data: any) => Promise<any>;
