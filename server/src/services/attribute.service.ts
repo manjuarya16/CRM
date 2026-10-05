@@ -75,4 +75,28 @@ export class AttributeService {
       throw err;
     }
   }
+
+  public static async deleteBulk(ids: number[]) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    try {
+      const result = await pool.query('SELECT bulk_delete_attributes($1) AS deleted_count', [ids]);
+      return Number(result.rows[0]?.deleted_count || 0);
+    } catch (err) {
+      logger.error({ err, ids }, 'AttributeService.deleteBulk failed');
+      throw err;
+    }
+  }
+
+  public static async deleteAll(entity_type?: string, search?: string) {
+    try {
+      const result = await pool.query('SELECT delete_all_attributes($1, $2) AS deleted_count', [
+        entity_type || null,
+        search || null,
+      ]);
+      return Number(result.rows[0]?.deleted_count || 0);
+    } catch (err) {
+      logger.error({ err, entity_type, search }, 'AttributeService.deleteAll failed');
+      throw err;
+    }
+  }
 }
