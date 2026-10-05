@@ -177,6 +177,19 @@ function validateWorkflow(workflow: any, entity: EntityData): boolean {
 
 async function fetchEntityData(entityType: string, entityId: number): Promise<EntityData | null> {
   try {
+    const { rows } = await pool.query(
+      `SELECT fn_get_entity_for_workflow($1, $2) AS entity`,
+      [entityType, entityId]
+    );
+    if (rows[0]?.entity) {
+      const data = typeof rows[0].entity === 'string' ? JSON.parse(rows[0].entity) : rows[0].entity;
+      return data;
+    }
+  } catch (err: any) {
+    logger.error({ err: err?.message, entityType, entityId }, '[WorkflowEngine] fetchEntityData stored function failed, trying fallback');
+  }
+
+  try {
     const lowerType = String(entityType).toLowerCase().trim();
 
     if (lowerType === 'leads' || lowerType === 'lead') {
