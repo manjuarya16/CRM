@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import API from "@/config";
+import API, { API_URL } from "@/config";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 
@@ -45,26 +45,108 @@ const CreateImportPage: React.FC = () => {
     sampleErrors: Array<{ row: number; error: string }>;
   } | null>(null);
 
+const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<string, any>[] }> = {
+  persons: {
+    headers: ["name", "emails", "contact_numbers", "job_title", "organization_id", "user_id"],
+    sampleRows: [
+      {
+        name: "Wilson Fisk",
+        emails: "wilson.fisk@example.com",
+        contact_numbers: "+1-555-0101",
+        job_title: "Chief Executive Officer",
+        organization_id: 1,
+        user_id: 1,
+      },
+      {
+        name: "Sasha Calle",
+        emails: "sasha.calle@example.com",
+        contact_numbers: "+1-555-0102",
+        job_title: "Sales Director",
+        organization_id: 1,
+        user_id: 1,
+      },
+    ],
+  },
+  leads: {
+    headers: ["title", "description", "lead_value", "user_id", "person_id", "organization_id", "lead_pipeline_id", "lead_pipeline_stage_id", "expected_close_date"],
+    sampleRows: [
+      {
+        title: "Enterprise Cloud Migration",
+        description: "Migration to dedicated cloud instance",
+        lead_value: 20000,
+        user_id: 1,
+        person_id: 1,
+        organization_id: 1,
+        lead_pipeline_id: 1,
+        lead_pipeline_stage_id: 1,
+        expected_close_date: "2026-11-30",
+      },
+    ],
+  },
+  organizations: {
+    headers: ["name", "address", "user_id"],
+    sampleRows: [
+      {
+        name: "Apex Global Dynamics",
+        address: "123 Market St, San Francisco, CA",
+        user_id: 1,
+      },
+      {
+        name: "Quantum Solutions LLC",
+        address: "456 Tech Blvd, Austin, TX",
+        user_id: 1,
+      },
+    ],
+  },
+  products: {
+    headers: ["name", "sku", "description", "price", "quantity"],
+    sampleRows: [
+      {
+        name: "CRM Enterprise License",
+        sku: "CRM-ENT-001",
+        description: "Annual Enterprise License",
+        price: 1200,
+        quantity: 10,
+      },
+      {
+        name: "Data Migration & API Integration",
+        sku: "SRV-MIG-002",
+        description: "Full service data migration",
+        price: 5000,
+        quantity: 1,
+      },
+    ],
+  },
+};
+
   // Fetch sample metadata (standard fields + custom attributes) whenever module type changes
   useEffect(() => {
     fetchModuleSampleMeta(type);
   }, [type]);
 
   const fetchModuleSampleMeta = async (currentType: string) => {
+    const key = currentType.toLowerCase();
+    const fallback = DEFAULT_SAMPLES[key] || { headers: [], sampleRows: [] };
     try {
       setLoadingSample(true);
-      const res = await API.get(`/data-transfer/sample/${currentType.toLowerCase()}`);
+      const res = await API.get(`/data-transfer/sample/${key}`);
       if (res.data) {
         setSampleMeta({
-          headers: res.data.headers || [],
-          sampleRows: res.data.data || [],
+          headers: res.data.headers && res.data.headers.length > 0 ? res.data.headers : fallback.headers,
+          sampleRows: res.data.data && res.data.data.length > 0 ? res.data.data : fallback.sampleRows,
           customAttributes: res.data.customAttributes || [],
+        });
+      } else {
+        setSampleMeta({
+          headers: fallback.headers,
+          sampleRows: fallback.sampleRows,
+          customAttributes: [],
         });
       }
     } catch {
       setSampleMeta({
-        headers: [],
-        sampleRows: [],
+        headers: fallback.headers,
+        sampleRows: fallback.sampleRows,
         customAttributes: [],
       });
     } finally {
@@ -154,65 +236,55 @@ const CreateImportPage: React.FC = () => {
     }
   };
 
-  const handleDownloadSample = async (formatParam?: any) => {
+  const handleDownloadSample = (formatParam?: any) => {
     const chosenFormat =
       typeof formatParam === "string" && formatParam.toLowerCase() === "csv"
         ? "csv"
         : "xlsx";
 
     const typeKey = type.toLowerCase();
+    const fallback = DEFAULT_SAMPLES[typeKey] || { headers: [], sampleRows: [] };
+    const headers = sampleMeta.headers && sampleMeta.headers.length > 0 ? sampleMeta.headers : fallback.headers;
+    const rows = sampleMeta.sampleRows && sampleMeta.sampleRows.length > 0 ? sampleMeta.sampleRows : fallback.sampleRows;
+
     try {
-      // 1. First attempt direct streaming download from backend endpoint
-      const response = await API.get(`/data-transfer/sample/${typeKey}`, {
-        params: { format: chosenFormat },
-        responseType: "blob",
-      });
-
-      const mimeType =
-        chosenFormat === "xlsx"
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "text/csv;charset=utf-8;";
-
-      const blob = new Blob([response.data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `sample_${typeKey}_import.${chosenFormat}`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch {
-      // 2. Fallback: generate file in-browser via XLSX library using sampleMeta
-      try {
-        const headers = sampleMeta.headers;
-        const rows = sampleMeta.sampleRows;
-
-        if (chosenFormat === "xlsx") {
-          const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
-          XLSX.writeFile(wb, `sample_${typeKey}_import.xlsx`);
-        } else {
-          const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-          const csvContent = XLSX.utils.sheet_to_csv(ws, { FS: fieldSeparator || "," });
-          const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.setAttribute("download", `sample_${typeKey}_import.csv`);
-          document.body.appendChild(link);
-          link.click();
+      if (chosenFormat === "xlsx") {
+        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbout], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `sample_${typeKey}_import.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
-        }
-      } catch (clientErr: any) {
-        Swal.fire({
-          icon: "error",
-          title: "Download Error",
-          text: clientErr.message || "Failed to download sample file",
-        });
+        }, 500);
+      } else {
+        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        const csvContent = XLSX.utils.sheet_to_csv(ws, { FS: fieldSeparator || "," });
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `sample_${typeKey}_import.csv`);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 500);
       }
+    } catch (clientErr: any) {
+      console.error("Download Error:", clientErr);
+      const directUrl = `${API_URL || "http://localhost:3040/api"}/data-transfer/sample/${typeKey}?format=${chosenFormat}`;
+      window.open(directUrl, "_blank");
     }
   };
 

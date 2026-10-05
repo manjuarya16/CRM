@@ -41,7 +41,7 @@ const NotificationDropdown = () => {
   } = useNotificationStore();
 
   useEffect(() => {
-    const cleanup = startPolling(5000);
+    const cleanup = startPolling(30000);
     return cleanup;
   }, [startPolling]);
 
