@@ -88,7 +88,7 @@ router.get('/sample/:type', async (req, res, next) => {
 
     // If client requested XLSX file download:
     if (req.query.format === 'xlsx') {
-      // @ts-ignore
+      // @ts-expect-error Dynamic import of xlsx package
       const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(sample.sampleRows, { header: sample.headers });
       const wb = XLSX.utils.book_new();
@@ -108,7 +108,7 @@ router.get('/sample/:type', async (req, res, next) => {
 
     // If client requested CSV string directly:
     if (req.query.format === 'csv') {
-      // @ts-ignore
+      // @ts-expect-error Dynamic import of xlsx package
       const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(sample.sampleRows, { header: sample.headers });
       const csvContent = XLSX.utils.sheet_to_csv(ws);
