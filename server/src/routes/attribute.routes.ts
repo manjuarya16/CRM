@@ -20,6 +20,54 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/attributes/bulk-delete
+router.post('/bulk-delete', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Please provide array of attribute IDs to delete' });
+    }
+    const numericIds = ids.map(Number).filter(Boolean);
+    const deletedCount = await AttributeService.deleteBulk(numericIds);
+    return res.json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} attributes`,
+      deletedCount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to bulk delete attributes' });
+  }
+});
+
+// DELETE /api/attributes/all or POST /api/attributes/delete-all
+router.delete('/all', async (req: Request, res: Response) => {
+  try {
+    const { search, entity_type } = req.query;
+    const deletedCount = await AttributeService.deleteAll(entity_type as string, search as string);
+    return res.json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} attributes`,
+      deletedCount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to delete all attributes' });
+  }
+});
+
+router.post('/delete-all', async (req: Request, res: Response) => {
+  try {
+    const { search, entity_type } = req.body;
+    const deletedCount = await AttributeService.deleteAll(entity_type, search);
+    return res.json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} attributes`,
+      deletedCount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to delete all attributes' });
+  }
+});
+
 // GET /api/attributes/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {

@@ -29,9 +29,11 @@ const AttributesPage: React.FC = () => {
   const [selectedAttribute, setSelectedAttribute] = useState<IAttribute | null>(null);
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   useEffect(() => {
     setPage(1);
+    setSelectedIds([]);
     fetchAttributes();
   }, [entityFilter, typeFilter]);
 
@@ -58,6 +60,7 @@ const AttributesPage: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
+    setSelectedIds([]);
     fetchAttributes();
   };
 
@@ -76,6 +79,7 @@ const AttributesPage: React.FC = () => {
       try {
         await API.delete(`/attributes/${attr.id}`);
         Swal.fire("Deleted!", "Attribute deleted successfully.", "success");
+        setSelectedIds((prev) => prev.filter((id) => id !== Number(attr.id)));
         fetchAttributes();
       } catch (err: any) {
         const msg = err.response?.data?.message || "Failed to delete attribute";
@@ -84,8 +88,121 @@ const AttributesPage: React.FC = () => {
     }
   };
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // BULK & DELETE ALL HANDLERS
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const handleSelectAllOnPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const pageIds = paginatedAttributes.map((a) => Number(a.id)).filter(Boolean);
+      const combined = Array.from(new Set([...selectedIds, ...pageIds]));
+      setSelectedIds(combined);
+    } else {
+      const pageIds = new Set(paginatedAttributes.map((a) => Number(a.id)));
+      setSelectedIds(selectedIds.filter((id) => !pageIds.has(id)));
+    }
+  };
+
+  const handleSelectRow = (id: number) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter((i) => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+
+    const result = await Swal.fire({
+      title: `Delete ${selectedIds.length} Attributes?`,
+      text: `Are you sure you want to delete ${selectedIds.length} selected attribute(s)? Associated custom field values will be permanently removed.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: `Yes, Delete (${selectedIds.length})`,
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setLoading(true);
+        const res = await API.post("/attributes/bulk-delete", { ids: selectedIds });
+        if (res.data?.success) {
+          Swal.fire(
+            "Deleted!",
+            res.data.message || `${selectedIds.length} attributes deleted successfully.`,
+            "success"
+          );
+          setSelectedIds([]);
+          fetchAttributes();
+        }
+      } catch (err: any) {
+        const msg = err.response?.data?.message || "Failed to bulk delete attributes";
+        Swal.fire("Error", msg, "error");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (attributes.length === 0) return;
+
+    const filterDesc = entityFilter !== "all" ? ` for "${entityFilter}"` : "";
+    const searchDesc = search ? ` matching "${search}"` : "";
+    const targetDesc =
+      filterDesc || searchDesc
+        ? `filtered attributes (${attributes.length} items)`
+        : `ALL ${attributes.length} custom attributes`;
+
+    const result = await Swal.fire({
+      title: "Delete ALL Attributes?",
+      text: `CRITICAL WARNING: Are you sure you want to delete ${targetDesc}? This will permanently remove all attribute definitions and associated dynamic field values!`,
+      icon: "error",
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, Delete All!",
+      input: "text",
+      inputPlaceholder: 'Type "DELETE" to confirm',
+      inputValidator: (value) => {
+        if (value !== "DELETE") {
+          return 'You must type "DELETE" in capital letters to confirm!';
+        }
+      },
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setLoading(true);
+        const res = await API.post("/attributes/delete-all", {
+          entity_type: entityFilter !== "all" ? entityFilter : undefined,
+          search: search || undefined,
+        });
+        if (res.data?.success) {
+          Swal.fire(
+            "Deleted!",
+            res.data.message || "All custom attributes deleted successfully.",
+            "success"
+          );
+          setSelectedIds([]);
+          fetchAttributes();
+        }
+      } catch (err: any) {
+        const msg = err.response?.data?.message || "Failed to delete all attributes";
+        Swal.fire("Error", msg, "error");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const totalPages = Math.ceil(attributes.length / perPage) || 1;
   const paginatedAttributes = attributes.slice((page - 1) * perPage, page * perPage);
+  const isAllPageSelected =
+    paginatedAttributes.length > 0 &&
+    paginatedAttributes.every((a) => selectedIds.includes(Number(a.id)));
 
   return (
     <>
@@ -107,15 +224,29 @@ const AttributesPage: React.FC = () => {
             </p>
           </div>
 
-          {canCreate && (
-            <Link
-              to="/settings/attributes/create"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold shadow-sm transition-all self-start sm:self-auto"
-            >
-              <i className="mgc_add_line text-base"></i>
-              <span>Create Attribute</span>
-            </Link>
-          )}
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {canDelete && attributes.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+                title="Delete all attributes"
+              >
+                <i className="mgc_delete_2_line text-base"></i>
+                <span>Delete All</span>
+              </button>
+            )}
+
+            {canCreate && (
+              <Link
+                to="/settings/attributes/create"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold shadow-sm transition-all"
+              >
+                <i className="mgc_add_line text-base"></i>
+                <span>Create Attribute</span>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Filter Card */}
@@ -200,6 +331,33 @@ const AttributesPage: React.FC = () => {
           </form>
         </div>
 
+        {/* Bulk Actions Banner */}
+        {canDelete && selectedIds.length > 0 && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3.5 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+              <i className="mgc_check_circle_fill text-lg"></i>
+              <span>Selected {selectedIds.length} attribute(s)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+              >
+                Deselect All
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-all"
+              >
+                <i className="mgc_delete_2_line"></i>
+                <span>Delete Selected ({selectedIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Data Grid / Table */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           {loading ? (
@@ -217,18 +375,31 @@ const AttributesPage: React.FC = () => {
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
                 No custom attributes match your search criteria. Create a new custom attribute to get started.
               </p>
-              <Link
-                to="/settings/attributes/create"
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-xs font-semibold"
-              >
-                <i className="mgc_add_line"></i> Create Attribute
-              </Link>
+              {canCreate && (
+                <Link
+                  to="/settings/attributes/create"
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-xs font-semibold"
+                >
+                  <i className="mgc_add_line"></i> Create Attribute
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                   <tr>
+                    {canDelete && (
+                      <th className="px-4 py-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllPageSelected}
+                          onChange={handleSelectAllOnPage}
+                          className="rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          title="Select all on this page"
+                        />
+                      </th>
+                    )}
                     <th className="px-5 py-3.5">ID</th>
                     <th className="px-5 py-3.5">Code</th>
                     <th className="px-5 py-3.5">Name</th>
@@ -245,12 +416,27 @@ const AttributesPage: React.FC = () => {
                       label: attr.entity_type,
                       badge: "bg-gray-100 text-gray-800 border-gray-200",
                     };
+                    const isSelected = selectedIds.includes(Number(attr.id));
 
                     return (
                       <tr
                         key={attr.id}
-                        className="hover:bg-gray-50/80 dark:hover:bg-gray-750 transition-colors"
+                        className={`transition-colors ${
+                          isSelected
+                            ? "bg-red-50/40 dark:bg-red-900/10 hover:bg-red-50/70"
+                            : "hover:bg-gray-50/80 dark:hover:bg-gray-750"
+                        }`}
                       >
+                        {canDelete && (
+                          <td className="px-4 py-3.5 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleSelectRow(Number(attr.id))}
+                              className="rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="px-5 py-3.5 font-medium text-gray-500">
                           #{attr.id}
                         </td>
