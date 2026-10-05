@@ -45,26 +45,108 @@ const CreateImportPage: React.FC = () => {
     sampleErrors: Array<{ row: number; error: string }>;
   } | null>(null);
 
+const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<string, any>[] }> = {
+  persons: {
+    headers: ["name", "emails", "contact_numbers", "job_title", "organization_id", "user_id"],
+    sampleRows: [
+      {
+        name: "Wilson Fisk",
+        emails: "wilson.fisk@example.com",
+        contact_numbers: "+1-555-0101",
+        job_title: "Chief Executive Officer",
+        organization_id: 1,
+        user_id: 1,
+      },
+      {
+        name: "Sasha Calle",
+        emails: "sasha.calle@example.com",
+        contact_numbers: "+1-555-0102",
+        job_title: "Sales Director",
+        organization_id: 1,
+        user_id: 1,
+      },
+    ],
+  },
+  leads: {
+    headers: ["title", "description", "lead_value", "user_id", "person_id", "organization_id", "lead_pipeline_id", "lead_pipeline_stage_id", "expected_close_date"],
+    sampleRows: [
+      {
+        title: "Enterprise Cloud Migration",
+        description: "Migration to dedicated cloud instance",
+        lead_value: 20000,
+        user_id: 1,
+        person_id: 1,
+        organization_id: 1,
+        lead_pipeline_id: 1,
+        lead_pipeline_stage_id: 1,
+        expected_close_date: "2026-11-30",
+      },
+    ],
+  },
+  organizations: {
+    headers: ["name", "address", "user_id"],
+    sampleRows: [
+      {
+        name: "Apex Global Dynamics",
+        address: "123 Market St, San Francisco, CA",
+        user_id: 1,
+      },
+      {
+        name: "Quantum Solutions LLC",
+        address: "456 Tech Blvd, Austin, TX",
+        user_id: 1,
+      },
+    ],
+  },
+  products: {
+    headers: ["name", "sku", "description", "price", "quantity"],
+    sampleRows: [
+      {
+        name: "CRM Enterprise License",
+        sku: "CRM-ENT-001",
+        description: "Annual Enterprise License",
+        price: 1200,
+        quantity: 10,
+      },
+      {
+        name: "Data Migration & API Integration",
+        sku: "SRV-MIG-002",
+        description: "Full service data migration",
+        price: 5000,
+        quantity: 1,
+      },
+    ],
+  },
+};
+
   // Fetch sample metadata (standard fields + custom attributes) whenever module type changes
   useEffect(() => {
     fetchModuleSampleMeta(type);
   }, [type]);
 
   const fetchModuleSampleMeta = async (currentType: string) => {
+    const key = currentType.toLowerCase();
+    const fallback = DEFAULT_SAMPLES[key] || { headers: [], sampleRows: [] };
     try {
       setLoadingSample(true);
-      const res = await API.get(`/data-transfer/sample/${currentType.toLowerCase()}`);
+      const res = await API.get(`/data-transfer/sample/${key}`);
       if (res.data) {
         setSampleMeta({
-          headers: res.data.headers || [],
-          sampleRows: res.data.data || [],
+          headers: res.data.headers && res.data.headers.length > 0 ? res.data.headers : fallback.headers,
+          sampleRows: res.data.data && res.data.data.length > 0 ? res.data.data : fallback.sampleRows,
           customAttributes: res.data.customAttributes || [],
+        });
+      } else {
+        setSampleMeta({
+          headers: fallback.headers,
+          sampleRows: fallback.sampleRows,
+          customAttributes: [],
         });
       }
     } catch {
       setSampleMeta({
-        headers: [],
-        sampleRows: [],
+        headers: fallback.headers,
+        sampleRows: fallback.sampleRows,
         customAttributes: [],
       });
     } finally {
@@ -183,10 +265,11 @@ const CreateImportPage: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch {
-      // 2. Fallback: generate file in-browser via XLSX library using sampleMeta
+      // 2. Fallback: generate file in-browser via XLSX library using sampleMeta / fallback
       try {
-        const headers = sampleMeta.headers;
-        const rows = sampleMeta.sampleRows;
+        const fallback = DEFAULT_SAMPLES[typeKey] || { headers: [], sampleRows: [] };
+        const headers = sampleMeta.headers && sampleMeta.headers.length > 0 ? sampleMeta.headers : fallback.headers;
+        const rows = sampleMeta.sampleRows && sampleMeta.sampleRows.length > 0 ? sampleMeta.sampleRows : fallback.sampleRows;
 
         if (chosenFormat === "xlsx") {
           const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
