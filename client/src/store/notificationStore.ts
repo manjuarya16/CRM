@@ -136,15 +136,13 @@ export const useNotificationStore = create<INotificationStore>((set, get) => ({
     }
   },
 
-  startPolling: (intervalMs = DEFAULT_POLL_INTERVAL_MS) => {
-    // Initial fetch immediately
+  startPolling: (intervalMs = 30000) => {
+    // Initial unread count fetch
     get().fetchUnreadCount();
-    get().fetchNotifications(get().activePage, get().activeLimit, get().activeModule, get().activeIsRead, true);
 
-    // Poll every 5 seconds for count & list, preserving current active filters silently in background
+    // Poll lightweight unread count every 30 seconds
     const interval = setInterval(() => {
       get().fetchUnreadCount();
-      get().fetchNotifications(get().activePage, get().activeLimit, get().activeModule, get().activeIsRead, true);
     }, intervalMs);
 
     return () => clearInterval(interval);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import API from "@/config";
+import API, { API_URL } from "@/config";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 
@@ -236,7 +236,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
     }
   };
 
-  const handleDownloadSample = async (formatParam?: any) => {
+  const handleDownloadSample = (formatParam?: any) => {
     const chosenFormat =
       typeof formatParam === "string" && formatParam.toLowerCase() === "csv"
         ? "csv"
@@ -252,7 +252,20 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
-        XLSX.writeFile(wb, `sample_${typeKey}_import.xlsx`);
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbout], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `sample_${typeKey}_import.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 500);
       } else {
         const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
         const csvContent = XLSX.utils.sheet_to_csv(ws, { FS: fieldSeparator || "," });
@@ -263,15 +276,15 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         link.setAttribute("download", `sample_${typeKey}_import.csv`);
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 500);
       }
     } catch (clientErr: any) {
-      Swal.fire({
-        icon: "error",
-        title: "Download Error",
-        text: clientErr.message || "Failed to download sample file",
-      });
+      console.error("Download Error:", clientErr);
+      const directUrl = `${API_URL || "http://localhost:3040/api"}/data-transfer/sample/${typeKey}?format=${chosenFormat}`;
+      window.open(directUrl, "_blank");
     }
   };
 
