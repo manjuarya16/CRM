@@ -181,7 +181,10 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
     // 404 NOT FOUND
     if (status === 404) {
       console.warn("404 Not Found:", error.config?.url);
-      showNotification("Resource not found", "warning");
+      const isSilentPoll = error.config?.url?.includes("/notifications");
+      if (!isSilentPoll) {
+        showNotification("Resource not found", "warning");
+      }
       return Promise.reject(error);
     }
 

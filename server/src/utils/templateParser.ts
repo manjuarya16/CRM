@@ -54,39 +54,51 @@ export async function fetchTemplateContext(params: {
   let quoteId = params.quote_id ? Number(params.quote_id) : null;
   let productId = params.product_id ? Number(params.product_id) : null;
 
-  // Direct fetch Activity using DB function fn_get_activity_by_id
+  // Direct fetch Activity
   if (activityId) {
     try {
-      const actRes = await pool.query(`SELECT * FROM fn_get_activity_by_id($1)`, [activityId]);
+      const actRes = await pool.query(
+        `SELECT a.*, u.name AS user_name, u.email AS user_email
+         FROM public.activities a
+         LEFT JOIN public.users u ON u.id = a.user_id
+         WHERE a.id = $1`,
+        [activityId]
+      );
       if (actRes.rows[0]) {
         context.activity = actRes.rows[0];
       }
     } catch (err) {
-      logger.error({ err, activityId }, 'fetchTemplateContext: fn_get_activity_by_id failed');
+      logger.error({ err, activityId }, 'fetchTemplateContext: activity query failed');
     }
   }
 
-  // Direct fetch Quote using DB function fn_get_quote_by_id
+  // Direct fetch Quote
   if (quoteId) {
     try {
-      const qRes = await pool.query(`SELECT * FROM fn_get_quote_by_id($1)`, [quoteId]);
+      const qRes = await pool.query(
+        `SELECT q.*, u.name AS user_name, u.email AS user_email
+         FROM public.quotes q
+         LEFT JOIN public.users u ON u.id = q.user_id
+         WHERE q.id = $1`,
+        [quoteId]
+      );
       if (qRes.rows[0]) {
         context.quote = qRes.rows[0];
       }
     } catch (err) {
-      logger.error({ err, quoteId }, 'fetchTemplateContext: fn_get_quote_by_id failed');
+      logger.error({ err, quoteId }, 'fetchTemplateContext: quote query failed');
     }
   }
 
-  // Direct fetch Product using DB function fn_get_product_by_id
+  // Direct fetch Product
   if (productId) {
     try {
-      const pRes = await pool.query(`SELECT * FROM fn_get_product_by_id($1)`, [productId]);
+      const pRes = await pool.query(`SELECT * FROM public.products WHERE id = $1`, [productId]);
       if (pRes.rows[0]) {
         context.product = pRes.rows[0];
       }
     } catch (err) {
-      logger.error({ err, productId }, 'fetchTemplateContext: fn_get_product_by_id failed');
+      logger.error({ err, productId }, 'fetchTemplateContext: product query failed');
     }
   }
 
@@ -109,18 +121,43 @@ export async function fetchTemplateContext(params: {
     }
   }
 
-  // ─── Fetch LEAD using DB function fn_get_lead_by_id ──────────────────────────
+  // ─── Fetch LEAD ──────────────────────────
   if (leadId) {
     try {
-      const { rows } = await pool.query(`SELECT * FROM fn_get_lead_by_id($1)`, [leadId]);
+      const { rows } = await pool.query(
+        `SELECT l.*,
+                p.name AS person_name,
+                p.emails AS person_emails,
+                p.contact_numbers AS person_contact_numbers,
+                o.name AS organization_name,
+                u.name AS user_name,
+                u.email AS user_email,
+                s.name AS stage_name,
+                src.name AS source_name,
+                pipe.name AS pipeline_name,
+                lt.name AS type_name
+         FROM public.leads l
+         LEFT JOIN public.persons p ON p.id = l.person_id
+         LEFT JOIN public.organizations o ON o.id = l.organization_id
+         LEFT JOIN public.users u ON u.id = l.user_id
+         LEFT JOIN public.lead_pipeline_stages s ON s.id = l.lead_pipeline_stage_id
+         LEFT JOIN public.lead_sources src ON src.id = l.lead_source_id
+         LEFT JOIN public.lead_pipelines pipe ON pipe.id = l.lead_pipeline_id
+         LEFT JOIN public.lead_types lt ON lt.id = l.lead_type_id
+         WHERE l.id = $1`,
+        [leadId]
+      );
       if (rows[0]) {
         context.lead = rows[0];
         if (!personId && rows[0].person_id) {
           personId = rows[0].person_id;
         }
+        if (!organizationId && rows[0].organization_id) {
+          organizationId = rows[0].organization_id;
+        }
       }
     } catch (err) {
-      logger.error({ err, leadId }, 'fetchTemplateContext: fn_get_lead_by_id failed');
+      logger.error({ err, leadId }, 'fetchTemplateContext: lead query failed');
     }
 
     // Fetch latest ACTIVITY linked to this lead if not direct
@@ -283,13 +320,12 @@ export async function fetchTemplateContext(params: {
 
   if (organizationId) {
     try {
-      const { rows } = await pool.query(`SELECT get_organization($1) AS data`, [organizationId]);
-      if (rows[0]?.data) {
-        const orgData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
-        context.organization = orgData;
+      const { rows } = await pool.query(`SELECT * FROM public.organizations WHERE id = $1`, [organizationId]);
+      if (rows[0]) {
+        context.organization = rows[0];
       }
     } catch (err) {
-      logger.error({ err, organizationId }, 'fetchTemplateContext: get_organization failed');
+      logger.error({ err, organizationId }, 'fetchTemplateContext: organization query failed');
     }
   }
 

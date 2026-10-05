@@ -74,22 +74,30 @@ function buildTransporterOptions(config: SmtpSettingsConfig) {
   const cleanPass = (config.pass || '').trim().replace(/\s+/g, '');
 
   const hostLower = (config.host || '').toLowerCase();
-  const isGmail = hostLower.includes('gmail');
+  const isGmail = hostLower.includes('gmail') || hostLower === 'smtp.gmail.com';
+
+  const port = Number(config.port) || (config.secure ? 465 : 587);
+  const isSecure = config.secure ?? (port === 465);
 
   if (isGmail) {
     return {
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port,
+      secure: isSecure,
       auth: {
         user: cleanUser,
         pass: cleanPass,
+      },
+      tls: {
+        rejectUnauthorized: false,
       },
     };
   }
 
   return {
     host: config.host,
-    port: config.port,
-    secure: config.secure,
+    port,
+    secure: isSecure,
     auth: {
       user: cleanUser,
       pass: cleanPass,
