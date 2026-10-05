@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 
 export interface ExtractedProduct {
   name: string;
@@ -27,6 +28,7 @@ export interface ExtractedLeadData {
 
 /**
  * Extracts plain text from a PDF, text file, or binary document buffer.
+ * Supports standard PDF text streams, zlib/FlateDecode compressed streams, and hex encoded strings.
  */
 export function extractTextFromBuffer(buffer: Buffer, originalFilename: string): string {
   const ext = path.extname(originalFilename).toLowerCase();
@@ -35,43 +37,85 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
     return buffer.toString('utf8');
   }
 
-  // Handle PDF extraction
   const raw = buffer.toString('latin1');
   const textChunks: string[] = [];
 
-  // Match PDF string literals: (Text here) Tj or [(T)(e)(x)(t)] TJ
-  const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
-  let match;
-  while ((match = tjRegex.exec(raw)) !== null) {
-    const unescaped = match[1]
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\t/g, '\t')
-      .replace(/\\([()\\])/g, '$1');
-    textChunks.push(unescaped);
+  // 1. Locate all stream...endstream sections and decompress flated streams
+  const decompressedStreams: string[] = [];
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let sMatch;
+  while ((sMatch = streamRegex.exec(raw)) !== null) {
+    const streamContent = sMatch[1];
+    const streamBuffer = Buffer.from(streamContent, 'latin1');
+    try {
+      const inflated = zlib.inflateSync(streamBuffer);
+      decompressedStreams.push(inflated.toString('latin1'));
+    } catch {
+      try {
+        const rawInflated = zlib.inflateRawSync(streamBuffer);
+        decompressedStreams.push(rawInflated.toString('latin1'));
+      } catch {
+        decompressedStreams.push(streamContent);
+      }
+    }
   }
 
-  // Match PDF array text: [ (text1) 20 (text2) ] TJ
-  const arrayTjRegex = /\[\s*((?:\([^)]*\)|[0-9\s.-]+)+)\s*\]\s*TJ/g;
-  while ((match = arrayTjRegex.exec(raw)) !== null) {
-    const subStrRegex = /\(([^)]+)\)/g;
-    let subMatch;
-    let fullWord = '';
-    while ((subMatch = subStrRegex.exec(match[1])) !== null) {
-      fullWord += subMatch[1].replace(/\\([()\\])/g, '$1');
+  // Combine raw content and decompressed streams
+  const sources = [raw, ...decompressedStreams];
+
+  for (const src of sources) {
+    // Match PDF string literals: (Text here) Tj or (Text here) '
+    const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
+    let match;
+    while ((match = tjRegex.exec(src)) !== null) {
+      const unescaped = match[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\([()\\])/g, '$1');
+      if (unescaped.trim()) {
+        textChunks.push(unescaped.trim());
+      }
     }
-    if (fullWord) {
-      textChunks.push(fullWord);
+
+    // Match PDF array text: [ (text1) 20 (text2) ] TJ
+    const arrayTjRegex = /\[\s*((?:\([^)]*\)|[0-9\s.-]+)+)\s*\]\s*TJ/g;
+    while ((match = arrayTjRegex.exec(src)) !== null) {
+      const subStrRegex = /\(([^)]+)\)/g;
+      let subMatch;
+      let fullWord = '';
+      while ((subMatch = subStrRegex.exec(match[1])) !== null) {
+        fullWord += subMatch[1].replace(/\\([()\\])/g, '$1');
+      }
+      if (fullWord.trim()) {
+        textChunks.push(fullWord.trim());
+      }
+    }
+
+    // Match Hex strings: <48656c6c6f> Tj
+    const hexTjRegex = /<([0-9a-fA-F]{4,})>\s*(?:Tj|'|")/g;
+    while ((match = hexTjRegex.exec(src)) !== null) {
+      const hex = match[1];
+      let str = '';
+      for (let i = 0; i < hex.length; i += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+      }
+      if (str.trim() && /[a-zA-Z0-9]/.test(str)) {
+        textChunks.push(str.trim());
+      }
     }
   }
 
   // Fallback: If no PDF text operators matched, scan for printable ASCII character sequences
   if (textChunks.length === 0) {
-    const asciiRegex = /[a-zA-Z0-9@+._\s-]{4,}/g;
-    while ((match = asciiRegex.exec(raw)) !== null) {
-      const candidate = match[0].trim();
-      if (candidate.includes('@') || candidate.includes(':') || candidate.length > 8) {
-        textChunks.push(candidate);
+    for (const src of sources) {
+      const asciiRegex = /[a-zA-Z0-9@+._\s-]{4,}/g;
+      let am;
+      while ((am = asciiRegex.exec(src)) !== null) {
+        const candidate = am[0].trim();
+        if (candidate.includes('@') || candidate.includes(':') || candidate.length > 8) {
+          textChunks.push(candidate);
+        }
       }
     }
   }
@@ -99,7 +143,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   // 2. Phone extraction
   const phonePatterns = [
-    /(?:phone|mobile|tel|contact(?:\s*no|\s*number)?|cell)\s*[:=-]\s*([+]?[0-9\s().-]{7,20})/i,
+    /(?:phone|mobile|tel|contact(?:\s*no|\s*number)?|cell)\s*[:=-]?\s*([+]?[0-9\s().-]{7,20})/i,
     /([+]?\d{1,3}[-.\s]?(?:\(\d{2,4}\)|\d{2,4})[-.\s]?\d{3,4}[-.\s]?\d{3,5})/,
   ];
   for (const pat of phonePatterns) {
@@ -190,7 +234,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   }
 
   // 7. Expected Close Date
-  const dateMatch = text.match(/(?:expected\s*close\s*date|close\s*date|target\s*date|due\s*date)\s*[:=-]\s*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i);
+  const dateMatch = text.match(/(?:expected\s*close\s*date|target\s*close\s*date|close\s*date|target\s*date|due\s*date)\s*[:=-]\s*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i);
   if (dateMatch && dateMatch[1]) {
     result.expectedCloseDate = dateMatch[1].trim();
   }
@@ -200,7 +244,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const addedProductNames = new Set<string>();
 
   // Pattern A: Product: Name, Qty: X, Price: Y
-  const productLineRegex = /(?:product|item|service|package|software|hardware)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
+  const productLineRegex = /(?:product|item|service|package|software|hardware)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._&/()+-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount|unit\s*price)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
   let pMatch;
   while ((pMatch = productLineRegex.exec(text)) !== null) {
     const name = pMatch[1]?.trim();
@@ -214,7 +258,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   }
 
   // Pattern B: Line items like "1. Product Name - 2 x $500" or "Product Name x 3 @ $100"
-  const itemRowRegex = /(?:^|\n)\s*(?:\d+[\).])?\s*([A-Za-z0-9][A-Za-z0-9\s._-]{2,40})\s+[-–—]?\s*(?:(?:qty|quantity)?\s*[:=]?\s*(\d+)\s*(?:x|@|units?)\s*)?[$€£₹]\s*([0-9,]+(?:\.[0-9]{1,2})?)/gi;
+  const itemRowRegex = /(?:^|\n)\s*(?:\d+[\).])?\s*([A-Za-z0-9][A-Za-z0-9\s._&/()+-]{2,40})\s+[-–—]?\s*(?:(?:qty|quantity)?\s*[:=]?\s*(\d+)\s*(?:x|@|units?)\s*)?[$€£₹]\s*([0-9,]+(?:\.[0-9]{1,2})?)/gi;
   let rowMatch;
   while ((rowMatch = itemRowRegex.exec(text)) !== null) {
     const name = rowMatch[1]?.trim();
@@ -228,12 +272,12 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   result.products = productList;
 
-  // 9. Lead Value extraction
-  const valuePatterns = [
-    /(?:lead\s*value|value|budget|deal\s*size|grand\s*total|total\s*amount|total|amount|price|cost)\s*[:=-]?\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-    /[$€£₹]\s*([0-9,]+(?:\.[0-9]{1,2})?)/,
+  // 9. Lead Value extraction (Prioritize explicit Total / Lead Value keywords)
+  const totalValuePatterns = [
+    /(?:total\s*lead\s*value|grand\s*total|total\s*amount|total\s*value|lead\s*value|deal\s*size|budget)\s*[:=-]?\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
+    /(?:total|amount|price|cost)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
   ];
-  for (const pat of valuePatterns) {
+  for (const pat of totalValuePatterns) {
     const vMatch = text.match(pat);
     if (vMatch && vMatch[1]) {
       const cleanNum = parseFloat(vMatch[1].replace(/,/g, ''));
@@ -265,6 +309,14 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         result.title = candidate;
         break;
       }
+    }
+  }
+
+  // If no explicit keyword title found, check first non-meta heading line
+  if (!result.title && lines.length > 0) {
+    const firstLine = lines[0];
+    if (firstLine.length >= 4 && !firstLine.includes(':') && !firstLine.includes('@')) {
+      result.title = firstLine;
     }
   }
 
