@@ -7,12 +7,10 @@
     "baseUrl": ".",
     "paths": {
       "@src/*": [
-        "src/*",
-        "dist/*"
+        "src/*"
       ],
       "@/*": [
-        "src/*",
-        "dist/*"
+        "src/*"
       ]
     },
     "esModuleInterop": true,
