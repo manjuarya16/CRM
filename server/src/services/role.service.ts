@@ -26,7 +26,17 @@ export class RoleService {
         'SELECT get_all_roles($1) as result',
         [searchTerm]
       );
-      return rows[0]?.result || [];
+      const roles: IRole[] = rows[0]?.result || [];
+      if (roles.length > 0 && roles[0].parent_role_id === undefined) {
+        const { rows: directRows } = await pool.query(
+          'SELECT id, parent_role_id FROM roles'
+        );
+        const map = new Map(directRows.map((r: any) => [Number(r.id), r.parent_role_id ? Number(r.parent_role_id) : null]));
+        roles.forEach((r) => {
+          r.parent_role_id = map.get(Number(r.id)) ?? null;
+        });
+      }
+      return roles;
     } catch (error: any) {
       logger.error({ error, search }, 'RoleService.getAll failed');
       throw error;
@@ -43,7 +53,17 @@ export class RoleService {
         'SELECT get_role($1) as result',
         [roleId]
       );
-      return rows[0]?.result || null;
+      const role: IRole | null = rows[0]?.result || null;
+      if (role && role.parent_role_id === undefined) {
+        const { rows: directRows } = await pool.query(
+          'SELECT parent_role_id FROM roles WHERE id = $1',
+          [roleId]
+        );
+        if (directRows[0]) {
+          role.parent_role_id = directRows[0].parent_role_id ? Number(directRows[0].parent_role_id) : null;
+        }
+      }
+      return role;
     } catch (error: any) {
       logger.error({ error, id }, 'RoleService.getById failed');
       throw error;

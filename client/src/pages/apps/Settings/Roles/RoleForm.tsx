@@ -9,6 +9,7 @@ import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { IRole, MatrixModule, RoleFormProps } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { useAuthStore } from "@/store";
+import { buildHierarchicalRoleList } from "@/utils/roleHierarchy";
 
 export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [parentRoleId, setParentRoleId] = useState<number | null>(null);
+  const [roleDetails, setRoleDetails] = useState<IRole | null>(null);
   const [permissionType, setPermissionType] = useState<"all" | "custom">("custom");
   const [permissions, setPermissions] = useState<string[]>([]);
   const [allRoles, setAllRoles] = useState<IRole[]>([]);
@@ -72,6 +74,10 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
     return allRoles.filter((r) => allowedIds.has(Number(r.id)));
   }, [allRoles, currentUserRole, isAllAccess]);
 
+  const hierarchicalParentRoles = React.useMemo(() => {
+    return buildHierarchicalRoleList(visibleParentRoles);
+  }, [visibleParentRoles]);
+
   useEffect(() => {
     fetchAllRoles();
     if (mode === "edit" && id) {
@@ -96,7 +102,15 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       if (data) {
         setName(data.name || "");
         setDescription(data.description || "");
-        setParentRoleId(data.parent_role_id ? Number(data.parent_role_id) : null);
+
+        const initialParentId =
+          data.parent_role_id != null &&
+          String(data.parent_role_id).trim() !== "" &&
+          Number(data.parent_role_id) > 0
+            ? Number(data.parent_role_id)
+            : null;
+        setParentRoleId(initialParentId);
+
         const type = (data.permission_type as "all" | "custom") || "custom";
         setPermissionType(type);
 
@@ -336,11 +350,11 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
               className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#4f46e5] focus:border-transparent cursor-pointer"
             >
               <option value="">-- None (Top-Level Role) --</option>
-              {visibleParentRoles
+              {hierarchicalParentRoles
                 .filter((r) => !id || String(r.id) !== String(id))
                 .map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name}
+                    {"\u00A0\u00A0\u00A0\u00A0".repeat(r.__depth || 0)}{r.__depth ? "└── " : ""}{r.name}
                   </option>
                 ))}
             </select>

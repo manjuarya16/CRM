@@ -21,11 +21,28 @@ const getProducts = async (req: Request, res: Response): Promise<void> => {
       [search, page, limit]
     );
 
-    const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
+    let products = result.rows;
+    if (products.length > 0) {
+      const ids = products.map((p: any) => p.id);
+      const attrRes = await connection.query(
+        "SELECT id, custom_attributes FROM products WHERE id = ANY($1::int[])",
+        [ids]
+      );
+      const attrMap = new Map(attrRes.rows.map((r: any) => [r.id, r.custom_attributes || {}]));
+      products.forEach((p: any) => {
+        p.custom_attributes = attrMap.get(p.id) || {};
+      });
+    }
+
+    if (req.query.sellable_only === "true" || req.query.in_stock_only === "true") {
+      products = products.filter((p: any) => Number(p.quantity) > 0);
+    }
+
+    const total = products.length > 0 ? Number(products[0].total_count || products.length) : 0;
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      data: result.rows,
+      data: products,
       total,
       page,
       limit,
@@ -65,19 +82,26 @@ const getProductById = async (req: Request, res: Response): Promise<void> => {
       productData.custom_attributes = pRes.rows[0]?.custom_attributes || {};
     }
 
-    // Fetch warehouse inventories for this product
+    // DB Function call: get_product_inventories(p_product_id)
     try {
       const invRes = await connection.query(
-        `SELECT pi.id, pi.product_id, pi.warehouse_id, pi.warehouse_location_id, pi.in_stock, pi.allocated,
-                w.name as warehouse_name, wl.name as warehouse_location_name
-         FROM product_inventories pi
-         LEFT JOIN warehouses w ON w.id = pi.warehouse_id
-         LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
-         WHERE pi.product_id = $1
-         ORDER BY pi.id ASC`,
+        "SELECT get_product_inventories($1::integer) as result",
         [id]
-      );
-      productData.inventories = invRes.rows || [];
+      ).catch(async () => {
+        return (connection as PoolClient).query(
+          `SELECT pi.id, pi.product_id, pi.warehouse_id, pi.warehouse_location_id, pi.in_stock, pi.allocated,
+                  w.name as warehouse_name, wl.name as warehouse_location_name
+           FROM product_inventories pi
+           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+           WHERE pi.product_id = $1
+           ORDER BY pi.id ASC`,
+          [id]
+        );
+      });
+      productData.inventories = Array.isArray(invRes.rows[0]?.result)
+        ? invRes.rows[0].result
+        : invRes.rows || [];
     } catch {
       productData.inventories = [];
     }
