@@ -701,7 +701,26 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // 4. Resolve default pipeline and first stage
+    // 4. Resolve Lead Source & Lead Type
+    let sourceId: number | null = null;
+    if (parsed.source && parsed.source.trim()) {
+      const sRes = await connection.query(
+        "SELECT id FROM public.lead_sources WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
+        [parsed.source.trim(), `%${parsed.source.trim()}%`]
+      );
+      if (sRes.rows.length > 0) sourceId = sRes.rows[0].id;
+    }
+
+    let typeId: number | null = null;
+    if (parsed.type && parsed.type.trim()) {
+      const tRes = await connection.query(
+        "SELECT id FROM public.lead_types WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
+        [parsed.type.trim(), `%${parsed.type.trim()}%`]
+      );
+      if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
+    }
+
+    // 5. Resolve default pipeline and first stage
     const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
     let pipelineId: number | null = null;
     let stageId: number | null = null;
@@ -717,7 +736,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     const leadTitle = parsed.title || `Lead from ${path.basename(file.originalname, path.extname(file.originalname))}`;
 
-    // 5. Create Lead
+    // 6. Create Lead
     const leadResult = await connection.query(
       "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       [
@@ -726,14 +745,17 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
         parsed.leadValue || null,
         currentUserId,
         personId,
-        null,
-        null,
+        sourceId,
+        typeId,
         pipelineId,
-        null,
+        stageId,
       ]
     );
 
     const lead = leadResult.rows[0];
+
+    let createdProductsCount = 0;
+    let attachedProductsCount = 0;
 
     if (lead) {
       // Set stage and organization on lead
@@ -751,7 +773,62 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
         );
       }
 
-      // 6. Attach file activity to the newly created lead using fn_create_activity
+      // Update expected close date if parsed
+      if (parsed.expectedCloseDate) {
+        await connection.query(
+          "UPDATE public.leads SET expected_close_date = $1 WHERE id = $2",
+          [parsed.expectedCloseDate, lead.id]
+        ).catch(() => {});
+      }
+
+      // 7. Process & Attach Products from document
+      if (Array.isArray(parsed.products) && parsed.products.length > 0) {
+        for (const prod of parsed.products) {
+          if (!prod.name || !prod.name.trim()) continue;
+          const pName = prod.name.trim();
+          const pSku = prod.sku?.trim() || `SKU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const pQty = Number(prod.quantity) || 1;
+          const pPrice = prod.price !== undefined && prod.price !== null ? Number(prod.price) : null;
+
+          let prodId: number | null = null;
+          const pCheck = await connection.query(
+            "SELECT id, name, price FROM public.products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR (sku IS NOT NULL AND LOWER(sku) = LOWER($2)) LIMIT 1",
+            [pName, pSku]
+          );
+
+          if (pCheck.rows.length > 0) {
+            prodId = pCheck.rows[0].id;
+          } else {
+            // Create new product
+            const newProdRes = await connection.query(
+              "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
+              [
+                pSku,
+                pName,
+                prod.description || `Extracted from ${file.originalname}`,
+                pQty,
+                pPrice,
+              ]
+            );
+            const createdProduct = newProdRes.rows[0];
+            if (createdProduct && createdProduct.id) {
+              prodId = createdProduct.id;
+              createdProductsCount++;
+              WorkflowService.triggerWorkflows("products", "create", createdProduct).catch((e) => logger.error(e));
+            }
+          }
+
+          if (prodId && lead.id) {
+            await connection.query(
+              "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
+              [lead.id, prodId, pQty, pPrice]
+            );
+            attachedProductsCount++;
+          }
+        }
+      }
+
+      // 8. Attach file activity to the newly created lead using fn_create_activity
       await connection.query(
         "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         [
@@ -788,6 +865,9 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     } else if (organizationId && parsed.organization) {
       msgParts.push(`linked to organization "${parsed.organization}"`);
     }
+    if (attachedProductsCount > 0) {
+      msgParts.push(`${attachedProductsCount} product(s) added (${createdProductsCount} new)`);
+    }
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
@@ -796,6 +876,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
         ...lead,
         person_id: personId,
         organization_id: organizationId,
+        productsCount: attachedProductsCount,
         extracted: parsed,
       },
     });

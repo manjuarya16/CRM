@@ -1,6 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
+export interface ExtractedProduct {
+  name: string;
+  sku?: string;
+  quantity?: number;
+  price?: number;
+  description?: string;
+}
+
 export interface ExtractedLeadData {
   title?: string;
   leadValue?: number | null;
@@ -9,6 +17,10 @@ export interface ExtractedLeadData {
   phone?: string;
   organization?: string;
   jobTitle?: string;
+  source?: string;
+  type?: string;
+  expectedCloseDate?: string;
+  products?: ExtractedProduct[];
   description?: string;
   rawText?: string;
 }
@@ -53,7 +65,7 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
     }
   }
 
-  // Fallback: If no PDF text operators matched, scan for printable ASCII character sequences (length >= 4)
+  // Fallback: If no PDF text operators matched, scan for printable ASCII character sequences
   if (textChunks.length === 0) {
     const asciiRegex = /[a-zA-Z0-9@+._\s-]{4,}/g;
     while ((match = asciiRegex.exec(raw)) !== null) {
@@ -68,11 +80,12 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
 }
 
 /**
- * Parses structured CRM entities (Person, Org, Lead, Value, Phone, Email) from raw document text.
+ * Parses structured CRM entities (Person, Org, Lead, Products, Dates) from raw document text.
  */
 export function parseLeadDocumentText(text: string, fallbackFilename?: string): ExtractedLeadData {
   const result: ExtractedLeadData = {
     rawText: text,
+    products: [],
   };
 
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -116,7 +129,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // If no person name explicitly found but email exists, synthesize name from email (e.g. sarah.jenkins@... -> Sarah Jenkins)
+  // If no person name explicitly found but email exists, synthesize name from email
   if (!result.contactPerson && result.email) {
     const emailPrefix = result.email.split('@')[0];
     const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
@@ -141,7 +154,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // If organization not found, check email domain if not public domain (gmail, yahoo, hotmail, etc.)
+  // If organization not found, check email domain
   if (!result.organization && result.email) {
     const domain = result.email.split('@')[1]?.toLowerCase();
     const publicDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'mail.com', 'proton.me'];
@@ -165,7 +178,57 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // 6. Lead Value extraction
+  // 6. Lead Source & Type
+  const sourceMatch = text.match(/(?:lead\s*source|source|channel)\s*[:=-]\s*([^\r\n,;]+)/i);
+  if (sourceMatch && sourceMatch[1]) {
+    result.source = sourceMatch[1].trim();
+  }
+
+  const typeMatch = text.match(/(?:lead\s*type|type|deal\s*type|opportunity\s*type)\s*[:=-]\s*([^\r\n,;]+)/i);
+  if (typeMatch && typeMatch[1]) {
+    result.type = typeMatch[1].trim();
+  }
+
+  // 7. Expected Close Date
+  const dateMatch = text.match(/(?:expected\s*close\s*date|close\s*date|target\s*date|due\s*date)\s*[:=-]\s*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i);
+  if (dateMatch && dateMatch[1]) {
+    result.expectedCloseDate = dateMatch[1].trim();
+  }
+
+  // 8. Product Items extraction
+  const productList: ExtractedProduct[] = [];
+  const addedProductNames = new Set<string>();
+
+  // Pattern A: Product: Name, Qty: X, Price: Y
+  const productLineRegex = /(?:product|item|service|package|software|hardware)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
+  let pMatch;
+  while ((pMatch = productLineRegex.exec(text)) !== null) {
+    const name = pMatch[1]?.trim();
+    if (name && name.length >= 2 && !addedProductNames.has(name.toLowerCase())) {
+      const sku = pMatch[2]?.trim();
+      const qty = pMatch[3] ? parseInt(pMatch[3], 10) : 1;
+      const price = pMatch[4] ? parseFloat(pMatch[4].replace(/,/g, '')) : undefined;
+      productList.push({ name, sku, quantity: qty, price });
+      addedProductNames.add(name.toLowerCase());
+    }
+  }
+
+  // Pattern B: Line items like "1. Product Name - 2 x $500" or "Product Name x 3 @ $100"
+  const itemRowRegex = /(?:^|\n)\s*(?:\d+[\).])?\s*([A-Za-z0-9][A-Za-z0-9\s._-]{2,40})\s+[-–—]?\s*(?:(?:qty|quantity)?\s*[:=]?\s*(\d+)\s*(?:x|@|units?)\s*)?[$€£₹]\s*([0-9,]+(?:\.[0-9]{1,2})?)/gi;
+  let rowMatch;
+  while ((rowMatch = itemRowRegex.exec(text)) !== null) {
+    const name = rowMatch[1]?.trim();
+    if (name && !name.toLowerCase().includes('total') && !name.toLowerCase().includes('lead value') && !addedProductNames.has(name.toLowerCase())) {
+      const qty = rowMatch[2] ? parseInt(rowMatch[2], 10) : 1;
+      const price = rowMatch[3] ? parseFloat(rowMatch[3].replace(/,/g, '')) : undefined;
+      productList.push({ name, quantity: qty, price });
+      addedProductNames.add(name.toLowerCase());
+    }
+  }
+
+  result.products = productList;
+
+  // 9. Lead Value extraction
   const valuePatterns = [
     /(?:lead\s*value|value|budget|deal\s*size|grand\s*total|total\s*amount|total|amount|price|cost)\s*[:=-]?\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
     /[$€£₹]\s*([0-9,]+(?:\.[0-9]{1,2})?)/,
@@ -181,7 +244,15 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // 7. Lead Title extraction
+  // If leadValue not explicitly stated, sum product prices
+  if (result.leadValue == null && productList.length > 0) {
+    const sum = productList.reduce((acc, p) => acc + ((p.price || 0) * (p.quantity || 1)), 0);
+    if (sum > 0) {
+      result.leadValue = sum;
+    }
+  }
+
+  // 10. Lead Title extraction
   const titlePatterns = [
     /(?:title|subject|project\s*name|requirement|proposal\s*for|inquiry\s*for|lead\s*title)\s*[:=-]\s*([^\r\n]+)/i,
     /(?:project|deal|opportunity)\s*[:=-]\s*([^\r\n]+)/i,
@@ -216,13 +287,20 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // 8. Description / Notes summary
+  // 11. Description / Notes summary
   const summaryParts: string[] = [];
   if (result.contactPerson) summaryParts.push(`Contact: ${result.contactPerson}`);
   if (result.email) summaryParts.push(`Email: ${result.email}`);
   if (result.phone) summaryParts.push(`Phone: ${result.phone}`);
   if (result.organization) summaryParts.push(`Organization: ${result.organization}`);
   if (result.jobTitle) summaryParts.push(`Title: ${result.jobTitle}`);
+  if (result.source) summaryParts.push(`Source: ${result.source}`);
+  if (result.type) summaryParts.push(`Type: ${result.type}`);
+  if (result.expectedCloseDate) summaryParts.push(`Target Date: ${result.expectedCloseDate}`);
+  if (result.products && result.products.length > 0) {
+    const prodSummaries = result.products.map((p) => `${p.name} (Qty: ${p.quantity || 1}${p.price ? `, Price: $${p.price}` : ''})`);
+    summaryParts.push(`Products: ${prodSummaries.join(', ')}`);
+  }
   if (result.leadValue != null) summaryParts.push(`Value: $${result.leadValue.toLocaleString()}`);
 
   result.description = summaryParts.length > 0 
