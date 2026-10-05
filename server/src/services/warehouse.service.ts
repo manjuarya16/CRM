@@ -19,9 +19,36 @@ export class WarehouseService {
       );
       const warehouses: IWarehouse[] = rows[0]?.result || [];
 
-      // Attach product_count to each warehouse
+      // Attach locations and product_count to each warehouse
       if (warehouses.length > 0) {
         const ids = warehouses.map((w: any) => w.id);
+
+        // DB Function call: get_warehouse_locations(p_warehouse_ids)
+        const locRes = await pool.query(
+          'SELECT get_warehouse_locations($1::int[]) as result',
+          [ids]
+        ).catch(async () => {
+          return pool.query(
+            'SELECT id, warehouse_id, name, created_at FROM warehouse_locations WHERE warehouse_id = ANY($1::int[]) ORDER BY id ASC',
+            [ids]
+          );
+        });
+
+        const locationsList = Array.isArray(locRes.rows[0]?.result)
+          ? locRes.rows[0].result
+          : locRes.rows;
+
+        const locMap: Record<number, any[]> = {};
+        for (const loc of locationsList) {
+          const wId = Number(loc.warehouse_id);
+          if (!locMap[wId]) locMap[wId] = [];
+          locMap[wId].push({
+            id: loc.id,
+            name: loc.name,
+            created_at: loc.created_at,
+          });
+        }
+
         const countRes = await pool.query(
           `SELECT warehouse_id, COUNT(DISTINCT product_id)::int AS product_count
            FROM product_inventories
@@ -33,7 +60,9 @@ export class WarehouseService {
         for (const r of countRes.rows) {
           countMap[r.warehouse_id] = r.product_count;
         }
+
         for (const w of warehouses as any[]) {
+          w.locations = locMap[w.id] || w.locations || [];
           w.product_count = countMap[w.id] ?? 0;
         }
       }

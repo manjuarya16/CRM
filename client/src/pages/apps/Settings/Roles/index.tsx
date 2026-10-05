@@ -9,6 +9,7 @@ import { ZodError } from "zod";
 import { CRM_PERMISSION_GROUPS, ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
 import { usePermission } from "@/hooks/usePermission";
 import { useAuthStore } from "@/store";
+import { buildHierarchicalRoleList } from "@/utils/roleHierarchy";
 
 const RolesPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -356,6 +357,10 @@ const RolesPage: React.FC = () => {
 
     return roles.filter((r) => allowedIds.has(Number(r.id)));
   }, [roles, currentUserRole, isAllAccess]);
+
+  const hierarchicalRoles = React.useMemo(() => {
+    return buildHierarchicalRoleList(visibleRoles);
+  }, [visibleRoles]);
 
   const filteredRoles = React.useMemo(() => {
     const matched = visibleRoles.filter((r) => {
@@ -842,11 +847,11 @@ const RolesPage: React.FC = () => {
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-[#0088cc]"
                   >
                     <option value="">-- None (Top-Level Role) --</option>
-                    {roles
+                    {hierarchicalRoles
                       .filter((r) => !editingRole || String(r.id) !== String(editingRole.id))
                       .map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.name}
+                          {"\u00A0\u00A0\u00A0\u00A0".repeat(r.__depth || 0)}{r.__depth ? "└── " : ""}{r.name}
                         </option>
                       ))}
                   </select>

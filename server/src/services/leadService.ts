@@ -299,6 +299,14 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     // If stage explicitly provided, update stage via fn_update_lead_stage
     if (lead_pipeline_stage_id) {
+      const stagesRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages(null)");
+      const targetStage = stagesRes.rows.find((s: any) => Number(s.id) === Number(lead_pipeline_stage_id));
+      const stageCode = (targetStage?.code || "").toLowerCase();
+      const stageName = (targetStage?.name || "").toLowerCase();
+      if (stageCode.includes("won") || stageName.includes("won")) {
+        await deductStockForWonLead(connection, id);
+      }
+
       await connection.query(
         "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
         [id, Number(lead_pipeline_stage_id)]
@@ -470,6 +478,58 @@ const deleteLeadProduct = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+const deductStockForWonLead = async (connection: PoolClient, leadId: number): Promise<void> => {
+  try {
+    await connection.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_stock_deducted BOOLEAN DEFAULT FALSE;");
+    const checkRes = await connection.query("SELECT is_stock_deducted FROM leads WHERE id = $1", [leadId]);
+    if (checkRes.rows[0]?.is_stock_deducted) {
+      return;
+    }
+
+    const lpRes = await connection.query(
+      "SELECT product_id, quantity FROM lead_products WHERE lead_id = $1",
+      [leadId]
+    );
+    const leadProducts = lpRes.rows || [];
+    if (leadProducts.length === 0) return;
+
+    for (const lp of leadProducts) {
+      const productId = Number(lp.product_id);
+      const qtyToDeduct = Number(lp.quantity) || 1;
+      if (!productId || qtyToDeduct <= 0) continue;
+
+      const invRes = await connection.query(
+        "SELECT id, in_stock FROM product_inventories WHERE product_id = $1 AND in_stock > 0 ORDER BY in_stock DESC",
+        [productId]
+      );
+
+      let remaining = qtyToDeduct;
+      for (const invRow of invRes.rows) {
+        if (remaining <= 0) break;
+        const currentStock = Number(invRow.in_stock) || 0;
+        const deductAmount = Math.min(currentStock, remaining);
+        const newStock = currentStock - deductAmount;
+        remaining -= deductAmount;
+
+        await connection.query(
+          "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
+          [newStock, invRow.id]
+        );
+      }
+
+      await connection.query(
+        "UPDATE products SET quantity = GREATEST(0, COALESCE(quantity, 0) - $1), updated_at = NOW() WHERE id = $2",
+        [qtyToDeduct, productId]
+      );
+    }
+
+    await connection.query("UPDATE leads SET is_stock_deducted = TRUE WHERE id = $1", [leadId]);
+    logger.info({ leadId }, "Warehouse stock successfully deducted for won lead");
+  } catch (err: any) {
+    logger.error({ err, leadId }, "Failed to deduct warehouse stock for won lead");
+  }
+};
+
 const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
@@ -492,6 +552,13 @@ const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
     );
     const targetStage = stagesRes.rows.find((s: any) => Number(s.id) === Number(stage_id));
     const newStageName = targetStage?.name || `Stage #${stage_id}`;
+
+    // Deduct warehouse stock if transition is to a Won stage
+    const stageCode = (targetStage?.code || "").toLowerCase();
+    const stageName = (targetStage?.name || "").toLowerCase();
+    if (stageCode.includes("won") || stageName.includes("won")) {
+      await deductStockForWonLead(connection, leadId);
+    }
 
     // Update the stage
     const result = await connection.query(

@@ -41,6 +41,7 @@ const CreateProductPage: React.FC = () => {
   const [warehouses, setWarehouses] = useState<IWarehouse[]>([]);
   const [inventoryRows, setInventoryRows] = useState<WarehouseInventoryRow[]>([]);
   const [loadingWarehouses, setLoadingWarehouses] = useState<boolean>(false);
+  const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState<string>("all");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -388,56 +389,135 @@ const CreateProductPage: React.FC = () => {
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                    {inventoryRows.map((row, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg space-y-2 text-xs"
+                  <div className="space-y-3">
+                    {/* Warehouse Selector Dropdown Filter */}
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-700">
+                      <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-[#0e90d9]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        Filter Warehouse:
+                      </label>
+                      <select
+                        value={selectedWarehouseFilter}
+                        onChange={(e) => setSelectedWarehouseFilter(e.target.value)}
+                        className="px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200 font-medium transition"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-gray-800 dark:text-gray-200 truncate">
-                            {row.warehouse_name}
-                          </span>
-                          <span className="text-gray-400 font-mono text-[11px]">
-                            {row.warehouse_location_name}
-                          </span>
-                        </div>
+                        <option value="all">-- Show All Warehouses --</option>
+                        {warehouses.map((w) => (
+                          <option key={w.id} value={String(w.id)}>
+                            {w.name} ({Array.isArray(w.locations) ? w.locations.length : 1} location{Array.isArray(w.locations) && w.locations.length === 1 ? "" : "s"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-2 pt-1">
-                          <div>
-                            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">
-                              In Stock
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.in_stock}
-                              onChange={(e) => handleInventoryChange(idx, "in_stock", Number(e.target.value))}
-                              className="w-full px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">
-                              Allocated
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.allocated}
-                              onChange={(e) => handleInventoryChange(idx, "allocated", Number(e.target.value))}
-                              className="w-full px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
-                            />
-                          </div>
-                        </div>
+                    <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
+                      {(() => {
+                        const groupedMap = inventoryRows.reduce((acc, row, idx) => {
+                          const wKey = row.warehouse_id;
+                          if (!acc[wKey]) {
+                            acc[wKey] = {
+                              warehouse_id: row.warehouse_id,
+                              warehouse_name: row.warehouse_name,
+                              items: [],
+                            };
+                          }
+                          acc[wKey].items.push({ row, index: idx });
+                          return acc;
+                        }, {} as Record<number, { warehouse_id: number; warehouse_name: string; items: { row: WarehouseInventoryRow; index: number }[] }>);
+
+                        const allGroups = Object.values(groupedMap);
+                        const filteredGroups = selectedWarehouseFilter === "all"
+                          ? allGroups
+                          : allGroups.filter((g) => String(g.warehouse_id) === selectedWarehouseFilter);
+
+                        if (filteredGroups.length === 0) {
+                          return (
+                            <div className="py-4 text-center text-xs text-gray-400">
+                              No locations found for selected warehouse.
+                            </div>
+                          );
+                        }
+
+                        return filteredGroups.map((group) => {
+                          const warehouseStockTotal = group.items.reduce(
+                            (sum, item) => sum + (Number(item.row.in_stock) || 0),
+                            0
+                          );
+                          return (
+                            <div
+                              key={group.warehouse_id}
+                              className="bg-gray-50/80 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm"
+                            >
+                              <div className="px-4 py-2.5 bg-gray-100/70 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-gray-800 dark:text-gray-100">
+                                    {group.warehouse_name}
+                                  </span>
+                                  <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-[#0e90d9] dark:text-blue-300 font-medium px-2 py-0.5 rounded-full">
+                                    {group.items.length} {group.items.length === 1 ? "location" : "locations"}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-gray-500 font-medium">
+                                  Total Stock: <strong className="text-gray-800 dark:text-gray-200">{warehouseStockTotal}</strong>
+                                </span>
+                              </div>
+
+                              <div className="p-3">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead>
+                                    <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-200/60 dark:border-gray-700/60 text-[11px]">
+                                      <th className="pb-1.5 font-medium">Storage Location</th>
+                                      <th className="pb-1.5 font-medium w-28 text-center">In Stock</th>
+                                      <th className="pb-1.5 font-medium w-28 text-center">Allocated</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200/40 dark:divide-gray-700/40">
+                                    {group.items.map(({ row, index }) => (
+                                      <tr key={index}>
+                                        <td className="py-2 font-mono text-[11px] text-gray-700 dark:text-gray-300 pr-2">
+                                          {row.warehouse_location_name}
+                                        </td>
+                                        <td className="py-2 px-1">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={row.in_stock}
+                                            onChange={(e) =>
+                                              handleInventoryChange(index, "in_stock", Number(e.target.value))
+                                            }
+                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
+                                          />
+                                        </td>
+                                        <td className="py-2 px-1">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={row.allocated}
+                                            onChange={(e) =>
+                                              handleInventoryChange(index, "allocated", Number(e.target.value))
+                                            }
+                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
+                                          />
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                      <div className="pt-2 text-right">
+                        <Link
+                          to="/settings/warehouses"
+                          className="text-xs text-[#0e90d9] hover:underline font-medium"
+                        >
+                          Manage Warehouses &rarr;
+                        </Link>
                       </div>
-                    ))}
-                    <div className="pt-2 text-right">
-                      <Link
-                        to="/settings/warehouses"
-                        className="text-xs text-[#0e90d9] hover:underline font-medium"
-                      >
-                        Manage Warehouses &rarr;
-                      </Link>
                     </div>
                   </div>
                 )}
