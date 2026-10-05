@@ -8,6 +8,7 @@ import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
+import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from "@/utils/documentParser";
 
 const logger = pino();
 
@@ -145,8 +146,19 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       person_id = personRes.rows[0]?.result?.id || null;
     }
 
+    const rawOrgId = req.body.organization_id || (person && person.organization_id) || null;
+    const orgId = rawOrgId ? Number(rawOrgId) : null;
+
+    let validExpectedCloseDate: string | null = null;
+    if (expected_close_date) {
+      const parsedDate = new Date(expected_close_date);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpectedCloseDate = parsedDate.toISOString().split('T')[0];
+      }
+    }
+
     const result = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
         title,
         description || null,
@@ -156,7 +168,8 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         lead_source_id || null,
         lead_type_id || null,
         lead_pipeline_id || null,
-        expected_close_date || null,
+        validExpectedCloseDate,
+        orgId,
       ]
     );
 
@@ -561,7 +574,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     if (!file) {
       res.status(HttpStatusCodes.BAD_REQUEST).json({
         success: false,
-        message: "No file uploaded. Please provide a PDF or image file.",
+        message: "No file uploaded. Please provide a PDF or document file.",
       });
       return;
     }
@@ -574,21 +587,152 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const destPath = path.join(uploadDir, uniqueName);
 
+    let fileBuffer: Buffer | null = null;
     if (file.path && fs.existsSync(file.path)) {
+      fileBuffer = fs.readFileSync(file.path);
       fs.copyFileSync(file.path, destPath);
       try { fs.unlinkSync(file.path); } catch (e) {}
+    } else if (file.buffer) {
+      fileBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
+      if (fileBuffer) {
+        fs.writeFileSync(destPath, fileBuffer);
+      }
     }
 
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
-    const fileBaseName = path.basename(file.originalname, path.extname(file.originalname))
-      .replace(/[_-]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    // 1. Extract text and parse structured data from the document
+    let parsed: ExtractedLeadData = {};
+    if (fileBuffer) {
+      const extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
+      parsed = parseLeadDocumentText(extractedText, file.originalname);
+    }
 
-    const leadTitle = fileBaseName || `Lead from ${new Date().toLocaleDateString()}`;
+    const currentUserId = (req as any).user?.id || null;
 
-    // Get default pipeline and its first stage using stored functions
+    // 2. Check or create Organization
+    let organizationId: number | null = null;
+    let orgCreated = false;
+    if (parsed.organization && parsed.organization.trim()) {
+      const orgName = parsed.organization.trim();
+      const existingOrgRes = await connection.query(
+        "SELECT id, name FROM public.organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
+        [orgName]
+      );
+      if (existingOrgRes.rows.length > 0) {
+        organizationId = existingOrgRes.rows[0].id;
+      } else {
+        const newOrgRes = await connection.query(
+          "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
+          [orgName, null, currentUserId, "{}"]
+        );
+        const newOrg = newOrgRes.rows[0]?.result;
+        if (newOrg && newOrg.id) {
+          organizationId = newOrg.id;
+          orgCreated = true;
+          WorkflowService.triggerWorkflows("organizations", "create", newOrg).catch((e) => logger.error(e));
+        }
+      }
+    }
+
+    // 3. Check or create Person (Contact)
+    let personId: number | null = null;
+    let personCreated = false;
+    let resolvedPersonName = parsed.contactPerson || null;
+
+    if (parsed.email || parsed.phone || parsed.contactPerson) {
+      // Check existing person by email
+      if (parsed.email) {
+        const pEmailRes = await connection.query(
+          "SELECT id, name, organization_id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1",
+          [`%${parsed.email.trim()}%`]
+        );
+        if (pEmailRes.rows.length > 0) {
+          personId = pEmailRes.rows[0].id;
+          resolvedPersonName = pEmailRes.rows[0].name;
+        }
+      }
+
+      // Check existing person by phone if not found
+      if (!personId && parsed.phone) {
+        const cleanPhone = parsed.phone.replace(/[^0-9+]/g, "");
+        const searchPhone = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${parsed.phone.trim()}%`;
+        const pPhoneRes = await connection.query(
+          "SELECT id, name, organization_id FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1",
+          [searchPhone]
+        );
+        if (pPhoneRes.rows.length > 0) {
+          personId = pPhoneRes.rows[0].id;
+          resolvedPersonName = pPhoneRes.rows[0].name;
+        }
+      }
+
+      // Check existing person by name if not found
+      if (!personId && parsed.contactPerson) {
+        const pNameRes = await connection.query(
+          "SELECT id, name, organization_id FROM public.persons WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
+          [parsed.contactPerson.trim()]
+        );
+        if (pNameRes.rows.length > 0) {
+          personId = pNameRes.rows[0].id;
+          resolvedPersonName = pNameRes.rows[0].name;
+        }
+      }
+
+      // If person not found, create new person
+      if (!personId && (parsed.contactPerson || parsed.email || parsed.phone)) {
+        const newPersonName = parsed.contactPerson || (parsed.email ? parsed.email.split("@")[0] : "New Contact");
+        const emailArr = parsed.email ? [{ label: "work", value: parsed.email }] : [];
+        const phoneArr = parsed.phone ? [{ label: "work", value: parsed.phone }] : [];
+
+        const newPersonRes = await connection.query(
+          "SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result",
+          [
+            newPersonName,
+            JSON.stringify(emailArr),
+            JSON.stringify(phoneArr),
+            organizationId || null,
+            parsed.jobTitle || null,
+            currentUserId,
+            "{}",
+          ]
+        );
+        const newPerson = newPersonRes.rows[0]?.result;
+        if (newPerson && newPerson.id) {
+          personId = newPerson.id;
+          resolvedPersonName = newPerson.name;
+          personCreated = true;
+          WorkflowService.triggerWorkflows("persons", "create", newPerson).catch((e) => logger.error(e));
+        }
+      } else if (personId && organizationId) {
+        // If person already exists without organization, link the organization
+        await connection.query(
+          "UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL",
+          [organizationId, personId]
+        );
+      }
+    }
+
+    // 4. Resolve Lead Source & Lead Type
+    let sourceId: number | null = null;
+    if (parsed.source && parsed.source.trim()) {
+      const sRes = await connection.query(
+        "SELECT id FROM public.lead_sources WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
+        [parsed.source.trim(), `%${parsed.source.trim()}%`]
+      );
+      if (sRes.rows.length > 0) sourceId = sRes.rows[0].id;
+    }
+
+    let typeId: number | null = null;
+    if (parsed.type && parsed.type.trim()) {
+      const tRes = await connection.query(
+        "SELECT id FROM public.lead_types WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
+        [parsed.type.trim(), `%${parsed.type.trim()}%`]
+      );
+      if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
+    }
+
+    // 5. Resolve default pipeline and first stage
     const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
     let pipelineId: number | null = null;
     let stageId: number | null = null;
@@ -602,25 +746,41 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // Create the lead using fn_create_lead
+    const leadTitle = parsed.title || `Lead from ${path.basename(file.originalname, path.extname(file.originalname))}`;
+
+    // Parse / sanitize expected close date
+    let validExpectedCloseDate: string | null = null;
+    if (parsed.expectedCloseDate) {
+      const parsedDate = new Date(parsed.expectedCloseDate);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpectedCloseDate = parsedDate.toISOString().split('T')[0];
+      }
+    }
+
+    // 6. Create Lead
     const leadResult = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
         leadTitle,
-        `Created from uploaded file: ${file.originalname}`,
-        null,
-        (req as any).user?.id || null,
-        null,
-        null,
-        null,
+        parsed.description || `Created from uploaded file: ${file.originalname}`,
+        parsed.leadValue || null,
+        currentUserId,
+        personId,
+        sourceId,
+        typeId,
         pipelineId,
-        null,
+        validExpectedCloseDate,
+        organizationId,
       ]
     );
 
     const lead = leadResult.rows[0];
 
+    let createdProductsCount = 0;
+    let attachedProductsCount = 0;
+
     if (lead) {
+      // Set stage on lead
       if (stageId) {
         await connection.query(
           "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
@@ -628,7 +788,54 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
         );
       }
 
-      // Attach file activity to the newly created lead using fn_create_activity
+      // 7. Process & Attach Products from document
+      if (Array.isArray(parsed.products) && parsed.products.length > 0) {
+        for (const prod of parsed.products) {
+          if (!prod.name || !prod.name.trim()) continue;
+          const pName = prod.name.trim();
+          const pSku = prod.sku?.trim() || `SKU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const pQty = Number(prod.quantity) || 1;
+          const pPrice = prod.price !== undefined && prod.price !== null ? Number(prod.price) : null;
+
+          let prodId: number | null = null;
+          const pCheck = await connection.query(
+            "SELECT id, name, price FROM public.products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR (sku IS NOT NULL AND LOWER(sku) = LOWER($2)) LIMIT 1",
+            [pName, pSku]
+          );
+
+          if (pCheck.rows.length > 0) {
+            prodId = pCheck.rows[0].id;
+          } else {
+            // Create new product
+            const newProdRes = await connection.query(
+              "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
+              [
+                pSku,
+                pName,
+                prod.description || `Extracted from ${file.originalname}`,
+                pQty,
+                pPrice,
+              ]
+            );
+            const createdProduct = newProdRes.rows[0];
+            if (createdProduct && createdProduct.id) {
+              prodId = createdProduct.id;
+              createdProductsCount++;
+              WorkflowService.triggerWorkflows("products", "create", createdProduct).catch((e) => logger.error(e));
+            }
+          }
+
+          if (prodId && lead.id) {
+            await connection.query(
+              "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
+              [lead.id, prodId, pQty, pPrice]
+            );
+            attachedProductsCount++;
+          }
+        }
+      }
+
+      // 8. Attach file activity to the newly created lead using fn_create_activity
       await connection.query(
         "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         [
@@ -638,18 +845,47 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
           null,
           null,
           true,
-          (req as any).user?.id || null,
+          currentUserId,
           null,
           lead.id,
-          null,
+          personId,
         ]
       );
+
+      // Trigger lead create workflows
+      WorkflowService.triggerWorkflows("leads", "create", {
+        ...lead,
+        person_id: personId,
+        organization_id: organizationId,
+      }).catch((e) => logger.error(e));
+    }
+
+    // Build friendly success message
+    const msgParts: string[] = [`Lead "${leadTitle}" created successfully`];
+    if (personCreated && resolvedPersonName) {
+      msgParts.push(`new contact "${resolvedPersonName}" created`);
+    } else if (personId && resolvedPersonName) {
+      msgParts.push(`linked to contact "${resolvedPersonName}"`);
+    }
+    if (orgCreated && parsed.organization) {
+      msgParts.push(`new organization "${parsed.organization}" created`);
+    } else if (organizationId && parsed.organization) {
+      msgParts.push(`linked to organization "${parsed.organization}"`);
+    }
+    if (attachedProductsCount > 0) {
+      msgParts.push(`${attachedProductsCount} product(s) added (${createdProductsCount} new)`);
     }
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: `Lead "${leadTitle}" created successfully from uploaded file.`,
-      data: lead,
+      message: `${msgParts.join(", ")}.`,
+      data: {
+        ...lead,
+        person_id: personId,
+        organization_id: organizationId,
+        productsCount: attachedProductsCount,
+        extracted: parsed,
+      },
     });
   } catch (error: any) {
     logger.error(error);
