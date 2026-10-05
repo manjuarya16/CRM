@@ -146,8 +146,19 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       person_id = personRes.rows[0]?.result?.id || null;
     }
 
+    const rawOrgId = req.body.organization_id || (person && person.organization_id) || null;
+    const orgId = rawOrgId ? Number(rawOrgId) : null;
+
+    let validExpectedCloseDate: string | null = null;
+    if (expected_close_date) {
+      const parsedDate = new Date(expected_close_date);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpectedCloseDate = parsedDate.toISOString().split('T')[0];
+      }
+    }
+
     const result = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
         title,
         description || null,
@@ -157,7 +168,8 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         lead_source_id || null,
         lead_type_id || null,
         lead_pipeline_id || null,
-        expected_close_date || null,
+        validExpectedCloseDate,
+        orgId,
       ]
     );
 
@@ -736,9 +748,18 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     const leadTitle = parsed.title || `Lead from ${path.basename(file.originalname, path.extname(file.originalname))}`;
 
+    // Parse / sanitize expected close date
+    let validExpectedCloseDate: string | null = null;
+    if (parsed.expectedCloseDate) {
+      const parsedDate = new Date(parsed.expectedCloseDate);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpectedCloseDate = parsedDate.toISOString().split('T')[0];
+      }
+    }
+
     // 6. Create Lead
     const leadResult = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
         leadTitle,
         parsed.description || `Created from uploaded file: ${file.originalname}`,
@@ -748,7 +769,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
         sourceId,
         typeId,
         pipelineId,
-        stageId,
+        validExpectedCloseDate,
+        organizationId,
       ]
     );
 
@@ -758,27 +780,12 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     let attachedProductsCount = 0;
 
     if (lead) {
-      // Set stage and organization on lead
+      // Set stage on lead
       if (stageId) {
         await connection.query(
           "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
           [lead.id, stageId]
         );
-      }
-
-      if (organizationId) {
-        await connection.query(
-          "UPDATE public.leads SET organization_id = $1 WHERE id = $2",
-          [organizationId, lead.id]
-        );
-      }
-
-      // Update expected close date if parsed
-      if (parsed.expectedCloseDate) {
-        await connection.query(
-          "UPDATE public.leads SET expected_close_date = $1 WHERE id = $2",
-          [parsed.expectedCloseDate, lead.id]
-        ).catch(() => {});
       }
 
       // 7. Process & Attach Products from document

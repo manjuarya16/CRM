@@ -233,10 +233,60 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     result.type = typeMatch[1].trim();
   }
 
-  // 7. Expected Close Date
-  const dateMatch = text.match(/(?:expected\s*close\s*date|target\s*close\s*date|close\s*date|target\s*date|due\s*date)\s*[:=-]\s*([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/i);
-  if (dateMatch && dateMatch[1]) {
-    result.expectedCloseDate = dateMatch[1].trim();
+  // Multi-line line-by-line fallback scanner for separate label/value lines
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
+
+    // Contact Person
+    if (!result.contactPerson && /^(?:contact\s*person|person\s*name|contact\s*name|client\s*name|customer\s*name|full\s*name|name)\s*:?$/i.test(line)) {
+      if (nextLine && !nextLine.includes(':') && !nextLine.includes('@') && nextLine.length >= 2 && !/^(?:organization|company|role|title|email|phone|source)/i.test(nextLine)) {
+        result.contactPerson = nextLine;
+      }
+    }
+
+    // Organization
+    if (!result.organization && /^(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*:?$/i.test(line)) {
+      if (nextLine && !nextLine.includes(':') && !nextLine.includes('@') && nextLine.length >= 2 && !/^(?:contact|role|title|email|phone|source)/i.test(nextLine)) {
+        result.organization = nextLine;
+      }
+    }
+
+    // Job Title
+    if (!result.jobTitle && /^(?:job\s*title|designation|role|position)\s*:?$/i.test(line)) {
+      if (nextLine && !nextLine.includes(':') && nextLine.length >= 2) {
+        result.jobTitle = nextLine;
+      }
+    }
+
+    // Email
+    if (!result.email && /^(?:email|email\s*address|e-mail)\s*:?$/i.test(line)) {
+      const em = nextLine.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+      if (em) result.email = em[1].toLowerCase().trim();
+    }
+
+    // Phone
+    if (!result.phone && /^(?:phone|mobile|tel|contact(?:\s*no|\s*number)?|cell)\s*:?$/i.test(line)) {
+      const pm = nextLine.match(/([+]?[0-9\s().-]{7,20})/);
+      if (pm && pm[1].replace(/[^0-9]/g, '').length >= 7) {
+        result.phone = pm[1].trim();
+      }
+    }
+
+    // Source
+    if (!result.source && /^(?:lead\s*source|source|channel)\s*:?$/i.test(line)) {
+      if (nextLine && !nextLine.includes(':')) {
+        result.source = nextLine;
+      }
+    }
+
+    // Close Date
+    if (!result.expectedCloseDate && /^(?:expected\s*close\s*date|target\s*close\s*date|close\s*date|target\s*date|due\s*date)\s*:?$/i.test(line)) {
+      const dMatch = nextLine.match(/([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})/);
+      if (dMatch) {
+        result.expectedCloseDate = dMatch[1];
+      }
+    }
   }
 
   // 8. Product Items extraction
