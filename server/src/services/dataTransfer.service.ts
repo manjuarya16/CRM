@@ -884,7 +884,7 @@ export class DataTransferService {
 
           if (type === 'leads') {
             const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
-            const titleVal = row.title || row.Title || row['Lead Title'] || row.name || row.Name;
+            const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
             if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
             const titleStr = titleVal ? String(titleVal).trim() : '';
 
@@ -1217,10 +1217,10 @@ export class DataTransferService {
             }
           } else if (type === 'products') {
             const idVal = toNumberParam(row.id || row.Id || row['Product ID'] || row['ID']);
-            const skuVal = row.sku || row.SKU || row.code || row.Name || row.name;
+            const skuVal = row.sku || row.SKU || row.code || row['Product Code'] || row['Item Code'];
             if (!idVal && !skuVal) throw new Error(`Row ${i + 1}: sku or id is required`);
             const skuStr = skuVal ? String(skuVal).trim() : '';
-            const prodName = row.name || row.Name || skuStr;
+            const prodName = row.name || row.Name || row['Product Name'] || skuStr;
             const description = row.description || row.Description || null;
             const quantity = Number(row.quantity || row.Quantity || 0);
             const price = Number(row.price || row.Price || 0);
@@ -1405,6 +1405,110 @@ export class DataTransferService {
       };
     }
 
+    // 1. Header schema compatibility check against selected module type
+    const firstRow = rows[0] || {};
+    const firstRowKeys = Object.keys(firstRow).map((k) => k.trim().toLowerCase());
+    const hasColumn = (...candidates: string[]) =>
+      candidates.some((c) => firstRowKeys.includes(c.toLowerCase()));
+
+    if (type === 'products') {
+      const hasSkuCol = hasColumn('sku', 'code', 'product code', 'item code', 'id', 'product id');
+      if (!hasSkuCol) {
+        return {
+          isValid: false,
+          total: rows.length,
+          validCount: 0,
+          invalidCount: rows.length,
+          errorsCount: 1,
+          errors: [
+            "Header Mismatch: Column 'sku' is required for Products import. The uploaded file appears to be formatted for another module (found: " +
+              Object.keys(firstRow).join(', ') +
+              ').'
+          ],
+          sampleErrors: [
+            {
+              row: 1,
+              error:
+                "Header Mismatch: Missing required 'sku' column for Products import. Found columns: " +
+                Object.keys(firstRow).join(', ')
+            }
+          ],
+        };
+      }
+    } else if (type === 'persons') {
+      const hasPersonCol = hasColumn('name', 'person name', 'full name', 'id', 'person id');
+      if (!hasPersonCol) {
+        return {
+          isValid: false,
+          total: rows.length,
+          validCount: 0,
+          invalidCount: rows.length,
+          errorsCount: 1,
+          errors: [
+            "Header Mismatch: Column 'name' is required for Persons import. The uploaded file appears to be formatted for another module (found: " +
+              Object.keys(firstRow).join(', ') +
+              ').'
+          ],
+          sampleErrors: [
+            {
+              row: 1,
+              error:
+                "Header Mismatch: Missing required 'name' column for Persons import. Found columns: " +
+                Object.keys(firstRow).join(', ')
+            }
+          ],
+        };
+      }
+    } else if (type === 'leads') {
+      const hasLeadCol = hasColumn('title', 'lead title', 'deal name', 'subject', 'id', 'lead id');
+      if (!hasLeadCol) {
+        return {
+          isValid: false,
+          total: rows.length,
+          validCount: 0,
+          invalidCount: rows.length,
+          errorsCount: 1,
+          errors: [
+            "Header Mismatch: Column 'title' is required for Leads import. The uploaded file appears to be formatted for another module (found: " +
+              Object.keys(firstRow).join(', ') +
+              ').'
+          ],
+          sampleErrors: [
+            {
+              row: 1,
+              error:
+                "Header Mismatch: Missing required 'title' column for Leads import. Found columns: " +
+                Object.keys(firstRow).join(', ')
+            }
+          ],
+        };
+      }
+    } else if (type === 'organizations') {
+      const hasOrgCol = hasColumn('name', 'organization name', 'company', 'company name', 'id', 'organization id');
+      if (!hasOrgCol) {
+        return {
+          isValid: false,
+          total: rows.length,
+          validCount: 0,
+          invalidCount: rows.length,
+          errorsCount: 1,
+          errors: [
+            "Header Mismatch: Column 'name' is required for Organizations import. The uploaded file appears to be formatted for another module (found: " +
+              Object.keys(firstRow).join(', ') +
+              ').'
+          ],
+          sampleErrors: [
+            {
+              row: 1,
+              error:
+                "Header Mismatch: Missing required 'name' column for Organizations import. Found columns: " +
+                Object.keys(firstRow).join(', ')
+            }
+          ],
+        };
+      }
+    }
+
     const client = await pool.connect();
     try {
       // Fetch required custom attributes for this entity type
@@ -1431,7 +1535,7 @@ export class DataTransferService {
         if (!rowError) {
           if (type === 'leads') {
             const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
-            const titleVal = row.title || row.Title || row['Lead Title'] || row.name || row.Name;
+            const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
             if (!idVal && !titleVal) {
               rowError = 'Field "title" or "id" is required';
             } else {
@@ -1450,7 +1554,7 @@ export class DataTransferService {
             }
           } else if (type === 'persons') {
             const idVal = toNumberParam(row.id || row.Id || row['Person ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Person Name'];
+            const nameVal = row.name || row.Name || row['Person Name'] || row['Full Name'];
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
@@ -1469,7 +1573,7 @@ export class DataTransferService {
             }
           } else if (type === 'organizations') {
             const idVal = toNumberParam(row.id || row.Id || row['Organization ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Organization Name'];
+            const nameVal = row.name || row.Name || row['Organization Name'] || row['Company Name'] || row.Company;
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
@@ -1488,17 +1592,18 @@ export class DataTransferService {
             }
           } else if (type === 'products') {
             const idVal = toNumberParam(row.id || row.Id || row['Product ID'] || row['ID']);
-            const skuVal = row.sku || row.SKU || row.code || row.Name || row.name;
+            const skuVal = row.sku || row.SKU || row.code || row['Product Code'] || row['Item Code'];
+            const nameVal = row.name || row.Name || row['Product Name'] || row['Item Name'];
             if (!idVal && !skuVal) {
-              rowError = 'Field "sku" or "id" is required';
+              rowError = 'Field "sku" is required for products';
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
-              const prodName = row.name || row.Name || skuStr;
+              const prodName = nameVal ? String(nameVal).trim() : skuStr;
               const existingProd = idVal
                 ? await client.query('SELECT id FROM products WHERE id = $1 LIMIT 1', [idVal])
                 : await client.query(
                     'SELECT id FROM products WHERE LOWER(TRIM(sku)) = LOWER($1) OR LOWER(TRIM(name)) = LOWER($2) LIMIT 1',
-                    [skuStr, String(prodName).trim()]
+                    [skuStr, prodName]
                   );
               const exists = existingProd.rows.length > 0;
               if (action === 'delete' && !exists) {

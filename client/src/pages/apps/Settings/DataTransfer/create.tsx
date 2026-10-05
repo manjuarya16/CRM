@@ -243,59 +243,35 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         : "xlsx";
 
     const typeKey = type.toLowerCase();
+    const fallback = DEFAULT_SAMPLES[typeKey] || { headers: [], sampleRows: [] };
+    const headers = sampleMeta.headers && sampleMeta.headers.length > 0 ? sampleMeta.headers : fallback.headers;
+    const rows = sampleMeta.sampleRows && sampleMeta.sampleRows.length > 0 ? sampleMeta.sampleRows : fallback.sampleRows;
+
     try {
-      // 1. First attempt direct streaming download from backend endpoint
-      const response = await API.get(`/data-transfer/sample/${typeKey}`, {
-        params: { format: chosenFormat },
-        responseType: "blob",
-      });
-
-      const mimeType =
-        chosenFormat === "xlsx"
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "text/csv;charset=utf-8;";
-
-      const blob = new Blob([response.data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `sample_${typeKey}_import.${chosenFormat}`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch {
-      // 2. Fallback: generate file in-browser via XLSX library using sampleMeta / fallback
-      try {
-        const fallback = DEFAULT_SAMPLES[typeKey] || { headers: [], sampleRows: [] };
-        const headers = sampleMeta.headers && sampleMeta.headers.length > 0 ? sampleMeta.headers : fallback.headers;
-        const rows = sampleMeta.sampleRows && sampleMeta.sampleRows.length > 0 ? sampleMeta.sampleRows : fallback.sampleRows;
-
-        if (chosenFormat === "xlsx") {
-          const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
-          XLSX.writeFile(wb, `sample_${typeKey}_import.xlsx`);
-        } else {
-          const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-          const csvContent = XLSX.utils.sheet_to_csv(ws, { FS: fieldSeparator || "," });
-          const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.setAttribute("download", `sample_${typeKey}_import.csv`);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }
-      } catch (clientErr: any) {
-        Swal.fire({
-          icon: "error",
-          title: "Download Error",
-          text: clientErr.message || "Failed to download sample file",
-        });
+      if (chosenFormat === "xlsx") {
+        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, `${type}_Sample`);
+        XLSX.writeFile(wb, `sample_${typeKey}_import.xlsx`);
+      } else {
+        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        const csvContent = XLSX.utils.sheet_to_csv(ws, { FS: fieldSeparator || "," });
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `sample_${typeKey}_import.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }
+    } catch (clientErr: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Download Error",
+        text: clientErr.message || "Failed to download sample file",
+      });
     }
   };
 
