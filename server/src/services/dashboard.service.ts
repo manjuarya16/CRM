@@ -10,6 +10,36 @@ export interface IDashboardStatsParams {
   pipelineId?: number | string;
 }
 
+function parseFlexibleDate(dateStr?: string | null): Date | null {
+  if (!dateStr || typeof dateStr !== "string") return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return null;
+
+  // 1. Check YYYY-MM-DD format (standard)
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (ymdMatch) {
+    const y = parseInt(ymdMatch[1], 10);
+    const m = parseInt(ymdMatch[2], 10);
+    const d = parseInt(ymdMatch[3], 10);
+    const date = new Date(y, m - 1, d);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 2. Check DD-MM-YYYY format (e.g. 05-09-2026)
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    const d = parseInt(dmyMatch[1], 10);
+    const m = parseInt(dmyMatch[2], 10);
+    const y = parseInt(dmyMatch[3], 10);
+    const date = new Date(y, m - 1, d);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 3. Fallback standard Date parsing
+  const parsed = new Date(trimmed);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export class DashboardService {
   /**
    * Get complete dashboard metrics matching Krayin CRM specification
@@ -22,17 +52,19 @@ export class DashboardService {
       const pipelineIdParam = params.pipeline_id || params.pipelineId;
 
       // Ensure full start day (00:00:00) and full end day (23:59:59.999)
-      // Default to last 30 days if start_date is not specified
+      const parsedStart = parseFlexibleDate(rawStart);
+      const parsedEnd = parseFlexibleDate(rawEnd);
+
       let startDateObj: Date;
-      if (rawStart) {
-        startDateObj = new Date(rawStart);
+      if (parsedStart) {
+        startDateObj = parsedStart;
       } else {
         startDateObj = new Date(now);
         startDateObj.setDate(startDateObj.getDate() - 30);
       }
       startDateObj.setHours(0, 0, 0, 0);
 
-      const endDateObj = rawEnd ? new Date(rawEnd) : new Date(now);
+      const endDateObj = parsedEnd ? parsedEnd : new Date(now);
       endDateObj.setHours(23, 59, 59, 999);
 
       const startDateStr = startDateObj.toISOString();

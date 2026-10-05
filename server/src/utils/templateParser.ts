@@ -54,39 +54,39 @@ export async function fetchTemplateContext(params: {
   let quoteId = params.quote_id ? Number(params.quote_id) : null;
   let productId = params.product_id ? Number(params.product_id) : null;
 
-  // Direct fetch Activity using DB function fn_get_activity_by_id
+  // 1. Fetch Activity via procedural function
   if (activityId) {
     try {
-      const actRes = await pool.query(`SELECT * FROM fn_get_activity_by_id($1)`, [activityId]);
-      if (actRes.rows[0]) {
-        context.activity = actRes.rows[0];
+      const { rows } = await pool.query(`SELECT fn_get_template_activity_context($1) AS data`, [activityId]);
+      if (rows[0]?.data) {
+        context.activity = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
       }
     } catch (err) {
-      logger.error({ err, activityId }, 'fetchTemplateContext: fn_get_activity_by_id failed');
+      logger.error({ err, activityId }, 'fetchTemplateContext: fn_get_template_activity_context failed');
     }
   }
 
-  // Direct fetch Quote using DB function fn_get_quote_by_id
+  // 2. Fetch Quote via procedural function
   if (quoteId) {
     try {
-      const qRes = await pool.query(`SELECT * FROM fn_get_quote_by_id($1)`, [quoteId]);
-      if (qRes.rows[0]) {
-        context.quote = qRes.rows[0];
+      const { rows } = await pool.query(`SELECT fn_get_template_quote_context($1) AS data`, [quoteId]);
+      if (rows[0]?.data) {
+        context.quote = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
       }
     } catch (err) {
-      logger.error({ err, quoteId }, 'fetchTemplateContext: fn_get_quote_by_id failed');
+      logger.error({ err, quoteId }, 'fetchTemplateContext: fn_get_template_quote_context failed');
     }
   }
 
-  // Direct fetch Product using DB function fn_get_product_by_id
+  // 3. Fetch Product via procedural function
   if (productId) {
     try {
-      const pRes = await pool.query(`SELECT * FROM fn_get_product_by_id($1)`, [productId]);
-      if (pRes.rows[0]) {
-        context.product = pRes.rows[0];
+      const { rows } = await pool.query(`SELECT fn_get_template_product_context($1) AS data`, [productId]);
+      if (rows[0]?.data) {
+        context.product = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
       }
     } catch (err) {
-      logger.error({ err, productId }, 'fetchTemplateContext: fn_get_product_by_id failed');
+      logger.error({ err, productId }, 'fetchTemplateContext: fn_get_template_product_context failed');
     }
   }
 
@@ -109,124 +109,78 @@ export async function fetchTemplateContext(params: {
     }
   }
 
-  // ─── Fetch LEAD using DB function fn_get_lead_by_id ──────────────────────────
+  // 4. Fetch Lead via procedural function
   if (leadId) {
     try {
-      const { rows } = await pool.query(`SELECT * FROM fn_get_lead_by_id($1)`, [leadId]);
-      if (rows[0]) {
-        context.lead = rows[0];
-        if (!personId && rows[0].person_id) {
-          personId = rows[0].person_id;
+      const { rows } = await pool.query(`SELECT fn_get_template_lead_context($1) AS data`, [leadId]);
+      if (rows[0]?.data) {
+        const lData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+        context.lead = lData;
+        if (!personId && lData.person_id) {
+          personId = lData.person_id;
+        }
+        if (!organizationId && lData.organization_id) {
+          organizationId = lData.organization_id;
         }
       }
     } catch (err) {
-      logger.error({ err, leadId }, 'fetchTemplateContext: fn_get_lead_by_id failed');
+      logger.error({ err, leadId }, 'fetchTemplateContext: fn_get_template_lead_context failed');
     }
 
     // Fetch latest ACTIVITY linked to this lead if not direct
     if (!context.activity?.id) {
       try {
-        const actRes = await pool.query(
-          `SELECT a.id, a.title, a.type, a.comment, a.schedule_from, a.schedule_to,
-                  a.location, a.is_done, a.created_at, a.user_id,
-                  u.name AS user_name
-           FROM public.activities a
-           LEFT JOIN public.users u ON u.id = a.user_id
-           JOIN public.lead_activities la ON la.activity_id = a.id
-           WHERE la.lead_id = $1
-             AND a.type NOT IN ('email', 'file', 'system')
-           ORDER BY a.id DESC LIMIT 1`,
-          [leadId]
-        );
-        if (actRes.rows[0]) {
-          context.activity = actRes.rows[0];
+        const { rows } = await pool.query(`SELECT fn_get_lead_latest_activity($1) AS data`, [leadId]);
+        if (rows[0]?.data) {
+          context.activity = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
         }
       } catch (err) {
-        logger.warn({ err, leadId }, 'fetchTemplateContext: lead activity query failed');
+        logger.warn({ err, leadId }, 'fetchTemplateContext: fn_get_lead_latest_activity failed');
       }
     }
 
     // Fetch latest QUOTE linked to this lead if not direct
     if (!context.quote?.id) {
       try {
-        const qRes = await pool.query(
-          `SELECT q.id, q.subject, q.description, q.grand_total, q.sub_total,
-                  q.expired_at, q.billing_address, q.shipping_address,
-                  u.name AS user_name
-           FROM public.quotes q
-           LEFT JOIN public.users u ON u.id = q.user_id
-           WHERE q.lead_id = $1
-           ORDER BY q.id DESC LIMIT 1`,
-          [leadId]
-        );
-        if (qRes.rows[0]) {
-          context.quote = qRes.rows[0];
+        const { rows } = await pool.query(`SELECT fn_get_lead_latest_quote($1) AS data`, [leadId]);
+        if (rows[0]?.data) {
+          context.quote = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
         }
       } catch (err) {
-        logger.error({ err, leadId }, 'fetchTemplateContext: quote query failed');
+        logger.error({ err, leadId }, 'fetchTemplateContext: fn_get_lead_latest_quote failed');
       }
     }
   }
 
-  // ─── Fetch PERSON using DB function get_person ───────────────────────────────
+  // 5. Fetch Person via procedural function
   if (personId) {
     try {
       const { rows } = await pool.query(`SELECT get_person($1) AS data`, [personId]);
       if (rows[0]?.data) {
         const pData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
         context.person = pData;
+        if (!organizationId && pData.organization_id) {
+          organizationId = pData.organization_id;
+        }
       }
     } catch (err) {
       logger.error({ err, personId }, 'fetchTemplateContext: get_person failed');
     }
   }
 
-  // Fallback 1: If activity wasn't found by lead, search activity by person
+  // Fallback 1: If activity wasn't found by lead, search activity by person via procedural function
   if (!context.activity?.id && personId) {
     try {
-      const actRes2 = await pool.query(
-        `SELECT a.id, a.title, a.type, a.comment, a.schedule_from, a.schedule_to,
-                a.location, a.is_done, a.created_at, a.user_id,
-                u.name AS user_name
-         FROM public.activities a
-         LEFT JOIN public.users u ON u.id = a.user_id
-         JOIN public.person_activities pa ON pa.activity_id = a.id
-         WHERE pa.person_id = $1
-           AND a.type NOT IN ('email', 'file', 'system')
-         ORDER BY a.id DESC LIMIT 1`,
-        [personId]
-      );
-      if (actRes2.rows[0]) {
-        context.activity = actRes2.rows[0];
+      const { rows } = await pool.query(`SELECT fn_get_person_latest_activity($1) AS data`, [personId]);
+      if (rows[0]?.data) {
+        context.activity = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
       }
     } catch (err) {
-      logger.warn({ err, personId }, 'fetchTemplateContext: person activity query failed');
+      logger.warn({ err, personId }, 'fetchTemplateContext: fn_get_person_latest_activity failed');
     }
   }
 
-  // Fallback 2: If activity still not found, check the user's latest scheduled activity
-  if (!context.activity?.id && params.user?.id) {
-    try {
-      const actRes3 = await pool.query(
-        `SELECT a.id, a.title, a.type, a.comment, a.schedule_from, a.schedule_to,
-                a.location, a.is_done, a.created_at, a.user_id,
-                u.name AS user_name
-         FROM public.activities a
-         LEFT JOIN public.users u ON u.id = a.user_id
-         WHERE a.user_id = $1
-           AND a.type NOT IN ('email', 'file', 'system')
-         ORDER BY a.id DESC LIMIT 1`,
-        [params.user.id]
-      );
-      if (actRes3.rows[0]) {
-        context.activity = actRes3.rows[0];
-      }
-    } catch (err) {
-      logger.warn({ err, userId: params.user.id }, 'fetchTemplateContext: user activity query failed');
-    }
-  }
-
-  // Fallback 3: Check system's latest scheduled activity
+  // Fallback 2: Check system's latest scheduled activity
   if (!context.activity?.id) {
     try {
       const actRes4 = await pool.query(
@@ -246,34 +200,19 @@ export async function fetchTemplateContext(params: {
     }
   }
 
-  // Fetch participants for the found activity
+  // 6. Fetch participants for the found activity via procedural function
   if (context.activity?.id) {
     try {
-      const partRes = await pool.query(
-        `SELECT 
-           COALESCE(u.name, p.name) AS name,
-           COALESCE(u.email, (
-             CASE 
-               WHEN jsonb_typeof(p.emails::jsonb) = 'array' THEN p.emails->0->>'value'
-               ELSE p.emails::text 
-             END
-           )) AS email
-         FROM public.activity_participants ap
-         LEFT JOIN public.users u ON u.id = ap.user_id
-         LEFT JOIN public.persons p ON p.id = ap.person_id
-         WHERE ap.activity_id = $1`,
-        [context.activity.id]
-      );
-      const participantNames = partRes.rows
-        .map((r: any) => r.name || r.email)
-        .filter(Boolean);
-      context.activity.participants = participantNames.join(', ');
+      const { rows } = await pool.query(`SELECT fn_get_activity_participants_context($1) AS participants`, [context.activity.id]);
+      if (rows[0]?.participants) {
+        context.activity.participants = rows[0].participants;
+      }
     } catch (err) {
-      logger.warn({ err, activityId: context.activity.id }, 'fetchTemplateContext: participants query failed');
+      logger.warn({ err, activityId: context.activity.id }, 'fetchTemplateContext: fn_get_activity_participants_context failed');
     }
   }
 
-  // ─── Fetch ORGANIZATION using DB function get_organization ──────────────────
+  // 7. Fetch Organization via procedural function
   if (!organizationId && context.person?.organization_id) {
     organizationId = context.person.organization_id;
   }
@@ -283,13 +222,12 @@ export async function fetchTemplateContext(params: {
 
   if (organizationId) {
     try {
-      const { rows } = await pool.query(`SELECT get_organization($1) AS data`, [organizationId]);
+      const { rows } = await pool.query(`SELECT fn_get_template_organization_context($1) AS data`, [organizationId]);
       if (rows[0]?.data) {
-        const orgData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
-        context.organization = orgData;
+        context.organization = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
       }
     } catch (err) {
-      logger.error({ err, organizationId }, 'fetchTemplateContext: get_organization failed');
+      logger.error({ err, organizationId }, 'fetchTemplateContext: fn_get_template_organization_context failed');
     }
   }
 

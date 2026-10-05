@@ -3138,6 +3138,413 @@ BEGIN
 END;
 $$;
 
+-- ==========================================================
+-- 21. PROCEDURAL FUNCTIONS FOR TEMPLATE PARSER & WORKFLOWS
+-- ==========================================================
+
+CREATE OR REPLACE FUNCTION fn_get_template_lead_context(p_lead_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', l.id,
+        'title', l.title,
+        'description', l.description,
+        'lead_value', l.lead_value,
+        'status', l.status,
+        'user_id', l.user_id,
+        'person_id', l.person_id,
+        'organization_id', l.organization_id,
+        'lead_pipeline_id', l.lead_pipeline_id,
+        'lead_pipeline_stage_id', l.lead_pipeline_stage_id,
+        'lead_source_id', l.lead_source_id,
+        'lead_type_id', l.lead_type_id,
+        'expected_close_date', l.expected_close_date,
+        'created_at', l.created_at,
+        'updated_at', l.updated_at,
+        'person_name', p.name,
+        'person_emails', p.emails,
+        'person_contact_numbers', p.contact_numbers,
+        'organization_name', o.name,
+        'user_name', u.name,
+        'user_email', u.email,
+        'stage_name', s.name,
+        'source_name', src.name,
+        'pipeline_name', pipe.name,
+        'type_name', lt.name
+    ) INTO v_result
+    FROM leads l
+    LEFT JOIN persons p ON p.id = l.person_id
+    LEFT JOIN organizations o ON o.id = l.organization_id
+    LEFT JOIN users u ON u.id = l.user_id
+    LEFT JOIN lead_pipeline_stages s ON s.id = l.lead_pipeline_stage_id
+    LEFT JOIN lead_sources src ON src.id = l.lead_source_id
+    LEFT JOIN lead_pipelines pipe ON pipe.id = l.lead_pipeline_id
+    LEFT JOIN lead_types lt ON lt.id = l.lead_type_id
+    WHERE l.id = p_lead_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_template_activity_context(p_activity_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', a.id,
+        'title', a.title,
+        'type', a.type,
+        'comment', a.comment,
+        'schedule_from', a.schedule_from,
+        'schedule_to', a.schedule_to,
+        'location', a.location,
+        'is_done', a.is_done,
+        'user_id', a.user_id,
+        'created_at', a.created_at,
+        'updated_at', a.updated_at,
+        'user_name', u.name,
+        'user_email', u.email
+    ) INTO v_result
+    FROM activities a
+    LEFT JOIN users u ON u.id = a.user_id
+    WHERE a.id = p_activity_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_template_quote_context(p_quote_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', q.id,
+        'subject', q.subject,
+        'description', q.description,
+        'grand_total', q.grand_total,
+        'sub_total', q.sub_total,
+        'discount_amount', q.discount_amount,
+        'tax_amount', q.tax_amount,
+        'expired_at', q.expired_at,
+        'billing_address', q.billing_address,
+        'shipping_address', q.shipping_address,
+        'user_id', q.user_id,
+        'person_id', q.person_id,
+        'lead_id', q.lead_id,
+        'created_at', q.created_at,
+        'updated_at', q.updated_at,
+        'user_name', u.name,
+        'user_email', u.email
+    ) INTO v_result
+    FROM quotes q
+    LEFT JOIN users u ON u.id = q.user_id
+    WHERE q.id = p_quote_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_template_product_context(p_product_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', pr.id,
+        'sku', pr.sku,
+        'name', pr.name,
+        'description', pr.description,
+        'price', pr.price,
+        'quantity', pr.quantity,
+        'status', pr.status,
+        'created_at', pr.created_at,
+        'updated_at', pr.updated_at
+    ) INTO v_result
+    FROM products pr
+    WHERE pr.id = p_product_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_template_organization_context(p_org_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', o.id,
+        'name', o.name,
+        'address', o.address,
+        'created_at', o.created_at,
+        'updated_at', o.updated_at
+    ) INTO v_result
+    FROM organizations o
+    WHERE o.id = p_org_id;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_lead_latest_activity(p_lead_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', a.id,
+        'title', a.title,
+        'type', a.type,
+        'comment', a.comment,
+        'schedule_from', a.schedule_from,
+        'schedule_to', a.schedule_to,
+        'location', a.location,
+        'is_done', a.is_done,
+        'user_id', a.user_id,
+        'created_at', a.created_at,
+        'user_name', u.name,
+        'user_email', u.email
+    ) INTO v_result
+    FROM activities a
+    LEFT JOIN users u ON u.id = a.user_id
+    JOIN lead_activities la ON la.activity_id = a.id
+    WHERE la.lead_id = p_lead_id
+      AND a.type NOT IN ('email', 'file', 'system')
+    ORDER BY a.id DESC LIMIT 1;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_lead_latest_quote(p_lead_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', q.id,
+        'subject', q.subject,
+        'description', q.description,
+        'grand_total', q.grand_total,
+        'sub_total', q.sub_total,
+        'expired_at', q.expired_at,
+        'billing_address', q.billing_address,
+        'shipping_address', q.shipping_address,
+        'user_id', q.user_id,
+        'user_name', u.name
+    ) INTO v_result
+    FROM quotes q
+    LEFT JOIN users u ON u.id = q.user_id
+    WHERE q.lead_id = p_lead_id
+    ORDER BY q.id DESC LIMIT 1;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_person_latest_activity(p_person_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_result JSONB;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', a.id,
+        'title', a.title,
+        'type', a.type,
+        'comment', a.comment,
+        'schedule_from', a.schedule_from,
+        'schedule_to', a.schedule_to,
+        'location', a.location,
+        'is_done', a.is_done,
+        'user_id', a.user_id,
+        'created_at', a.created_at,
+        'user_name', u.name,
+        'user_email', u.email
+    ) INTO v_result
+    FROM activities a
+    LEFT JOIN users u ON u.id = a.user_id
+    JOIN person_activities pa ON pa.activity_id = a.id
+    WHERE pa.person_id = p_person_id
+      AND a.type NOT IN ('email', 'file', 'system')
+    ORDER BY a.id DESC LIMIT 1;
+
+    RETURN v_result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_activity_participants_context(p_activity_id INTEGER)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_names TEXT;
+BEGIN
+    SELECT string_agg(COALESCE(u.name, p.name, u.email), ', ') INTO v_names
+    FROM activity_participants ap
+    LEFT JOIN users u ON u.id = ap.user_id
+    LEFT JOIN persons p ON p.id = ap.person_id
+    WHERE ap.activity_id = p_activity_id;
+
+    RETURN COALESCE(v_names, '');
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_get_entity_for_workflow(p_entity_type VARCHAR, p_entity_id INTEGER)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_type VARCHAR := LOWER(p_entity_type);
+    v_result JSONB;
+BEGIN
+    IF v_type = 'leads' OR v_type = 'lead' THEN
+        SELECT jsonb_build_object(
+            'id', l.id,
+            'title', l.title,
+            'description', l.description,
+            'lead_value', l.lead_value,
+            'status', l.status,
+            'user_id', l.user_id,
+            'person_id', l.person_id,
+            'organization_id', l.organization_id,
+            'lead_pipeline_id', l.lead_pipeline_id,
+            'lead_pipeline_stage_id', l.lead_pipeline_stage_id,
+            'lead_source_id', l.lead_source_id,
+            'lead_type_id', l.lead_type_id,
+            'created_at', l.created_at,
+            'updated_at', l.updated_at,
+            'person_name', p.name,
+            'person_emails', p.emails,
+            'person_contact_numbers', p.contact_numbers,
+            'organization_name', o.name,
+            'user_name', u.name,
+            'user_email', u.email,
+            'stage_name', s.name,
+            'source_name', src.name,
+            'pipeline_name', pipe.name,
+            'type_name', lt.name
+        ) INTO v_result
+        FROM leads l
+        LEFT JOIN persons p ON p.id = l.person_id
+        LEFT JOIN organizations o ON o.id = l.organization_id
+        LEFT JOIN users u ON u.id = l.user_id
+        LEFT JOIN lead_pipeline_stages s ON s.id = l.lead_pipeline_stage_id
+        LEFT JOIN lead_sources src ON src.id = l.lead_source_id
+        LEFT JOIN lead_pipelines pipe ON pipe.id = l.lead_pipeline_id
+        LEFT JOIN lead_types lt ON lt.id = l.lead_type_id
+        WHERE l.id = p_entity_id;
+
+    ELSIF v_type = 'persons' OR v_type = 'person' OR v_type = 'contacts' OR v_type = 'contact' THEN
+        SELECT jsonb_build_object(
+            'id', p.id,
+            'name', p.name,
+            'emails', p.emails,
+            'contact_numbers', p.contact_numbers,
+            'job_title', p.job_title,
+            'organization_id', p.organization_id,
+            'user_id', p.user_id,
+            'created_at', p.created_at,
+            'updated_at', p.updated_at,
+            'organization_name', o.name,
+            'user_name', u.name,
+            'user_email', u.email
+        ) INTO v_result
+        FROM persons p
+        LEFT JOIN organizations o ON o.id = p.organization_id
+        LEFT JOIN users u ON u.id = p.user_id
+        WHERE p.id = p_entity_id;
+
+    ELSIF v_type = 'organizations' OR v_type = 'organization' THEN
+        SELECT jsonb_build_object(
+            'id', o.id,
+            'name', o.name,
+            'address', o.address,
+            'user_id', o.user_id,
+            'created_at', o.created_at,
+            'updated_at', o.updated_at,
+            'user_name', u.name,
+            'user_email', u.email
+        ) INTO v_result
+        FROM organizations o
+        LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.id = p_entity_id;
+
+    ELSIF v_type = 'quotes' OR v_type = 'quote' THEN
+        SELECT jsonb_build_object(
+            'id', q.id,
+            'subject', q.subject,
+            'description', q.description,
+            'grand_total', q.grand_total,
+            'sub_total', q.sub_total,
+            'discount_amount', q.discount_amount,
+            'tax_amount', q.tax_amount,
+            'user_id', q.user_id,
+            'person_id', q.person_id,
+            'lead_id', q.lead_id,
+            'created_at', q.created_at,
+            'updated_at', q.updated_at,
+            'person_name', p.name,
+            'person_emails', p.emails,
+            'lead_title', l.title,
+            'user_name', u.name,
+            'user_email', u.email
+        ) INTO v_result
+        FROM quotes q
+        LEFT JOIN persons p ON p.id = q.person_id
+        LEFT JOIN leads l ON l.id = q.lead_id
+        LEFT JOIN users u ON u.id = q.user_id
+        WHERE q.id = p_entity_id;
+
+    ELSIF v_type = 'activities' OR v_type = 'activity' THEN
+        SELECT jsonb_build_object(
+            'id', a.id,
+            'title', a.title,
+            'type', a.type,
+            'comment', a.comment,
+            'schedule_from', a.schedule_from,
+            'schedule_to', a.schedule_to,
+            'location', a.location,
+            'is_done', a.is_done,
+            'user_id', a.user_id,
+            'created_at', a.created_at,
+            'updated_at', a.updated_at,
+            'lead_id', la.lead_id,
+            'person_id', pa.person_id,
+            'user_name', u.name,
+            'user_email', u.email
+        ) INTO v_result
+        FROM activities a
+        LEFT JOIN users u ON u.id = a.user_id
+        LEFT JOIN lead_activities la ON la.activity_id = a.id
+        LEFT JOIN person_activities pa ON pa.activity_id = a.id
+        WHERE a.id = p_entity_id;
+    END IF;
+
+    RETURN v_result;
+END;
+$$;
+
+
 `;
 
 export async function initDbFunctions(): Promise<void> {
