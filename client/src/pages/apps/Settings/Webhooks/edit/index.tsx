@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IWebhook } from "@/interface";
 import { WebhookForm } from "../WebhookForm";
+import { useWebhookStore } from "@/store";
 
 const EditWebhookPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditWebhookPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/webhooks/${id}`)
-        .then((res) => setWebhook(res.data.data))
+      useWebhookStore.getState().fetchWebhookById(id)
+        .then((data) => setWebhook(data))
         .catch(() => setWebhook(null))
         .finally(() => setLoading(false));
     }

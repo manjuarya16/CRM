@@ -3,10 +3,9 @@ import { useNavigate } from "react-router-dom";
 import useUserStore from "@/store/userStore";
 import useBranchStore from "@/store/branchStore";
 import useRoleStore from "@/store/roleStore";
-import { useDepartmentStore } from "@/store";
+import { useDepartmentStore, useGroupStore } from "@/store";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IGroup } from "@/interface";
 import { handleErrorResponse, handleSuccessResponse } from "@/utils/swalAlert";
 import useModuleAccess from "@/hooks/useModuleAccess";
@@ -367,11 +366,11 @@ export const UserManagement: React.FC = () => {
       fetchRoles(),
       fetchDepartments(),
       fetchUsers(1, 99999, force),
-      API.get("/groups").catch(() => ({ data: { data: [] } })),
-    ]).then(([, , payload, groupsRes]) => {
+      useGroupStore.getState().fetchGroups(),
+    ]).then(([, , payload, groupList]) => {
       if ((payload as any)?.rows || Array.isArray(payload)) setCurrentPage(1);
-      if (groupsRes?.data?.data) {
-        setGroups(groupsRes.data.data);
+      if (groupList) {
+        setGroups(groupList);
       }
     }).catch(() => { });
   }, []);

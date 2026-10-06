@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IEmailTemplate } from "@/interface";
 import { EmailTemplateForm } from "../EmailTemplateForm";
+import { useEmailTemplateStore } from "@/store";
 
 const EditEmailTemplatePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditEmailTemplatePage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/email-templates/${id}`)
-        .then((res) => setTemplate(res.data.data))
+      useEmailTemplateStore.getState().fetchEmailTemplateById(id)
+        .then((data) => setTemplate(data))
         .catch(() => setTemplate(null))
         .finally(() => setLoading(false));
     }

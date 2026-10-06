@@ -2,10 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { emailTemplateSchema, EmailTemplateInput } from "@/schemas";
-import { IEmailTemplate, EmailTemplateFormProps } from "@/interface";
+import { EmailTemplateFormProps } from "@/interface";
+import { useEmailTemplateStore } from "@/store";
 
 const PLACEHOLDERS = [
   { label: "Lead Name", tag: "{%lead.name%}" },
@@ -39,8 +39,8 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
   useEffect(() => {
     if (initialData) {
       setValue("name", initialData.name);
-      setValue("subject", initialData.subject);
-      setValue("content", initialData.content);
+      setValue("subject", initialData.subject || "");
+      setValue("content", initialData.content || "");
     }
   }, [initialData, setValue]);
 
@@ -57,15 +57,15 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
     try {
       setLoading(true);
       if (isEdit && initialData) {
-        await API.put(`/email-templates/${initialData.id}`, data);
+        await useEmailTemplateStore.getState().saveEmailTemplate(data, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Email template updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/email-templates", data);
+        await useEmailTemplateStore.getState().saveEmailTemplate(data);
         Swal.fire({ icon: "success", title: "Created!", text: "Email template created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/email-templates");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save email template" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save email template" });
     } finally {
       setLoading(false);
     }

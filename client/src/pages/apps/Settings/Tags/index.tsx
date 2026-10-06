@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import PageBreadcrumb from "@/components/PageBreadcrumb";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { tagSchema } from "@/schemas";
 import { usePermission } from "@/hooks/usePermission";
+import { useTagStore } from "@/store";
 
 import { ITag } from "@/interface";
 
@@ -46,10 +46,8 @@ const TagsPage: React.FC = () => {
   const fetchTags = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/tags", { params: { search: search || undefined } });
-      if (res.data?.data) {
-        setTags(res.data.data);
-      }
+      const list = await useTagStore.getState().fetchTags(search || undefined);
+      setTags(list || []);
     } catch {
       Swal.fire("Error", "Failed to load tags", "error");
     } finally {
@@ -90,16 +88,16 @@ const TagsPage: React.FC = () => {
     try {
       setSaving(true);
       if (editingTag) {
-        await API.put(`/tags/${editingTag.id}`, { name: tagName.trim(), color: tagColor });
+        await useTagStore.getState().saveTag({ name: tagName.trim(), color: tagColor }, editingTag.id);
         Swal.fire({ icon: "success", title: "Updated!", text: "Tag updated successfully.", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/tags", { name: tagName.trim(), color: tagColor });
+        await useTagStore.getState().saveTag({ name: tagName.trim(), color: tagColor });
         Swal.fire({ icon: "success", title: "Created!", text: "Tag created successfully.", timer: 1500, showConfirmButton: false });
       }
       setIsModalOpen(false);
       fetchTags();
     } catch (err: any) {
-      const msg = err.response?.data?.message || "Failed to save tag";
+      const msg = err.response?.data?.message || err.message || "Failed to save tag";
       Swal.fire("Error", msg, "error");
     } finally {
       setSaving(false);
@@ -118,11 +116,11 @@ const TagsPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete(`/tags/${tag.id}`);
+        await useTagStore.getState().deleteTag(tag.id);
         Swal.fire("Deleted!", "Tag deleted successfully.", "success");
         fetchTags();
       } catch (err: any) {
-        const msg = err.response?.data?.message || "Failed to delete tag";
+        const msg = err.response?.data?.message || err.message || "Failed to delete tag";
         Swal.fire("Error", msg, "error");
       }
     }

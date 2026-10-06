@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IWebForm, IWebFormSubmission } from "@/interface";
 import { WebFormPreview } from "./WebFormPreview";
 import { usePermission } from "@/hooks/usePermission";
+import { useWebFormStore } from "@/store";
 
 const WebFormsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -29,8 +29,8 @@ const WebFormsPage: React.FC = () => {
   const fetchWebForms = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/web-forms").catch(() => ({ data: { data: [] } }));
-      setWebForms(res.data?.data || []);
+      const list = await useWebFormStore.getState().fetchWebforms();
+      setWebForms(list || []);
     } catch {
       setWebForms([]);
     } finally {
@@ -48,8 +48,8 @@ const WebFormsPage: React.FC = () => {
       setSubmissionsModalOpen(true);
       setLoadingSubmissions(true);
       const url = form ? `/web-forms/${form.id}/submissions` : "/web-forms/submissions";
-      const res = await API.get(url).catch(() => ({ data: { data: [] } }));
-      setSubmissions(res.data?.data || []);
+      const list = await useWebFormStore.getState().fetchWebforms(url);
+      setSubmissions((list as any) || []);
     } catch {
       setSubmissions([]);
     } finally {
@@ -68,11 +68,11 @@ const WebFormsPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/web-forms/${item.id}`);
+        await useWebFormStore.getState().deleteWebform(item.id);
         Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
         fetchWebForms();
       } catch (err: any) {
-        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to delete" });
+        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to delete" });
       }
     }
   };
@@ -80,7 +80,7 @@ const WebFormsPage: React.FC = () => {
   const filtered = webForms.filter(
     (w) =>
       w.title.toLowerCase().includes(search.toLowerCase()) ||
-      w.form_id.toLowerCase().includes(search.toLowerCase())
+      (w.form_id || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;

@@ -68,7 +68,7 @@ const QuotesPage: React.FC = () => {
     try {
       setLoadingPreview(true);
       setPreviewModalOpen(true);
-      const fullQuote = await fetchQuoteById(quote.id);
+      const fullQuote = await useQuoteStore.getState().fetchQuoteById(quote.id);
       setPreviewQuote(fullQuote || quote);
     } catch {
       setPreviewQuote(quote);
@@ -83,7 +83,7 @@ const QuotesPage: React.FC = () => {
 
   const handleOpenSendEmail = async (quote: IQuote) => {
     try {
-      const fullQuote = await fetchQuoteById(quote.id) || quote;
+      const fullQuote = (await useQuoteStore.getState().fetchQuoteById(quote.id)) || quote;
       setSelectedQuoteForEmail(fullQuote);
       setEmailTo(fullQuote.person_email || "");
       setEmailSubject(`Quotation #${fullQuote.id} - ${fullQuote.subject}`);

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import API from "@/config";
 import { IUserData } from "@/interface";
-import { useActivityStore } from "@/store";
+import { useActivityStore, useUserStore, useMailStore } from "@/store";
 import { extractFileUrl, fileToBase64 } from "@/utils/fileHelper";
 
 const ViewUserPage: React.FC = () => {
@@ -53,28 +52,21 @@ const ViewUserPage: React.FC = () => {
   const fetchUserDetails = async () => {
     try {
       setLoading(true);
-      const res = await API.get(`/users/${userId}`);
-      const userData = res.data?.data || res.data;
+      await useUserStore.getState().fetchUserById(userId);
+      const userData = useUserStore.getState().selectedUser;
       if (userData) {
-        setSelectedUser(userData);
+        setSelectedUser(userData as any);
         setModalForm((prev) => ({
           ...prev,
           email_to: userData.email || "",
         }));
-      } else {
-        // Fallback fetch from list
-        const listRes = await API.get("/users");
-        const found = (listRes.data?.data || []).find((u: IUserData) => Number(u.id) === userId);
-        if (found) {
-          setSelectedUser(found);
-          setModalForm((prev) => ({ ...prev, email_to: found.email || "" }));
-        }
       }
     } catch {
       // Fallback fetch all users
       try {
-        const listRes = await API.get("/users");
-        const found = (listRes.data?.data || []).find((u: IUserData) => Number(u.id) === userId);
+        const res: any = await useUserStore.getState().fetchUsers(1, 200);
+        const list = res?.rows || res || [];
+        const found = list.find((u: IUserData) => Number(u.id) === userId);
         if (found) {
           setSelectedUser(found);
           setModalForm((prev) => ({ ...prev, email_to: found.email || "" }));
@@ -100,7 +92,7 @@ const ViewUserPage: React.FC = () => {
 
     if (res.isConfirmed) {
       try {
-        await API.delete(`/users/${selectedUser.id}`);
+        await useUserStore.getState().deleteUser(Number(selectedUser.id));
         Swal.fire("Deleted!", "User has been deleted.", "success");
         navigate("/settings/users");
       } catch (err: any) {
@@ -122,9 +114,7 @@ const ViewUserPage: React.FC = () => {
         mailFormData.append("is_draft", "false");
 
         // Dispatch real email via SMTP
-        await API.post("/mail", mailFormData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        }).catch((err) => console.warn("SMTP email dispatch warning:", err));
+        await useMailStore.getState().sendEmail(mailFormData).catch((err) => console.warn("SMTP email dispatch warning:", err));
 
         await addActivity({
           title: modalForm.email_subject || "Email Sent to User",
@@ -139,10 +129,7 @@ const ViewUserPage: React.FC = () => {
           try {
             const formData = new FormData();
             formData.append("file", selectedFile);
-            const uploadRes = await API.post("/activities/upload-file", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            });
-            uploadedFileUrl = uploadRes.data?.fileUrl || uploadRes.data?.data?.fileUrl || "";
+            uploadedFileUrl = await useActivityStore.getState().uploadFile(formData);
           } catch (uploadErr) {
             console.warn("Server file upload failed, attempting fallback:", uploadErr);
             try {

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { ICampaign } from "@/interface";
 import { CampaignForm } from "../CampaignForm";
+import { useCampaignStore } from "@/store";
 
 const EditCampaignPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditCampaignPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/campaigns/${id}`)
-        .then((res) => setCampaign(res.data.data))
+      useCampaignStore.getState().fetchCampaignById(id)
+        .then((data) => setCampaign(data))
         .catch(() => setCampaign(null))
         .finally(() => setLoading(false));
     }

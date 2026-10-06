@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
+import { useTypeStore } from "@/store";
 import { IType } from "@/interface";
 import { typeSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -36,8 +36,8 @@ const TypesPage: React.FC = () => {
   const fetchTypes = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/types");
-      setTypes(res.data?.data || []);
+      const list = await useTypeStore.getState().fetchTypes();
+      setTypes(list || []);
     } catch {
       setTypes([]);
     } finally {
@@ -71,7 +71,7 @@ const TypesPage: React.FC = () => {
       setSaving(true);
       if (editingType?.id) {
         // Edit / Update
-        await API.put(`/types/${editingType.id}`, validated);
+        await useTypeStore.getState().saveType(validated, editingType.id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -81,7 +81,7 @@ const TypesPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/types", validated);
+        await useTypeStore.getState().saveType(validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -106,7 +106,7 @@ const TypesPage: React.FC = () => {
       }
       Swal.fire(
         "Error",
-        err?.response?.data?.message || "Failed to save type",
+        err?.response?.data?.message || err?.message || "Failed to save type",
         "error"
       );
     } finally {
@@ -126,13 +126,13 @@ const TypesPage: React.FC = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await API.delete(`/types/${id}`);
+          await useTypeStore.getState().deleteType(id);
           Swal.fire("Deleted!", "Type has been deleted.", "success");
           fetchTypes();
         } catch (err: any) {
           Swal.fire(
             "Error",
-            err?.response?.data?.message || "Failed to delete type",
+            err?.response?.data?.message || err?.message || "Failed to delete type",
             "error"
           );
         }

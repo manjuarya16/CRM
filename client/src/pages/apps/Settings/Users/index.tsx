@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useUserStore, useRoleStore, useGroupStore } from "@/store";
 import { IRole, IGroup, IUserData } from "@/interface";
 import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -81,8 +82,9 @@ const UsersPage: React.FC = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/users");
-      setUsers(res.data?.data || []);
+      const res: any = await useUserStore.getState().fetchUsers(1, 200, true);
+      const userList = res?.rows || res || [];
+      setUsers(userList);
     } catch {
       setUsers([]);
     } finally {
@@ -92,12 +94,12 @@ const UsersPage: React.FC = () => {
 
   const fetchRolesAndGroups = async () => {
     try {
-      const [rolesRes, groupsRes] = await Promise.all([
-        API.get("/roles").catch(() => ({ data: { data: [] } })),
-        API.get("/groups").catch(() => ({ data: { data: [] } })),
+      const [rolesList, groupsList] = await Promise.all([
+        useRoleStore.getState().fetchRoles(true),
+        useGroupStore.getState().fetchGroups(),
       ]);
-      setRoles(rolesRes.data?.data || []);
-      setGroups(groupsRes.data?.data || []);
+      setRoles(rolesList || []);
+      setGroups(groupsList || []);
     } catch {
       // Fallback
     }
@@ -172,7 +174,7 @@ const UsersPage: React.FC = () => {
       }
 
       if (editingUser?.id) {
-        await API.put(`/users/${editingUser.id}`, payload);
+        await useUserStore.getState().updateUser(Number(editingUser.id), payload);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -181,7 +183,7 @@ const UsersPage: React.FC = () => {
           showConfirmButton: false,
         });
       } else {
-        await API.post("/users", payload);
+        await useUserStore.getState().addUser(payload);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -226,7 +228,7 @@ const UsersPage: React.FC = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await API.delete(`/users/${user.id}`);
+          await useUserStore.getState().deleteUser(Number(user.id));
           Swal.fire("Deleted!", "User has been deleted.", "success");
           fetchUsers();
         } catch (err: any) {
@@ -711,7 +713,7 @@ const UsersPage: React.FC = () => {
                 </tr>
               ) : (
                 paginatedUsers.map((user) => {
-                  const permInfo = getViewPermissionLabel(user.view_permission);
+                  const permInfo = getViewPermissionLabel(user.view_permission || "");
                   return (
                     <tr
                       key={user.id}

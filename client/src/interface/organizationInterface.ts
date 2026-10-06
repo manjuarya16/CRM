@@ -33,4 +33,8 @@ export interface OrganizationState {
 
   getOrganization: () => Promise<void>;
   updateOrganization: (id: string, data: any) => Promise<any>;
+  fetchOrganizations: (page?: number, per_page?: number, search?: string) => Promise<any>;
+  fetchOrganizationById: (id: number | string) => Promise<any>;
+  createOrganization: (data: any) => Promise<any>;
+  deleteOrganization: (id: number | string) => Promise<any>;
 }

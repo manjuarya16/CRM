@@ -20,8 +20,8 @@ export interface IPipelineStage {
 export interface IPipeline {
   id: number;
   name: string;
-  is_default: boolean;
-  rotten_days: number;
+  is_default?: boolean;
+  rotten_days?: number;
   created_at?: string;
   updated_at?: string;
   stages?: IPipelineStage[];

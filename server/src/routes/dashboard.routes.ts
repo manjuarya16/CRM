@@ -3,7 +3,7 @@ import { DashboardService } from "@/services/dashboard.service";
 
 const router = Router();
 
-router.get("/stats", async (req, res, next) => {
+const handleGetStats = async (req: any, res: any, next: any) => {
   try {
     const startDate = typeof req.query.start_date === "string" ? req.query.start_date : undefined;
     const endDate = typeof req.query.end_date === "string" ? req.query.end_date : undefined;
@@ -18,6 +18,9 @@ router.get("/stats", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+};
+
+router.get("/stats", handleGetStats);
+router.get("/", handleGetStats);
 
 export default router;

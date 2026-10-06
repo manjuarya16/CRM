@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { usePipelineStore } from "@/store";
 import { IPipeline, IPipelineStage } from "@/interface";
 import { pipelineSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -43,8 +44,7 @@ const EditPipelinePage: React.FC = () => {
   const fetchPipelineData = async () => {
     try {
       setLoading(true);
-      const res = await API.get(`/pipelines/${id}`);
-      const pipeline: IPipeline = res.data?.data;
+      const pipeline = await usePipelineStore.getState().fetchPipelineById(id!);
       if (pipeline) {
         setFormData({
           name: pipeline.name || "",
@@ -121,7 +121,7 @@ const EditPipelinePage: React.FC = () => {
     try {
       const validated = pipelineSchema.parse(formData);
       setSaving(true);
-      await API.put(`/pipelines/${id}`, validated);
+      await usePipelineStore.getState().savePipeline(validated, id);
       Swal.fire({
         icon: "success",
         title: "Success",

@@ -38,8 +38,8 @@ export interface IAttribute {
   type: AttributeType;
   entity_type: EntityType;
   lookup_type?: string | null;
-  is_required: boolean;
-  is_unique: boolean;
+  is_required?: boolean;
+  is_unique?: boolean;
   quick_add?: boolean;
   is_user_defined?: boolean;
   sort_order?: number;

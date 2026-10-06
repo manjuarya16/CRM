@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IWebForm } from "@/interface";
 import { WebFormForm } from "../WebFormForm";
+import { useWebFormStore } from "@/store";
 
 const EditWebFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditWebFormPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/web-forms/${id}`)
-        .then((res) => setWebForm(res.data.data))
+      useWebFormStore.getState().fetchWebformById(id)
+        .then((data) => setWebForm(data))
         .catch(() => setWebForm(null))
         .finally(() => setLoading(false));
     }

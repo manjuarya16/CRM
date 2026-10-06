@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { IImport } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useDataTransferStore } from "@/store";
 
 const DataTransferPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -20,10 +20,8 @@ const DataTransferPage: React.FC = () => {
   const fetchImports = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/data-transfer/imports", {
-        params: { search: search || undefined },
-      }).catch(() => ({ data: { data: [] } }));
-      setImports(res.data?.data || []);
+      const list = await useDataTransferStore.getState().fetchImports();
+      setImports((list as any) || []);
     } catch {
       setImports([]);
     } finally {
@@ -53,7 +51,7 @@ const DataTransferPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete(`/data-transfer/imports/${id}`).catch(() => {});
+        await useDataTransferStore.getState().deleteImport(id);
         setImports(imports.filter((i) => i.id !== id));
         Swal.fire({ icon: "success", title: "Deleted!", timer: 1500, showConfirmButton: false });
       } catch {

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { IWebForm, WebFormPreviewProps } from "@/interface";
+import { WebFormPreviewProps } from "@/interface";
 import Swal from "sweetalert2";
-import API from "@/config";
 import { WebFormFieldInput } from "./WebFormFieldInput";
+import { useWebFormStore } from "@/store";
 
 export const WebFormPreview: React.FC<WebFormPreviewProps> = ({ form, onClose }) => {
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -12,7 +12,7 @@ export const WebFormPreview: React.FC<WebFormPreviewProps> = ({ form, onClose })
     e.preventDefault();
     try {
       setSubmitting(true);
-      await API.post(`/web-forms/submit/${form.form_id}`, formData);
+      await useWebFormStore.getState().submitWebform(form.form_id || String(form.id), formData);
       if (form.submit_success_action === "redirect" && form.submit_success_content) {
         Swal.fire({
           icon: "success",

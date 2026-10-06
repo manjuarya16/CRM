@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { webFormSchema, WebFormInput } from "@/schemas";
 import { IWebForm, IWebFormAttribute, IPipeline, IAttribute, WebFormFormProps } from "@/interface";
+import { useWebFormStore, usePipelineStore, useAttributeStore } from "@/store";
 
 export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
@@ -41,10 +41,9 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
   });
 
   useEffect(() => {
-    API.get("/pipelines").then((res) => setPipelines(res.data?.data || [])).catch(() => {});
-    API.get("/attributes").then((res) => {
-      const list: IAttribute[] = res.data?.data || [];
-      setAvailableAttributes(list);
+    usePipelineStore.getState().fetchPipelines().then((list) => setPipelines(list || [])).catch(() => {});
+    useAttributeStore.getState().fetchAttributes().then((list) => {
+      setAvailableAttributes((list || []) as any);
     }).catch(() => {});
   }, []);
 
@@ -113,15 +112,15 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
       data.attributes = attributes;
 
       if (isEdit && initialData) {
-        await API.put(`/web-forms/${initialData.id}`, data);
+        await useWebFormStore.getState().saveWebform(data, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Web form updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/web-forms", data);
+        await useWebFormStore.getState().saveWebform(data);
         Swal.fire({ icon: "success", title: "Created!", text: "Web form created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/web-forms");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save web form" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save web form" });
     } finally {
       setLoading(false);
     }

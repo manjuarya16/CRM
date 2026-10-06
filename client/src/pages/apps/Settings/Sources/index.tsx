@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useSourceStore } from "@/store";
 import { ISource } from "@/interface";
 import { sourceSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -36,8 +37,8 @@ const SourcesPage: React.FC = () => {
   const fetchSources = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/sources");
-      setSources(res.data?.data || []);
+      const list = await useSourceStore.getState().fetchSources();
+      setSources(list || []);
     } catch {
       setSources([]);
     } finally {
@@ -71,7 +72,7 @@ const SourcesPage: React.FC = () => {
       setSaving(true);
       if (editingSource?.id) {
         // Edit / Update
-        await API.put(`/sources/${editingSource.id}`, validated);
+        await useSourceStore.getState().saveSource(validated, editingSource.id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -81,7 +82,7 @@ const SourcesPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/sources", validated);
+        await useSourceStore.getState().saveSource(validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -126,7 +127,7 @@ const SourcesPage: React.FC = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await API.delete(`/sources/${id}`);
+          await useSourceStore.getState().deleteSource(id);
           Swal.fire("Deleted!", "Source has been deleted.", "success");
           fetchSources();
         } catch (err: any) {

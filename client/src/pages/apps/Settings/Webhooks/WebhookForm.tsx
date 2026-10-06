@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { webhookSchema, WebhookInput } from "@/schemas";
-import { IWebhook, WebhookFormProps } from "@/interface";
+import { WebhookFormProps } from "@/interface";
+import { useWebhookStore } from "@/store";
 
 export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
@@ -37,10 +37,10 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
   useEffect(() => {
     if (initialData) {
       setValue("name", initialData.name);
-      setValue("entity_type", initialData.entity_type);
+      setValue("entity_type", initialData.entity_type || "leads");
       setValue("description", initialData.description || "");
       setValue("method", initialData.method || "POST");
-      setValue("end_point", initialData.end_point);
+      setValue("end_point", initialData.end_point || "");
       setValue("payload_type", initialData.payload_type || "default");
       setValue("raw_payload_type", initialData.raw_payload_type || "json");
 
@@ -103,15 +103,15 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
       data.query_params = queryParams.filter((q) => q.key.trim() !== "");
 
       if (isEdit && initialData) {
-        await API.put(`/webhooks/${initialData.id}`, data);
+        await useWebhookStore.getState().saveWebhook(data, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Webhook updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/webhooks", data);
+        await useWebhookStore.getState().saveWebhook(data);
         Swal.fire({ icon: "success", title: "Created!", text: "Webhook created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/webhooks");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save webhook" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save webhook" });
     } finally {
       setLoading(false);
     }

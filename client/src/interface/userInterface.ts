@@ -26,8 +26,8 @@ export interface IUserData {
   id: number;
   name: string;
   email: string;
-  status: boolean;
-  view_permission: "global" | "group" | "individual" | string;
+  status?: boolean;
+  view_permission?: "global" | "group" | "individual" | string;
   role_id: number;
   role_name?: string;
   image?: string | null;

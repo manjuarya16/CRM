@@ -146,6 +146,7 @@ const useOrganizationStore = create<OrganizationState>((set) => {
 
         throw error;
       }
+    },
     fetchOrganizations: async (page = 1, per_page = 10, search = "") => {
       set({ loading: true, error: null });
       try {
@@ -193,6 +194,8 @@ const useOrganizationStore = create<OrganizationState>((set) => {
         throw error;
       }
     },
+  };
+});
 
 export { useOrganizationStore };
 

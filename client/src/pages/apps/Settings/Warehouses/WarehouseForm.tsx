@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useWarehouseStore } from "@/store";
 import { ZodError } from "zod";
 import { warehouseSchema } from "@/schemas/warehouse.schema";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
@@ -41,8 +42,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const fetchWarehouseDetails = async (warehouseId: string) => {
     try {
       setLoading(true);
-      const res = await API.get("/warehouses/" + warehouseId);
-      const data = res.data?.data;
+      const data = await useWarehouseStore.getState().fetchWarehouseById(warehouseId);
       if (data) {
         setName(data.name || "");
         setDescription(data.description || "");
@@ -173,7 +173,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
       setSaving(true);
 
       if (mode === "edit" && id) {
-        await API.put("/warehouses/" + id, validated);
+        await useWarehouseStore.getState().saveWarehouse(validated, id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -182,7 +182,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
           showConfirmButton: false,
         });
       } else {
-        await API.post("/warehouses/", validated);
+        await useWarehouseStore.getState().saveWarehouse(validated);
         Swal.fire({
           icon: "success",
           title: "Success",

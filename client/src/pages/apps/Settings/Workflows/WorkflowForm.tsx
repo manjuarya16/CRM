@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { workflowSchema, WorkflowInput } from "@/schemas";
 import { IWorkflow, IWorkflowCondition, IWorkflowAction, WorkflowFormProps } from "@/interface";
+import { useWorkflowStore, useEmailTemplateStore, useUserStore, useTagStore } from "@/store";
 
 const ENTITY_ACTION_OPTIONS: Record<string, { label: string; value: string }[]> = {
   leads: [
@@ -109,14 +109,17 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
     // Fetch helper data for dropdowns
     const fetchHelperData = async () => {
       try {
-        const [templatesRes, usersRes, tagsRes] = await Promise.all([
-          API.get("/email-templates").catch(() => ({ data: { data: [] } })),
-          API.get("/users").catch(() => ({ data: { data: [] } })),
-          API.get("/tags").catch(() => ({ data: { data: [] } })),
+        const [tmplList, uList, tagList] = await Promise.all([
+          useEmailTemplateStore.getState().fetchEmailTemplates(),
+          useUserStore.getState().fetchUsers(),
+          useTagStore.getState().fetchTags(),
         ]);
-        if (templatesRes.data?.data) setEmailTemplates(templatesRes.data.data);
-        if (usersRes.data?.data) setUsers(usersRes.data.data);
-        if (tagsRes.data?.data) setTags(tagsRes.data.data);
+        if (tmplList) setEmailTemplates(tmplList as any);
+        if (uList) {
+          const userRows = "rows" in uList ? uList.rows : Array.isArray(uList) ? uList : [];
+          setUsers(userRows);
+        }
+        if (tagList) setTags(tagList as any);
       } catch (err) {
         console.error("Failed to load helper options", err);
       }
@@ -128,8 +131,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
     if (initialData) {
       setValue("name", initialData.name);
       setValue("description", initialData.description || "");
-      setValue("entity_type", initialData.entity_type);
-      setValue("event", initialData.event);
+      setValue("entity_type", initialData.entity_type || "leads");
+      setValue("event", initialData.event || "created");
       setValue("condition_type", initialData.condition_type || "and");
 
       const conds = Array.isArray(initialData.conditions) ? initialData.conditions : [];
@@ -198,15 +201,15 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
       data.actions = actions;
 
       if (isEdit && initialData) {
-        await API.put(`/workflows/${initialData.id}`, data);
+        await useWorkflowStore.getState().saveWorkflow(data, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Workflow updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/workflows", data);
+        await useWorkflowStore.getState().saveWorkflow(data);
         Swal.fire({ icon: "success", title: "Created!", text: "Workflow created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/workflows");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save workflow" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save workflow" });
     } finally {
       setLoading(false);
     }

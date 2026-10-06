@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IWorkflow } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useWorkflowStore } from "@/store";
 
 const WorkflowsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -21,8 +21,8 @@ const WorkflowsPage: React.FC = () => {
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/workflows").catch(() => ({ data: { data: [] } }));
-      setWorkflows(res.data?.data || []);
+      const list = await useWorkflowStore.getState().fetchWorkflows();
+      setWorkflows(list || []);
     } catch {
       setWorkflows([]);
     } finally {
@@ -45,11 +45,11 @@ const WorkflowsPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/workflows/${item.id}`);
+        await useWorkflowStore.getState().deleteWorkflow(item.id);
         Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
         fetchWorkflows();
       } catch (err: any) {
-        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to delete" });
+        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to delete" });
       }
     }
   };
@@ -57,7 +57,7 @@ const WorkflowsPage: React.FC = () => {
   const filtered = workflows.filter(
     (w) =>
       w.name.toLowerCase().includes(search.toLowerCase()) ||
-      w.entity_type.toLowerCase().includes(search.toLowerCase())
+      (w.entity_type || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;

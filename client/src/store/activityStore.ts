@@ -127,6 +127,13 @@ export const useActivityStore = create<ActivityStore>((set, get) => ({
     }
   },
 
+  uploadFile: async (formData: FormData) => {
+    const res = await API.post("/activities/upload-file", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data?.fileUrl || res.data?.data?.fileUrl || "";
+  },
+
   setSelectedActivity: (activity: IActivity | null) => set({ selectedActivity: activity }),
   clearError: () => set({ error: null }),
 }));

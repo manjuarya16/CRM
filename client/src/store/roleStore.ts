@@ -53,11 +53,12 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
     set({ loading: true });
     try {
       const response = await API.get(`/roles/${id}`);
-      if (response.data?.success) {
-        set({ selectedRole: response.data.data, error: null });
-      }
+      const data = response.data?.data || response.data;
+      set({ selectedRole: data, error: null });
+      return data;
     } catch (error: any) {
       set({ error: error.message || "Error fetching role" });
+      return null;
     } finally {
       set({ loading: false });
     }

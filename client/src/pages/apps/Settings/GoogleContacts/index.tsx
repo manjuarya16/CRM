@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IGoogleContactAccount, IContactExportBatch } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useGoogleContactStore } from "@/store";
 
 const GoogleContactsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -23,12 +23,9 @@ const GoogleContactsPage: React.FC = () => {
   const fetchAccountsAndBatches = async () => {
     try {
       setLoading(true);
-      const [accRes, batchRes] = await Promise.all([
-        API.get("/google-contacts/accounts").catch(() => ({ data: { data: [] } })),
-        API.get("/google-contacts/batches").catch(() => ({ data: { data: [] } })),
-      ]);
-      setAccounts(accRes.data?.data || []);
-      setBatches(batchRes.data?.data || []);
+      const res = await useGoogleContactStore.getState().fetchAccountsAndBatches();
+      setAccounts(res.accounts || []);
+      setBatches(res.batches || []);
     } catch {
       setAccounts([]);
       setBatches([]);
@@ -44,7 +41,7 @@ const GoogleContactsPage: React.FC = () => {
   const handleConnectAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await API.post("/google-contacts/accounts", {
+      await useGoogleContactStore.getState().createAccount({
         google_email: googleEmail,
         access_token: accessToken || "mock_oauth_token_" + Date.now(),
       });
@@ -54,7 +51,7 @@ const GoogleContactsPage: React.FC = () => {
       setAccessToken("");
       fetchAccountsAndBatches();
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to connect Google account" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to connect Google account" });
     }
   };
 
@@ -69,7 +66,7 @@ const GoogleContactsPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/google-contacts/accounts/${id}`);
+        await useGoogleContactStore.getState().deleteAccount(id);
         Swal.fire({ icon: "success", title: "Disconnected", timer: 1200, showConfirmButton: false });
         fetchAccountsAndBatches();
       } catch (err: any) {
@@ -81,15 +78,15 @@ const GoogleContactsPage: React.FC = () => {
   const handleSyncContacts = async (account: IGoogleContactAccount) => {
     try {
       setSyncing(true);
-      const res = await API.post(`/google-contacts/sync/${account.id}`);
+      const resData = await useGoogleContactStore.getState().syncAccount(account.id);
       Swal.fire({
         icon: "success",
         title: "Synchronized!",
-        text: res.data?.message || "Google contacts imported into CRM Persons.",
+        text: resData?.message || "Google contacts imported into CRM Persons.",
       });
       fetchAccountsAndBatches();
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Sync Failed", text: err.response?.data?.message || "Sync failed" });
+      Swal.fire({ icon: "error", title: "Sync Failed", text: err.response?.data?.message || err.message || "Sync failed" });
     } finally {
       setSyncing(false);
     }
@@ -97,11 +94,11 @@ const GoogleContactsPage: React.FC = () => {
 
   const handleCreateExportBatch = async () => {
     try {
-      const res = await API.post("/google-contacts/export", {});
+      const resData = await useGoogleContactStore.getState().exportContacts();
       Swal.fire({
         icon: "success",
         title: "Export Batch Queued!",
-        text: res.data?.message || "CRM contacts queued for export to Google Contacts.",
+        text: resData?.message || "CRM contacts queued for export to Google Contacts.",
       });
       fetchAccountsAndBatches();
     } catch (err: any) {

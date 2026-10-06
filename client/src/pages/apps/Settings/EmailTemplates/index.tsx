@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IEmailTemplate } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useEmailTemplateStore } from "@/store";
 
 const EmailTemplatesPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -22,8 +22,8 @@ const EmailTemplatesPage: React.FC = () => {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/email-templates").catch(() => ({ data: { data: [] } }));
-      setTemplates(res.data?.data || []);
+      const list = await useEmailTemplateStore.getState().fetchEmailTemplates();
+      setTemplates(list || []);
     } catch {
       setTemplates([]);
     } finally {
@@ -46,11 +46,11 @@ const EmailTemplatesPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/email-templates/${item.id}`);
+        await useEmailTemplateStore.getState().deleteEmailTemplate(item.id);
         Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
         fetchTemplates();
       } catch (err: any) {
-        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to delete" });
+        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to delete" });
       }
     }
   };
@@ -58,7 +58,7 @@ const EmailTemplatesPage: React.FC = () => {
   const filtered = templates.filter(
     (t) =>
       t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.subject.toLowerCase().includes(search.toLowerCase())
+      (t.subject || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
