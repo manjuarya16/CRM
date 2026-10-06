@@ -77,6 +77,15 @@ const CONFIG_NAV: { category: string; items: ConfigNavItem[] }[] = [
           { id: "doc_generation", key: "general.magic_ai.doc_generation", title: "Doc Generation" },
         ],
       },
+      {
+        id: "whatsapp",
+        key: "general.whatsapp",
+        title: "WhatsApp Settings",
+        icon: "mgc_phone_line",
+        subItems: [
+          { id: "whatsapp_settings", key: "general.whatsapp.settings", title: "WhatsApp Cloud API" },
+        ],
+      },
     ],
   },
   {
@@ -157,6 +166,13 @@ const ConfigurationPage: React.FC = () => {
     "general.magic_ai.settings.model": "openai/gpt-4o-mini",
     "general.magic_ai.settings.other_model": "",
     "general.magic_ai.doc_generation.enabled": "1",
+    // WhatsApp Configuration
+    "general.whatsapp.enabled": "1",
+    "general.whatsapp.phone_number": "",
+    "general.whatsapp.phone_number_id": "",
+    "general.whatsapp.access_token": "",
+    "general.whatsapp.verify_token": "krayin_crm_whatsapp_token",
+    "general.whatsapp.auto_reply": "1",
     // Email — SMTP Configuration
     "email.smtp.account.enable": "1",
     "email.smtp.account.host": "smtp.gmail.com",
@@ -179,7 +195,17 @@ const ConfigurationPage: React.FC = () => {
   const [testingSmtp, setTestingSmtp] = useState<boolean>(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const { fetchConfigs: fetchConfigsStore, saveConfigurations, uploadConfigImage, testSmtpConnection } = useConfigStore();
+  // WhatsApp Sandbox / Simulator States
+  const [showWaToken, setShowWaToken] = useState<boolean>(false);
+  const [waTesting, setWaTesting] = useState<boolean>(false);
+  const [waSimPhone, setWaSimPhone] = useState<string>("");
+  const [waSimName, setWaSimName] = useState<string>("");
+  const [waSimMessage, setWaSimMessage] = useState<string>("");
+  const [waSimFile, setWaSimFile] = useState<File | null>(null);
+  const [waTestResult, setWaTestResult] = useState<{ success: boolean; message: string; data?: any } | null>(null);
+  const [copiedWebhook, setCopiedWebhook] = useState<boolean>(false);
+
+  const { fetchConfigs: fetchConfigsStore, saveConfigurations, uploadConfigImage, testSmtpConnection, simulateWhatsAppLead } = useConfigStore();
 
   useEffect(() => { loadConfigs(); }, []);
 
@@ -205,6 +231,33 @@ const ConfigurationPage: React.FC = () => {
       });
     } finally {
       setTestingSmtp(false);
+    }
+  };
+
+  const handleSimulateWhatsApp = async () => {
+    setWaTesting(true);
+    setWaTestResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("senderPhoneNumber", waSimPhone);
+      formData.append("senderName", waSimName);
+      formData.append("textBody", waSimMessage);
+      if (waSimFile) {
+        formData.append("mediaFile", waSimFile);
+      }
+      const res = await simulateWhatsAppLead(formData);
+      setWaTestResult({
+        success: res?.success || false,
+        message: res?.message || "Lead successfully created from simulated WhatsApp message!",
+        data: res?.data,
+      });
+    } catch (err: any) {
+      setWaTestResult({
+        success: false,
+        message: err.response?.data?.message || err.message || "Failed to simulate WhatsApp lead creation.",
+      });
+    } finally {
+      setWaTesting(false);
     }
   };
 
@@ -758,6 +811,282 @@ const ConfigurationPage: React.FC = () => {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ════════════════════════════════════════════════════════════
+                  WHATSAPP CLOUD API & LEAD SETTINGS
+              ════════════════════════════════════════════════════════════ */}
+              {activeTab === "whatsapp" && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                      <i className="mgc_phone_line text-[#25D366]"></i>
+                      WhatsApp Cloud API & Lead Settings
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Configure WhatsApp Business Cloud API integration for automatic lead generation, visiting card OCR, and inbound inquiry capture.
+                    </p>
+                  </div>
+
+                  <div className="space-y-6 max-w-2xl">
+                    <ToggleSwitch
+                      checked={isOn("general.whatsapp.enabled")}
+                      onChange={(v) => handleToggle("general.whatsapp.enabled", v)}
+                      label="Enable WhatsApp Inbound Lead Generation"
+                      hint="When enabled, incoming WhatsApp messages, images (visiting cards), and PDF documents will automatically create leads in the CRM."
+                    />
+
+                    {/* Webhook URL Live Box */}
+                    <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                            <i className="mgc_link_line text-sm"></i>
+                            Meta Webhook Callback URL
+                          </span>
+                          <p className="text-[10px] text-emerald-700/80 dark:text-emerald-400">
+                            Enter this URL into Meta Developer Dashboard &gt; WhatsApp &gt; Configuration &gt; Callback URL.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const prodUrl = "https://crmsrv.imorse.digital/api/whatsapp/webhook";
+                              navigator.clipboard.writeText(prodUrl);
+                              setCopiedWebhook(true);
+                              setTimeout(() => setCopiedWebhook(false), 2000);
+                            }}
+                            className="text-[11px] px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium transition-colors shadow-sm flex items-center gap-1"
+                          >
+                            <i className="mgc_copy_line"></i>
+                            {copiedWebhook ? "✓ Copied Production URL!" : "Copy Production URL"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Production Webhook URL Card */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-900 dark:text-emerald-200">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                            Production Webhook URL (Live Meta Cloud API):
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-mono bg-white/90 dark:bg-gray-900/80 p-2.5 rounded-lg border border-emerald-300/70 dark:border-emerald-700 select-all break-all font-semibold">
+                          https://crmsrv.imorse.digital/api/whatsapp/webhook
+                        </p>
+                      </div>
+
+                      {/* Local / Dynamic Tunnel URL (shown if testing locally) */}
+                      {typeof window !== "undefined" && window.location.hostname !== "crm.imorse.digital" && window.location.hostname !== "crmsrv.imorse.digital" && (
+                        <div className="space-y-1 pt-1 border-t border-emerald-200/50 dark:border-emerald-800/40">
+                          <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400">
+                            <span>Dynamic Local / Tunnel URL:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const dynUrl = `${window.location.origin}/api/whatsapp/webhook`;
+                                navigator.clipboard.writeText(dynUrl);
+                                setCopiedWebhook(true);
+                                setTimeout(() => setCopiedWebhook(false), 2000);
+                              }}
+                              className="text-emerald-700 dark:text-emerald-400 hover:underline font-medium"
+                            >
+                              Copy Dynamic URL
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-gray-600 dark:text-gray-400 font-mono bg-white/60 dark:bg-gray-900/40 p-1.5 rounded border border-gray-200 dark:border-gray-800 select-all break-all">
+                            {`${window.location.origin}/api/whatsapp/webhook`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {isOn("general.whatsapp.enabled") && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>WhatsApp Business Phone Number</label>
+                            <input
+                              type="text"
+                              value={formValues["general.whatsapp.phone_number"] || ""}
+                              onChange={(e) => handleInputChange("general.whatsapp.phone_number", e.target.value)}
+                              placeholder="+1 555 019 2834 or +91 98765 43210"
+                              className={inputCls}
+                            />
+                            <p className="text-[10px] text-gray-400">Display phone number for your WhatsApp business profile.</p>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className={labelCls}>Phone Number ID</label>
+                            <input
+                              type="text"
+                              value={formValues["general.whatsapp.phone_number_id"] || ""}
+                              onChange={(e) => handleInputChange("general.whatsapp.phone_number_id", e.target.value)}
+                              placeholder="e.g. 104592039482910"
+                              className={inputCls}
+                            />
+                            <p className="text-[10px] text-gray-400">Found in Meta App &gt; WhatsApp &gt; API Setup.</p>
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label className={labelCls}>Webhook Verify Token</label>
+                            <input
+                              type="text"
+                              value={formValues["general.whatsapp.verify_token"] || "krayin_crm_whatsapp_token"}
+                              onChange={(e) => handleInputChange("general.whatsapp.verify_token", e.target.value)}
+                              placeholder="krayin_crm_whatsapp_token"
+                              className={inputCls}
+                            />
+                            <p className="text-[10px] text-gray-400">Secret token entered in Meta Developer Portal for webhook verification.</p>
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label className={labelCls}>System User Access Token (Permanent Token)</label>
+                            <div className="relative">
+                              <input
+                                type={showWaToken ? "text" : "password"}
+                                value={formValues["general.whatsapp.access_token"] || ""}
+                                onChange={(e) => handleInputChange("general.whatsapp.access_token", e.target.value)}
+                                placeholder="EAAB..."
+                                className={`${inputCls} pr-10`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowWaToken(!showWaToken)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                              >
+                                <i className={showWaToken ? "mgc_eye_close_line" : "mgc_eye_line"}></i>
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-gray-400">Used for downloading inbound media files and sending automated replies.</p>
+                          </div>
+                        </div>
+
+                        <ToggleSwitch
+                          checked={isOn("general.whatsapp.auto_reply")}
+                          onChange={(v) => handleToggle("general.whatsapp.auto_reply", v)}
+                          label="Send Instant Automated WhatsApp Reply"
+                          hint="Sends a confirmation message to the sender on WhatsApp acknowledging receipt of their lead."
+                        />
+
+                        {/* Direct Save Button inside WhatsApp Panel */}
+                        <div className="flex items-center gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={saving}
+                            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077bb] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                          >
+                            {saving ? (
+                              <><i className="mgc_loading_2_line animate-spin mr-1.5"></i>Saving Settings...</>
+                            ) : (
+                              <><i className="mgc_check_line mr-1.5"></i>Save WhatsApp Settings</>
+                            )}
+                          </button>
+                        </div>
+
+                        {/* WhatsApp Simulator Sandbox */}
+                        <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                          <div>
+                            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                              <i className="mgc_play_circle_line text-[#0088cc]"></i>
+                              WhatsApp Lead Creation Simulator
+                            </h3>
+                            <p className="text-[11px] text-gray-500">
+                              Simulate an incoming WhatsApp message, visiting card photo, or PDF inquiry to test live lead creation in the CRM.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 dark:bg-gray-800/60 p-3.5 rounded-xl border border-gray-200/80 dark:border-gray-700">
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Sender Phone</label>
+                              <input
+                                type="text"
+                                value={waSimPhone}
+                                onChange={(e) => setWaSimPhone(e.target.value)}
+                                className={inputCls}
+                                placeholder="+91 98765 43210"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Sender Contact Name</label>
+                              <input
+                                type="text"
+                                value={waSimName}
+                                onChange={(e) => setWaSimName(e.target.value)}
+                                className={inputCls}
+                                placeholder="Rajesh Sharma"
+                              />
+                            </div>
+
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Inbound Message / Requirement Text</label>
+                              <textarea
+                                rows={2}
+                                value={waSimMessage}
+                                onChange={(e) => setWaSimMessage(e.target.value)}
+                                className={inputCls}
+                                placeholder="Hi, we need 10 licenses of CRM software for Acme Corp, budget $8,500..."
+                              />
+                            </div>
+
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Attach Media (Visiting Card Image / PDF)</label>
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => setWaSimFile(e.target.files?.[0] || null)}
+                                className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-[#0088cc]/10 file:text-[#0088cc] hover:file:bg-[#0088cc]/20 cursor-pointer"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2 flex items-center justify-between pt-2">
+                              <button
+                                type="button"
+                                disabled={waTesting}
+                                onClick={handleSimulateWhatsApp}
+                                className="px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                              >
+                                {waTesting ? (
+                                  <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Simulating & Extracting Lead...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="mgc_send_line text-sm"></i>
+                                    Test WhatsApp Lead Creation
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {waTestResult && (
+                            <div className={`p-3 rounded-lg text-xs border flex items-start gap-2 ${
+                              waTestResult.success
+                                ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/30 dark:border-green-800 dark:text-green-300"
+                                : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-300"
+                            }`}>
+                              <i className={waTestResult.success ? "mgc_check_circle_fill text-base text-green-600 mt-0.5" : "mgc_close_circle_fill text-base text-red-600 mt-0.5"}></i>
+                              <div className="space-y-1">
+                                <p className="font-semibold">{waTestResult.message}</p>
+                                {waTestResult.data && (
+                                  <p className="text-[11px] opacity-90">
+                                    Lead ID: <strong>#{waTestResult.data.leadId}</strong> | Contact: <strong>{waTestResult.data.personName || "N/A"}</strong> | Title: <em>"{waTestResult.data.leadTitle}"</em>
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 
