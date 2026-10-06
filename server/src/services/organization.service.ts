@@ -19,17 +19,33 @@ export class OrganizationService {
       const search = params?.search ? String(params.search).trim() : '';
       const offset = (page - 1) * perPage;
 
-      const { rows } = await pool.query('SELECT get_all_organizations($1, $2, $3) as result', [
-        search || null,
-        perPage,
-        offset,
-      ]);
+      try {
+        const { rows } = await pool.query('SELECT get_all_organizations($1, $2, $3) as result', [
+          search || null,
+          perPage,
+          offset,
+        ]);
 
-      const resData = rows[0]?.result || { rows: [], total: 0 };
-      return {
-        rows: resData.rows || [],
-        total: Number(resData.total) || 0,
-      };
+        const resData = rows[0]?.result || { rows: [], total: 0 };
+        return {
+          rows: resData.rows || [],
+          total: Number(resData.total) || 0,
+        };
+      } catch (spError) {
+        let query = 'SELECT * FROM organizations';
+        const queryParams: any[] = [];
+        if (search) {
+          query += ' WHERE name ILIKE $1';
+          queryParams.push(`%${search}%`);
+        }
+        query += ` ORDER BY id DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(perPage, offset);
+
+        const { rows } = await pool.query(query, queryParams);
+        const countRes = await pool.query('SELECT COUNT(*) FROM organizations');
+        const total = Number(countRes.rows[0]?.count || rows.length);
+        return { rows, total };
+      }
     } catch (error: any) {
       logger.error({ error, params }, 'OrganizationService.getAll failed');
       throw error;
@@ -41,8 +57,15 @@ export class OrganizationService {
       const orgId = toNumberParam(id);
       if (!orgId) return null;
 
-      const { rows } = await pool.query('SELECT get_organization($1) as result', [orgId]);
-      return rows[0]?.result || null;
+      try {
+        const { rows } = await pool.query('SELECT get_organization($1) as result', [orgId]);
+        if (rows[0]?.result) return rows[0].result;
+      } catch (spErr) {
+        // Fallback to direct query
+      }
+
+      const { rows } = await pool.query('SELECT * FROM organizations WHERE id = $1', [orgId]);
+      return rows[0] || null;
     } catch (error: any) {
       logger.error({ error, id }, 'OrganizationService.getById failed');
       throw error;
