@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IEvent } from "@/interface";
 import { EventForm } from "../EventForm";
+import { useEventStore } from "@/store";
 
 const EditEventPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditEventPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/events/${id}`)
-        .then((res) => setEvent(res.data.data))
+      useEventStore.getState().fetchEventById(id)
+        .then((data) => setEvent(data))
         .catch(() => setEvent(null))
         .finally(() => setLoading(false));
     }

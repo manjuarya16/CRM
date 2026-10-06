@@ -17,10 +17,10 @@ export interface IWarehouse {
   id: number;
   name: string;
   description?: string | null;
-  contact_name: string;
-  contact_emails: string[] | { value: string }[] | string;
-  contact_numbers: string[] | { value: string }[] | string;
-  contact_address: IWarehouseAddress | string;
+  contact_name?: string;
+  contact_emails?: string[] | { value: string }[] | string;
+  contact_numbers?: string[] | { value: string }[] | string;
+  contact_address?: IWarehouseAddress | string;
   location_count?: number;
   locations?: IWarehouseLocation[];
   product_count?: number;

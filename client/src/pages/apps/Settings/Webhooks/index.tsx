@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { IWebhook } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useWebhookStore } from "@/store";
 
 const WebhooksPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -21,8 +21,8 @@ const WebhooksPage: React.FC = () => {
   const fetchWebhooks = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/webhooks").catch(() => ({ data: { data: [] } }));
-      setWebhooks(res.data?.data || []);
+      const list = await useWebhookStore.getState().fetchWebhooks();
+      setWebhooks(list || []);
     } catch {
       setWebhooks([]);
     } finally {
@@ -45,11 +45,11 @@ const WebhooksPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/webhooks/${item.id}`);
+        await useWebhookStore.getState().deleteWebhook(item.id);
         Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
         fetchWebhooks();
       } catch (err: any) {
-        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to delete" });
+        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to delete" });
       }
     }
   };
@@ -62,14 +62,14 @@ const WebhooksPage: React.FC = () => {
         allowOutsideClick: false,
         didOpen: () => Swal.showLoading(),
       });
-      const res = await API.post(`/webhooks/${item.id}/test`);
-      const payloadStr = JSON.stringify(res.data?.sent_payload, null, 2);
+      const resData = await useWebhookStore.getState().testWebhook(item.id);
+      const payloadStr = JSON.stringify(resData?.sent_payload, null, 2);
       Swal.fire({
         icon: "success",
         title: "Webhook Fired Successfully!",
         html: `
           <div style="text-align: left; font-size: 13px;">
-            <p><strong>HTTP Status:</strong> <span style="color: green; font-weight: bold;">${res.data?.result?.status_code || 200} OK</span></p>
+            <p><strong>HTTP Status:</strong> <span style="color: green; font-weight: bold;">${resData?.result?.status_code || 200} OK</span></p>
             <p><strong>Endpoint:</strong> <code style="word-break: break-all; font-size: 11px;">${item.end_point}</code></p>
             <p style="margin-top: 10px;"><strong>Sent Real CRM Payload:</strong></p>
             <pre style="background: #f4f4f4; padding: 10px; border-radius: 6px; max-height: 180px; overflow-y: auto; font-size: 11px; color: #111;">${payloadStr}</pre>
@@ -90,8 +90,8 @@ const WebhooksPage: React.FC = () => {
   const filtered = webhooks.filter(
     (w) =>
       w.name.toLowerCase().includes(search.toLowerCase()) ||
-      w.end_point.toLowerCase().includes(search.toLowerCase()) ||
-      w.entity_type.toLowerCase().includes(search.toLowerCase())
+      (w.end_point || "").toLowerCase().includes(search.toLowerCase()) ||
+      (w.entity_type || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;

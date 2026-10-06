@@ -99,7 +99,7 @@ const Topbar = () => {
     // If authStore already has profile_img (set after upload), use it directly
     if (user.profile_img) { setProfilePic(user.profile_img as string); return; }
     import("@/config").then(({ API }) => {
-      API.get(`/user/${user.id}`)
+      API.get(`/users/${user.id}`)
         .then((res: any) => {
           const img = res?.data?.data?.profile_img;
           if (img) setProfilePic(img);

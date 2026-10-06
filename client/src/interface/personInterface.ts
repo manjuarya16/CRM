@@ -18,6 +18,8 @@ export interface IPerson {
   job_title?: string | null;
   user_id?: number | null;
   sales_owner_name?: string | null;
+  address?: any;
+  billing_address?: any;
   created_at?: string;
   updated_at?: string;
   custom_attributes?: any;
@@ -39,9 +41,10 @@ export interface PersonState {
   loading: boolean;
   total: number;
   error: any;
-  fetchPersons: (params?: { page?: number; perPage?: number; search?: string }) => Promise<void>;
+  fetchPersons: (params?: { page?: number; perPage?: number; limit?: number; per_page?: number; search?: string }) => Promise<void>;
   getPersonById: (id: number | string) => Promise<IPerson | null>;
-  savePerson: (data: PersonFormData, id?: number | string) => Promise<IPerson>;
+  savePerson: (data: PersonFormData | any, id?: number | string) => Promise<IPerson>;
   deletePerson: (id: number | string) => Promise<boolean>;
   clearAllPersons: () => Promise<{ success: boolean; message: string }>;
+  checkDuplicate: (email?: string, phone?: string, excludeId?: number | string) => Promise<any>;
 }

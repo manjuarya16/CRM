@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { PageBreadcrumb } from "@/components";
-import API from "@/config";
 import { IWorkflow } from "@/interface";
 import { WorkflowForm } from "../WorkflowForm";
+import { useWorkflowStore } from "@/store";
 
 const EditWorkflowPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,8 +12,8 @@ const EditWorkflowPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      API.get(`/workflows/${id}`)
-        .then((res) => setWorkflow(res.data.data))
+      useWorkflowStore.getState().fetchWorkflowById(id)
+        .then((data) => setWorkflow(data))
         .catch(() => setWorkflow(null))
         .finally(() => setLoading(false));
     }

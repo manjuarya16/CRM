@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useWarehouseStore } from "@/store";
 import { IWarehouse, IWarehouseProduct } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 
@@ -31,9 +32,8 @@ const WarehousesPage: React.FC = () => {
   const fetchWarehouses = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/warehouse/").catch(() => ({ data: { data: [] } }));
-      const list = res.data?.data || [];
-      setWarehouses(list);
+      const list = await useWarehouseStore.getState().fetchWarehouses();
+      setWarehouses(list || []);
     } catch {
       setWarehouses([]);
     } finally {
@@ -47,8 +47,8 @@ const WarehousesPage: React.FC = () => {
     setViewingProducts([]);
     setViewingProductsLoading(true);
     try {
-      const res = await API.get(`/warehouse/${item.id}/products`).catch(() => ({ data: { data: [] } }));
-      setViewingProducts(res.data?.data || []);
+      const prods = await useWarehouseStore.getState().fetchWarehouseProducts(item.id);
+      setViewingProducts(prods || []);
     } catch {
       setViewingProducts([]);
     } finally {
@@ -69,7 +69,7 @@ const WarehousesPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete("/warehouse/" + item.id);
+        await useWarehouseStore.getState().deleteWarehouse(item.id);
         Swal.fire({
           icon: "success",
           title: "Deleted!",

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "@/components";
 import { ICampaign } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useCampaignStore } from "@/store";
 
 const CampaignsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -21,8 +21,8 @@ const CampaignsPage: React.FC = () => {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/campaigns").catch(() => ({ data: { data: [] } }));
-      setCampaigns(res.data?.data || []);
+      const list = await useCampaignStore.getState().fetchCampaigns();
+      setCampaigns(list || []);
     } catch {
       setCampaigns([]);
     } finally {
@@ -45,11 +45,11 @@ const CampaignsPage: React.FC = () => {
     });
     if (res.isConfirmed) {
       try {
-        await API.delete(`/campaigns/${item.id}`);
+        await useCampaignStore.getState().deleteCampaign(item.id);
         Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
         fetchCampaigns();
       } catch (err: any) {
-        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to delete" });
+        Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to delete" });
       }
     }
   };
@@ -71,17 +71,17 @@ const CampaignsPage: React.FC = () => {
           allowOutsideClick: false,
           didOpen: () => Swal.showLoading(),
         });
-        const resp = await API.post(`/campaigns/${item.id}/send`);
+        const resp = await useCampaignStore.getState().sendCampaign(item.id);
         Swal.fire({
           icon: "success",
           title: "Campaign Dispatched!",
-          text: resp.data?.message || "Emails sent successfully",
+          text: resp?.message || "Emails sent successfully",
         });
       } catch (err: any) {
         Swal.fire({
           icon: "error",
           title: "Failed to Send",
-          text: err.response?.data?.message || "Failed to send campaign emails",
+          text: err.response?.data?.message || err.message || "Failed to send campaign emails",
         });
       }
     }
@@ -90,7 +90,7 @@ const CampaignsPage: React.FC = () => {
   const filtered = campaigns.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.subject.toLowerCase().includes(search.toLowerCase())
+      (c.subject || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;

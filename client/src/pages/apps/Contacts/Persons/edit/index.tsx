@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { usePersonStore } from "@/store";
+import { usePersonStore, useOrganizationStore, useUserStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
 
@@ -42,19 +42,19 @@ const EditPersonPage: React.FC = () => {
   const fetchMetadataAndPerson = async () => {
     try {
       setLoading(true);
-      const [orgsRes, usersRes, person, tagsRes] = await Promise.all([
-        API.get("/organization").catch(() => ({ data: { data: [] } })),
-        API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
+      const [orgsRes, usersRes, person, tags] = await Promise.all([
+        useOrganizationStore.getState().fetchOrganizations(1, 100),
+        useUserStore.getState().fetchUsers(1, 200),
         usePersonStore.getState().getPersonById(id!),
-        API.get(`/tags/entity/person/${id}`).catch(() => ({ data: { data: [] } })),
+        useTagStore.getState().fetchEntityTags("person", id!),
       ]);
 
-      setOrganizations(orgsRes.data?.data || []);
-      const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
+      setOrganizations(orgsRes?.data || []);
+      const userRows: any = (usersRes as any)?.rows || usersRes || [];
       setUsers(userRows);
 
-      if (tagsRes.data?.data) {
-        setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+      if (tags) {
+        setSelectedTagIds(tags.map((t: any) => t.id));
       }
 
       if (person) {
@@ -238,11 +238,9 @@ const EditPersonPage: React.FC = () => {
   const checkDuplicateEmail = async (val: string) => {
     if (!val || !val.trim().includes("@")) return;
     try {
-      const res = await API.get("/persons/check-duplicate", {
-        params: { email: val.trim(), exclude_id: id },
-      });
-      if (res.data?.isDuplicate) {
-        setErrors((prev) => ({ ...prev, emails: res.data.message }));
+      const data = await usePersonStore.getState().checkDuplicate(val.trim(), undefined, id);
+      if (data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, emails: data.message }));
       }
     } catch (e) {
       console.error(e);
@@ -268,11 +266,9 @@ const EditPersonPage: React.FC = () => {
       return;
     }
     try {
-      const res = await API.get("/persons/check-duplicate", {
-        params: { phone: cleanVal, exclude_id: id },
-      });
-      if (res.data?.isDuplicate) {
-        setErrors((prev) => ({ ...prev, contact_numbers: res.data.message }));
+      const data = await usePersonStore.getState().checkDuplicate(undefined, cleanVal, id);
+      if (data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, contact_numbers: data.message }));
       }
     } catch (e) {
       console.error(e);
@@ -315,11 +311,7 @@ const EditPersonPage: React.FC = () => {
     try {
       setSaving(true);
       await usePersonStore.getState().savePerson(payload as any, id);
-      await API.post("/tags/entity", {
-        entity_type: "person",
-        entity_id: id,
-        tag_ids: selectedTagIds,
-      }).catch(() => {});
+      await useTagStore.getState().saveEntityTags("person", id!, selectedTagIds);
       Swal.fire({
         icon: "success",
         title: "Success",

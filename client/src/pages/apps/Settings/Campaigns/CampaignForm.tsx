@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { campaignSchema, CampaignInput } from "@/schemas";
 import { ICampaign, IEmailTemplate, IEvent, CampaignFormProps } from "@/interface";
+import { useCampaignStore, useEmailTemplateStore, useEventStore } from "@/store";
 
 export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
@@ -36,11 +36,11 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit 
 
   useEffect(() => {
     Promise.all([
-      API.get("/email-templates").catch(() => ({ data: { data: [] } })),
-      API.get("/events").catch(() => ({ data: { data: [] } }))
-    ]).then(([tmplRes, evtRes]) => {
-      setTemplates(tmplRes.data?.data || []);
-      setEvents(evtRes.data?.data || []);
+      useEmailTemplateStore.getState().fetchEmailTemplates(),
+      useEventStore.getState().fetchEvents()
+    ]).then(([tmplList, evtList]) => {
+      setTemplates(tmplList || []);
+      setEvents(evtList || []);
       setOptionsLoaded(true);
     });
   }, []);
@@ -75,15 +75,15 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit 
       };
 
       if (isEdit && initialData) {
-        await API.put(`/campaigns/${initialData.id}`, payload);
+        await useCampaignStore.getState().saveCampaign(payload, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Marketing campaign updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/campaigns", payload);
+        await useCampaignStore.getState().saveCampaign(payload);
         Swal.fire({ icon: "success", title: "Created!", text: "Marketing campaign created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/campaigns");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save campaign" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save campaign" });
     } finally {
       setLoading(false);
     }

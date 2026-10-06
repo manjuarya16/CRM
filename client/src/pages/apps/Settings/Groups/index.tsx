@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useGroupStore, useUserStore } from "@/store";
 import { IGroup, IUserData } from "@/interface";
 import { groupSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -41,8 +42,8 @@ const GroupsPage: React.FC = () => {
   const fetchGroups = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/groups");
-      setGroups(res.data?.data || []);
+      const list = await useGroupStore.getState().fetchGroups();
+      setGroups(list || []);
     } catch {
       setGroups([]);
     } finally {
@@ -52,8 +53,9 @@ const GroupsPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await API.get("/users");
-      setUsers(res.data?.data || []);
+      const res: any = await useUserStore.getState().fetchUsers(1, 200);
+      const userList = res?.rows || res || [];
+      setUsers(userList);
     } catch {
       setUsers([]);
     }
@@ -109,7 +111,7 @@ const GroupsPage: React.FC = () => {
       setSaving(true);
       if (editingGroup?.id) {
         // Edit / Update
-        await API.put(`/groups/${editingGroup.id}`, validated);
+        await useGroupStore.getState().saveGroup(validated, editingGroup.id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -119,7 +121,7 @@ const GroupsPage: React.FC = () => {
         });
       } else {
         // Add / Create
-        await API.post("/groups", validated);
+        await useGroupStore.getState().saveGroup(validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -164,7 +166,7 @@ const GroupsPage: React.FC = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await API.delete(`/groups/${id}`);
+          await useGroupStore.getState().deleteGroup(id);
           Swal.fire("Deleted!", "Group has been deleted.", "success");
           fetchGroups();
         } catch (err: any) {

@@ -27,6 +27,7 @@ export interface ActivityStore {
   addActivity: (data: any) => Promise<any>;
   updateActivity: (id: number, data: any) => Promise<any>;
   deleteActivity: (id: number) => Promise<void>;
+  uploadFile: (formData: FormData) => Promise<string>;
   setSelectedActivity: (activity: IActivity | null) => void;
   clearError: () => void;
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useLeadStore } from "@/store";
+import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
@@ -118,22 +118,29 @@ const EditLeadPage: React.FC = () => {
     fetchSources();
     fetchTypes();
     fetchPipelines();
-    API.get("/users?limit=200&per_page=200").then((r) => { if (r.data?.data) setUsers(r.data.data); }).catch(() => { });
-    API.get("/persons?limit=500&per_page=500").then((r) => {
-      if (r.data?.data) {
-        const sorted = (r.data.data || []).sort((a: any, b: any) =>
+    useUserStore.getState().fetchUsers(1, 200).then((res: any) => { if (res?.rows || res) setUsers(res?.rows || res || []); }).catch(() => { });
+    usePersonStore.getState().fetchPersons({ limit: 500, per_page: 500 }).then(() => {
+      const statePersons = usePersonStore.getState().persons;
+      if (statePersons) {
+        const sorted = [...statePersons].sort((a: any, b: any) =>
           (a.name || "").localeCompare(b.name || "")
         );
         setPersons(sorted);
       }
     }).catch(() => { });
-    API.get("/organizations?limit=200&per_page=200").then((r) => { if (r.data?.data) setOrganizations(r.data.data); }).catch(() => { });
-    API.get("/products?limit=500&per_page=500").then((r) => { if (r.data?.data) setProducts(r.data.data); }).catch(() => { });
-    API.get("/warehouse/").then((r) => { if (r.data?.data) setWarehouses(r.data.data); }).catch(() => { });
+    useOrganizationStore.getState().getOrganization().then(() => {
+      const org = useOrganizationStore.getState().organization;
+      if (org) setOrganizations([org]);
+    }).catch(() => { });
+    useProductStore.getState().fetchProducts(1, 500).then(() => {
+      const prods = useProductStore.getState().products;
+      if (prods) setProducts(prods);
+    }).catch(() => { });
+    useWarehouseStore.getState().fetchWarehouses().then((list) => { if (list) setWarehouses(list); }).catch(() => { });
 
     if (id) {
-      API.get(`/tags/entity/lead/${id}`).then((r) => {
-        if (r.data?.data) setSelectedTagIds(r.data.data.map((t: any) => t.id));
+      useTagStore.getState().fetchEntityTags("lead", id).then((tags) => {
+        if (tags) setSelectedTagIds(tags.map((t: any) => t.id));
       }).catch(() => { });
       setLoading(true);
       fetchLeadById(Number(id)).then((lead) => {
@@ -173,10 +180,11 @@ const EditLeadPage: React.FC = () => {
         setLoading(false);
       });
 
-      API.get(`/leads/${id}/products`).then((res) => {
-        if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+      useLeadStore.getState().fetchLeadProducts(Number(id)).then(() => {
+        const prods = useLeadStore.getState().leadProducts;
+        if (Array.isArray(prods) && prods.length > 0) {
           setProductRows(
-            res.data.data.map((lp: any) => ({
+            prods.map((lp: any) => ({
               id: lp.id,
               product_id: String(lp.product_id),
               product_name: lp.product_name || "",
@@ -346,10 +354,10 @@ const EditLeadPage: React.FC = () => {
     });
 
     if (productId) {
-      API.get(`/products/${productId}`)
-        .then((res) => {
-          if (res.data?.success && Array.isArray(res.data.data?.inventories)) {
-            const invs = res.data.data.inventories;
+      useProductStore.getState().fetchProductById(Number(productId))
+        .then((productData) => {
+          if (productData && Array.isArray(productData.inventories)) {
+            const invs = productData.inventories;
             setProductRows((rows) => {
               const next = [...rows];
               if (next[index] && String(next[index].product_id) === String(productId)) {
@@ -480,11 +488,7 @@ const EditLeadPage: React.FC = () => {
       await updateLead(Number(id), payload);
 
       if (id) {
-        await API.post("/tags/entity", {
-          entity_type: "lead",
-          entity_id: Number(id),
-          tag_ids: selectedTagIds,
-        }).catch(() => { });
+        await useTagStore.getState().saveEntityTags("lead", Number(id), selectedTagIds);
       }
 
       navigate("/leads");

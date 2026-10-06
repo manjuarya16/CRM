@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useRoleStore } from "@/store";
 import { ZodError } from "zod";
 import { roleSchema } from "@/schemas";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
@@ -87,8 +88,8 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
 
   const fetchAllRoles = async () => {
     try {
-      const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
-      setAllRoles(res.data?.data || []);
+      const list = await useRoleStore.getState().fetchRoles(true);
+      setAllRoles(list || []);
     } catch {
       setAllRoles([]);
     }
@@ -97,8 +98,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
   const fetchRoleDetails = async (roleId: string) => {
     try {
       setLoading(true);
-      const res = await API.get("/role/" + roleId);
-      const data = res.data?.data;
+      const data = await useRoleStore.getState().fetchRoleById(Number(roleId));
       if (data) {
         setName(data.name || "");
         setDescription(data.description || "");
@@ -203,7 +203,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
       setSaving(true);
 
       if (mode === "edit" && id) {
-        await API.put("/role/" + id, validated);
+        await useRoleStore.getState().saveRole(validated, id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -212,7 +212,7 @@ export const RoleForm: React.FC<RoleFormProps> = ({ mode }) => {
           showConfirmButton: false,
         });
       } else {
-        await API.post("/role/", validated);
+        await useRoleStore.getState().saveRole(validated);
         Swal.fire({
           icon: "success",
           title: "Success",

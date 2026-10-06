@@ -23,6 +23,7 @@ export interface IQuote {
   person_id?: number;
   user_id?: number;
   person_name?: string;
+  person_email?: string;
   user_name?: string;
   lead_id?: number;
   created_at?: string;

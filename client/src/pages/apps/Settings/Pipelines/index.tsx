@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { usePipelineStore } from "@/store";
 import { IPipeline } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 
@@ -25,8 +26,8 @@ const PipelinesPage: React.FC = () => {
   const fetchPipelines = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/pipelines");
-      setPipelines(res.data?.data || []);
+      const list = await usePipelineStore.getState().fetchPipelines();
+      setPipelines(list || []);
     } catch {
       setPipelines([]);
     } finally {
@@ -51,7 +52,7 @@ const PipelinesPage: React.FC = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await API.delete(`/pipelines/${pipeline.id}`);
+          await usePipelineStore.getState().deletePipeline(pipeline.id);
           Swal.fire("Deleted!", "Pipeline has been deleted.", "success");
           fetchPipelines();
         } catch (err: any) {

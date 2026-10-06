@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useQuoteStore } from "@/store";
+import { useQuoteStore, useMailStore } from "@/store";
 import { IQuote } from "@/interface";
 import API from "@/config";
 
@@ -68,8 +68,8 @@ const QuotesPage: React.FC = () => {
     try {
       setLoadingPreview(true);
       setPreviewModalOpen(true);
-      const res = await API.get(`/quotes/${quote.id}`);
-      setPreviewQuote(res.data?.data || quote);
+      const fullQuote = await useQuoteStore.getState().fetchQuoteById(quote.id);
+      setPreviewQuote(fullQuote || quote);
     } catch {
       setPreviewQuote(quote);
     } finally {
@@ -83,8 +83,7 @@ const QuotesPage: React.FC = () => {
 
   const handleOpenSendEmail = async (quote: IQuote) => {
     try {
-      const res = await API.get(`/quotes/${quote.id}`);
-      const fullQuote = res.data?.data || quote;
+      const fullQuote = (await useQuoteStore.getState().fetchQuoteById(quote.id)) || quote;
       setSelectedQuoteForEmail(fullQuote);
       setEmailTo(fullQuote.person_email || "");
       setEmailSubject(`Quotation #${fullQuote.id} - ${fullQuote.subject}`);
@@ -111,12 +110,14 @@ const QuotesPage: React.FC = () => {
     }
     setSendingEmail(true);
     try {
-      await API.post("/mail/send", {
-        to: [emailTo.trim()],
-        subject: emailSubject,
-        reply: emailBody,
-        quote_id: selectedQuoteForEmail?.id,
-      });
+      const formData = new FormData();
+      formData.append("to", JSON.stringify([emailTo.trim()]));
+      formData.append("subject", emailSubject);
+      formData.append("reply", emailBody);
+      if (selectedQuoteForEmail?.id) {
+        formData.append("quote_id", String(selectedQuoteForEmail.id));
+      }
+      await useMailStore.getState().sendEmail(formData);
       Swal.fire("Success", "Quote email sent successfully", "success");
       setEmailModalOpen(false);
     } catch (err: any) {

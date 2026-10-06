@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import API, { API_URL } from "@/config";
+import { API_URL } from "@/config";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
+import { useDataTransferStore } from "@/store";
 
 const CreateImportPage: React.FC = () => {
   const navigate = useNavigate();
@@ -129,12 +130,12 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
     const fallback = DEFAULT_SAMPLES[key] || { headers: [], sampleRows: [] };
     try {
       setLoadingSample(true);
-      const res = await API.get(`/data-transfer/sample/${key}`);
-      if (res.data) {
+      const data = await useDataTransferStore.getState().getSample(key);
+      if (data) {
         setSampleMeta({
-          headers: res.data.headers && res.data.headers.length > 0 ? res.data.headers : fallback.headers,
-          sampleRows: res.data.data && res.data.data.length > 0 ? res.data.data : fallback.sampleRows,
-          customAttributes: res.data.customAttributes || [],
+          headers: data.headers && data.headers.length > 0 ? data.headers : fallback.headers,
+          sampleRows: data.data && data.data.length > 0 ? data.data : fallback.sampleRows,
+          customAttributes: data.customAttributes || [],
         });
       } else {
         setSampleMeta({
@@ -214,7 +215,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         ? "skip_error_entries"
         : "stop_on_errors";
 
-      const res = await API.post("/data-transfer/validate", {
+      const resData = await useDataTransferStore.getState().validateImport({
         type: entityType,
         action: actionParam,
         validation_strategy: stratParam,
@@ -222,8 +223,8 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         rows: parsedRows,
       });
 
-      if (res.data?.success && res.data?.data) {
-        setValidationResult(res.data.data);
+      if (resData?.success && resData?.data) {
+        setValidationResult(resData.data);
       }
     } catch (err: any) {
       Swal.fire({
@@ -308,7 +309,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         ? "skip_error_entries"
         : "stop_on_errors";
 
-      const res = await API.post("/data-transfer/import", {
+      const resData = await useDataTransferStore.getState().executeImport({
         type: entityType,
         action: actionParam,
         validation_strategy: stratParam,
@@ -319,7 +320,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         process_in_queue: processInQueue,
       });
 
-      const result = res.data?.data;
+      const result = resData?.data;
       if (result) {
         if (result.errors === 0) {
           Swal.fire({

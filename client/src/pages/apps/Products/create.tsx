@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import API from "@/config";
-import { useProductStore } from "@/store";
+import { useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { productSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
@@ -52,9 +52,8 @@ const CreateProductPage: React.FC = () => {
   const fetchWarehouses = async () => {
     try {
       setLoadingWarehouses(true);
-      const res = await API.get("/warehouse/").catch(() => ({ data: { data: [] } }));
-      const list: IWarehouse[] = res.data?.data || [];
-      setWarehouses(list);
+      const list = await useWarehouseStore.getState().fetchWarehouses();
+      setWarehouses(list || []);
 
       // Build initial inventory rows for all warehouses & their locations
       const initialRows: WarehouseInventoryRow[] = [];
@@ -145,11 +144,7 @@ const CreateProductPage: React.FC = () => {
       } as any);
 
       if (res?.id && selectedTagIds.length > 0) {
-        await API.post("/tags/entity", {
-          entity_type: "product",
-          entity_id: res.id,
-          tag_ids: selectedTagIds,
-        }).catch(() => {});
+        await useTagStore.getState().saveEntityTags("product", res.id, selectedTagIds);
       }
 
       navigate("/products");

@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
-import API from "@/config";
 import Swal from "sweetalert2";
 import { eventSchema, EventInput } from "@/schemas";
-import { IEvent, EventFormProps } from "@/interface";
+import { EventFormProps } from "@/interface";
+import { useEventStore } from "@/store";
 
 export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
@@ -49,15 +49,15 @@ export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => 
       };
 
       if (isEdit && initialData) {
-        await API.put(`/events/${initialData.id}`, payload);
+        await useEventStore.getState().saveEvent(payload, initialData.id);
         Swal.fire({ icon: "success", title: "Saved!", text: "Marketing event updated successfully", timer: 1500, showConfirmButton: false });
       } else {
-        await API.post("/events", payload);
+        await useEventStore.getState().saveEvent(payload);
         Swal.fire({ icon: "success", title: "Created!", text: "Marketing event created successfully", timer: 1500, showConfirmButton: false });
       }
       navigate("/settings/events");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || "Failed to save event" });
+      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save event" });
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,8 @@
 export interface IEmailTemplate {
   id: number;
   name: string;
-  subject: string;
-  content: string;
+  subject?: string;
+  content?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -10,8 +10,8 @@ export interface IEmailTemplate {
 export interface IEvent {
   id: number;
   name: string;
-  description: string;
-  date: string;
+  description?: string;
+  date?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -19,10 +19,10 @@ export interface IEvent {
 export interface ICampaign {
   id: number;
   name: string;
-  subject: string;
-  status: boolean;
-  type: string;
-  mail_to: string;
+  subject?: string;
+  status?: boolean;
+  type?: string;
+  mail_to?: string;
   spooling?: string | null;
   marketing_template_id?: number | null;
   marketing_event_id?: number | null;
@@ -35,10 +35,10 @@ export interface ICampaign {
 export interface IWebhook {
   id: number;
   name: string;
-  entity_type: string;
+  entity_type?: string;
   description?: string | null;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  end_point: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  end_point?: string;
   query_params?: Array<{ key: string; value: string }>;
   headers?: Array<{ key: string; value: string }>;
   payload_type?: 'default' | 'x-www-form-urlencoded' | 'raw';
@@ -64,9 +64,9 @@ export interface IWorkflow {
   id: number;
   name: string;
   description?: string | null;
-  entity_type: string;
-  event: string;
-  condition_type: 'and' | 'or';
+  entity_type?: string;
+  event?: string;
+  condition_type?: 'and' | 'or';
   conditions?: IWorkflowCondition[];
   actions?: IWorkflowAction[];
   created_at?: string;
@@ -99,7 +99,7 @@ export interface WebFormFieldInputProps {
 
 export interface IWebForm {
   id: number;
-  form_id: string;
+  form_id?: string;
   title: string;
   description?: string | null;
   submit_button_label?: string;

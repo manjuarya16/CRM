@@ -49,8 +49,9 @@ export interface RoleStore {
   error: string | null;
   selectedRole: Role | null;
 
-  fetchRoles: () => Promise<void>;
-  fetchRoleById: (id: number) => Promise<void>;
+  fetchRoles: (force?: boolean) => Promise<any>;
+  fetchRoleById: (id: number) => Promise<any>;
+  saveRole: (data: any, id?: number | string) => Promise<any>;
   addRole: (roleData: any) => Promise<void>;
   updateRole: (id: number, roleData: any) => Promise<void>;
   deleteRole: (id: number) => Promise<void>;

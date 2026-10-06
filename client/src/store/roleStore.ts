@@ -11,20 +11,19 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
   error: null,
   selectedRole: null,
 
-  fetchRoles: async () => {
-    if (get().roles.length > 0) return;
-    if (_rolesFlight) return _rolesFlight;
+  fetchRoles: async (force = false) => {
+    if (!force && get().roles.length > 0) return get().roles;
+    if (_rolesFlight && !force) return _rolesFlight;
     set({ loading: true });
     _rolesFlight = (async () => {
       try {
-        const response = await API.get("/role/");
-        if (response.data?.success) {
-          set({ roles: response.data.data || [], error: null });
-        } else {
-          set({ error: "Failed to fetch roles" });
-        }
+        const response = await API.get("/roles/");
+        const list = response.data?.data || response.data || [];
+        set({ roles: list, error: null });
+        return list;
       } catch (error: any) {
         set({ error: error.message || "Error fetching roles" });
+        return [];
       } finally {
         set({ loading: false });
         _rolesFlight = null;
@@ -33,15 +32,33 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
     return _rolesFlight;
   },
 
+  saveRole: async (data: any, id?: number | string) => {
+    set({ loading: true });
+    try {
+      let response;
+      if (id) {
+        response = await API.put(`/roles/${id}`, data);
+      } else {
+        response = await API.post("/roles/", data);
+      }
+      set({ loading: false });
+      return response.data?.data || response.data;
+    } catch (error: any) {
+      set({ loading: false, error: error.message });
+      throw error;
+    }
+  },
+
   fetchRoleById: async (id: number) => {
     set({ loading: true });
     try {
-      const response = await API.get(`/role/${id}`);
-      if (response.data?.success) {
-        set({ selectedRole: response.data.data, error: null });
-      }
+      const response = await API.get(`/roles/${id}`);
+      const data = response.data?.data || response.data;
+      set({ selectedRole: data, error: null });
+      return data;
     } catch (error: any) {
       set({ error: error.message || "Error fetching role" });
+      return null;
     } finally {
       set({ loading: false });
     }
@@ -50,7 +67,7 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
   addRole: async (roleData: any) => {
     set({ loading: true });
     try {
-      const response = await API.post("/role/create", roleData);
+      const response = await API.post("/roles/create", roleData);
       if (response.data?.success) {
         set((state) => ({
           roles: [...state.roles, response.data.data],
@@ -72,7 +89,7 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
   updateRole: async (id: number, roleData: any) => {
     set({ loading: true });
     try {
-      const response = await API.put("/role/update", { id, ...roleData });
+      const response = await API.put("/roles/update", { id, ...roleData });
       if (response.data?.success) {
         set((state) => ({
           roles: state.roles.map((r) =>
@@ -96,7 +113,7 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
   deleteRole: async (id: number) => {
     try {
       set({ loading: true });
-      const response = await API.delete(`/role/delete/${id}`);
+      const response = await API.delete(`/roles/delete/${id}`);
       if (response.data?.success) {
         set((state) => ({
           roles: state.roles.filter((r) => r.id !== id),

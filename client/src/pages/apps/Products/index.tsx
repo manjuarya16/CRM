@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import API from "@/config";
-import { useProductStore } from "@/store";
+import { useProductStore, useTagStore } from "@/store";
 import { IProduct } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 
@@ -41,16 +41,16 @@ const ProductsPage: React.FC = () => {
     setViewingTags([]);
 
     try {
-      const [fullProduct, tagsRes] = await Promise.all([
+      const [fullProduct, tags] = await Promise.all([
         fetchProductById(product.id),
-        API.get(`/tags/entity/product/${product.id}`).catch(() => ({ data: { data: [] } })),
+        useTagStore.getState().fetchEntityTags("product", product.id),
       ]);
 
       if (fullProduct) {
         setViewingProduct(fullProduct);
       }
-      if (tagsRes.data?.data) {
-        setViewingTags(tagsRes.data.data);
+      if (tags) {
+        setViewingTags(tags);
       }
     } catch {
       // Keep basic product info

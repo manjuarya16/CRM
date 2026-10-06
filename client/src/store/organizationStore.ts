@@ -105,7 +105,7 @@ const useOrganizationStore = create<OrganizationState>((set) => {
           error: null,
         });
 
-        const response = await API.get("/organization");
+        const response = await API.get("/organizations");
 
         const row = response.data.data && response.data.data[0];
 
@@ -130,7 +130,7 @@ const useOrganizationStore = create<OrganizationState>((set) => {
           error: null,
         });
 
-        const response = await API.put(`/organization/${id}`, data);
+        const response = await API.put(`/organizations/${id}`, data);
 
         set({
           organization: normalize(response.data.data) || data,
@@ -144,6 +144,53 @@ const useOrganizationStore = create<OrganizationState>((set) => {
           loading: false,
         });
 
+        throw error;
+      }
+    },
+    fetchOrganizations: async (page = 1, per_page = 10, search = "") => {
+      set({ loading: true, error: null });
+      try {
+        const response = await API.get(`/organizations?page=${page}&per_page=${per_page}&search=${encodeURIComponent(search)}`);
+        set({ loading: false });
+        return response.data || { data: [], total: 0 };
+      } catch (error) {
+        set({ error, loading: false });
+        return { data: [], total: 0 };
+      }
+    },
+
+    fetchOrganizationById: async (id: number | string) => {
+      set({ loading: true, error: null });
+      try {
+        const response = await API.get(`/organizations/${id}`);
+        set({ loading: false });
+        return response.data?.data || null;
+      } catch (error) {
+        set({ error, loading: false });
+        return null;
+      }
+    },
+
+    createOrganization: async (data: any) => {
+      set({ loading: true, error: null });
+      try {
+        const response = await API.post("/organizations", data);
+        set({ loading: false });
+        return response.data;
+      } catch (error) {
+        set({ error, loading: false });
+        throw error;
+      }
+    },
+
+    deleteOrganization: async (id: number | string) => {
+      set({ loading: true, error: null });
+      try {
+        const response = await API.delete(`/organizations/${id}`);
+        set({ loading: false });
+        return response.data;
+      } catch (error) {
+        set({ error, loading: false });
         throw error;
       }
     },

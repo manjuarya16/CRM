@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { usePipelineStore } from "@/store";
 import { IPipelineStage } from "@/interface";
 import { pipelineSchema } from "@/schemas";
 import { ZodError } from "zod";
@@ -89,7 +90,7 @@ const CreatePipelinePage: React.FC = () => {
     try {
       const validated = pipelineSchema.parse(formData);
       setSaving(true);
-      await API.post("/pipelines", validated);
+      await usePipelineStore.getState().savePipeline(validated);
       Swal.fire({
         icon: "success",
         title: "Success",
