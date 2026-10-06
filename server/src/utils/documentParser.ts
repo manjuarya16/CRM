@@ -132,7 +132,19 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     products: [],
   };
 
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Clean lines of box drawing characters, decorative borders, and extra symbols
+  const cleanedLines = text
+    .split(/\r?\n/)
+    .map((l) =>
+      l
+        .replace(/[┌┐└┘│─├┤┬┴┼═║╔╗╚╝╠╣╦╩╬┃━┏┓┗┛┣┫┳┻╋|_\-—=]/g, ' ')
+        .replace(/[⚡📞☎️✉️🌐🏢👤💼🛠️✨🌟🔹🔸]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .filter((l) => l.length >= 2);
+
+  const lines = cleanedLines;
 
   // 1. Email extraction
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
@@ -173,7 +185,22 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // If no person name explicitly found but email exists, synthesize name from email
+  // If no person name explicitly found, check lines that look like a person name (2-3 capitalized words)
+  if (!result.contactPerson) {
+    const nameLineCandidate = lines.find((l) => {
+      const lower = l.toLowerCase();
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('mobile') || lower.includes('tel') || lower.includes('web') || lower.includes('address') || lower.includes('services') || lower.includes('suite') || lower.includes('@') || lower.includes('http') || lower.includes('technologies') || lower.includes('solutions') || lower.includes('ltd') || lower.includes('corp') || lower.includes('director') || lower.includes('officer') || lower.includes('manager')) {
+        return false;
+      }
+      const words = l.split(' ').filter(Boolean);
+      return words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Z][a-z]+$/.test(w));
+    });
+    if (nameLineCandidate) {
+      result.contactPerson = nameLineCandidate;
+    }
+  }
+
+  // If no person name found but email exists, synthesize name from email
   if (!result.contactPerson && result.email) {
     const emailPrefix = result.email.split('@')[0];
     const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
@@ -185,7 +212,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   // 4. Organization / Company extraction
   const orgPatterns = [
     /(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*[:=-]\s*([A-Za-z0-9\s.,&'-]+)/i,
-    /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corp|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
+    /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
   ];
   for (const pat of orgPatterns) {
     const oMatch = text.match(pat);
@@ -195,6 +222,19 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         result.organization = val;
         break;
       }
+    }
+  }
+
+  // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES)
+  if (!result.organization) {
+    const companyKeywords = ['technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global', 'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries', 'consulting', 'group', 'tech', 'software'];
+    const orgLine = lines.find((l) => {
+      const lower = l.toLowerCase();
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('address') || lower.includes('services:')) return false;
+      return companyKeywords.some((kw) => lower.includes(kw));
+    });
+    if (orgLine) {
+      result.organization = orgLine;
     }
   }
 
@@ -219,6 +259,17 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     if (jMatch && jMatch[1]) {
       result.jobTitle = jMatch[1].split('\n')[0].trim();
       break;
+    }
+  }
+
+  if (!result.jobTitle) {
+    const designationKeywords = ['managing director', 'chief technology officer', 'chief executive officer', 'cto', 'ceo', 'director', 'president', 'vice president', 'vp', 'manager', 'lead', 'consultant', 'engineer', 'architect', 'executive'];
+    const titleLine = lines.find((l) => {
+      const lower = l.toLowerCase();
+      return designationKeywords.some((dk) => lower.includes(dk));
+    });
+    if (titleLine) {
+      result.jobTitle = titleLine;
     }
   }
 
@@ -362,14 +413,6 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // If no explicit keyword title found, check first non-meta heading line
-  if (!result.title && lines.length > 0) {
-    const firstLine = lines[0];
-    if (firstLine.length >= 4 && !firstLine.includes(':') && !firstLine.includes('@')) {
-      result.title = firstLine;
-    }
-  }
-
   // Fallback title
   if (!result.title) {
     if (result.contactPerson && result.organization) {
@@ -385,7 +428,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         .trim();
       result.title = baseName || `Lead from Document`;
     } else {
-      result.title = `Lead from Uploaded File`;
+      result.title = `Lead from Inbound Inquiry`;
     }
   }
 

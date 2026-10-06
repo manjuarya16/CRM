@@ -82,6 +82,13 @@ export const useConfigStore = create<ConfigState>((set) => ({
     return response.data;
   },
 
+  simulateWhatsAppLead: async (formData: FormData) => {
+    const response = await API.post("/whatsapp/simulate", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
+
   setConfigs: (configs) => {
     applyConfigEffects(configs);
     set({ configs });

@@ -31,5 +31,6 @@ export interface ConfigState {
   saveConfigurations: (settings: Record<string, any>) => Promise<any>;
   uploadConfigImage: (file: File) => Promise<any>;
   testSmtpConnection: (testConfig?: Record<string, any>) => Promise<any>;
+  simulateWhatsAppLead: (formData: FormData) => Promise<any>;
   setConfigs: (configs: Record<string, any>) => void;
 }

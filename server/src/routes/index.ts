@@ -27,6 +27,7 @@ import configRoutes from '@/routes/config.routes';
 import mailRoutes from '@/routes/mail.routes';
 import dashboardRoutes from '@/routes/dashboard.routes';
 import notificationRoutes from '@/routes/notification.routes';
+import whatsappRoutes from '@/routes/whatsapp.routes';
 const router = Router();
 
 router.get('/health', (_req, res) => {
@@ -93,6 +94,8 @@ router.use('/data-transfer', dataTransferRoutes);
 router.use('/google-contacts', googleContactRoutes);
 router.use('/tags', tagRoutes);
 router.use('/tag', tagRoutes);
+router.use('/whatsapp', whatsappRoutes);
+router.use('/webhooks/whatsapp', whatsappRoutes);
 
 router.use('/', authRoutes);
 
