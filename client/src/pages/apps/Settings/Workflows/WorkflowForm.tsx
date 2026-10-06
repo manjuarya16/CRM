@@ -48,7 +48,7 @@ const ENTITY_ACTION_OPTIONS: Record<string, { label: string; value: string }[]> 
 const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: string }[]> = {
   leads: [
     { label: "Lead Title", value: "title" },
-    { label: "Lead Value ($)", value: "lead_value", type: "number" },
+    { label: "Lead Value (₹)", value: "lead_value", type: "number" },
     { label: "Status (Open/Won/Lost)", value: "status" },
     { label: "Pipeline Stage ID", value: "stage_id" },
     { label: "Lead Source ID", value: "source_id" },
@@ -69,7 +69,7 @@ const ENTITY_FIELDS: Record<string, { label: string; value: string; type?: strin
   ],
   quotes: [
     { label: "Quote Subject", value: "subject" },
-    { label: "Grand Total ($)", value: "grand_total", type: "number" },
+    { label: "Grand Total (₹)", value: "grand_total", type: "number" },
     { label: "User ID", value: "user_id" },
   ],
 };

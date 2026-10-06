@@ -194,11 +194,29 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     } catch (err) {}
   },
 
-  addLeadProduct: async (leadId: number, productId: number, quantity = 1, price?: number) => {
+  addLeadProduct: async (
+    leadId: number,
+    productId: number,
+    quantity = 1,
+    price?: number,
+    warehouseId?: number,
+    warehouseLocationId?: number
+  ) => {
     try {
-      const res = await API.post(`/leads/${leadId}/products`, { product_id: productId, quantity, price });
+      const res = await API.post(`/leads/${leadId}/products`, {
+        product_id: productId,
+        quantity,
+        price,
+        warehouse_id: warehouseId,
+        warehouse_location_id: warehouseLocationId,
+      });
       if (res.data?.success) {
-        set((state) => ({ leadProducts: [...state.leadProducts, res.data.data] }));
+        const fresh = await API.get(`/leads/${leadId}/products`);
+        if (fresh.data?.success) {
+          set({ leadProducts: fresh.data.data || [] });
+        } else {
+          set((state) => ({ leadProducts: [...state.leadProducts, res.data.data] }));
+        }
         handleSuccessResponse("Product", "added to lead", null);
         return res.data.data;
       }

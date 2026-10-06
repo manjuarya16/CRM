@@ -58,7 +58,8 @@ const LeadViewPage: React.FC = () => {
   });
 
   // Add Product form
-  const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "" });
+  const [warehousesList, setWarehousesList] = useState<any[]>([]);
+  const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "", warehouse_id: "", warehouse_location_id: "" });
   const [prodError, setProdError] = useState<string>("");
 
   const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
@@ -76,6 +77,10 @@ const LeadViewPage: React.FC = () => {
 
     API.get("/email-templates").then((res) => {
       if (res.data?.data) setEmailTemplates(res.data.data);
+    }).catch(() => { });
+
+    API.get("/warehouse/").then((res) => {
+      if (res.data?.data) setWarehousesList(res.data.data);
     }).catch(() => { });
   }, []);
 
@@ -155,7 +160,7 @@ const LeadViewPage: React.FC = () => {
       let body = tmpl.content || "";
       const personName = person?.name || selectedLead?.person_name || "Customer";
       const leadTitle = selectedLead?.title || "Lead";
-      const leadValue = selectedLead?.lead_value ? `$${selectedLead.lead_value}` : "$0";
+      const leadValue = selectedLead?.lead_value ? `₹${selectedLead.lead_value}` : "₹0";
       const userName = selectedLead?.user_name || "Sales Team";
 
       body = body
@@ -181,8 +186,15 @@ const LeadViewPage: React.FC = () => {
       return;
     }
     setProdError("");
-    await addLeadProduct(leadId, Number(newProd.product_id), Number(newProd.quantity) || 1, newProd.price ? Number(newProd.price) : undefined);
-    setNewProd({ product_id: "", quantity: "1", price: "" });
+    await addLeadProduct(
+      leadId,
+      Number(newProd.product_id),
+      Number(newProd.quantity) || 1,
+      newProd.price ? Number(newProd.price) : undefined,
+      newProd.warehouse_id ? Number(newProd.warehouse_id) : undefined,
+      newProd.warehouse_location_id ? Number(newProd.warehouse_location_id) : undefined
+    );
+    setNewProd({ product_id: "", quantity: "1", price: "", warehouse_id: "", warehouse_location_id: "" });
     fetchLeadById(leadId);
   };
 
@@ -277,7 +289,7 @@ const LeadViewPage: React.FC = () => {
     { id: 2, action: `Updated Pipeline : ${selectedLead.pipeline_name || "Default Pipeline"}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
     { id: 3, action: `Updated Type : ${selectedLead.type_name || "New Business"}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
     { id: 4, action: `Updated Source : ${selectedLead.source_name || "Email"}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
-    { id: 5, action: `Updated Lead Value : $${Number(selectedLead.lead_value || 0).toFixed(2)}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
+    { id: 5, action: `Updated Lead Value : ₹${Number(selectedLead.lead_value || 0).toFixed(2)}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
     { id: 6, action: `Created Lead #${selectedLead.id}`, time: new Date(selectedLead.created_at || Date.now()).toLocaleString(), user: selectedLead.user_name || "Admin" },
   ];
 
@@ -407,7 +419,7 @@ const LeadViewPage: React.FC = () => {
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Lead Value</span>
-                  <span className="font-bold text-gray-800 dark:text-gray-200">${Number(selectedLead.lead_value || 0).toFixed(4)}</span>
+                  <span className="font-bold text-gray-800 dark:text-gray-200">₹{Number(selectedLead.lead_value || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Source</span>
@@ -745,11 +757,51 @@ const LeadViewPage: React.FC = () => {
                       >
                         <option value="">Select Product</option>
                         {productsList.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name} (${p.price})</option>
+                          <option key={p.id} value={p.id}>{p.name} (₹{p.price})</option>
                         ))}
                       </select>
                       {prodError && <p className="mt-1 text-xs text-red-500 font-medium">{prodError}</p>}
                     </div>
+
+                    {/* Warehouse Dropdown */}
+                    <div className="flex-1 min-w-[150px]">
+                      <label className="block text-xs font-semibold mb-1">Warehouse</label>
+                      <select
+                        value={newProd.warehouse_id}
+                        onChange={(e) => {
+                          setNewProd({ ...newProd, warehouse_id: e.target.value, warehouse_location_id: "" });
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                      >
+                        <option value="">Select Warehouse</option>
+                        {warehousesList.map((w) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Storage Location Dropdown */}
+                    {(() => {
+                      const selectedW = warehousesList.find((w) => String(w.id) === newProd.warehouse_id);
+                      const availableLocations = selectedW?.locations || [];
+                      return (
+                        <div className="flex-1 min-w-[150px]">
+                          <label className="block text-xs font-semibold mb-1">Location</label>
+                          <select
+                            value={newProd.warehouse_location_id}
+                            onChange={(e) => setNewProd({ ...newProd, warehouse_location_id: e.target.value })}
+                            disabled={!newProd.warehouse_id}
+                            className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs disabled:opacity-50"
+                          >
+                            <option value="">Select Location</option>
+                            {availableLocations.map((loc: any) => (
+                              <option key={loc.id} value={loc.id}>{loc.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+
                     <div className="w-20">
                       <label className="block text-xs font-semibold mb-1">Qty</label>
                       <input
@@ -770,6 +822,8 @@ const LeadViewPage: React.FC = () => {
                       <tr className="border-b bg-gray-50 dark:bg-gray-900/50">
                         <th className="p-2">Product</th>
                         <th className="p-2">SKU</th>
+                        <th className="p-2">Warehouse</th>
+                        <th className="p-2">Location</th>
                         <th className="p-2">Qty</th>
                         <th className="p-2">Price</th>
                         <th className="p-2">Amount</th>
@@ -778,15 +832,33 @@ const LeadViewPage: React.FC = () => {
                     </thead>
                     <tbody>
                       {leadProducts.length === 0 ? (
-                        <tr><td colSpan={6} className="text-center py-6 text-gray-400">No products added.</td></tr>
+                        <tr><td colSpan={8} className="text-center py-6 text-gray-400">No products added.</td></tr>
                       ) : (
                         leadProducts.map((p) => (
                           <tr key={p.id} className="border-b">
                             <td className="p-2 font-semibold">{p.product_name}</td>
-                            <td className="p-2 text-gray-500 font-mono">{p.sku}</td>
+                            <td className="p-2 text-gray-500 font-mono">{p.sku || "-"}</td>
+                            <td className="p-2">
+                              {p.warehouse_name ? (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-medium">
+                                  {p.warehouse_name}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">-</span>
+                              )}
+                            </td>
+                            <td className="p-2">
+                              {p.warehouse_location_name ? (
+                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[11px] font-medium">
+                                  {p.warehouse_location_name}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">-</span>
+                              )}
+                            </td>
                             <td className="p-2">{p.quantity}</td>
-                            <td className="p-2">${Number(p.price || 0).toFixed(2)}</td>
-                            <td className="p-2 font-bold">${Number(p.amount || 0).toFixed(2)}</td>
+                            <td className="p-2">₹{Number(p.price || 0).toFixed(2)}</td>
+                            <td className="p-2 font-bold">₹{Number(p.amount || 0).toFixed(2)}</td>
                             <td className="p-2 text-right">
                               <button onClick={() => deleteLeadProduct(p.id, leadId)} className="text-red-500 hover:underline">
                                 Remove
@@ -818,7 +890,7 @@ const LeadViewPage: React.FC = () => {
                           <Link to={`/quotes/edit/${q.id}`} className="font-bold text-[#0088cc] hover:underline">
                             {q.subject}
                           </Link>
-                          <p className="text-gray-500">Grand Total: ${Number(q.grand_total || 0).toFixed(2)}</p>
+                          <p className="text-gray-500">Grand Total: ₹{Number(q.grand_total || 0).toFixed(2)}</p>
                         </div>
                         <Link to={`/quotes/edit/${q.id}`} className="px-2.5 py-1 border rounded text-xs">View Quote</Link>
                       </div>
@@ -865,7 +937,7 @@ const LeadViewPage: React.FC = () => {
                 <form onSubmit={handleWonLostSubmit} className="space-y-4">
                   {targetWonLostStage?.code === "won" ? (
                     <div>
-                      <label className="block text-xs font-semibold mb-1">Won Value ($)</label>
+                      <label className="block text-xs font-semibold mb-1">Won Value (₹)</label>
                       <input
                         type="number"
                         step="0.01"

@@ -253,7 +253,7 @@ export const DashboardPage: React.FC = () => {
     xaxis: {
       categories: ["Won Revenue", "Lost Revenue"],
       labels: {
-        formatter: (val) => "$" + Number(val).toLocaleString(),
+        formatter: (val) => "₹" + Number(val).toLocaleString("en-IN"),
         rotate: -45,
         style: { colors: "#64748b", fontSize: "11px" },
       },

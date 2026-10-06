@@ -646,7 +646,7 @@ const CreateQuotePage: React.FC = () => {
                   <option value="">Select product...</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} {p.sku ? `(${p.sku})` : ""} - ${p.price || 0}
+                      {p.name} {p.sku ? `(${p.sku})` : ""} - ₹{p.price || 0}
                     </option>
                   ))}
                 </select>
@@ -664,13 +664,14 @@ const CreateQuotePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Price ($)</label>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Price (₹)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={newItem.price}
                   onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                  className={inputCls}
+                  disabled
+                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400`}
                 />
               </div>
 
@@ -782,7 +783,7 @@ const CreateQuotePage: React.FC = () => {
                 <span className="text-red-500">-{fmtCurrency(totalDiscount)}</span>
               </div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Tax Amount ($):</span>
+                <span>Tax Amount (₹):</span>
                 <input
                   type="number"
                   value={formData.tax_amount}
@@ -791,7 +792,7 @@ const CreateQuotePage: React.FC = () => {
                 />
               </div>
               <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Adjustment ($):</span>
+                <span>Adjustment (₹):</span>
                 <input
                   type="number"
                   value={formData.adjustment_amount}

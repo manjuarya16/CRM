@@ -106,8 +106,9 @@ const CreateLeadPage: React.FC = () => {
 
   // Tab 3 – Products
   const [products, setProducts] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [productRows, setProductRows] = useState<ProductRow[]>([
-    { product_id: "", product_name: "", quantity: "1", price: "0" },
+    { product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" },
   ]);
 
   // Tab 4 – Custom Attributes
@@ -150,6 +151,9 @@ const CreateLeadPage: React.FC = () => {
     }).catch(() => { });
     API.get("/products?limit=500&per_page=500").then((r) => {
       if (r.data?.data) setProducts(r.data.data);
+    }).catch(() => { });
+    API.get("/warehouse/").then((r) => {
+      if (r.data?.data) setWarehouses(r.data.data);
     }).catch(() => { });
   }, []);
 
@@ -280,9 +284,30 @@ const CreateLeadPage: React.FC = () => {
           next[idx].product_name = prod.name || "";
           next[idx].price = String(prod.price ?? 0);
         }
+        next[idx].warehouse_id = "";
+        next[idx].warehouse_location_id = "";
+        next[idx].inventories = [];
       }
       return next;
     });
+
+    if (field === "product_id" && val) {
+      API.get(`/products/${val}`)
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.data?.inventories)) {
+            const invs = res.data.data.inventories;
+            setProductRows((rows) => {
+              const next = [...rows];
+              if (next[idx] && String(next[idx].product_id) === String(val)) {
+                next[idx] = { ...next[idx], inventories: invs };
+              }
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
@@ -831,9 +856,11 @@ const CreateLeadPage: React.FC = () => {
                     <th className="py-2.5 px-3">
                       Product <span className="text-red-500">*</span>
                     </th>
-                    <th className="py-2.5 px-3 w-28">Quantity</th>
-                    <th className="py-2.5 px-3 w-36">Price ($)</th>
-                    <th className="py-2.5 px-3 w-36">Amount</th>
+                    <th className="py-2.5 px-3 w-40">Warehouse</th>
+                    <th className="py-2.5 px-3 w-40">Location</th>
+                    <th className="py-2.5 px-3 w-24">Quantity</th>
+                    <th className="py-2.5 px-3 w-32">Price (₹)</th>
+                    <th className="py-2.5 px-3 w-32">Amount</th>
                     <th className="py-2.5 px-3 w-12"></th>
                   </tr>
                 </thead>
@@ -843,6 +870,47 @@ const CreateLeadPage: React.FC = () => {
                     const prodErr = errors[`product_${idx}`];
                     const qtyErr = errors[`quantity_${idx}`];
                     const priceErr = errors[`price_${idx}`];
+
+                    // Dependent Warehouses for selected product
+                    const productInventories = row.inventories || [];
+                    const hasInvRecords = productInventories.length > 0;
+                    const validWarehouseIds = new Set(
+                      productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
+                    );
+
+                    const availableWarehouses = warehouses.filter((w) => {
+                      if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
+                      return validWarehouseIds.has(Number(w.id));
+                    });
+
+                    const getWarehouseLabel = (w: any) => {
+                      if (!row.product_id || !hasInvRecords) return w.name;
+                      const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
+                      const totalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
+                      return totalStock > 0 ? `${w.name} (Stock: ${totalStock})` : w.name;
+                    };
+
+                    // Dependent Locations for selected warehouse
+                    const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
+                    const allLocations = selectedW?.locations || [];
+                    const locInvsForW = productInventories.filter(
+                      (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
+                    );
+                    const validLocationIds = new Set(
+                      locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
+                    );
+
+                    const availableLocations = allLocations.filter((loc: any) => {
+                      if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
+                      return validLocationIds.has(Number(loc.id));
+                    });
+
+                    const getLocationLabel = (loc: any) => {
+                      if (!row.product_id || !hasInvRecords) return loc.name;
+                      const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
+                      if (!invForLoc) return loc.name;
+                      return `${loc.name} (Stock: ${invForLoc.in_stock ?? 0})`;
+                    };
 
                     return (
                       <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
@@ -862,6 +930,38 @@ const CreateLeadPage: React.FC = () => {
                           {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
                         </td>
                         <td className="py-2 px-3 align-top">
+                          <select
+                            value={row.warehouse_id || ""}
+                            onChange={(e) => {
+                              handleProductRowChange(idx, "warehouse_id", e.target.value);
+                              handleProductRowChange(idx, "warehouse_location_id", "");
+                            }}
+                            className={inputCls}
+                          >
+                            <option value="">Select Warehouse</option>
+                            {availableWarehouses.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {getWarehouseLabel(w)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-2 px-3 align-top">
+                          <select
+                            value={row.warehouse_location_id || ""}
+                            onChange={(e) => handleProductRowChange(idx, "warehouse_location_id", e.target.value)}
+                            disabled={!row.warehouse_id}
+                            className={`${inputCls} disabled:opacity-50`}
+                          >
+                            <option value="">Select Location</option>
+                            {availableLocations.map((loc: any) => (
+                              <option key={loc.id} value={loc.id}>
+                                {getLocationLabel(loc)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-2 px-3 align-top">
                           <input
                             type="number"
                             min="1"
@@ -877,7 +977,8 @@ const CreateLeadPage: React.FC = () => {
                             step="0.01"
                             value={row.price}
                             onChange={(e) => handleProductRowChange(idx, "price", e.target.value)}
-                            className={`${inputCls} ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                            disabled
+                            className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           />
                           {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
                         </td>

@@ -283,7 +283,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
       }
     } catch (clientErr: any) {
       console.error("Download Error:", clientErr);
-      const directUrl = `${API_URL || "http://localhost:3040/api"}/data-transfer/sample/${typeKey}?format=${chosenFormat}`;
+      const directUrl = `${API_URL}/data-transfer/sample/${typeKey}?format=${chosenFormat}`;
       window.open(directUrl, "_blank");
     }
   };

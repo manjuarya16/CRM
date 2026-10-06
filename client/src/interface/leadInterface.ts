@@ -63,6 +63,10 @@ export interface ILeadProduct {
   price?: number;
   quantity?: number;
   amount?: number;
+  warehouse_id?: number;
+  warehouse_location_id?: number;
+  warehouse_name?: string;
+  warehouse_location_name?: string;
 }
 
 export interface ProductRow {
@@ -71,6 +75,9 @@ export interface ProductRow {
   product_name: string;
   quantity: string;
   price: string;
+  warehouse_id?: string;
+  warehouse_location_id?: string;
+  inventories?: any[];
 }
 
 export interface LeadState {
@@ -95,7 +102,14 @@ export interface LeadState {
   deleteLead: (id: number) => Promise<void>;
   updateLeadStage: (id: number, stageId: number, status?: boolean, lostReason?: string) => Promise<any>;
   fetchLeadProducts: (leadId: number) => Promise<void>;
-  addLeadProduct: (leadId: number, productId: number, quantity?: number, price?: number) => Promise<any>;
+  addLeadProduct: (
+    leadId: number,
+    productId: number,
+    quantity?: number,
+    price?: number,
+    warehouseId?: number,
+    warehouseLocationId?: number
+  ) => Promise<any>;
   deleteLeadProduct: (itemId: number, leadId: number) => Promise<void>;
   fetchSources: () => Promise<void>;
   fetchTypes: () => Promise<void>;
