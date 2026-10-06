@@ -69,10 +69,10 @@ export const commonAPI = {
     return API.post("/common/upload/base64/store", payload);
   },
   getPublicBranding: async () => {
-    return API.get("/organization/public/branding");
+    return API.get("/organizations/public/branding");
   },
   getNextUserId: async () => {
-    return API.get(`/user/next-id`);
+    return API.get(`/users/next-id`);
   },
 };
 

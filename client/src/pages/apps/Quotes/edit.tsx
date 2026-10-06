@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useQuoteStore } from "@/store";
+import { useQuoteStore, useLeadStore, usePersonStore, useUserStore, useProductStore } from "@/store";
 import API from "@/config";
 import { ITempQuoteItem, IQuoteAddress } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
@@ -67,20 +67,23 @@ const EditQuotePage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    API.get("/persons?per_page=500&limit=500").then((res) => {
-      if (res.data?.data) setPersons(res.data.data);
+    usePersonStore.getState().fetchPersons({ per_page: 500, limit: 500 }).then(() => {
+      const pList = usePersonStore.getState().persons;
+      if (pList) setPersons(pList);
     }).catch(() => {});
 
-    API.get("/users?limit=100").then((res) => {
-      if (res.data?.data) setUsers(res.data.data);
+    useUserStore.getState().fetchUsers(1, 100).then((res: any) => {
+      if (res?.rows || res) setUsers(res?.rows || res || []);
     }).catch(() => {});
 
-    API.get("/leads?limit=100").then((res) => {
-      if (res.data?.data) setLeads(res.data.data);
+    useLeadStore.getState().fetchLeads(1, 100).then(() => {
+      const lList = useLeadStore.getState().leads;
+      if (lList) setLeads(lList);
     }).catch(() => {});
 
-    API.get("/products?limit=200").then((res) => {
-      if (res.data?.data) setProducts(res.data.data);
+    useProductStore.getState().fetchProducts(1, 200).then(() => {
+      const prodList = useProductStore.getState().products;
+      if (prodList) setProducts(prodList);
     }).catch(() => {});
 
     if (id) {
@@ -133,9 +136,8 @@ const EditQuotePage: React.FC = () => {
           }
 
           if (q.lead_id) {
-            API.get(`/leads/${q.lead_id}`).then((leadRes) => {
-              if (leadRes.data?.data) {
-                const leadData = leadRes.data.data;
+            useLeadStore.getState().fetchLeadById(Number(q.lead_id)).then((leadData) => {
+              if (leadData) {
                 setLeads((prev) => {
                   if (!prev.some((l) => String(l.id) === String(leadData.id))) {
                     return [leadData, ...prev];
@@ -186,8 +188,7 @@ const EditQuotePage: React.FC = () => {
     if (!leadIdStr) return;
 
     try {
-      const leadRes = await API.get(`/leads/${leadIdStr}`);
-      const leadData = leadRes.data?.data;
+      const leadData = await useLeadStore.getState().fetchLeadById(Number(leadIdStr));
       if (leadData) {
         setLeads((prev) => {
           if (!prev.some((l) => String(l.id) === String(leadData.id))) {
@@ -206,8 +207,8 @@ const EditQuotePage: React.FC = () => {
 
       // If items is empty, automatically populate with lead products
       if (items.length === 0) {
-        const prodRes = await API.get(`/leads/${leadIdStr}/products`);
-        const leadProds = prodRes.data?.data || [];
+        await useLeadStore.getState().fetchLeadProducts(Number(leadIdStr));
+        const leadProds = useLeadStore.getState().leadProducts || [];
         if (Array.isArray(leadProds) && leadProds.length > 0) {
           const mappedItems: ITempQuoteItem[] = leadProds.map((lp: any) => {
             const qty = Number(lp.quantity) || 1;

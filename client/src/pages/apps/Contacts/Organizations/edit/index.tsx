@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useOrganizationStore, useUserStore, useTagStore } from "@/store";
 import { OrganizationFormData } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { organizationSchema } from "@/schemas";
@@ -58,20 +59,19 @@ const EditOrganizationPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [orgRes, usersRes, tagsRes] = await Promise.all([
-        API.get(`/organization/${id}`),
-        API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
-        API.get(`/tags/entity/organization/${id}`).catch(() => ({ data: { data: [] } })),
+      const [org, usersRes, tags] = await Promise.all([
+        useOrganizationStore.getState().fetchOrganizationById(id!),
+        useUserStore.getState().fetchUsers(1, 200),
+        useTagStore.getState().fetchEntityTags("organization", id!),
       ]);
 
-      const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
+      const userRows: any = (usersRes as any)?.rows || usersRes || [];
       setUsers(userRows);
 
-      if (tagsRes.data?.data) {
-        setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+      if (tags) {
+        setSelectedTagIds(tags.map((t: any) => t.id));
       }
 
-      const org = orgRes.data?.data;
       if (org) {
         let addrObj: any = {};
         if (typeof org.address === "object" && org.address !== null) {
@@ -156,12 +156,8 @@ const EditOrganizationPage: React.FC = () => {
         custom_attributes: customAttributes,
       };
 
-      const res = await API.put(`/organization/${id}`, payload);
-      await API.post("/tags/entity", {
-        entity_type: "organization",
-        entity_id: id,
-        tag_ids: selectedTagIds,
-      }).catch(() => {});
+      const res = await useOrganizationStore.getState().updateOrganization(id!, payload);
+      await useTagStore.getState().saveEntityTags("organization", id!, selectedTagIds);
       if (res.data?.success || res.status === 200) {
         Swal.fire({
           icon: "success",

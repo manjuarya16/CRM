@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useOrganizationStore } from "@/store";
 
 import { IOrganization } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
@@ -27,13 +28,10 @@ const OrganizationsPage: React.FC = () => {
   const fetchOrgs = async () => {
     try {
       setLoading(true);
-      const res = await API.get(
-        `/organization?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`
-      ).catch(() => ({ data: { data: [], total: 0 } }));
-
-      const list = res.data?.data || [];
+      const res = await useOrganizationStore.getState().fetchOrganizations(page, perPage, search);
+      const list = res?.data || [];
       setOrganizations(list);
-      setTotal(res.data?.total !== undefined ? res.data.total : list.length);
+      setTotal(res?.total !== undefined ? res.total : list.length);
     } catch {
       setOrganizations([]);
     } finally {
@@ -94,7 +92,7 @@ const OrganizationsPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete(`/organization/${id}`);
+        await useOrganizationStore.getState().deleteOrganization(id);
         Swal.fire({
           icon: "success",
           title: "Deleted!",
@@ -127,7 +125,7 @@ const OrganizationsPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await Promise.all(selectedIds.map((id) => API.delete(`/organization/${id}`)));
+        await Promise.all(selectedIds.map((id) => useOrganizationStore.getState().deleteOrganization(id)));
         Swal.fire({
           icon: "success",
           title: "Deleted!",

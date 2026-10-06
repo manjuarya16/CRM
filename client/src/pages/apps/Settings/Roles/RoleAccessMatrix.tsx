@@ -5,7 +5,7 @@ import { IRole, MatrixModule } from "@/interface";
 import { ALL_CRM_PERMISSION_KEYS } from "@/constants/permissions";
 import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { usePermission } from "@/hooks/usePermission";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useRoleStore } from "@/store";
 
 export const RoleAccessMatrix: React.FC = () => {
   const { user } = useAuthStore();
@@ -66,9 +66,8 @@ export const RoleAccessMatrix: React.FC = () => {
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
-      const list: IRole[] = res.data?.data || [];
-      setRoles(list);
+      const list = await useRoleStore.getState().fetchRoles(true);
+      setRoles(list || []);
     } catch {
       setRoles([]);
     } finally {
@@ -165,7 +164,7 @@ export const RoleAccessMatrix: React.FC = () => {
         permissions: isAll ? ALL_CRM_PERMISSION_KEYS : selectedPermissions,
       };
 
-      await API.put("/role/" + selectedRoleId, payload);
+      await useRoleStore.getState().saveRole(payload, selectedRoleId);
       Swal.fire({
         icon: "success",
         title: "Access Saved!",
@@ -175,9 +174,8 @@ export const RoleAccessMatrix: React.FC = () => {
       });
 
       // Refresh roles
-      const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
-      const list: IRole[] = res.data?.data || [];
-      setRoles(list);
+      const list = await useRoleStore.getState().fetchRoles(true);
+      setRoles(list || []);
     } catch (err: any) {
       Swal.fire("Error", err?.response?.data?.message || "Failed to save permissions", "error");
     } finally {

@@ -41,7 +41,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
   const fetchWarehouseDetails = async (warehouseId: string) => {
     try {
       setLoading(true);
-      const res = await API.get("/warehouse/" + warehouseId);
+      const res = await API.get("/warehouses/" + warehouseId);
       const data = res.data?.data;
       if (data) {
         setName(data.name || "");
@@ -173,7 +173,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
       setSaving(true);
 
       if (mode === "edit" && id) {
-        await API.put("/warehouse/" + id, validated);
+        await API.put("/warehouses/" + id, validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -182,7 +182,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
           showConfirmButton: false,
         });
       } else {
-        await API.post("/warehouse/", validated);
+        await API.post("/warehouses/", validated);
         Swal.fire({
           icon: "success",
           title: "Success",

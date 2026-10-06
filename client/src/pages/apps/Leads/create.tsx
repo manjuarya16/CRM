@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useLeadStore } from "@/store";
+import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
@@ -135,25 +135,28 @@ const CreateLeadPage: React.FC = () => {
       }
     });
 
-    API.get("/users?limit=200&per_page=200").then((r) => {
-      if (r.data?.data) setUsers(r.data.data);
+    useUserStore.getState().fetchUsers(1, 200).then((res: any) => {
+      if (res?.rows || res) setUsers(res?.rows || res || []);
     }).catch(() => { });
-    API.get("/persons?limit=500&per_page=500").then((r) => {
-      if (r.data?.data) {
-        const sorted = (r.data.data || []).sort((a: any, b: any) =>
+    usePersonStore.getState().fetchPersons({ limit: 500, per_page: 500 }).then(() => {
+      const statePersons = usePersonStore.getState().persons;
+      if (statePersons) {
+        const sorted = [...statePersons].sort((a: any, b: any) =>
           (a.name || "").localeCompare(b.name || "")
         );
         setPersons(sorted);
       }
     }).catch(() => { });
-    API.get("/organizations?limit=200&per_page=200").then((r) => {
-      if (r.data?.data) setOrganizations(r.data.data);
+    useOrganizationStore.getState().getOrganization().then(() => {
+      const org = useOrganizationStore.getState().organization;
+      if (org) setOrganizations([org]);
     }).catch(() => { });
-    API.get("/products?limit=500&per_page=500").then((r) => {
-      if (r.data?.data) setProducts(r.data.data);
+    useProductStore.getState().fetchProducts(1, 500).then(() => {
+      const prods = useProductStore.getState().products;
+      if (prods) setProducts(prods);
     }).catch(() => { });
-    API.get("/warehouse/").then((r) => {
-      if (r.data?.data) setWarehouses(r.data.data);
+    useWarehouseStore.getState().fetchWarehouses().then((list) => {
+      if (list) setWarehouses(list);
     }).catch(() => { });
   }, []);
 
@@ -292,10 +295,10 @@ const CreateLeadPage: React.FC = () => {
     });
 
     if (field === "product_id" && val) {
-      API.get(`/products/${val}`)
-        .then((res) => {
-          if (res.data?.success && Array.isArray(res.data.data?.inventories)) {
-            const invs = res.data.data.inventories;
+      useProductStore.getState().fetchProductById(Number(val))
+        .then((productData) => {
+          if (productData && Array.isArray(productData.inventories)) {
+            const invs = productData.inventories;
             setProductRows((rows) => {
               const next = [...rows];
               if (next[idx] && String(next[idx].product_id) === String(val)) {
@@ -423,11 +426,7 @@ const CreateLeadPage: React.FC = () => {
 
       const savedLead: any = await addLead(payload);
       if (savedLead?.id && selectedTagIds.length > 0) {
-        await API.post("/tags/entity", {
-          entity_type: "lead",
-          entity_id: savedLead.id,
-          tag_ids: selectedTagIds,
-        }).catch(() => { });
+        await useTagStore.getState().saveEntityTags("lead", savedLead.id, selectedTagIds);
       }
       navigate("/leads");
     } catch (error: any) {

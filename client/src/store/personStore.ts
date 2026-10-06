@@ -85,6 +85,19 @@ export const usePersonStore = create<PersonState>((set) => ({
       set({ loading: false });
     }
   },
+
+  checkDuplicate: async (email?: string, phone?: string, excludeId?: number | string) => {
+    try {
+      const params: any = {};
+      if (email) params.email = email;
+      if (phone) params.phone = phone;
+      if (excludeId) params.exclude_id = excludeId;
+      const res = await API.get("/persons/check-duplicate", { params });
+      return res.data;
+    } catch {
+      return null;
+    }
+  },
 }));
 
 export default usePersonStore;

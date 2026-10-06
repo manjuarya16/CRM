@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import API from "@/config";
-import { useProductStore } from "@/store";
+import { useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { productSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
@@ -58,18 +58,17 @@ const EditProductPage: React.FC = () => {
       setLoading(true);
       setLoadingWarehouses(true);
 
-      const [product, tagsRes, warehousesRes] = await Promise.all([
+      const [product, tags, warehouseList] = await Promise.all([
         fetchProductById(productId),
-        API.get(`/tags/entity/product/${productId}`).catch(() => ({ data: { data: [] } })),
-        API.get("/warehouse/").catch(() => ({ data: { data: [] } })),
+        useTagStore.getState().fetchEntityTags("product", productId),
+        useWarehouseStore.getState().fetchWarehouses(),
       ]);
 
-      if (tagsRes.data?.data) {
-        setSelectedTagIds(tagsRes.data.data.map((t: any) => t.id));
+      if (tags) {
+        setSelectedTagIds(tags.map((t: any) => t.id));
       }
 
-      const warehouseList: IWarehouse[] = warehousesRes.data?.data || [];
-      setWarehouses(warehouseList);
+      setWarehouses(warehouseList || []);
 
       const savedInventories = Array.isArray(product?.inventories) ? product.inventories : [];
 
@@ -197,11 +196,7 @@ const EditProductPage: React.FC = () => {
       } as any);
 
       if (id) {
-        await API.post("/tags/entity", {
-          entity_type: "product",
-          entity_id: Number(id),
-          tag_ids: selectedTagIds,
-        }).catch(() => {});
+        await useTagStore.getState().saveEntityTags("product", Number(id), selectedTagIds);
       }
 
       navigate("/products");

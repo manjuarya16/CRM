@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useRoleStore } from "@/store";
 
 import { IRole } from "@/interface";
 import { roleSchema } from "@/schemas";
@@ -56,9 +57,8 @@ const RolesPage: React.FC = () => {
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/role/").catch(() => ({ data: { data: [] } }));
-      const list = res.data?.data || [];
-      setRoles(list);
+      const list = await useRoleStore.getState().fetchRoles(true);
+      setRoles(list || []);
     } catch {
       setRoles([]);
     } finally {
@@ -175,7 +175,7 @@ const RolesPage: React.FC = () => {
 
       if (editingRole) {
         // Update
-        await API.put(`/role/${editingRole.id}`, validated);
+        await useRoleStore.getState().saveRole(validated, editingRole.id);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -185,7 +185,7 @@ const RolesPage: React.FC = () => {
         });
       } else {
         // Add
-        await API.post("/role/", validated);
+        await useRoleStore.getState().saveRole(validated);
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -228,7 +228,7 @@ const RolesPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete(`/role/${role.id}`);
+        await useRoleStore.getState().deleteRole(role.id);
         Swal.fire({
           icon: "success",
           title: "Deleted!",

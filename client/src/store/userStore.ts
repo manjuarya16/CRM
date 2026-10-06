@@ -25,7 +25,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ loading: true });
     _usersFetchInFlight = (async () => {
       try {
-        let url = `/user/?page=${page}&per_page=${per_page}`;
+        let url = `/users/?page=${page}&per_page=${per_page}`;
         if (excludeRole !== null && excludeRole !== undefined) {
           url += `&exclude_role=${excludeRole}`;
         }
@@ -61,7 +61,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     set({ loading: true });
     try {
-      const response = await API.get(`/user/${id}`);
+      const response = await API.get(`/users/${id}`);
       if (response.data?.success) {
         set({ selectedUser: response.data.data, error: null });
       }
@@ -82,7 +82,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       };
       delete dataToSend.password;
 
-      const response = await API.post("/user/add", dataToSend);
+      const response = await API.post("/users/add", dataToSend);
       if (response.data?.success) {
         set((state) => ({
           users: [...state.users, response.data.data],
@@ -110,7 +110,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   updateUser: async (id: number, userData: any) => {
     set({ loading: true });
     try {
-      const response = await API.put("/user/update/", { id, ...userData });
+      const response = await API.put("/users/update/", { id, ...userData });
       if (response.data?.success) {
         set((state) => ({
           users: state.users.map((u) =>
@@ -151,7 +151,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (result.isConfirmed) {
         set({ loading: true });
-        const response = await API.delete(`/user/delete/${id}`, {
+        const response = await API.delete(`/users/delete/${id}`, {
           data: { id, deleted_by: 0 },
         });
         if (response.data?.success) {

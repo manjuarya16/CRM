@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
+import { useOrganizationStore, useUserStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { organizationSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
@@ -54,8 +55,8 @@ const CreateOrganizationPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await API.get("/user/").catch(() => ({ data: { data: { rows: [] } } }));
-      const userRows = res.data?.data?.rows || res.data?.data || [];
+      const res: any = await useUserStore.getState().fetchUsers(1, 200);
+      const userRows = res?.rows || res || [];
       setUsers(userRows);
     } catch (e) {
       console.error(e);
@@ -105,14 +106,10 @@ const CreateOrganizationPage: React.FC = () => {
         custom_attributes: customAttributes,
       };
 
-      const res = await API.post("/organization", payload);
-      const createdOrgId = res.data?.data?.id || res.data?.id;
+      const res = await useOrganizationStore.getState().createOrganization(payload);
+      const createdOrgId = res?.data?.id || res?.id;
       if (createdOrgId && selectedTagIds.length > 0) {
-        await API.post("/tags/entity", {
-          entity_type: "organization",
-          entity_id: createdOrgId,
-          tag_ids: selectedTagIds,
-        }).catch(() => {});
+        await useTagStore.getState().saveEntityTags("organization", createdOrgId, selectedTagIds);
       }
       if (res.data?.success || res.status === 200 || res.status === 201) {
         Swal.fire({

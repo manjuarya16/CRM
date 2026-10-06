@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useLeadStore, useActivityStore, useQuoteStore } from "@/store";
+import { useLeadStore, useActivityStore, useQuoteStore, usePersonStore, useEmailTemplateStore, useWarehouseStore, useProductStore } from "@/store";
 import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
 import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
@@ -66,21 +66,22 @@ const LeadViewPage: React.FC = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   useEffect(() => {
-    API.get("/persons?limit=500&per_page=500").then((res) => {
-      if (res.data?.data) {
-        const sorted = (res.data.data || []).sort((a: any, b: any) =>
+    usePersonStore.getState().fetchPersons({ limit: 500, per_page: 500 }).then(() => {
+      const statePersons = usePersonStore.getState().persons;
+      if (statePersons) {
+        const sorted = [...statePersons].sort((a: any, b: any) =>
           (a.name || "").localeCompare(b.name || "")
         );
         setPersonsList(sorted);
       }
     }).catch(() => { });
 
-    API.get("/email-templates").then((res) => {
-      if (res.data?.data) setEmailTemplates(res.data.data);
+    useEmailTemplateStore.getState().fetchEmailTemplates().then((templates) => {
+      if (templates) setEmailTemplates(templates);
     }).catch(() => { });
 
-    API.get("/warehouse/").then((res) => {
-      if (res.data?.data) setWarehousesList(res.data.data);
+    useWarehouseStore.getState().fetchWarehouses().then((warehouses) => {
+      if (warehouses) setWarehousesList(warehouses);
     }).catch(() => { });
   }, []);
 
@@ -93,8 +94,8 @@ const LeadViewPage: React.FC = () => {
           else fetchStages();
 
           if (lead.person_id) {
-            API.get(`/persons/${lead.person_id}`).then((res) => {
-              if (res.data?.data) setPerson(res.data.data);
+            usePersonStore.getState().getPersonById(lead.person_id).then((p) => {
+              if (p) setPerson(p);
             }).catch(() => { });
           }
         }
@@ -105,9 +106,9 @@ const LeadViewPage: React.FC = () => {
       fetchActivities(1, 100, "", leadId);
       fetchQuotes(1, 50, "", leadId);
 
-
-      API.get("/products?limit=100").then((res) => {
-        if (res.data?.data) setProductsList(res.data.data);
+      useProductStore.getState().fetchProducts(1, 100).then(() => {
+        const prods = useProductStore.getState().products;
+        if (prods) setProductsList(prods);
       }).catch(() => { });
     }
   }, [leadId]);

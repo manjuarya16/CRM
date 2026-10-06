@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "@/config";
 import Swal from "sweetalert2";
-import { usePersonStore } from "@/store";
+import { usePersonStore, useOrganizationStore, useUserStore, useTagStore } from "@/store";
 import { PersonEmailItem, ContactItem } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
@@ -40,11 +40,11 @@ const CreatePersonPage: React.FC = () => {
   const fetchMetadata = async () => {
     try {
       const [orgsRes, usersRes] = await Promise.all([
-        API.get("/organization").catch(() => ({ data: { data: [] } })),
-        API.get("/user/").catch(() => ({ data: { data: { rows: [] } } })),
+        useOrganizationStore.getState().fetchOrganizations(1, 100),
+        useUserStore.getState().fetchUsers(1, 200),
       ]);
-      setOrganizations(orgsRes.data?.data || []);
-      const userRows = usersRes.data?.data?.rows || usersRes.data?.data || [];
+      setOrganizations(orgsRes?.data || []);
+      const userRows: any = (usersRes as any)?.rows || usersRes || [];
       setUsers(userRows);
       if (userRows.length > 0) {
         setFormData((prev) => ({ ...prev, user_id: String(userRows[0].id) }));
@@ -139,11 +139,9 @@ const CreatePersonPage: React.FC = () => {
   const checkDuplicateEmail = async (val: string) => {
     if (!val || !val.trim().includes("@")) return;
     try {
-      const res = await API.get("/persons/check-duplicate", {
-        params: { email: val.trim() },
-      });
-      if (res.data?.isDuplicate) {
-        setErrors((prev) => ({ ...prev, emails: res.data.message }));
+      const data = await usePersonStore.getState().checkDuplicate(val.trim());
+      if (data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, emails: data.message }));
       }
     } catch (e) {
       console.error(e);
@@ -169,11 +167,9 @@ const CreatePersonPage: React.FC = () => {
       return;
     }
     try {
-      const res = await API.get("/persons/check-duplicate", {
-        params: { phone: cleanVal },
-      });
-      if (res.data?.isDuplicate) {
-        setErrors((prev) => ({ ...prev, contact_numbers: res.data.message }));
+      const data = await usePersonStore.getState().checkDuplicate(undefined, cleanVal);
+      if (data?.isDuplicate) {
+        setErrors((prev) => ({ ...prev, contact_numbers: data.message }));
       }
     } catch (e) {
       console.error(e);
@@ -217,11 +213,7 @@ const CreatePersonPage: React.FC = () => {
       setSaving(true);
       const savedPerson = await usePersonStore.getState().savePerson(payload as any);
       if (savedPerson?.id && selectedTagIds.length > 0) {
-        await API.post("/tags/entity", {
-          entity_type: "person",
-          entity_id: savedPerson.id,
-          tag_ids: selectedTagIds,
-        }).catch(() => {});
+        await useTagStore.getState().saveEntityTags("person", savedPerson.id, selectedTagIds);
       }
       Swal.fire({
         icon: "success",

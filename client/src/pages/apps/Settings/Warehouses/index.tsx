@@ -31,7 +31,7 @@ const WarehousesPage: React.FC = () => {
   const fetchWarehouses = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/warehouse/").catch(() => ({ data: { data: [] } }));
+      const res = await API.get("/warehouses/").catch(() => ({ data: { data: [] } }));
       const list = res.data?.data || [];
       setWarehouses(list);
     } catch {
@@ -47,7 +47,7 @@ const WarehousesPage: React.FC = () => {
     setViewingProducts([]);
     setViewingProductsLoading(true);
     try {
-      const res = await API.get(`/warehouse/${item.id}/products`).catch(() => ({ data: { data: [] } }));
+      const res = await API.get(`/warehouses/${item.id}/products`).catch(() => ({ data: { data: [] } }));
       setViewingProducts(res.data?.data || []);
     } catch {
       setViewingProducts([]);
@@ -69,7 +69,7 @@ const WarehousesPage: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        await API.delete("/warehouse/" + item.id);
+        await API.delete("/warehouses/" + item.id);
         Swal.fire({
           icon: "success",
           title: "Deleted!",
