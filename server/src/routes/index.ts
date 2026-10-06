@@ -94,5 +94,6 @@ router.use('/google-contacts', googleContactRoutes);
 router.use('/tags', tagRoutes);
 router.use('/tag', tagRoutes);
 router.use('/whatsapp', whatsappRoutes);
+router.use('/', authRoutes);
 
 export default router;
