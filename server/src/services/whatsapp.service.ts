@@ -84,9 +84,9 @@ export class WhatsAppService {
     queryParams: IWhatsAppWebhookVerificationQuery,
     configuredVerifyToken?: string
   ): Promise<string | null> {
-    const hubMode = queryParams['hub.mode'];
-    const hubToken = queryParams['hub.verify_token'];
-    const hubChallenge = queryParams['hub.challenge'];
+    const hubMode = queryParams['hub.mode'] || (queryParams as any)?.hub?.mode || (queryParams as any)?.mode;
+    const hubToken = queryParams['hub.verify_token'] || (queryParams as any)?.hub?.verify_token || (queryParams as any)?.verify_token;
+    const hubChallenge = queryParams['hub.challenge'] || (queryParams as any)?.hub?.challenge || (queryParams as any)?.challenge;
 
     let expectedVerifyToken = configuredVerifyToken;
 
@@ -101,7 +101,7 @@ export class WhatsAppService {
 
     if (hubMode === 'subscribe' && (hubToken === expectedVerifyToken || hubToken === 'krayin_crm_whatsapp_token')) {
       logger.info('WhatsApp webhook successfully verified.');
-      return hubChallenge || 'OK';
+      return String(hubChallenge || 'OK');
     }
 
     logger.warn(`WhatsApp webhook verification failed: Token received [${hubToken}] did not match expected [${expectedVerifyToken}].`);

@@ -27,11 +27,20 @@ const upload = multer({
  */
 router.get(['/', '/webhook'], async (req: Request, res: Response): Promise<void> => {
   try {
-    const queryParams = req.query as IWhatsAppWebhookVerificationQuery;
+    const rawMode = req.query['hub.mode'] || (req.query as any)?.hub?.mode || req.query['mode'];
+    const rawToken = req.query['hub.verify_token'] || (req.query as any)?.hub?.verify_token || req.query['verify_token'] || req.query['token'];
+    const rawChallenge = req.query['hub.challenge'] || (req.query as any)?.hub?.challenge || req.query['challenge'];
+
+    const queryParams: IWhatsAppWebhookVerificationQuery = {
+      'hub.mode': rawMode ? String(rawMode) : undefined,
+      'hub.verify_token': rawToken ? String(rawToken) : undefined,
+      'hub.challenge': rawChallenge ? String(rawChallenge) : undefined,
+    };
+
     const challenge = await WhatsAppService.verifyWebhookSubscription(queryParams);
 
     if (challenge) {
-      res.status(HttpStatusCodes.OK).send(challenge);
+      res.status(HttpStatusCodes.OK).type('text/plain').send(String(challenge));
       return;
     }
 
