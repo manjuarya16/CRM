@@ -185,11 +185,20 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
 
     // Save products via fn_add_lead_product
     if (lead && Array.isArray(products) && products.length > 0) {
+      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
+      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
-          [lead.id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          [
+            lead.id,
+            Number(p.product_id),
+            Number(p.quantity) || 1,
+            p.price ? Number(p.price) : null,
+            p.warehouse_id ? Number(p.warehouse_id) : null,
+            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+          ]
         );
       }
     }
@@ -328,12 +337,21 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     // Update products if array provided using fn_clear_lead_products & fn_add_lead_product
     if (Array.isArray(products)) {
+      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
+      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
       await connection.query("SELECT public.fn_clear_lead_products($1)", [id]);
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
-          [id, Number(p.product_id), Number(p.quantity) || 1, p.price ? Number(p.price) : null]
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          [
+            id,
+            Number(p.product_id),
+            Number(p.quantity) || 1,
+            p.price ? Number(p.price) : null,
+            p.warehouse_id ? Number(p.warehouse_id) : null,
+            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+          ]
         );
       }
     }
@@ -447,7 +465,22 @@ const getLeadProducts = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
-    const result = await connection.query("SELECT * FROM public.fn_get_lead_products($1)", [leadId]);
+    const result = await connection.query(
+      `SELECT lp.id, lp.lead_id, lp.product_id, lp.quantity, lp.price, lp.amount,
+              lp.warehouse_id, lp.warehouse_location_id,
+              p.name AS product_name, p.sku,
+              w.name AS warehouse_name,
+              wl.name AS warehouse_location_name
+       FROM lead_products lp
+       LEFT JOIN products p ON p.id = lp.product_id
+       LEFT JOIN warehouses w ON w.id = lp.warehouse_id
+       LEFT JOIN warehouse_locations wl ON wl.id = lp.warehouse_location_id
+       WHERE lp.lead_id = $1
+       ORDER BY lp.id ASC`,
+      [leadId]
+    ).catch(async () => {
+      return (connection as PoolClient).query("SELECT * FROM public.fn_get_lead_products($1)", [leadId]);
+    });
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
     logger.error(error);
@@ -462,12 +495,25 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
-    const { product_id, quantity, price } = req.body;
+    const { product_id, quantity, price, warehouse_id, warehouse_location_id } = req.body;
+
+    await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
+    await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
+
     const result = await connection.query(
-      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
-      [leadId, product_id, quantity || 1, price || null]
+      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+      [
+        leadId,
+        product_id,
+        quantity || 1,
+        price || null,
+        warehouse_id ? Number(warehouse_id) : null,
+        warehouse_location_id ? Number(warehouse_location_id) : null,
+      ]
     );
-    res.status(HttpStatusCodes.CREATED).json({ success: true, message: "Product added to lead", data: result.rows[0] });
+
+    const addedItem = result.rows[0];
+    res.status(HttpStatusCodes.CREATED).json({ success: true, message: "Product added to lead", data: addedItem });
   } catch (error: any) {
     logger.error(error);
     res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
@@ -480,7 +526,7 @@ const deleteLeadProduct = async (req: Request, res: Response): Promise<void> => 
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const itemId = Number(req.params.itemId);
+    const itemId = Number(req.params.id);
     await connection.query("SELECT public.fn_delete_lead_product($1) AS deleted", [itemId]);
     res.status(HttpStatusCodes.OK).json({ success: true, message: "Product removed from lead" });
   } catch (error: any) {
@@ -500,7 +546,7 @@ const deductStockForWonLead = async (connection: PoolClient, leadId: number): Pr
     }
 
     const lpRes = await connection.query(
-      "SELECT product_id, quantity FROM lead_products WHERE lead_id = $1",
+      "SELECT product_id, quantity, warehouse_id, warehouse_location_id FROM lead_products WHERE lead_id = $1",
       [leadId]
     );
     const leadProducts = lpRes.rows || [];
@@ -509,25 +555,133 @@ const deductStockForWonLead = async (connection: PoolClient, leadId: number): Pr
     for (const lp of leadProducts) {
       const productId = Number(lp.product_id);
       const qtyToDeduct = Number(lp.quantity) || 1;
+      const wId = lp.warehouse_id ? Number(lp.warehouse_id) : null;
+      const locId = lp.warehouse_location_id ? Number(lp.warehouse_location_id) : null;
+
       if (!productId || qtyToDeduct <= 0) continue;
 
-      const invRes = await connection.query(
-        "SELECT id, in_stock FROM product_inventories WHERE product_id = $1 AND in_stock > 0 ORDER BY in_stock DESC",
-        [productId]
-      );
+      // Get product name for history logging
+      const pNameRes = await connection.query("SELECT name FROM products WHERE id = $1", [productId]);
+      const prodName = pNameRes.rows[0]?.name || `Product #${productId}`;
 
       let remaining = qtyToDeduct;
-      for (const invRow of invRes.rows) {
-        if (remaining <= 0) break;
-        const currentStock = Number(invRow.in_stock) || 0;
-        const deductAmount = Math.min(currentStock, remaining);
-        const newStock = currentStock - deductAmount;
-        remaining -= deductAmount;
 
-        await connection.query(
-          "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
-          [newStock, invRow.id]
+      // Deduct specifically from targeted warehouse_location_id if assigned
+      if (locId) {
+        const locInvRes = await connection.query(
+          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
+           FROM product_inventories pi
+           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+           WHERE pi.product_id = $1 AND pi.warehouse_location_id = $2 AND pi.in_stock > 0 LIMIT 1`,
+          [productId, locId]
         );
+        if (locInvRes.rows.length > 0) {
+          const invRow = locInvRes.rows[0];
+          const currentStock = Number(invRow.in_stock) || 0;
+          const deductAmount = Math.min(currentStock, remaining);
+          const newStock = currentStock - deductAmount;
+          remaining -= deductAmount;
+
+          await connection.query(
+            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
+            [newStock, invRow.id]
+          );
+
+          // Log history activity
+          const actRes = await connection.query(
+            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
+             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
+            [
+              "Inventory Stock Deducted",
+              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'Assigned Location'}") for Lead #${leadId}.`
+            ]
+          );
+          if (actRes.rows[0]?.id) {
+            await connection.query(
+              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+              [leadId, actRes.rows[0].id]
+            );
+          }
+        }
+      } else if (wId) {
+        const wInvRes = await connection.query(
+          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
+           FROM product_inventories pi
+           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+           WHERE pi.product_id = $1 AND pi.warehouse_id = $2 AND pi.in_stock > 0 ORDER BY pi.in_stock DESC`,
+          [productId, wId]
+        );
+        for (const invRow of wInvRes.rows) {
+          if (remaining <= 0) break;
+          const currentStock = Number(invRow.in_stock) || 0;
+          const deductAmount = Math.min(currentStock, remaining);
+          const newStock = currentStock - deductAmount;
+          remaining -= deductAmount;
+
+          await connection.query(
+            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
+            [newStock, invRow.id]
+          );
+
+          // Log history activity
+          const actRes = await connection.query(
+            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
+             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
+            [
+              "Inventory Stock Deducted",
+              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'General'}") for Lead #${leadId}.`
+            ]
+          );
+          if (actRes.rows[0]?.id) {
+            await connection.query(
+              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+              [leadId, actRes.rows[0].id]
+            );
+          }
+        }
+      }
+
+      // Fallback: Deduct remaining quantity from any location with available stock
+      if (remaining > 0) {
+        const invRes = await connection.query(
+          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
+           FROM product_inventories pi
+           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
+           WHERE pi.product_id = $1 AND pi.in_stock > 0 ORDER BY pi.in_stock DESC`,
+          [productId]
+        );
+
+        for (const invRow of invRes.rows) {
+          if (remaining <= 0) break;
+          const currentStock = Number(invRow.in_stock) || 0;
+          const deductAmount = Math.min(currentStock, remaining);
+          const newStock = currentStock - deductAmount;
+          remaining -= deductAmount;
+
+          await connection.query(
+            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
+            [newStock, invRow.id]
+          );
+
+          // Log history activity
+          const actRes = await connection.query(
+            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
+             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
+            [
+              "Inventory Stock Deducted",
+              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'General'}") for Lead #${leadId}.`
+            ]
+          );
+          if (actRes.rows[0]?.id) {
+            await connection.query(
+              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+              [leadId, actRes.rows[0].id]
+            );
+          }
+        }
       }
 
       await connection.query(

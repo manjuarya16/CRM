@@ -492,7 +492,7 @@ const LeadsPage: React.FC = () => {
                               {lead.user_name || "Unassigned"}
                             </span>
                             <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
-                              ${Number(lead.lead_value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                             </span>
                           </div>
 
@@ -619,7 +619,7 @@ const LeadsPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">
-                          ${Number(lead.lead_value || 0).toFixed(2)}
+                          ₹{Number(lead.lead_value || 0).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.person_name || "-"}</td>
                         <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.source_name || "-"}</td>

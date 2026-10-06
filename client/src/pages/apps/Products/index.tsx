@@ -201,7 +201,7 @@ const ProductsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">
-                      ${Number(p.price || 0).toFixed(2)}
+                      ₹{Number(p.price || 0).toFixed(2)}
                     </td>
                     <td className="py-3 px-4 text-gray-500">
                       {p.created_at ? new Date(p.created_at).toLocaleDateString() : "-"}
@@ -320,7 +320,7 @@ const ProductsPage: React.FC = () => {
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
                       <div className="text-[11px] text-gray-500 uppercase font-semibold">Price</div>
                       <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                        ${Number(viewingProduct.price || 0).toFixed(2)}
+                        ₹{Number(viewingProduct.price || 0).toFixed(2)}
                       </div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">

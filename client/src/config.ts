@@ -1,6 +1,7 @@
 import axios from "axios";
 
-export const API_URL = import.meta.env.VITE_API_URL as string;
+// Reads VITE_API_URL from .env file (defaults to /api if undefined)
+export const API_URL = (import.meta.env.VITE_API_URL as string) || "/api";
 
 export const SERVER_URL = API_URL?.replace(/\/api$/, "");
 

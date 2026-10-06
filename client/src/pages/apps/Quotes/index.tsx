@@ -216,11 +216,11 @@ const QuotesPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{quote.user_name || "-"}</td>
                     <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{quote.person_name || "-"}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">${Number(quote.sub_total || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">${Number(quote.discount_amount || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">${Number(quote.tax_amount || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">${Number(quote.adjustment_amount || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">${Number(quote.grand_total || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">₹{Number(quote.sub_total || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">₹{Number(quote.discount_amount || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">₹{Number(quote.tax_amount || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">₹{Number(quote.adjustment_amount || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">₹{Number(quote.grand_total || 0).toFixed(2)}</td>
                     <td className="py-3 px-4 text-gray-500">
                       {quote.expired_at ? new Date(quote.expired_at).toLocaleDateString() : "-"}
                     </td>
@@ -444,10 +444,10 @@ const QuotesPage: React.FC = () => {
                         <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
                           <td className="py-2 px-3 font-medium">{it.name} {it.sku ? `(${it.sku})` : ""}</td>
                           <td className="py-2 px-3 text-right">{it.quantity}</td>
-                          <td className="py-2 px-3 text-right">${Number(it.price || 0).toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right">₹{Number(it.price || 0).toFixed(2)}</td>
                           <td className="py-2 px-3 text-right">{it.discount_percent || 0}%</td>
                           <td className="py-2 px-3 text-right">{it.tax_percent || 0}%</td>
-                          <td className="py-2 px-3 text-right font-semibold">${Number(it.total || (it.quantity * it.price)).toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right font-semibold">₹{Number(it.total || (it.quantity * it.price)).toFixed(2)}</td>
                         </tr>
                       ))
                     )}
@@ -460,29 +460,29 @@ const QuotesPage: React.FC = () => {
                 <div className="w-64 space-y-1.5 text-xs text-right">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal:</span>
-                    <span>${Number(previewQuote.sub_total || previewQuote.grand_total || 0).toFixed(2)}</span>
+                    <span>₹{Number(previewQuote.sub_total || previewQuote.grand_total || 0).toFixed(2)}</span>
                   </div>
                   {Number(previewQuote.discount_amount) > 0 && (
                     <div className="flex justify-between text-red-500">
                       <span>Discount:</span>
-                      <span>-${Number(previewQuote.discount_amount).toFixed(2)}</span>
+                      <span>-₹{Number(previewQuote.discount_amount).toFixed(2)}</span>
                     </div>
                   )}
                   {Number(previewQuote.tax_amount) > 0 && (
                     <div className="flex justify-between text-gray-600">
                       <span>Tax:</span>
-                      <span>+${Number(previewQuote.tax_amount).toFixed(2)}</span>
+                      <span>+₹{Number(previewQuote.tax_amount).toFixed(2)}</span>
                     </div>
                   )}
                   {Number(previewQuote.adjustment_amount) !== 0 && (
                     <div className="flex justify-between text-gray-600">
                       <span>Adjustment:</span>
-                      <span>${Number(previewQuote.adjustment_amount).toFixed(2)}</span>
+                      <span>₹{Number(previewQuote.adjustment_amount).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-300 dark:border-gray-700">
                     <span>Grand Total:</span>
-                    <span className="text-[#0088cc]">${Number(previewQuote.grand_total || 0).toFixed(2)}</span>
+                    <span className="text-[#0088cc]">₹{Number(previewQuote.grand_total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
