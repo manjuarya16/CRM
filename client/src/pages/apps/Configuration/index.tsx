@@ -248,7 +248,14 @@ const ConfigurationPage: React.FC = () => {
     setTestingImap(true);
     setImapTestResult(null);
     try {
-      const res = await API.post("/mail/imap/test");
+      const res = await API.post("/mail/imap/test", {
+        host: (formValues["email.imap.account.host"] || "imap.gmail.com").trim(),
+        port: Number(formValues["email.imap.account.port"]) || 993,
+        encryption: formValues["email.imap.account.encryption"] || "ssl",
+        validateCert: isOn("email.imap.account.validate_cert"),
+        username: (formValues["email.imap.account.username"] || "").trim(),
+        password: (formValues["email.imap.account.password"] || "").trim(),
+      });
       setImapTestResult({
         success: Boolean(res.data?.success),
         message: res.data?.message || (res.data?.success ? "Connected successfully to IMAP server!" : "Connection failed."),

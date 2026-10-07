@@ -92,13 +92,21 @@ export class ImapLeadSyncService {
   /**
    * Test IMAP connection and credentials
    */
-  public static async testConnection(): Promise<{ success: boolean; message: string }> {
-    const config = await this.getImapConfig();
+  public static async testConnection(customConfig?: Partial<ImapAccountConfig>): Promise<{ success: boolean; message: string }> {
+    const dbConfig = await this.getImapConfig();
+    const config: ImapAccountConfig = {
+      ...dbConfig,
+      ...(customConfig || {}),
+    };
+
+    if (customConfig?.password) {
+      config.password = customConfig.password.replace(/\s+/g, '');
+    }
 
     if (!config.username || !config.password) {
       return {
         success: false,
-        message: 'IMAP username or password is missing in configuration.',
+        message: 'IMAP username or password is required to test connection.',
       };
     }
 

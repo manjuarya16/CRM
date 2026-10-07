@@ -81,10 +81,10 @@ router.get('/attachments/:id/download', requireAuth, async (req: Request, res: R
 });
 
 // POST /api/mail/imap/test - Test IMAP connection
-router.post('/imap/test', requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+router.post('/imap/test', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ImapLeadSyncService } = await import('@/services/imapLeadSync.service');
-    const result = await ImapLeadSyncService.testConnection();
+    const result = await ImapLeadSyncService.testConnection(req.body);
     res.json(result);
   } catch (error) {
     next(error);
