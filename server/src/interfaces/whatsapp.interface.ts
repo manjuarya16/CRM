@@ -27,9 +27,17 @@ export interface IWhatsAppExtractedProduct {
   description?: string;
 }
 
+export interface IWhatsAppExtractedContactPerson {
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface IWhatsAppExtractedLead {
   leadTitle?: string;
   contactPersonName?: string;
+  contactPersons?: IWhatsAppExtractedContactPerson[];
   contactPhone?: string;
   phones?: string[];
   contactEmail?: string;

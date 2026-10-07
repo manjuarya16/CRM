@@ -4,6 +4,7 @@ import { useConfigStore } from "@/store";
 import { ConfigNavItem } from "@/interface";
 import { extractFileUrl } from "@/utils/fileHelper";
 import { usePermission } from "@/hooks/usePermission";
+import API from "@/config";
 
 const resolveImageUrl = (url: string | null): string => {
   return extractFileUrl(url) || "";
@@ -183,6 +184,8 @@ const ConfigurationPage: React.FC = () => {
     "email.smtp.account.from_name": "CRM Admin",
     "email.smtp.account.from_email": "",
     // Email — IMAP
+    "email.imap.account.enable": "1",
+    "email.imap.lead.auto_create": "1",
     "email.imap.account.host": "imap.gmail.com",
     "email.imap.account.port": "993",
     "email.imap.account.encryption": "ssl",
@@ -194,6 +197,13 @@ const ConfigurationPage: React.FC = () => {
   const [showSmtpPass, setShowSmtpPass] = useState<boolean>(false);
   const [testingSmtp, setTestingSmtp] = useState<boolean>(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // IMAP States
+  const [showImapPass, setShowImapPass] = useState<boolean>(false);
+  const [testingImap, setTestingImap] = useState<boolean>(false);
+  const [syncingImap, setSyncingImap] = useState<boolean>(false);
+  const [imapTestResult, setImapTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [imapSyncResult, setImapSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // WhatsApp Sandbox / Simulator States
   const [showWaToken, setShowWaToken] = useState<boolean>(false);
@@ -231,6 +241,44 @@ const ConfigurationPage: React.FC = () => {
       });
     } finally {
       setTestingSmtp(false);
+    }
+  };
+
+  const handleTestImap = async () => {
+    setTestingImap(true);
+    setImapTestResult(null);
+    try {
+      const res = await API.post("/mail/imap/test");
+      setImapTestResult({
+        success: Boolean(res.data?.success),
+        message: res.data?.message || (res.data?.success ? "Connected successfully to IMAP server!" : "Connection failed."),
+      });
+    } catch (err: any) {
+      setImapTestResult({
+        success: false,
+        message: err.response?.data?.message || err.message || "Failed to test IMAP connection.",
+      });
+    } finally {
+      setTestingImap(false);
+    }
+  };
+
+  const handleSyncImap = async () => {
+    setSyncingImap(true);
+    setImapSyncResult(null);
+    try {
+      const res = await API.post("/mail/imap/sync");
+      setImapSyncResult({
+        success: Boolean(res.data?.success),
+        message: res.data?.message || `Sync completed. Processed ${res.data?.processedCount || 0} emails.`,
+      });
+    } catch (err: any) {
+      setImapSyncResult({
+        success: false,
+        message: err.response?.data?.message || err.message || "Failed to trigger IMAP email sync.",
+      });
+    } finally {
+      setSyncingImap(false);
     }
   };
 
@@ -1250,8 +1298,24 @@ const ConfigurationPage: React.FC = () => {
                       IMAP Email Account Settings
                     </h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Configure IMAP credentials for email synchronization and inbox integration.
+                      Configure IMAP credentials for automated inbound email ingestion, document & visiting card OCR, and CRM lead creation.
                     </p>
+                  </div>
+
+                  {/* IMAP Enable & Lead Auto-Create Toggles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <ToggleSwitch
+                      checked={isOn("email.imap.account.enable")}
+                      onChange={(v) => handleToggle("email.imap.account.enable", v)}
+                      label="Enable IMAP Sync"
+                      hint="Activates background mailbox checking every 60 seconds."
+                    />
+                    <ToggleSwitch
+                      checked={isOn("email.imap.lead.auto_create")}
+                      onChange={(v) => handleToggle("email.imap.lead.auto_create", v)}
+                      label="Auto-Create Leads with OCR"
+                      hint="Extracts visiting cards, PDFs, and text inquiries directly into CRM leads."
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
@@ -1284,9 +1348,9 @@ const ConfigurationPage: React.FC = () => {
                         onChange={(e) => handleInputChange("email.imap.account.encryption", e.target.value)}
                         className={inputCls}
                       >
-                        <option value="ssl">SSL</option>
-                        <option value="tls">TLS / STARTTLS</option>
-                        <option value="none">None</option>
+                        <option value="ssl">SSL / TLS (Port 993)</option>
+                        <option value="tls">STARTTLS (Port 143)</option>
+                        <option value="none">None (Plain)</option>
                       </select>
                     </div>
 
@@ -1312,17 +1376,87 @@ const ConfigurationPage: React.FC = () => {
 
                     <div className="space-y-1.5 sm:col-span-2">
                       <label className={labelCls}>Password / App Password</label>
-                      <input
-                        type="password"
-                        value={formValues["email.imap.account.password"] || ""}
-                        onChange={(e) => handleInputChange("email.imap.account.password", e.target.value)}
-                        placeholder="••••••••••••"
-                        className={inputCls}
-                      />
+                      <div className="relative">
+                        <input
+                          type={showImapPass ? "text" : "password"}
+                          value={formValues["email.imap.account.password"] || ""}
+                          onChange={(e) => handleInputChange("email.imap.account.password", e.target.value)}
+                          placeholder="••••••••••••"
+                          className={`${inputCls} pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowImapPass(!showImapPass)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          <i className={showImapPass ? "mgc_eye_close_line text-base" : "mgc_eye_line text-base"}></i>
+                        </button>
+                      </div>
                       <p className="text-[10px] text-gray-400">
-                        For Gmail, use an App Password instead of your regular password.
+                        For Gmail or Google Workspace, generate and use an <strong>App Password</strong> with 2-Step Verification enabled.
                       </p>
                     </div>
+
+                    {/* Test & Sync Actions */}
+                    <div className="sm:col-span-2 pt-2 border-t border-gray-100 dark:border-gray-700/60 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleTestImap}
+                        disabled={testingImap}
+                        className="px-4 py-2 text-xs font-semibold text-[#0088cc] border border-[#0088cc] rounded-lg hover:bg-[#0088cc] hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {testingImap ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                            Testing Connection...
+                          </>
+                        ) : (
+                          <>
+                            <i className="mgc_refresh_3_line text-sm"></i>
+                            Test IMAP Connection
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSyncImap}
+                        disabled={syncingImap}
+                        className="px-4 py-2 text-xs font-semibold text-emerald-600 border border-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {syncingImap ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                            Syncing Inbound Emails & OCR...
+                          </>
+                        ) : (
+                          <>
+                            <i className="mgc_download_2_line text-sm"></i>
+                            Sync Emails Now
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Test Result Message */}
+                    {imapTestResult && (
+                      <div className={`sm:col-span-2 p-3 rounded-lg text-xs flex items-center gap-2 ${
+                        imapTestResult.success ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
+                      }`}>
+                        <i className={imapTestResult.success ? "mgc_check_circle_line text-base text-emerald-600" : "mgc_close_circle_line text-base text-red-600"}></i>
+                        <span>{imapTestResult.message}</span>
+                      </div>
+                    )}
+
+                    {/* Sync Result Message */}
+                    {imapSyncResult && (
+                      <div className={`sm:col-span-2 p-3 rounded-lg text-xs flex items-center gap-2 ${
+                        imapSyncResult.success ? "bg-blue-50 text-blue-800 border border-blue-200" : "bg-amber-50 text-amber-800 border border-amber-200"
+                      }`}>
+                        <i className={imapSyncResult.success ? "mgc_check_circle_line text-base text-blue-600" : "mgc_alert_line text-base text-amber-600"}></i>
+                        <span>{imapSyncResult.message}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

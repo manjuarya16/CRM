@@ -33,6 +33,21 @@ const getPersonEmail = (person: any): string => {
   return "";
 };
 
+const getPersonPhone = (person: any): string => {
+  if (!person) return "";
+  if (person.phone) return person.phone;
+  if (!person.contact_numbers) return "";
+  try {
+    const phones = typeof person.contact_numbers === "string" ? JSON.parse(person.contact_numbers) : person.contact_numbers;
+    if (Array.isArray(phones) && phones.length > 0) {
+      const first = phones[0];
+      return typeof first === "object" ? (first.value || first.number || first.phone || "") : String(first);
+    }
+    if (typeof phones === "string") return phones;
+  } catch (e) { }
+  return "";
+};
+
 interface ContactItem {
   label: string;
   value: string;
@@ -128,9 +143,16 @@ const EditLeadPage: React.FC = () => {
         setPersons(sorted);
       }
     }).catch(() => { });
-    useOrganizationStore.getState().getOrganization().then(() => {
-      const org = useOrganizationStore.getState().organization;
-      if (org) setOrganizations([org]);
+    useOrganizationStore.getState().fetchOrganizations(1, 500).then((res: any) => {
+      const orgList = res?.data || res?.rows || [];
+      if (Array.isArray(orgList) && orgList.length > 0) {
+        setOrganizations(orgList);
+      } else {
+        useOrganizationStore.getState().getOrganization().then(() => {
+          const org = useOrganizationStore.getState().organization;
+          if (org) setOrganizations([org]);
+        }).catch(() => { });
+      }
     }).catch(() => { });
     useProductStore.getState().fetchProducts(1, 500).then(() => {
       const prods = useProductStore.getState().products;
@@ -899,6 +921,99 @@ const EditLeadPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Organization Contacts List */}
+              {(() => {
+                const orgContacts = organizationId
+                  ? persons.filter((p) => String(p.organization_id) === String(organizationId))
+                  : [];
+                if (orgContacts.length === 0) return null;
+                const orgObj = organizations.find((o) => String(o.id) === String(organizationId));
+
+                return (
+                  <div className="mt-2 p-3.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <i className="mgc_group_line text-sm text-[#0088cc]"></i>
+                          Organization Contacts ({orgContacts.length})
+                        </h4>
+                        <p className="text-[11px] text-gray-500">
+                          {orgObj?.name ? `Contacts associated with ${orgObj.name}` : "Contacts associated with this organization"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {orgContacts.map((contact) => {
+                        const isPrimary = String(contact.id) === String(personId);
+                        const cEmail = getPersonEmail(contact);
+                        const cPhone = getPersonPhone(contact);
+
+                        return (
+                          <div
+                            key={contact.id}
+                            className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${
+                              isPrimary
+                                ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
+                                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                }`}>
+                                  {contact.name?.substring(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-gray-800 dark:text-gray-100">
+                                    {contact.name}
+                                  </p>
+                                  {contact.job_title && (
+                                    <p className="text-[10px] text-gray-500 font-medium">
+                                      {contact.job_title}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {isPrimary ? (
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-[#0088cc] text-white rounded-full shrink-0">
+                                  Primary
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectPerson(contact)}
+                                  className="px-2 py-0.5 text-[10px] font-semibold text-[#0088cc] border border-[#0088cc] rounded hover:bg-[#0088cc] hover:text-white transition-colors shrink-0"
+                                >
+                                  Set Primary
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="text-[11px] text-gray-500 space-y-0.5 pt-1 border-t border-gray-100 dark:border-gray-700/60">
+                              {cPhone && (
+                                <p className="flex items-center gap-1">
+                                  <i className="mgc_phone_line text-gray-400 text-xs"></i>
+                                  {cPhone}
+                                </p>
+                              )}
+                              {cEmail && (
+                                <p className="flex items-center gap-1">
+                                  <i className="mgc_mail_line text-gray-400 text-xs"></i>
+                                  {cEmail}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
