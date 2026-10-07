@@ -188,6 +188,84 @@ export class ImapLeadSyncService {
   }
 
   /**
+   * Qualifies whether an email represents a genuine business lead/inquiry
+   * vs a general operational email, receipt, newsletter, or conversational message.
+   */
+  private static qualifyEmailForLeadCreation(params: {
+    fromAddress: string;
+    subject: string;
+    textBody: string;
+    savedAttachmentRecords: Array<{ filename: string; contentType: string }>;
+    ocrExtractedTexts: string[];
+    extractedLeadData: ExtractedLeadData;
+  }): { shouldCreateLead: boolean; reason: string } {
+    const { subject, textBody, savedAttachmentRecords, ocrExtractedTexts, extractedLeadData } = params;
+    const lowerSub = (subject || '').toLowerCase();
+    const lowerBody = (textBody || '').toLowerCase();
+    const fullText = `${lowerSub} ${lowerBody}`;
+
+    // 1. Negative Signals (DEFINITELY NOT A SALES LEAD):
+    // Invoices, bills, receipts, bank/payment notifications, delivery/shipping updates
+    const operationalKeywords = [
+      'invoice', 'tax invoice', 'bill payment', 'payment receipt', 'receipt',
+      'payment confirmation', 'payment successful', 'payment received',
+      'bank transfer', 'account statement', 'neft', 'rtgs', 'imps', 'upi',
+      'payslip', 'salary', 'subscription renewal', 'recharge successful',
+      'order shipped', 'out for delivery', 'order delivered', 'tracking details',
+      'meeting invitation', 'calendar invite', 'zoom meeting', 'google meet',
+    ];
+
+    const hasCardAttachment = savedAttachmentRecords.some((att) => {
+      const fn = (att.filename || '').toLowerCase();
+      return fn.includes('card') || fn.includes('visiting') || fn.includes('vcard');
+    }) || ocrExtractedTexts.some((t) => {
+      const lt = t.toLowerCase();
+      return lt.includes('visiting card') || lt.includes('director') || lt.includes('partner') || lt.includes('proprietor') || lt.includes('founder');
+    });
+
+    const isOperational = operationalKeywords.some((kw) => lowerSub.includes(kw));
+    if (isOperational && !hasCardAttachment) {
+      return { shouldCreateLead: false, reason: 'Operational/Transactional email (invoice, receipt, or notification)' };
+    }
+
+    // 2. Strong Positive Signal A: Visiting Card / Business Document Detected via OCR
+    if (ocrExtractedTexts.length > 0 && (extractedLeadData.contactPersons?.length || extractedLeadData.organization || extractedLeadData.phone)) {
+      return { shouldCreateLead: true, reason: 'Visiting card / business document with contact info detected via OCR' };
+    }
+
+    // 3. Strong Positive Signal B: Document attachment with RFQ / Inquiry naming
+    const hasInquiryDoc = savedAttachmentRecords.some((att) => {
+      const fn = (att.filename || '').toLowerCase();
+      return fn.includes('rfq') || fn.includes('inquiry') || fn.includes('enquiry') || fn.includes('quote') || fn.includes('quotation') || fn.includes('requirement') || fn.includes('tender');
+    });
+    if (hasInquiryDoc) {
+      return { shouldCreateLead: true, reason: 'Attachment specifies RFQ / Inquiry document' };
+    }
+
+    // 4. Strong Positive Signal C: Commercial Inquiry Keywords in Subject or Body
+    const inquiryKeywords = [
+      'inquiry', 'enquiry', 'quotation', 'quote', 'rfq', 'pricing', 'price list',
+      'rates', 'rate list', 'costing', 'proposal', 'requirement', 'require',
+      'needed', 'order for', 'purchase order', 'interested in', 'specification',
+      'supply of', 'distributor', 'dealership', 'product inquiry', 'service inquiry',
+      'catalog', 'catalogue', 'brochure request',
+    ];
+
+    const hasInquiryKeyword = inquiryKeywords.some((kw) => fullText.includes(kw));
+    if (hasInquiryKeyword) {
+      return { shouldCreateLead: true, reason: 'Matched commercial inquiry keywords in subject or body' };
+    }
+
+    // 5. Positive Signal D: Phone and organization/products detected in email body
+    if (extractedLeadData.phone && (extractedLeadData.organization || (extractedLeadData.products && extractedLeadData.products.length > 0))) {
+      return { shouldCreateLead: true, reason: 'Phone and organization/products detected in email body' };
+    }
+
+    // Otherwise, treat as a General Email (store in Mail Inbox, do not auto-create Lead)
+    return { shouldCreateLead: false, reason: 'General email without distinct commercial inquiry signals' };
+  }
+
+  /**
    * Connect to IMAP inbox, fetch unseen messages, run OCR on attachments, and create leads in CRM
    */
   public static async syncEmailsAndGenerateLeads(customConfig?: Partial<ImapAccountConfig>): Promise<ImapSyncResult> {
@@ -422,10 +500,24 @@ export class ImapLeadSyncService {
       ...ocrExtractedTexts,
     ].filter(Boolean).join('\n\n');
 
+    // Run comprehensive document & contact parser
+    const extractedLeadData = parseLeadDocumentText(combinedCorpus, subject);
+
+    // Qualify whether this email represents an actual commercial Inquiry / Lead vs General Email
+    const qualification = this.qualifyEmailForLeadCreation({
+      fromAddress,
+      subject,
+      textBody,
+      savedAttachmentRecords,
+      ocrExtractedTexts,
+      extractedLeadData,
+    });
+
     let createdLeadId: number | null = null;
     let contactPersonId: number | null = null;
 
-    if (autoCreateLead) {
+    if (autoCreateLead && qualification.shouldCreateLead) {
+      logger.info(`[ImapSync] Qualified as Lead (${qualification.reason}): Creating CRM Lead from ${fromAddress}`);
       createdLeadId = await this.createLeadFromEmailData({
         fromName,
         fromEmail: fromAddress,
@@ -433,7 +525,10 @@ export class ImapLeadSyncService {
         textBody,
         combinedCorpus,
         hasAttachments: savedAttachmentRecords.length > 0,
+        extractedData: extractedLeadData,
       });
+    } else {
+      logger.info(`[ImapSync] Storing in Mailbox only (${qualification.reason}): No new lead created for ${fromAddress}`);
     }
 
     // 3. Save Email Record in public.emails
@@ -449,6 +544,18 @@ export class ImapLeadSyncService {
         );
         if (pSearch.rows.length > 0) {
           contactPersonId = pSearch.rows[0].id;
+        }
+      }
+
+      // If no new lead was created, check if this contact already has an open lead to link this email thread to
+      if (!createdLeadId && contactPersonId) {
+        const existingLeadCheck = await client.query(
+          `SELECT id FROM public.leads WHERE person_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          [contactPersonId]
+        );
+        if (existingLeadCheck.rows.length > 0) {
+          createdLeadId = existingLeadCheck.rows[0].id;
+          logger.info(`[ImapSync] Linked inbound email from contact #${contactPersonId} to existing Lead #${createdLeadId}`);
         }
       }
 
@@ -534,11 +641,12 @@ export class ImapLeadSyncService {
     textBody: string;
     combinedCorpus: string;
     hasAttachments: boolean;
+    extractedData?: ExtractedLeadData;
   }): Promise<number | null> {
-    const { fromName, fromEmail, subject, textBody, combinedCorpus } = params;
+    const { fromName, fromEmail, subject, textBody, combinedCorpus, extractedData } = params;
 
-    // Run our comprehensive document parser on all extracted text (OCR + Body)
-    const extracted: ExtractedLeadData = parseLeadDocumentText(combinedCorpus, subject);
+    // Use passed extracted data or run comprehensive document parser
+    const extracted: ExtractedLeadData = extractedData || parseLeadDocumentText(combinedCorpus, subject);
 
     // Fallbacks
     if (!extracted.email && fromEmail) extracted.email = fromEmail;
