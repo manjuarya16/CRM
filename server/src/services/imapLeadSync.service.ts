@@ -190,15 +190,50 @@ export class ImapLeadSyncService {
   /**
    * Connect to IMAP inbox, fetch unseen messages, run OCR on attachments, and create leads in CRM
    */
-  public static async syncEmailsAndGenerateLeads(): Promise<ImapSyncResult> {
+  public static async syncEmailsAndGenerateLeads(customConfig?: Partial<ImapAccountConfig>): Promise<ImapSyncResult> {
     if (this.isSyncing) {
       return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Sync already in progress' };
     }
 
-    const config = await this.getImapConfig();
+    const dbConfig = await this.getImapConfig();
+    const config: ImapAccountConfig = {
+      ...dbConfig,
+      ...(customConfig || {}),
+    };
+
+    if (customConfig?.password) {
+      config.password = customConfig.password.replace(/\s+/g, '');
+    }
+
+    if (config.username && config.password) {
+      config.enabled = true;
+    }
 
     if (!config.enabled || !config.username || !config.password) {
-      return { success: false, processedCount: 0, leadsCreatedCount: 0, message: 'IMAP sync is not enabled or credentials are not configured.' };
+      return {
+        success: false,
+        processedCount: 0,
+        leadsCreatedCount: 0,
+        message: 'IMAP sync is not enabled or credentials are not configured. Please enter email & App Password and click "Save Configuration".',
+      };
+    }
+
+    // If custom credentials were provided in the sync request, persist them to core_config
+    if (customConfig?.username && customConfig?.password) {
+      try {
+        await configService.saveConfigs({
+          'email.imap.account.host': config.host,
+          'email.imap.account.port': String(config.port),
+          'email.imap.account.encryption': config.encryption,
+          'email.imap.account.validate_cert': config.validateCert ? '1' : '0',
+          'email.imap.account.username': config.username,
+          'email.imap.account.password': config.password,
+          'email.imap.account.enable': '1',
+          'email.imap.lead.auto_create': config.autoCreateLead ? '1' : '0',
+        });
+      } catch (saveErr: any) {
+        logger.warn(`[ImapSync] Could not persist IMAP configs to database: ${saveErr.message}`);
+      }
     }
 
     this.isSyncing = true;

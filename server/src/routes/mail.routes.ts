@@ -92,10 +92,10 @@ router.post('/imap/test', requireAuth, async (req: Request, res: Response, next:
 });
 
 // POST /api/mail/imap/sync - Trigger on-demand IMAP sync and lead generation
-router.post('/imap/sync', requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+router.post('/imap/sync', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ImapLeadSyncService } = await import('@/services/imapLeadSync.service');
-    const result = await ImapLeadSyncService.syncEmailsAndGenerateLeads();
+    const result = await ImapLeadSyncService.syncEmailsAndGenerateLeads(req.body);
     res.json(result);
   } catch (error) {
     next(error);
