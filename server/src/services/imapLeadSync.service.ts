@@ -74,7 +74,7 @@ export class ImapLeadSyncService {
   private static createClient(config: ImapAccountConfig): ImapFlow {
     const isSecure = config.encryption === 'ssl' || config.port === 465 || config.port === 993;
 
-    return new ImapFlow({
+    const client = new ImapFlow({
       host: config.host,
       port: config.port,
       secure: isSecure,
@@ -87,6 +87,13 @@ export class ImapLeadSyncService {
       },
       logger: false,
     });
+
+    // Safely trap socket/connection error events so they never bubble up as unhandled EventEmitter errors
+    client.on('error', (err: any) => {
+      logger.warn(`[ImapFlow] Socket error event: ${err?.message || err}`);
+    });
+
+    return client;
   }
 
   /**
@@ -162,6 +169,17 @@ export class ImapLeadSyncService {
       'notification@',
       'facebookmail.com',
       'linkedin.com',
+      'instagram.com',
+      'mail.instagram.com',
+      'me-qr.com',
+      'canva.com',
+      'pinterest.com',
+      'tiktok.com',
+      'twitter.com',
+      'x.com',
+      'swiggy.in',
+      'zomato.com',
+      'uber.com',
     ];
 
     if (ignoredSenders.some((ign) => lowerFrom.includes(ign))) {
@@ -565,7 +583,7 @@ export class ImapLeadSyncService {
           reply_to, folders, is_read, lead_id, person_id, user_id,
           message_id, source, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6,
+          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb,
           $7::jsonb, $8::jsonb, $9, $10, $11, $12,
           $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         ) RETURNING id`,
@@ -575,7 +593,7 @@ export class ImapLeadSyncService {
           htmlBody || textBody,
           JSON.stringify([fromAddress]),
           JSON.stringify({ name: fromName, email: fromAddress }),
-          fromAddress,
+          JSON.stringify({ name: fromName, email: fromAddress }),
           JSON.stringify([fromAddress]),
           JSON.stringify(['inbox']),
           false,

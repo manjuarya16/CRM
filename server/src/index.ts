@@ -33,3 +33,11 @@ bootstrap().catch((err) => {
   logger.error({ err }, 'Failed to start server');
   process.exit(1);
 });
+
+process.on('unhandledRejection', (reason: any) => {
+  logger.error({ reason: reason?.message || reason }, 'Unhandled Rejection caught safely');
+});
+
+process.on('uncaughtException', (err: any) => {
+  logger.error({ err: err?.message || err }, 'Uncaught Exception caught safely');
+});
