@@ -474,6 +474,7 @@ Extract all contact and business information and return pure JSON with keys:
           leadTitle: parsedOcrLead.title || `WhatsApp Card: ${parsedOcrLead.contactPerson || parsedOcrLead.organization || senderName || senderPhoneNumber}`,
           contactPersonName: parsedOcrLead.contactPerson || senderName || 'WhatsApp Contact',
           contactPhone: parsedOcrLead.phone || senderPhoneNumber,
+          phones: parsedOcrLead.phones || (parsedOcrLead.phone ? [parsedOcrLead.phone] : []),
           contactEmail: parsedOcrLead.email || undefined,
           organizationName: parsedOcrLead.organization || undefined,
           jobTitle: parsedOcrLead.jobTitle || undefined,
@@ -617,7 +618,9 @@ Extract all contact and business information and return pure JSON with keys:
       if (!contactPersonId && (resolvedPersonName || personEmail || personPhone)) {
         const targetPersonName = resolvedPersonName || 'WhatsApp Contact';
         const emailList = personEmail ? [{ label: 'work', value: personEmail }] : [];
-        const phoneList = personPhone ? [{ label: 'mobile', value: personPhone }] : [];
+        const phoneList = Array.isArray(extractedLeadData.phones) && extractedLeadData.phones.length > 0
+          ? extractedLeadData.phones.map((p, idx) => ({ label: idx === 0 ? 'mobile' : 'work', value: p }))
+          : (personPhone ? [{ label: 'mobile', value: personPhone }] : []);
 
         const savePersonResult = await databaseConnection.query(
           'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result',

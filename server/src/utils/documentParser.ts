@@ -16,6 +16,7 @@ export interface ExtractedLeadData {
   contactPerson?: string;
   email?: string;
   phone?: string;
+  phones?: string[];
   organization?: string;
   jobTitle?: string;
   source?: string;
@@ -154,19 +155,49 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   }
 
   // 2. Phone extraction
-  const phonePatterns = [
-    /(?:phone|mobile|tel|contact(?:\s*no|\s*number)?|cell)\s*[:=-]?\s*([+]?[0-9\s().-]{7,20})/i,
-    /([+]?\d{1,3}[-.\s]?(?:\(\d{2,4}\)|\d{2,4})[-.\s]?\d{3,4}[-.\s]?\d{3,5})/,
-  ];
-  for (const pat of phonePatterns) {
-    const pm = text.match(pat);
-    if (pm) {
-      const cleanPhone = pm[1].trim();
-      if (cleanPhone.replace(/[^0-9]/g, '').length >= 7) {
-        result.phone = cleanPhone;
-        break;
+  const extractedPhones: string[] = [];
+
+  // A. Labeled contact: "Contact No. : 8888624454, 8530224414" or "Phone: +91..."
+  const labeledRegex = /(?:phone|mobile|mob|tel|cell|contact|appointment)[^\d\n\r]*([+]?[0-9][0-9\s().,-]{7,40})/gi;
+  let lMatch;
+  while ((lMatch = labeledRegex.exec(text)) !== null) {
+    const rawCandidates = lMatch[1].split(/[,;/]/);
+    for (const cand of rawCandidates) {
+      const trimmed = cand.trim();
+      const digits = trimmed.replace(/[^0-9]/g, '');
+      if (digits.length >= 7 && digits.length <= 15 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+        extractedPhones.push(trimmed);
       }
     }
+  }
+
+  // B. Standard 10-digit mobile number pattern (e.g. 99750 83285, 90281 76386, 8888624454)
+  const mobile10Regex = /(?:[+]?91[\s.-]?)?\b([6-9]\d{4}[\s.-]?\d{5}|[6-9]\d{9})\b/g;
+  let m10Match;
+  while ((m10Match = mobile10Regex.exec(text)) !== null) {
+    const candidate = m10Match[1].trim();
+    const digits = candidate.replace(/[^0-9]/g, '');
+    if (digits.length === 10 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+      extractedPhones.push(candidate);
+    }
+  }
+
+  // C. Fallback international formatted number
+  if (extractedPhones.length === 0) {
+    const genericRegex = /([+]?\d{1,3}[-.\s]?(?:\(\d{2,4}\)|\d{2,4})[-.\s]?\d{3,4}[-.\s]?\d{4})/g;
+    let gMatch;
+    while ((gMatch = genericRegex.exec(text)) !== null) {
+      const cand = gMatch[1].trim();
+      const digits = cand.replace(/[^0-9]/g, '');
+      if (digits.length >= 7 && digits.length <= 15 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+        extractedPhones.push(cand);
+      }
+    }
+  }
+
+  if (extractedPhones.length > 0) {
+    result.phone = extractedPhones[0];
+    result.phones = extractedPhones;
   }
 
   // 3. Contact Person extraction
@@ -174,11 +205,12 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     /(?:contact\s*person|person\s*name|contact\s*name|client\s*name|customer\s*name|attention|attn|full\s*name|name)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
     /(?:prepared\s*for|billed\s*to|bill\s*to)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
     /(?:my\s*name\s*is|i\s*am|this\s*is)\s+([A-Za-z\s.'-]+?)(?:\s+(?:from|at|with|contact|phone|email|\.|\n|$)|$)/i,
+    /(?:mr\.|ms\.|mrs\.|dr\.)\s+([A-Za-z]+(?:\s+[A-Za-z]+){1,2})/i,
   ];
   for (const pat of personPatterns) {
     const pMatch = text.match(pat);
     if (pMatch && pMatch[1]) {
-      const val = pMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
+      const val = pMatch[1].split('\n')[0].replace(/[,;].*$/, '').replace(/\s+\b(?:mr|ms|mrs|dr)\.?$/i, '').trim();
       if (val.length >= 2 && !val.includes('@') && !val.toLowerCase().includes('ltd') && !val.toLowerCase().includes('inc') && !val.toLowerCase().includes('corp')) {
         result.contactPerson = val;
         break;

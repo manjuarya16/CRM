@@ -31,6 +31,7 @@ export interface IWhatsAppExtractedLead {
   leadTitle?: string;
   contactPersonName?: string;
   contactPhone?: string;
+  phones?: string[];
   contactEmail?: string;
   organizationName?: string;
   jobTitle?: string;
