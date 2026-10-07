@@ -137,6 +137,57 @@ export class ImapLeadSyncService {
   }
 
   /**
+   * Identifies automated system emails, newsletters, or security notifications
+   */
+  private static isAutomatedOrSystemEmail(fromAddress: string, subject: string): boolean {
+    const lowerFrom = (fromAddress || '').toLowerCase();
+    const lowerSub = (subject || '').toLowerCase();
+
+    const ignoredSenders = [
+      'no-reply@',
+      'noreply@',
+      'mailer-daemon@',
+      'postmaster@',
+      'notifications@google.com',
+      'googlecommunityteam-noreply@google.com',
+      'security-noreply@',
+      'accounts.google.com',
+      'donotreply@',
+      'promotions@',
+      'newsletter@',
+      'newsletters@',
+      'marketing@',
+      'updates@',
+      'support@github.com',
+      'notification@',
+      'facebookmail.com',
+      'linkedin.com',
+    ];
+
+    if (ignoredSenders.some((ign) => lowerFrom.includes(ign))) {
+      return true;
+    }
+
+    const ignoredSubjectPhrases = [
+      'security alert',
+      'critical security alert',
+      'new sign-in',
+      'verify your email',
+      'one-time password',
+      'otp',
+      'password reset',
+      'two-step verification',
+      'sign-in attempt',
+    ];
+
+    if (ignoredSubjectPhrases.some((phrase) => lowerSub.includes(phrase))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Connect to IMAP inbox, fetch unseen messages, run OCR on attachments, and create leads in CRM
    */
   public static async syncEmailsAndGenerateLeads(): Promise<ImapSyncResult> {
@@ -161,15 +212,25 @@ export class ImapLeadSyncService {
       const lock = await client.getMailboxLock('INBOX');
 
       try {
-        // Search unread / unseen messages in INBOX
-        const messageUids = await client.search({ seen: false });
+        // Search unread / unseen messages in INBOX from the last 3 days to avoid mass backlog ingestion
+        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        let rawUids: number[] = [];
+        try {
+          const res = await client.search({ seen: false, since: threeDaysAgo });
+          if (Array.isArray(res)) rawUids = res;
+        } catch {
+          const fallbackRes = await client.search({ seen: false });
+          if (Array.isArray(fallbackRes)) rawUids = fallbackRes;
+        }
 
-        if (!messageUids || messageUids.length === 0) {
+        if (!rawUids || rawUids.length === 0) {
           logger.info('[ImapSync] No unread messages in INBOX');
           return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new unread emails.' };
         }
 
-        logger.info(`[ImapSync] Found ${messageUids.length} unread message(s) to process`);
+        // Cap to latest 10 unread emails per sync pass (highest UIDs are newest)
+        const messageUids = rawUids.slice(-10);
+        logger.info(`[ImapSync] Found ${rawUids.length} unread message(s). Processing latest ${messageUids.length} in this pass.`);
 
         for (const uid of messageUids) {
           try {
@@ -188,6 +249,16 @@ export class ImapLeadSyncService {
 
             // Parse MIME message
             const parsed = await simpleParser(emailBuffer);
+
+            // Filter automated notification or security emails
+            const fromAddr = parsed.from?.value?.[0]?.address || '';
+            const subj = parsed.subject || '';
+            if (this.isAutomatedOrSystemEmail(fromAddr, subj)) {
+              logger.info(`[ImapSync] Skipping automated/notification email from ${fromAddr}: "${subj}"`);
+              await client.messageFlagsAdd(String(uid), ['\\Seen']);
+              processedCount++;
+              continue;
+            }
 
             // Process email & attachments with OCR
             const leadCreated = await this.processParsedEmail(parsed, config.autoCreateLead);
