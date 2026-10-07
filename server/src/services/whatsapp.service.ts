@@ -728,17 +728,16 @@ Extract all contact and business information and return pure JSON with keys:
             // Create product if new
             const generatedSku = productItem.sku || `PROD-${Date.now().toString().slice(-5)}`;
             const newProductQuery = await databaseConnection.query(
-              'SELECT save_product($1, $2, $3, $4, $5, $6::jsonb) as result',
+              'SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)',
               [
+                generatedSku,
                 productItem.name.trim(),
                 productItem.description || productItem.name,
-                generatedSku,
                 productItem.quantity || 1,
                 productItem.price || 0,
-                '{}',
               ]
             );
-            const savedProduct = newProductQuery.rows[0]?.result;
+            const savedProduct = newProductQuery.rows[0];
             if (savedProduct && savedProduct.id) {
               targetProductId = savedProduct.id;
             }
