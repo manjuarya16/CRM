@@ -459,7 +459,37 @@ Extract all contact and business information and return pure JSON with keys:
       }
     }
 
-    // Fallback if Vision AI is unavailable
+    // 2. Local Tesseract OCR (Runs completely offline without any API key)
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('eng');
+      const ocrResult = await worker.recognize(imageBuffer);
+      await worker.terminate();
+
+      const ocrText = ocrResult?.data?.text?.trim();
+      if (ocrText && ocrText.length > 5) {
+        logger.info(`[WhatsAppService] Extracted ${ocrText.length} chars via local Tesseract OCR`);
+        const parsedOcrLead = parseLeadDocumentText(ocrText, 'whatsapp_image.jpg');
+        return {
+          leadTitle: parsedOcrLead.title || `WhatsApp Card: ${parsedOcrLead.contactPerson || parsedOcrLead.organization || senderName || senderPhoneNumber}`,
+          contactPersonName: parsedOcrLead.contactPerson || senderName || 'WhatsApp Contact',
+          contactPhone: parsedOcrLead.phone || senderPhoneNumber,
+          contactEmail: parsedOcrLead.email || undefined,
+          organizationName: parsedOcrLead.organization || undefined,
+          jobTitle: parsedOcrLead.jobTitle || undefined,
+          leadValue: parsedOcrLead.leadValue || null,
+          expectedCloseDate: parsedOcrLead.expectedCloseDate || null,
+          products: parsedOcrLead.products || [],
+          description: `Extracted via Local OCR:\n${ocrText}`,
+          rawText: ocrText,
+          source: 'WhatsApp Card OCR (Offline)',
+        };
+      }
+    } catch (tesseractError: any) {
+      logger.warn(`[WhatsAppService] Local Tesseract OCR failed: ${tesseractError.message}`);
+    }
+
+    // 3. Fallback to caption text if available
     if (captionText && captionText.trim().length > 3) {
       const parsedFromCaption = await this.extractLeadFromText(captionText, senderPhoneNumber || '', senderName);
       if (parsedFromCaption) {
