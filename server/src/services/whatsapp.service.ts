@@ -460,6 +460,17 @@ Extract all contact and business information and return pure JSON with keys:
     }
 
     // Fallback if Vision AI is unavailable
+    if (captionText && captionText.trim().length > 3) {
+      const parsedFromCaption = await this.extractLeadFromText(captionText, senderPhoneNumber || '', senderName);
+      if (parsedFromCaption) {
+        return {
+          ...parsedFromCaption,
+          leadTitle: parsedFromCaption.leadTitle || `WhatsApp Image Lead from ${senderName || senderPhoneNumber || 'Contact'}`,
+          description: `WhatsApp Image with caption:\n${captionText}`,
+        };
+      }
+    }
+
     return {
       leadTitle: `WhatsApp Image Lead from ${senderName || senderPhoneNumber || 'Contact'}`,
       contactPersonName: senderName || 'WhatsApp Contact',

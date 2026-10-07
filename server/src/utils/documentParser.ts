@@ -173,6 +173,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const personPatterns = [
     /(?:contact\s*person|person\s*name|contact\s*name|client\s*name|customer\s*name|attention|attn|full\s*name|name)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
     /(?:prepared\s*for|billed\s*to|bill\s*to)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
+    /(?:my\s*name\s*is|i\s*am|this\s*is)\s+([A-Za-z\s.'-]+?)(?:\s+(?:from|at|with|contact|phone|email|\.|\n|$)|$)/i,
   ];
   for (const pat of personPatterns) {
     const pMatch = text.match(pat);
@@ -206,6 +207,8 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
     if (parts.length >= 2) {
       result.contactPerson = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+    } else if (parts.length === 1 && parts[0].length >= 3 && !/^[0-9]+$/.test(parts[0])) {
+      result.contactPerson = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
     }
   }
 
