@@ -602,8 +602,14 @@ Extract all contact and business information and return pure JSON with keys:
           [searchPattern]
         );
         if (phonePersonQuery.rows.length > 0) {
-          contactPersonId = phonePersonQuery.rows[0].id;
-          resolvedPersonName = phonePersonQuery.rows[0].name;
+          const existingName = phonePersonQuery.rows[0].name;
+          const isGenericName = !resolvedPersonName || /^(whatsapp|contact|lead|unknown)/i.test(resolvedPersonName);
+          const isNameMatch = resolvedPersonName && (existingName.toLowerCase().includes(resolvedPersonName.toLowerCase()) || resolvedPersonName.toLowerCase().includes(existingName.toLowerCase()));
+
+          if (isGenericName || isNameMatch) {
+            contactPersonId = phonePersonQuery.rows[0].id;
+            resolvedPersonName = existingName;
+          }
         }
       }
 
