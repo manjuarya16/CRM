@@ -231,13 +231,24 @@ const INVALID_PERSON_NAMES = new Set([
   'visiting card', 'smart card', 'id card', 'contact details', 'contact us'
 ]);
 
+const SYSTEM_OR_TECHNICAL_WORDS = [
+  'token', 'webhook', 'callback', 'whatsapp', 'crm', 'krayin', 'server', 'error', 'failed',
+  'account', 'password', 'user', 'admin', 'certificate', 'subscription', 'download', 'upload',
+  'response', 'request', 'domain', 'cloud', 'status', 'message', 'alert', 'notification',
+  'http', 'https', 'url', 'www', 'click', 'submit', 'login', 'logout', 'dashboard', 'settings',
+  'overview', 'details', 'preview', 'learn', 'more', 'about', 'remove', 'attach', 'verify',
+  'verified', 'cloudflare', 'client', 'app', 'application', 'code'
+];
+
 const COMPANY_SUFFIX_WORDS = [
   'tours', 'travels', 'astronomy', 'academy', 'agency', 'studio', 'photography',
   'enterprises', 'solutions', 'services', 'technologies', 'industries', 'consulting',
   'media', 'digital', 'systems', 'card', 'maker', 'business', 'store', 'shop',
   'mart', 'cafe', 'restaurant', 'hospital', 'clinic', 'pharma', 'labs', 'holdings',
   'ventures', 'group', 'pvt', 'ltd', 'limited', 'inc', 'corp', 'corporation', 'llc',
-  'infotech', 'software', 'tech', 'firm', 'co', 'associates', 'logistics', 'transport'
+  'infotech', 'software', 'tech', 'firm', 'co', 'associates', 'logistics', 'transport',
+  'builders', 'developers', 'motors', 'automotive', 'auto', 'works', 'healthcare',
+  'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals'
 ];
 
 export function isValidPersonName(name: string): boolean {
@@ -251,8 +262,9 @@ export function isValidPersonName(name: string): boolean {
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 4) return false;
 
-  // Reject if any word matches company/category keywords
+  // Reject if any word matches company/category keywords or technical/system words
   if (words.some((w) => COMPANY_SUFFIX_WORDS.includes(w.toLowerCase()))) return false;
+  if (words.some((w) => SYSTEM_OR_TECHNICAL_WORDS.includes(w.toLowerCase()))) return false;
 
   // Reject single-letter words that are not middle initials
   for (const w of words) {
@@ -372,10 +384,10 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const seenPersonNames = new Set<string>();
 
   // A. Honorific names (stopping before next honorific or line break to prevent greedy eating of adjacent names)
-  const honorificRegex = /(?:mr|ms|mrs|dr)\.?\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)(?=\s+(?:mr|ms|mrs|dr)\.?|\s*[\n\r,;|]|$)/gi;
+  const honorificRegex = /(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)(?=\s+(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?|\s*[\n\r,;|]|$)/gi;
   let hMatch;
   while ((hMatch = honorificRegex.exec(text)) !== null) {
-    let rawName = hMatch[1].trim().replace(/\b(?:mr|ms|mrs|dr)\.?$/i, '').trim();
+    let rawName = hMatch[1].trim().replace(/\b(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?$/i, '').trim();
     if (rawName.length >= 2 && isValidPersonName(rawName) && !seenPersonNames.has(rawName.toLowerCase()) && !rawName.includes('@')) {
       seenPersonNames.add(rawName.toLowerCase());
       extractedContactPersons.push({ name: rawName });
@@ -404,11 +416,34 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // D. Check line immediately preceding a designation keyword (managing director, ceo, etc.)
-  const designationKeywords = ['director', 'managing director', 'chief technology officer', 'chief executive officer', 'cto', 'ceo', 'partner', 'proprietor', 'b.e. mechanical', 'b.e.', 'manager', 'founder', 'engineer', 'architect', 'executive'];
+  // D. Designation-based name extraction (preceding, succeeding, or same-line)
+  const designationKeywords = [
+    'director', 'managing director', 'chief technology officer', 'chief executive officer',
+    'cto', 'ceo', 'partner', 'managing partner', 'proprietor', 'founder', 'co-founder',
+    'president', 'vice president', 'vp', 'manager', 'general manager', 'sales manager',
+    'lead engineer', 'engineer', 'architect', 'executive', 'consultant', 'advocate',
+    'b.e. mechanical', 'b.e.'
+  ];
+
   for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase();
+    const line = lines[i].trim();
+    const lower = line.toLowerCase();
+
+    // Check same-line combination: "Rahul Sharma - Managing Director" or "Rahul Sharma | Founder"
+    const sameLineMatch = line.match(/^([A-Za-z\s.'-]+?)\s*[-|–—,]\s*([A-Za-z\s.,&-]+)$/);
+    if (sameLineMatch) {
+      const candName = sameLineMatch[1].trim();
+      const candTitle = sameLineMatch[2].trim();
+      if (designationKeywords.some((dk) => candTitle.toLowerCase().includes(dk)) && isValidPersonName(candName)) {
+        if (!seenPersonNames.has(candName.toLowerCase())) {
+          seenPersonNames.add(candName.toLowerCase());
+          extractedContactPersons.unshift({ name: candName, title: candTitle });
+        }
+      }
+    }
+
     if (designationKeywords.some((dk) => lower.includes(dk))) {
+      // 1. Line immediately preceding designation
       if (i > 0) {
         const prev = lines[i - 1].trim();
         const prevLower = prev.toLowerCase();
@@ -428,6 +463,28 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
             if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
               seenPersonNames.add(formattedName.toLowerCase());
               extractedContactPersons.unshift({ name: formattedName, title: lines[i] });
+            }
+          }
+        }
+      }
+
+      // 2. Line immediately following designation (e.g. "Managing Director:\nRahul Sharma")
+      if (i + 1 < lines.length) {
+        const next = lines[i + 1].trim();
+        const nextLower = next.toLowerCase();
+        if (
+          !nextLower.includes('email') &&
+          !nextLower.includes('phone') &&
+          !nextLower.includes('mobile') &&
+          !nextLower.includes('address') &&
+          !nextLower.includes('@')
+        ) {
+          const words = next.split(/\s+/).filter(Boolean);
+          if (words.length >= 2 && words.length <= 4) {
+            const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+            if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+              seenPersonNames.add(formattedName.toLowerCase());
+              extractedContactPersons.unshift({ name: formattedName, title: lines[i].replace(/[:=-]+$/, '').trim() });
             }
           }
         }
@@ -539,7 +596,15 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES, STARLIGHT ASTRONOMY TOURS)
   if (!result.organization) {
-    const companyKeywords = ['technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global', 'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries', 'consulting', 'group', 'tech', 'software', 'tours', 'photography', 'studio', 'agency', 'travels', 'academy', 'infotech', 'logistics', 'transport'];
+    const companyKeywords = [
+      'technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global',
+      'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries',
+      'consulting', 'group', 'tech', 'software', 'tours', 'photography', 'studio',
+      'agency', 'travels', 'academy', 'infotech', 'logistics', 'transport',
+      'builders', 'developers', 'motors', 'automotive', 'auto', 'works', 'healthcare',
+      'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals',
+      'hospital', 'clinic', 'pharma', 'labs', 'holdings', 'ventures'
+    ];
     const orgLine = lines.find((l) => {
       const lower = l.toLowerCase();
       if (lower.includes('email') || lower.includes('phone') || lower.includes('address') || lower.includes('services:')) return false;
@@ -563,7 +628,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   }
 
   // Address extraction
-  const addressMatch = text.match(/(?:address|office|location|addr)\s*[:=-]\s*([^\r\n]+(?:\r?\n[^\r\n]+)?)/i);
+  const addressMatch = text.match(/(?:address|office|location|addr|add)\.?\s*[:=-]\s*([^\r\n]+)/i);
   if (addressMatch && addressMatch[1]) {
     const rawAddr = addressMatch[1].replace(/[\r\n]+/g, ' ').replace(/[\\\/]/g, '').trim();
     if (rawAddr.length >= 5) {
@@ -571,16 +636,31 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
   if (!result.address) {
-    const addrLine = lines.find((l) => /^(?:address|office|location|addr)\s*:/i.test(l));
+    const addressLineKeywords = ['nagar', 'road', 'street', 'floor', 'tower', 'chawk', 'chowk', 'complex', 'sector', 'plot', 'opp.', 'near ', 'behind ', 'marg', 'lane', 'building', 'bldg', 'pincode', 'pin:'];
+    const addrLine = lines.find((l) => {
+      const lower = l.toLowerCase();
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('www.') || lower.includes('@')) return false;
+      return /^(?:address|office|location|addr|add)\.?\s*:/i.test(l) || addressLineKeywords.some((ak) => lower.includes(ak));
+    });
     if (addrLine) {
-      result.address = addrLine.replace(/^(?:address|office|location|addr)\s*:\s*/i, '').replace(/[\\\/]/g, '').trim();
+      result.address = addrLine.replace(/^(?:address|office|location|addr|add)\.?\s*[:=-]?\s*/i, '').replace(/[\\\/]/g, '').trim();
     }
   }
 
-  // Website extraction
-  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n\s]+)/i) || text.match(/\b(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i);
+  // Website extraction (www., http(s)://, or bare domain like ahcnashik.com)
+  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n\s]+)/i) ||
+                   text.match(/\b(https?:\/\/[^\s]+)/i) ||
+                   text.match(/\b(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i);
   if (webMatch && webMatch[1]) {
     result.website = webMatch[1].trim();
+  }
+  if (!result.website) {
+    const domainMatch = text.match(/(?<!@)\b([a-zA-Z0-9-]+\.(?:com|in|co\.in|org|net|io|biz|ai|co))\b/i);
+    if (domainMatch && domainMatch[1] && !domainMatch[1].endsWith('google.com') && !domainMatch[1].endsWith('gmail.com')) {
+      if (!result.email || !result.email.includes(domainMatch[1])) {
+        result.website = domainMatch[1].trim();
+      }
+    }
   }
 
   // 5. Job Title extraction

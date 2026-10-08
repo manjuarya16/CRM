@@ -47,7 +47,15 @@ export async function getSmtpConfig(): Promise<SmtpSettingsConfig> {
   const port = Number(portStr) || 587;
   const encryption = dbConfigs['email.smtp.account.encryption'] || 'tls';
   const user = (dbConfigs['email.smtp.account.username'] || env.SMTP_USER || process.env.SMTP_USER || '').trim();
-  const pass = (dbConfigs['email.smtp.account.password'] || env.SMTP_PASS || process.env.SMTP_PASS || '').trim();
+  let pass = (dbConfigs['email.smtp.account.password'] || env.SMTP_PASS || process.env.SMTP_PASS || '').trim();
+
+  // Dynamic fallback: If SMTP password is not set or empty, and IMAP credentials exist for same account, reuse dynamically
+  if (!pass && dbConfigs['email.imap.account.password']) {
+    const imapUser = (dbConfigs['email.imap.account.username'] || '').trim().toLowerCase();
+    if (!user || !imapUser || user.toLowerCase() === imapUser) {
+      pass = (dbConfigs['email.imap.account.password'] || '').trim();
+    }
+  }
   const fromName = dbConfigs['email.smtp.account.from_name'] || env.SMTP_FROM_NAME || process.env.SMTP_FROM_NAME || 'CRM Admin';
   const fromEmail = dbConfigs['email.smtp.account.from_email'] || env.SMTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || user || 'no-reply@crm.local';
 
