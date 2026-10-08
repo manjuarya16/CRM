@@ -343,20 +343,20 @@ export class ImapLeadSyncService {
       const lock = await client.getMailboxLock('INBOX');
 
       try {
-        // Search unread / unseen messages in INBOX from the last 3 days to avoid mass backlog ingestion
-        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-        let rawUids: number[] = [];
+        // STRICT SAFETY: The mailbox contains historical unread emails.
+        // We MUST NOT search { seen: false } without a date, otherwise old unread backlog gets pulled in!
+        // Only inspect emails received in the last 24 hours.
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        let recentRes: any = [];
         try {
-          const res = await client.search({ seen: false, since: threeDaysAgo });
-          if (Array.isArray(res)) rawUids = res;
-        } catch {
-          const fallbackRes = await client.search({ seen: false });
-          if (Array.isArray(fallbackRes)) rawUids = fallbackRes;
-        }
+          recentRes = await client.search({ since: twentyFourHoursAgo });
+        } catch { }
+
+        const rawUids = (Array.isArray(recentRes) ? recentRes : []).sort((a: number, b: number) => a - b);
 
         if (!rawUids || rawUids.length === 0) {
-          logger.info('[ImapSync] No unread messages in INBOX');
-          return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new unread emails.' };
+          logger.info('[ImapSync] No new messages in the last 24 hours in INBOX');
+          return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new emails found.' };
         }
 
         // Cap to latest 10 unread emails per sync pass (highest UIDs are newest)
@@ -580,12 +580,12 @@ export class ImapLeadSyncService {
       const emailInsertResult = await client.query(
         `INSERT INTO public.emails (
           name, subject, reply, "from", sender, from_email,
-          reply_to, folders, is_read, lead_id, person_id, user_id,
+          reply_to, folders, is_read, lead_id, person_id, user_id, user_type,
           message_id, source, created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb,
-          $7::jsonb, $8::jsonb, $9, $10, $11, $12,
-          $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13,
+          $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         ) RETURNING id`,
         [
           fromName,
@@ -600,6 +600,7 @@ export class ImapLeadSyncService {
           createdLeadId || null,
           contactPersonId || null,
           1,
+          'admin',
           messageId,
           'imap',
         ]
