@@ -6,7 +6,7 @@ import Tesseract from 'tesseract.js';
 import { pool } from '@/config/db';
 import { logger } from '@/utils/logger';
 import { configService } from '@/services/configService';
-import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from '@/utils/documentParser';
+import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData, recognizeImageWithAutoOrientation } from '@/utils/documentParser';
 
 export interface ImapAccountConfig {
   enabled: boolean;
@@ -479,11 +479,11 @@ export class ImapLeadSyncService {
         const isPdfOrText = mimeLower === 'application/pdf' || ['.pdf', '.txt', '.csv'].includes(ext);
 
         if (isImage) {
-          logger.info(`[ImapSync] Running offline Tesseract OCR on image attachment: ${att.filename}`);
+          logger.info(`[ImapSync] Running offline multi-angle OCR on image attachment: ${att.filename}`);
           try {
-            const { data: { text: imgOcrText } } = await Tesseract.recognize(att.content, 'eng');
+            const imgOcrText = await recognizeImageWithAutoOrientation(att.content, att.filename);
             if (imgOcrText && imgOcrText.trim().length > 10) {
-              logger.info(`[ImapSync] Extracted ${imgOcrText.length} characters from image via OCR`);
+              logger.info(`[ImapSync] Extracted ${imgOcrText.length} characters from image via multi-angle OCR`);
               ocrExtractedTexts.push(`--- ATTACHMENT OCR (${att.filename}) ---\n${imgOcrText.trim()}`);
             }
           } catch (tessErr: any) {
@@ -531,7 +531,7 @@ export class ImapLeadSyncService {
 
     if (autoCreateLead && qualification.shouldCreateLead) {
       logger.info(`[ImapSync] Qualified as Lead (${qualification.reason}): Creating CRM Lead from ${fromAddress}`);
-      createdLeadId = await this.createLeadFromEmailData({
+      const leadResult = await this.createLeadFromEmailData({
         fromName,
         fromEmail: fromAddress,
         subject,
@@ -540,6 +540,8 @@ export class ImapLeadSyncService {
         hasAttachments: savedAttachmentRecords.length > 0,
         extractedData: extractedLeadData,
       });
+      createdLeadId = leadResult.leadId;
+      contactPersonId = leadResult.personId;
     } else {
       logger.info(`[ImapSync] Storing in Mailbox only (${qualification.reason}): No new lead created for ${fromAddress}`);
     }
@@ -656,7 +658,7 @@ export class ImapLeadSyncService {
     combinedCorpus: string;
     hasAttachments: boolean;
     extractedData?: ExtractedLeadData;
-  }): Promise<number | null> {
+  }): Promise<{ leadId: number | null; personId: number | null; organizationId: number | null }> {
     const { fromName, fromEmail, subject, textBody, combinedCorpus, extractedData } = params;
 
     // Use passed extracted data or run comprehensive document parser
@@ -685,9 +687,10 @@ export class ImapLeadSyncService {
         if (orgSearch.rows.length > 0) {
           organizationId = orgSearch.rows[0].id;
         } else {
+          const orgAddress = extracted.address ? JSON.stringify({ address: extracted.address }) : null;
           const orgRes = await client.query(
             'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result',
-            [extracted.organization.trim(), null, 1, '{}']
+            [extracted.organization.trim(), orgAddress, 1, '{}']
           );
           organizationId = orgRes.rows[0]?.result?.id || null;
         }
@@ -700,7 +703,7 @@ export class ImapLeadSyncService {
       for (let i = 0; i < contactPersons.length; i++) {
         const cp = contactPersons[i];
         const cpName = cp.name.trim();
-        const cpEmail = cp.email?.trim() || (i === 0 ? fromEmail : undefined);
+        const cpEmail = cp.email?.trim() || (i === 0 ? (extracted.email || fromEmail) : undefined);
         const cpPhone = cp.phone?.trim();
         const cpTitle = cp.title || (i === 0 ? extracted.jobTitle : undefined);
 
@@ -866,11 +869,11 @@ export class ImapLeadSyncService {
 
       await client.query('COMMIT');
       logger.info(`[ImapSync] Successfully created Lead #${leadId} ("${leadTitle}") from email`);
-      return leadId;
+      return { leadId, personId: primaryPersonId, organizationId };
     } catch (err: any) {
       await client.query('ROLLBACK');
       logger.error(`[ImapSync] Failed to create lead from email data: ${err.message}`);
-      return null;
+      return { leadId: null, personId: null, organizationId: null };
     } finally {
       client.release();
     }

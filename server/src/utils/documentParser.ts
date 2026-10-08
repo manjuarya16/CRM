@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import sharp from 'sharp';
+import Tesseract from 'tesseract.js';
+import { logger } from '@/utils/logger';
 
 export interface ExtractedProduct {
   name: string;
@@ -23,9 +26,12 @@ export interface ExtractedLeadData {
   contactPerson?: string;
   contactPersons?: ExtractedContactPerson[];
   email?: string;
+  emails?: string[];
   phone?: string;
   phones?: string[];
   organization?: string;
+  address?: string;
+  website?: string;
   jobTitle?: string;
   source?: string;
   type?: string;
@@ -33,6 +39,90 @@ export interface ExtractedLeadData {
   products?: ExtractedProduct[];
   description?: string;
   rawText?: string;
+}
+
+/**
+ * Evaluates extracted OCR text to determine confidence level of business/contact data.
+ */
+export function scoreOcrText(text: string): number {
+  if (!text || text.trim().length < 5) return 0;
+  let score = 0;
+
+  // 1. Email address detected
+  if (/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(text)) score += 50;
+
+  // 2. Phone number detected
+  if (/(?:[+]?91[\s.-]?)?\b([6-9]\d{4}[\s.-]?\d{5}|[6-9]\d{9})\b/.test(text) || /\+?\d{1,3}[-.\s]?\d{7,12}/.test(text)) {
+    score += 35;
+  }
+
+  // 3. Organization, designation and contact keywords
+  const keywords = [
+    'ltd', 'pvt', 'technologies', 'solutions', 'limited', 'services', 'enterprises', 'inc', 'corp', 'industries', 'group', 'systems', 'consulting',
+    'director', 'managing', 'manager', 'ceo', 'founder', 'partner', 'engineer', 'executive', 'officer',
+    'phone', 'mobile', 'email', 'tel', 'cell', 'address', 'website', 'www', 'tower', 'road', 'street', 'india'
+  ];
+  const lower = text.toLowerCase();
+  let kwMatches = 0;
+  for (const kw of keywords) {
+    if (lower.includes(kw)) kwMatches++;
+  }
+  score += Math.min(kwMatches * 15, 60);
+
+  // 4. Penalize excessive noise / garbage non-alphanumeric characters
+  const nonWs = text.replace(/\s+/g, '');
+  if (nonWs.length > 0) {
+    const noiseChars = (nonWs.match(/[^a-zA-Z0-9.,@+()&/'-]/g) || []).length;
+    const noiseRatio = noiseChars / nonWs.length;
+    if (noiseRatio > 0.3) score -= 30;
+  }
+
+  return Math.max(0, score);
+}
+
+/**
+ * Runs offline multi-angle Tesseract OCR with Sharp image preprocessing.
+ * Automatically tests orientations (0°, EXIF, 18°, -18°, 90°, 270°, 15°, -15°, 180°)
+ * and returns the highest-confidence extracted text.
+ */
+export async function recognizeImageWithAutoOrientation(imageBuffer: Buffer, filename?: string): Promise<string> {
+  const candidateAngles = [0, 18, -18, 90, 270, 15, -15, 180];
+  let bestText = '';
+  let bestScore = -1;
+
+  for (const ang of candidateAngles) {
+    try {
+      let pipeline = sharp(imageBuffer);
+      if (ang !== 0) {
+        pipeline = pipeline.rotate(ang);
+      } else {
+        // Pass 1: Auto-orient based on EXIF metadata if present
+        pipeline = pipeline.rotate();
+      }
+
+      const transformedBuffer = await pipeline.toBuffer();
+      const ocrResult = await Tesseract.recognize(transformedBuffer, 'eng');
+      const text = ocrResult?.data?.text || '';
+      const score = scoreOcrText(text);
+
+      logger.info(`[ImageOCR] Tested angle ${ang}° for ${filename || 'image'}: score = ${score}`);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestText = text;
+      }
+
+      // Early stop: If text reaches high-confidence threshold (has valid email/phone and keywords), return immediately!
+      if (score >= 60) {
+        logger.info(`[ImageOCR] Early stop reached at angle ${ang}° with confidence score ${score}`);
+        break;
+      }
+    } catch (err: any) {
+      logger.warn(`[ImageOCR] Error testing angle ${ang}° for ${filename || 'image'}: ${err.message}`);
+    }
+  }
+
+  return bestText.trim();
 }
 
 /**
@@ -155,11 +245,30 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   const lines = cleanedLines;
 
-  // 1. Email extraction
-  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
-  const emailMatch = text.match(emailRegex);
-  if (emailMatch) {
-    result.email = emailMatch[1].toLowerCase().trim();
+  // 1. Email extraction (support multiple emails & labeled emails)
+  const allEmails: string[] = [];
+  const labeledEmails: string[] = [];
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+  let eMatch;
+  while ((eMatch = emailRegex.exec(text)) !== null) {
+    const em = eMatch[1].toLowerCase().trim();
+    if (!allEmails.includes(em)) {
+      allEmails.push(em);
+    }
+  }
+
+  const labeledEmailRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+  let leMatch;
+  while ((leMatch = labeledEmailRegex.exec(text)) !== null) {
+    const em = leMatch[1].toLowerCase().trim();
+    if (!labeledEmails.includes(em)) {
+      labeledEmails.push(em);
+    }
+  }
+
+  if (allEmails.length > 0) {
+    result.email = labeledEmails[0] || allEmails[0];
+    result.emails = allEmails;
   }
 
   // 2. Phone extraction
@@ -251,7 +360,42 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // D. Fallback line candidate if no contact person found
+  // D. Check line immediately preceding a designation keyword (managing director, ceo, etc.)
+  const designationKeywords = ['director', 'managing director', 'chief technology officer', 'chief executive officer', 'cto', 'ceo', 'partner', 'proprietor', 'b.e. mechanical', 'b.e.', 'manager', 'founder', 'engineer', 'architect', 'executive'];
+  for (let i = 0; i < lines.length; i++) {
+    const lower = lines[i].toLowerCase();
+    if (designationKeywords.some((dk) => lower.includes(dk))) {
+      if (i > 0) {
+        const prev = lines[i - 1].trim();
+        const prevLower = prev.toLowerCase();
+        if (
+          !prevLower.includes('email') &&
+          !prevLower.includes('phone') &&
+          !prevLower.includes('mobile') &&
+          !prevLower.includes('tel') &&
+          !prevLower.includes('address') &&
+          !prevLower.includes('website') &&
+          !prevLower.includes('www') &&
+          !prevLower.includes('ltd') &&
+          !prevLower.includes('pvt') &&
+          !prevLower.includes('technologies') &&
+          !prevLower.includes('solutions') &&
+          !prevLower.includes('@')
+        ) {
+          const words = prev.split(/\s+/).filter(Boolean);
+          if (words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-z.'-]+$/.test(w))) {
+            const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+            if (!seenPersonNames.has(formattedName.toLowerCase())) {
+              seenPersonNames.add(formattedName.toLowerCase());
+              extractedContactPersons.unshift({ name: formattedName, title: lines[i] });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // E. Fallback line candidate if no contact person found
   if (extractedContactPersons.length === 0) {
     const nameLineCandidate = lines.find((l) => {
       const lower = l.toLowerCase();
@@ -259,15 +403,17 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         return false;
       }
       const words = l.split(' ').filter(Boolean);
-      return words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Z][a-z]+$/.test(w));
+      return words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-z.'-]+$/.test(w));
     });
     if (nameLineCandidate) {
-      seenPersonNames.add(nameLineCandidate.toLowerCase());
-      extractedContactPersons.push({ name: nameLineCandidate });
+      const words = nameLineCandidate.split(' ').filter(Boolean);
+      const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+      seenPersonNames.add(formattedName.toLowerCase());
+      extractedContactPersons.push({ name: formattedName });
     }
   }
 
-  // E. Fallback from email prefix if none found
+  // F. Fallback from email prefix if none found
   if (extractedContactPersons.length === 0 && result.email) {
     const emailPrefix = result.email.split('@')[0];
     const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
@@ -280,8 +426,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // F. Assign direct mobile numbers & titles to extracted contact persons
-  const designationKeywords = ['director', 'managing director', 'chief executive officer', 'ceo', 'partner', 'proprietor', 'b.e. mechanical', 'b.e.', 'manager', 'founder', 'engineer', 'architect', 'executive'];
+  // G. Assign direct mobile numbers & titles to extracted contact persons
   const foundDesignations: string[] = [];
   for (const line of lines) {
     const lower = line.toLowerCase();
@@ -292,13 +437,25 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   if (extractedContactPersons.length > 0) {
     extractedContactPersons.forEach((cp, idx) => {
-      if (foundDesignations.length > 0) {
+      if (!cp.title && foundDesignations.length > 0) {
         cp.title = foundDesignations[idx] || foundDesignations[0];
       }
       if (directMobiles[idx]) {
         cp.phone = directMobiles[idx];
       } else if (idx === 0 && extractedPhones.length > 0) {
         cp.phone = extractedPhones[0];
+      }
+
+      // Associate best matching email with contact person
+      const cpFirstName = cp.name.toLowerCase().split(/\s+/)[0];
+      const matchedEmail =
+        labeledEmails.find((e) => e.includes(cpFirstName)) ||
+        allEmails.find((e) => e.includes(cpFirstName)) ||
+        labeledEmails[idx] ||
+        (allEmails.length > 1 ? allEmails[allEmails.length - 1] : allEmails[0]);
+
+      if (matchedEmail) {
+        cp.email = matchedEmail;
       }
     });
 
@@ -309,6 +466,9 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
     if (extractedContactPersons[0].phone) {
       result.phone = extractedContactPersons[0].phone;
+    }
+    if (extractedContactPersons[0].email) {
+      result.email = extractedContactPersons[0].email;
     }
   }
 
@@ -351,6 +511,27 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         result.organization = domainName.charAt(0).toUpperCase() + domainName.slice(1);
       }
     }
+  }
+
+  // Address extraction
+  const addressMatch = text.match(/(?:address|office|location|addr)\s*[:=-]\s*([^\r\n]+(?:\r?\n[^\r\n]+)?)/i);
+  if (addressMatch && addressMatch[1]) {
+    const rawAddr = addressMatch[1].replace(/[\r\n]+/g, ' ').replace(/[\\\/]/g, '').trim();
+    if (rawAddr.length >= 5) {
+      result.address = rawAddr;
+    }
+  }
+  if (!result.address) {
+    const addrLine = lines.find((l) => /^(?:address|office|location|addr)\s*:/i.test(l));
+    if (addrLine) {
+      result.address = addrLine.replace(/^(?:address|office|location|addr)\s*:\s*/i, '').replace(/[\\\/]/g, '').trim();
+    }
+  }
+
+  // Website extraction
+  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n\s]+)/i) || text.match(/\b(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i);
+  if (webMatch && webMatch[1]) {
+    result.website = webMatch[1].trim();
   }
 
   // 5. Job Title extraction
@@ -546,6 +727,9 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     summaryParts.push(`Contact: ${result.contactPerson}`);
     if (result.jobTitle) summaryParts.push(`Title: ${result.jobTitle}`);
   }
+  if (result.organization) summaryParts.push(`Organization: ${result.organization}`);
+  if (result.address) summaryParts.push(`Address: ${result.address}`);
+  if (result.website) summaryParts.push(`Website: ${result.website}`);
   if (result.source) summaryParts.push(`Source: ${result.source}`);
   if (result.type) summaryParts.push(`Type: ${result.type}`);
   if (result.expectedCloseDate) summaryParts.push(`Target Date: ${result.expectedCloseDate}`);
