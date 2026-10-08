@@ -29,6 +29,11 @@ export interface ImapSyncResult {
 
 export class ImapLeadSyncService {
   private static isSyncing = false;
+  private static persistentClient: ImapFlow | null = null;
+  private static isProcessing = false;
+  private static hasQueuedRun = false;
+  private static reconnectTimeout: NodeJS.Timeout | null = null;
+  private static livenessInterval: NodeJS.Timeout | null = null;
 
   /**
    * Loads IMAP account settings from core_config table
@@ -165,8 +170,17 @@ export class ImapLeadSyncService {
       'newsletters@',
       'marketing@',
       'updates@',
+      'digest@',
+      'campaigns@',
       'support@github.com',
       'notification@',
+      'openrouter.ai',
+      'welcome@',
+      'hello@',
+      'alerts@',
+      'billing@',
+      'invoice@',
+      'receipt@',
       'facebookmail.com',
       'linkedin.com',
       'instagram.com',
@@ -196,6 +210,9 @@ export class ImapLeadSyncService {
       'password reset',
       'two-step verification',
       'sign-in attempt',
+      'paste this, get a response',
+      'your daily digest',
+      'weekly digest',
     ];
 
     if (ignoredSubjectPhrases.some((phrase) => lowerSub.includes(phrase))) {
@@ -250,13 +267,248 @@ export class ImapLeadSyncService {
   }
 
   /**
-   * Connect to IMAP inbox, fetch unseen messages, run OCR on attachments, and create leads in CRM
+   * Starts persistent IMAP connection with IDLE push listener.
+   * Maintains a single persistent socket with Gmail, avoiding connection churn and rate limits.
+   * When an email arrives, Gmail pushes an 'exists' notification in < 1 second.
    */
-  public static async syncEmailsAndGenerateLeads(customConfig?: Partial<ImapAccountConfig>): Promise<ImapSyncResult> {
-    if (this.isSyncing) {
-      return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Sync already in progress' };
+  public static async startPersistentSync(): Promise<void> {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
 
+    const config = await this.getImapConfig();
+    if (!config.enabled || !config.username || !config.password) {
+      logger.info('[ImapSync] IMAP is not enabled or credentials not configured. Persistent IDLE worker waiting.');
+      return;
+    }
+
+    if (this.persistentClient && this.persistentClient.usable && this.persistentClient.authenticated) {
+      return;
+    }
+
+    try {
+      if (this.persistentClient) {
+        try { await this.persistentClient.logout(); } catch { }
+        this.persistentClient = null;
+      }
+
+      logger.info(`[ImapSync] Initializing persistent IMAP connection for ${config.username}@${config.host}...`);
+      const client = this.createClient(config);
+      this.persistentClient = client;
+
+      client.on('close', () => {
+        logger.warn('[ImapSync] Persistent IMAP connection closed by server. Scheduling reconnect in 10s...');
+        this.persistentClient = null;
+        this.scheduleReconnect(10000);
+      });
+
+      client.on('error', (err: any) => {
+        logger.warn(`[ImapSync] Persistent IMAP error: ${err?.message || err}`);
+      });
+
+      // Instant push notification from Gmail RFC 2177 IDLE
+      client.on('exists', (data: any) => {
+        logger.info(`[ImapSync] ⚡ Real-time EXISTS notification from Gmail (messages: ${data?.count ?? data})! Triggering instant lead processing...`);
+        this.triggerPersistentSync().catch((err) => {
+          logger.error(`[ImapSync] Error running real-time sync on exists: ${err.message}`);
+        });
+      });
+
+      await client.connect();
+      const mbox = await client.mailboxOpen('INBOX');
+      const totalMessages = (mbox && typeof mbox === 'object') ? mbox.exists : 0;
+      logger.info(`[ImapSync] ✅ Persistent IMAP connected! Auto-IDLE active on INBOX (existing messages: ${totalMessages}).`);
+
+      // Immediately process any messages waiting since last watermark
+      await this.triggerPersistentSync();
+
+      // Gentle liveness interval every 60s
+      if (!this.livenessInterval) {
+        this.livenessInterval = setInterval(async () => {
+          if (!this.persistentClient || !this.persistentClient.usable) {
+            logger.info('[ImapSync] Persistent connection liveness check: Reconnecting...');
+            this.startPersistentSync().catch((err) => {
+              logger.warn(`[ImapSync] Liveness reconnect failed: ${err.message}`);
+            });
+          }
+        }, 60 * 1000);
+      }
+    } catch (err: any) {
+      logger.error(`[ImapSync] Persistent IMAP connection failed: ${err.message}`);
+      this.persistentClient = null;
+      this.scheduleReconnect(15000);
+    }
+  }
+
+  /**
+   * Schedules an automatic reconnection attempt after a delay
+   */
+  private static scheduleReconnect(delayMs = 10000): void {
+    if (this.reconnectTimeout) return;
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      this.startPersistentSync().catch((err) => {
+        logger.warn(`[ImapSync] Reconnect attempt failed: ${err.message}`);
+      });
+    }, delayMs);
+  }
+
+  /**
+   * Triggers lead extraction and processing on the active persistent connection
+   */
+  private static async triggerPersistentSync(): Promise<ImapSyncResult> {
+    if (!this.persistentClient || !this.persistentClient.usable) {
+      return this.syncEmailsAndGenerateLeads();
+    }
+
+    if (this.isProcessing) {
+      this.hasQueuedRun = true;
+      logger.info('[ImapSync] Processing already active, queued next cycle');
+      return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Processing already active, next cycle queued' };
+    }
+
+    this.isProcessing = true;
+    let totalProcessed = 0;
+    let totalLeadsCreated = 0;
+
+    try {
+      const config = await this.getImapConfig();
+      do {
+        this.hasQueuedRun = false;
+        const res = await this.processMailboxMessages(this.persistentClient, config.autoCreateLead);
+        totalProcessed += res.processedCount;
+        totalLeadsCreated += res.leadsCreatedCount;
+      } while (this.hasQueuedRun);
+
+      return {
+        success: true,
+        processedCount: totalProcessed,
+        leadsCreatedCount: totalLeadsCreated,
+        message: `Processed ${totalProcessed} email(s) and created ${totalLeadsCreated} lead(s).`,
+      };
+    } catch (err: any) {
+      logger.error(`[ImapSync] Persistent sync error: ${err.message}`);
+      return {
+        success: false,
+        processedCount: totalProcessed,
+        leadsCreatedCount: totalLeadsCreated,
+        error: err.message,
+      };
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Core worker: Acquires mailbox lock, fetches new messages (UID > watermark),
+   * runs OCR & extraction, creates leads, and advances watermark.
+   */
+  private static async processMailboxMessages(
+    client: ImapFlow,
+    autoCreateLead = true
+  ): Promise<{ processedCount: number; leadsCreatedCount: number }> {
+    let processedCount = 0;
+    let leadsCreatedCount = 0;
+
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      // 1. Read last_synced_uid watermark from core_config
+      let configs: Record<string, any> = {};
+      try {
+        configs = await configService.getAllConfigs();
+      } catch { }
+      let lastUid = Number(configs['email.imap.account.last_uid'] || 0);
+
+      // Initialize watermark to highest UID if not set, ignoring all historical backlog
+      if (!lastUid || lastUid <= 0) {
+        const allUids = await client.search({ all: true }).catch(() => []);
+        if (Array.isArray(allUids) && allUids.length > 0) {
+          lastUid = allUids[allUids.length - 1];
+          await configService.saveConfigs({ 'email.imap.account.last_uid': String(lastUid) });
+          logger.info(`[ImapSync] Watermark initialized to UID #${lastUid}. Historical emails ignored.`);
+          return { processedCount: 0, leadsCreatedCount: 0 };
+        }
+      }
+
+      // 2. Search STRICTLY for messages with UID > lastUid (strictly new emails only!)
+      const searchRange = `${lastUid + 1}:*`;
+      const searchRes = await client.search({ uid: searchRange }).catch(() => []);
+      const rawUids = (Array.isArray(searchRes) ? searchRes : [])
+        .filter((u: number) => u > lastUid)
+        .sort((a: number, b: number) => a - b);
+
+      if (!rawUids || rawUids.length === 0) {
+        logger.info(`[ImapSync] No new emails received since UID #${lastUid}`);
+        return { processedCount: 0, leadsCreatedCount: 0 };
+      }
+
+      logger.info(`[ImapSync] Found ${rawUids.length} brand-new email(s) since UID #${lastUid} to process`);
+
+      let highestProcessedUid = lastUid;
+
+      for (const uid of rawUids) {
+        try {
+          highestProcessedUid = Math.max(highestProcessedUid, uid);
+
+          // Fetch complete raw email RFC822 message buffer
+          const rawMessage = await client.download(String(uid));
+          if (!rawMessage || !rawMessage.content) {
+            continue;
+          }
+
+          // Read download stream into Buffer
+          const chunks: Buffer[] = [];
+          for await (const chunk of rawMessage.content) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const emailBuffer = Buffer.concat(chunks);
+
+          // Parse MIME message
+          const parsed = await simpleParser(emailBuffer);
+
+          // Filter automated notification or security emails
+          const fromAddr = parsed.from?.value?.[0]?.address || '';
+          const subj = parsed.subject || '';
+          if (this.isAutomatedOrSystemEmail(fromAddr, subj)) {
+            logger.info(`[ImapSync] Skipping automated/notification email from ${fromAddr}: "${subj}"`);
+            await client.messageFlagsAdd(String(uid), ['\\Seen']);
+            processedCount++;
+            continue;
+          }
+
+          // Process email & attachments with OCR
+          const leadCreated = await this.processParsedEmail(parsed, autoCreateLead);
+          processedCount++;
+          if (leadCreated) {
+            leadsCreatedCount++;
+          }
+
+          // Mark message as seen/read on IMAP server
+          await client.messageFlagsAdd(String(uid), ['\\Seen']);
+        } catch (msgErr: any) {
+          highestProcessedUid = Math.max(highestProcessedUid, uid);
+          logger.error(`[ImapSync] Error processing message UID ${uid}: ${msgErr.message}`);
+        }
+      }
+
+      // Advance watermark in core_config
+      if (highestProcessedUid > lastUid) {
+        await configService.saveConfigs({ 'email.imap.account.last_uid': String(highestProcessedUid) });
+        logger.info(`[ImapSync] Updated watermark last_uid to #${highestProcessedUid}`);
+      }
+    } finally {
+      lock.release();
+    }
+
+    return { processedCount, leadsCreatedCount };
+  }
+
+  /**
+   * Connect to IMAP inbox, fetch unseen messages, run OCR on attachments, and create leads in CRM.
+   * Uses active persistent connection if available, or starts one.
+   */
+  public static async syncEmailsAndGenerateLeads(customConfig?: Partial<ImapAccountConfig>): Promise<ImapSyncResult> {
     const dbConfig = await this.getImapConfig();
     const config: ImapAccountConfig = {
       ...dbConfig,
@@ -293,134 +545,44 @@ export class ImapLeadSyncService {
           'email.imap.account.enable': '1',
           'email.imap.lead.auto_create': config.autoCreateLead ? '1' : '0',
         });
+        // Restart persistent connection with new credentials
+        await this.startPersistentSync();
       } catch (saveErr: any) {
         logger.warn(`[ImapSync] Could not persist IMAP configs to database: ${saveErr.message}`);
       }
     }
 
+    // If persistent connection is active and healthy, trigger sync on it directly
+    if (this.persistentClient && this.persistentClient.usable && this.persistentClient.authenticated) {
+      return this.triggerPersistentSync();
+    }
+
+    // Otherwise, start persistent sync and let it process
+    await this.startPersistentSync();
+    if (this.persistentClient && this.persistentClient.usable) {
+      return this.triggerPersistentSync();
+    }
+
+    // Fallback transient sync if persistent failed
+    if (this.isSyncing) {
+      return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Sync already in progress' };
+    }
     this.isSyncing = true;
     const client = this.createClient(config);
-
-    let processedCount = 0;
-    let leadsCreatedCount = 0;
-
     try {
       await client.connect();
-      const lock = await client.getMailboxLock('INBOX');
-
-      try {
-        // 1. Read last_synced_uid watermark from core_config
-        let configs: Record<string, any> = {};
-        try {
-          configs = await configService.getAllConfigs();
-        } catch { }
-        let lastUid = Number(configs['email.imap.account.last_uid'] || 0);
-
-        // If lastUid is not set, initialize it to the highest UID in the mailbox right now
-        // so that ALL historical backlog emails are permanently ignored!
-        if (!lastUid || lastUid <= 0) {
-          const allUids = await client.search({ all: true }).catch(() => []);
-          if (Array.isArray(allUids) && allUids.length > 0) {
-            lastUid = allUids[allUids.length - 1];
-            await configService.saveConfigs({ 'email.imap.account.last_uid': String(lastUid) });
-            logger.info(`[ImapSync] Watermark initialized to UID #${lastUid}. All previous historical emails ignored.`);
-            return {
-              success: true,
-              processedCount: 0,
-              leadsCreatedCount: 0,
-              message: `Watermark initialized to UID #${lastUid}. Historical emails will not be processed. Ready for new incoming emails.`,
-            };
-          }
-        }
-
-        // 2. Search STRICTLY for messages with UID > lastUid (Strictly new emails only!)
-        const searchRange = `${lastUid + 1}:*`;
-        const searchRes = await client.search({ uid: searchRange }).catch(() => []);
-        const rawUids = (Array.isArray(searchRes) ? searchRes : [])
-          .filter((u: number) => u > lastUid)
-          .sort((a: number, b: number) => a - b);
-
-        if (!rawUids || rawUids.length === 0) {
-          logger.info(`[ImapSync] No new emails received since UID #${lastUid}`);
-          return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new incoming emails.' };
-        }
-
-        logger.info(`[ImapSync] Found ${rawUids.length} brand-new email(s) since UID #${lastUid} to process`);
-
-        let highestProcessedUid = lastUid;
-
-        for (const uid of rawUids) {
-          try {
-            highestProcessedUid = Math.max(highestProcessedUid, uid);
-
-            // Fetch complete raw email RFC822 message buffer
-            const rawMessage = await client.download(String(uid));
-            if (!rawMessage || !rawMessage.content) {
-              continue;
-            }
-
-            // Read download stream into Buffer
-            const chunks: Buffer[] = [];
-            for await (const chunk of rawMessage.content) {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            }
-            const emailBuffer = Buffer.concat(chunks);
-
-            // Parse MIME message
-            const parsed = await simpleParser(emailBuffer);
-
-            // Filter automated notification or security emails
-            const fromAddr = parsed.from?.value?.[0]?.address || '';
-            const subj = parsed.subject || '';
-            if (this.isAutomatedOrSystemEmail(fromAddr, subj)) {
-              logger.info(`[ImapSync] Skipping automated/notification email from ${fromAddr}: "${subj}"`);
-              await client.messageFlagsAdd(String(uid), ['\\Seen']);
-              processedCount++;
-              continue;
-            }
-
-            // Process email & attachments with OCR
-            const leadCreated = await this.processParsedEmail(parsed, config.autoCreateLead);
-            processedCount++;
-            if (leadCreated) {
-              leadsCreatedCount++;
-            }
-
-            // Mark message as seen/read on IMAP server
-            await client.messageFlagsAdd(String(uid), ['\\Seen']);
-          } catch (msgErr: any) {
-            highestProcessedUid = Math.max(highestProcessedUid, uid);
-            logger.error(`[ImapSync] Error processing message UID ${uid}: ${msgErr.message}`);
-          }
-        }
-
-        // Advance watermark in core_config
-        if (highestProcessedUid > lastUid) {
-          await configService.saveConfigs({ 'email.imap.account.last_uid': String(highestProcessedUid) });
-          logger.info(`[ImapSync] Updated watermark last_uid to #${highestProcessedUid}`);
-        }
-      } finally {
-        lock.release();
-      }
-
+      await client.mailboxOpen('INBOX');
+      const res = await this.processMailboxMessages(client, config.autoCreateLead);
       await client.logout();
       return {
         success: true,
-        processedCount,
-        leadsCreatedCount,
-        message: `Processed ${processedCount} email(s) and created ${leadsCreatedCount} lead(s).`,
+        processedCount: res.processedCount,
+        leadsCreatedCount: res.leadsCreatedCount,
+        message: `Processed ${res.processedCount} email(s) and created ${res.leadsCreatedCount} lead(s).`,
       };
     } catch (err: any) {
-      try {
-        await client.logout();
-      } catch { }
-      logger.error(`[ImapSync] Sync error: ${err.message}`);
-      return {
-        success: false,
-        processedCount,
-        leadsCreatedCount,
-        error: err.message,
-      };
+      try { await client.logout(); } catch { }
+      return { success: false, processedCount: 0, leadsCreatedCount: 0, error: err.message };
     } finally {
       this.isSyncing = false;
     }
@@ -506,15 +668,42 @@ export class ImapLeadSyncService {
     }
 
     // 2. Synthesize all extracted content for Lead Generation
-    const combinedCorpus = [
-      `Subject: ${subject}`,
-      `From: ${fromName} <${fromAddress}>`,
-      textBody ? `Email Body:\n${textBody}` : '',
-      ...ocrExtractedTexts,
-    ].filter(Boolean).join('\n\n');
+    const hasAttachments = savedAttachmentRecords.length > 0;
+    let extractedLeadData: ExtractedLeadData;
+    let combinedCorpus = '';
 
-    // Run comprehensive document & contact parser
-    const extractedLeadData = parseLeadDocumentText(combinedCorpus, subject);
+    if (hasAttachments && ocrExtractedTexts.length > 0) {
+      // Prioritize the attached document/visiting card
+      const attachmentCorpus = ocrExtractedTexts.join('\n\n');
+      const docExtracted = parseLeadDocumentText(attachmentCorpus, subject);
+      const bodyExtracted = textBody ? parseLeadDocumentText(textBody, subject) : {};
+
+      extractedLeadData = {
+        ...bodyExtracted,
+        ...docExtracted,
+        rawText: `${attachmentCorpus}\n\n${textBody}`,
+      };
+
+      if (!extractedLeadData.email && fromAddress) {
+        extractedLeadData.email = fromAddress;
+      }
+      combinedCorpus = `${attachmentCorpus}\n\nSubject: ${subject}\nEmail Body:\n${textBody}`;
+    } else {
+      combinedCorpus = [
+        `Subject: ${subject}`,
+        `From: ${fromName} <${fromAddress}>`,
+        textBody ? `Email Body:\n${textBody}` : '',
+        ...ocrExtractedTexts,
+      ].filter(Boolean).join('\n\n');
+
+      extractedLeadData = parseLeadDocumentText(combinedCorpus, subject);
+      if (!extractedLeadData.contactPerson && fromName) {
+        extractedLeadData.contactPerson = fromName;
+      }
+      if (!extractedLeadData.email && fromAddress) {
+        extractedLeadData.email = fromAddress;
+      }
+    }
 
     // Qualify whether this email represents an actual commercial Inquiry / Lead vs General Email
     const qualification = this.qualifyEmailForLeadCreation({
@@ -659,19 +848,25 @@ export class ImapLeadSyncService {
     hasAttachments: boolean;
     extractedData?: ExtractedLeadData;
   }): Promise<{ leadId: number | null; personId: number | null; organizationId: number | null }> {
-    const { fromName, fromEmail, subject, textBody, combinedCorpus, extractedData } = params;
+    const { fromName, fromEmail, subject, textBody, combinedCorpus, hasAttachments, extractedData } = params;
 
     // Use passed extracted data or run comprehensive document parser
     const extracted: ExtractedLeadData = extractedData || parseLeadDocumentText(combinedCorpus, subject);
 
-    // Fallbacks
+    // Fallbacks: Only fallback contactPerson to fromName if there are NO attachments
     if (!extracted.email && fromEmail) extracted.email = fromEmail;
-    if (!extracted.contactPerson && fromName) extracted.contactPerson = fromName;
+    if (!extracted.contactPerson && !hasAttachments && fromName) {
+      extracted.contactPerson = fromName;
+    }
 
-    // Contact Persons list
+    // Contact Persons list: only create contact person if valid contact extracted, or if direct text email
     const contactPersons = extracted.contactPersons && extracted.contactPersons.length > 0
       ? extracted.contactPersons
-      : [{ name: extracted.contactPerson || fromName, phone: extracted.phone, email: extracted.email || fromEmail, title: extracted.jobTitle }];
+      : (extracted.contactPerson
+          ? [{ name: extracted.contactPerson, phone: extracted.phone, email: extracted.email || fromEmail, title: extracted.jobTitle }]
+          : (!hasAttachments && fromName
+              ? [{ name: fromName, phone: extracted.phone, email: extracted.email || fromEmail, title: extracted.jobTitle }]
+              : []));
 
     const client = await pool.connect();
     try {
@@ -797,7 +992,7 @@ export class ImapLeadSyncService {
       const leadSourceId = 1;
 
       // 5. Create Lead via fn_create_lead
-      const leadTitle = extracted.title || `Email Lead: ${subject.replace(/^(re:|fwd:)\s*/i, '').trim() || fromName}`;
+      const leadTitle = extracted.title || (extracted.organization ? `Lead: ${extracted.organization}` : `Email Lead: ${subject.replace(/^(re:|fwd:)\s*/i, '').trim() || fromName}`);
       const leadDesc = extracted.description || `Inbound email inquiry from ${fromName} (${fromEmail}):\n${textBody.slice(0, 1000)}`;
 
       const leadRes = await client.query(

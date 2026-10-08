@@ -222,6 +222,50 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
   return textChunks.join('\n');
 }
 
+const INVALID_PERSON_NAMES = new Set([
+  'business card', 'card maker', 'name surname', 'your name', 'company name',
+  'position name', 'director name', 'john doe', 'jane doe', 'paste and run',
+  'lorem ipsum', 'sample text', 'placeholder', 'client name', 'contact person',
+  'full name', 'person name', 'manage account', 'explore the cosmos', 'business name',
+  'managing director', 'chief executive officer', 'lead generation', 'lead creation',
+  'visiting card', 'smart card', 'id card', 'contact details', 'contact us'
+]);
+
+const COMPANY_SUFFIX_WORDS = [
+  'tours', 'travels', 'astronomy', 'academy', 'agency', 'studio', 'photography',
+  'enterprises', 'solutions', 'services', 'technologies', 'industries', 'consulting',
+  'media', 'digital', 'systems', 'card', 'maker', 'business', 'store', 'shop',
+  'mart', 'cafe', 'restaurant', 'hospital', 'clinic', 'pharma', 'labs', 'holdings',
+  'ventures', 'group', 'pvt', 'ltd', 'limited', 'inc', 'corp', 'corporation', 'llc',
+  'infotech', 'software', 'tech', 'firm', 'co', 'associates', 'logistics', 'transport'
+];
+
+export function isValidPersonName(name: string): boolean {
+  if (!name) return false;
+  const cleaned = name.trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  const lower = cleaned.toLowerCase();
+
+  if (cleaned.length < 3 || cleaned.length > 35) return false;
+  if (INVALID_PERSON_NAMES.has(lower)) return false;
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+
+  // Reject if any word matches company/category keywords
+  if (words.some((w) => COMPANY_SUFFIX_WORDS.includes(w.toLowerCase()))) return false;
+
+  // Reject single-letter words that are not middle initials
+  for (const w of words) {
+    if (w.length < 2 && !w.endsWith('.')) return false;
+    if (/^[A-Z][a-z]$/.test(w) && ['ze', 'ww', 'es', 'ge', 'an', 'aa'].includes(w.toLowerCase())) return false;
+  }
+
+  // Must consist only of valid name letters
+  if (!/^[A-Za-z.' -]+$/.test(cleaned)) return false;
+
+  return true;
+}
+
 /**
  * Parses structured CRM entities (Person, Org, Lead, Products, Dates) from raw document text.
  */
@@ -332,7 +376,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   let hMatch;
   while ((hMatch = honorificRegex.exec(text)) !== null) {
     let rawName = hMatch[1].trim().replace(/\b(?:mr|ms|mrs|dr)\.?$/i, '').trim();
-    if (rawName.length >= 2 && !seenPersonNames.has(rawName.toLowerCase()) && !rawName.includes('@') && !rawName.toLowerCase().includes('ltd')) {
+    if (rawName.length >= 2 && isValidPersonName(rawName) && !seenPersonNames.has(rawName.toLowerCase()) && !rawName.includes('@')) {
       seenPersonNames.add(rawName.toLowerCase());
       extractedContactPersons.push({ name: rawName });
     }
@@ -343,7 +387,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   let lpMatch;
   while ((lpMatch = labeledPersonRegex.exec(text)) !== null) {
     const rawVal = lpMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-    if (rawVal.length >= 2 && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@') && !rawVal.toLowerCase().includes('ltd')) {
+    if (rawVal.length >= 2 && isValidPersonName(rawVal) && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@')) {
       seenPersonNames.add(rawVal.toLowerCase());
       extractedContactPersons.push({ name: rawVal });
     }
@@ -354,7 +398,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   let nlMatch;
   while ((nlMatch = nlIntroRegex.exec(text)) !== null) {
     const rawVal = nlMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-    if (rawVal.length >= 2 && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@')) {
+    if (rawVal.length >= 2 && isValidPersonName(rawVal) && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@')) {
       seenPersonNames.add(rawVal.toLowerCase());
       extractedContactPersons.push({ name: rawVal });
     }
@@ -376,16 +420,12 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
           !prevLower.includes('address') &&
           !prevLower.includes('website') &&
           !prevLower.includes('www') &&
-          !prevLower.includes('ltd') &&
-          !prevLower.includes('pvt') &&
-          !prevLower.includes('technologies') &&
-          !prevLower.includes('solutions') &&
           !prevLower.includes('@')
         ) {
           const words = prev.split(/\s+/).filter(Boolean);
-          if (words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-z.'-]+$/.test(w))) {
+          if (words.length >= 2 && words.length <= 4) {
             const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
-            if (!seenPersonNames.has(formattedName.toLowerCase())) {
+            if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
               seenPersonNames.add(formattedName.toLowerCase());
               extractedContactPersons.unshift({ name: formattedName, title: lines[i] });
             }
@@ -408,21 +448,30 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     if (nameLineCandidate) {
       const words = nameLineCandidate.split(' ').filter(Boolean);
       const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
-      seenPersonNames.add(formattedName.toLowerCase());
-      extractedContactPersons.push({ name: formattedName });
+      if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+        seenPersonNames.add(formattedName.toLowerCase());
+        extractedContactPersons.push({ name: formattedName });
+      }
     }
   }
 
   // F. Fallback from email prefix if none found
   if (extractedContactPersons.length === 0 && result.email) {
     const emailPrefix = result.email.split('@')[0];
-    const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
-    if (parts.length >= 2) {
-      const synthName = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
-      extractedContactPersons.push({ name: synthName });
-    } else if (parts.length === 1 && parts[0].length >= 3 && !/^[0-9]+$/.test(parts[0])) {
-      const synthName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-      extractedContactPersons.push({ name: synthName });
+    const genericPrefixes = ['info', 'sales', 'support', 'contact', 'admin', 'office', 'help', 'billing', 'service', 'enquiry', 'welcome', 'marketing', 'hello'];
+    if (!genericPrefixes.includes(emailPrefix.toLowerCase())) {
+      const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
+      if (parts.length >= 2) {
+        const synthName = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+        if (isValidPersonName(synthName)) {
+          extractedContactPersons.push({ name: synthName });
+        }
+      } else if (parts.length === 1 && parts[0].length >= 3 && !/^[0-9]+$/.test(parts[0])) {
+        const synthName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+        if (isValidPersonName(synthName)) {
+          extractedContactPersons.push({ name: synthName });
+        }
+      }
     }
   }
 
@@ -488,16 +537,16 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES)
+  // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES, STARLIGHT ASTRONOMY TOURS)
   if (!result.organization) {
-    const companyKeywords = ['technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global', 'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries', 'consulting', 'group', 'tech', 'software'];
+    const companyKeywords = ['technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global', 'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries', 'consulting', 'group', 'tech', 'software', 'tours', 'photography', 'studio', 'agency', 'travels', 'academy', 'infotech', 'logistics', 'transport'];
     const orgLine = lines.find((l) => {
       const lower = l.toLowerCase();
       if (lower.includes('email') || lower.includes('phone') || lower.includes('address') || lower.includes('services:')) return false;
       return companyKeywords.some((kw) => lower.includes(kw));
     });
     if (orgLine) {
-      result.organization = orgLine;
+      result.organization = orgLine.replace(/^[+\-*—_~|#\s]+|[+\-*—_~|#\s]+$/g, '').trim();
     }
   }
 
