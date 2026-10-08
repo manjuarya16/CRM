@@ -206,8 +206,9 @@ export class ImapLeadSyncService {
   }
 
   /**
-   * Qualifies whether an email represents a genuine business lead/inquiry
-   * vs a general operational email, receipt, newsletter, or conversational message.
+   * Evaluates if a new incoming email should create a Lead in CRM.
+   * Creates a lead automatically for any new email with a visiting card, image, PDF,
+   * document, or text inquiry, without restrictive dependencies.
    */
   private static qualifyEmailForLeadCreation(params: {
     fromAddress: string;
@@ -217,70 +218,35 @@ export class ImapLeadSyncService {
     ocrExtractedTexts: string[];
     extractedLeadData: ExtractedLeadData;
   }): { shouldCreateLead: boolean; reason: string } {
-    const { subject, textBody, savedAttachmentRecords, ocrExtractedTexts, extractedLeadData } = params;
+    const { subject, textBody, savedAttachmentRecords } = params;
     const lowerSub = (subject || '').toLowerCase();
-    const lowerBody = (textBody || '').toLowerCase();
-    const fullText = `${lowerSub} ${lowerBody}`;
 
-    // 1. Negative Signals (DEFINITELY NOT A SALES LEAD):
-    // Invoices, bills, receipts, bank/payment notifications, delivery/shipping updates
+    // 1. Exclude automated receipts / invoices / shipment notifications
     const operationalKeywords = [
-      'invoice', 'tax invoice', 'bill payment', 'payment receipt', 'receipt',
-      'payment confirmation', 'payment successful', 'payment received',
-      'bank transfer', 'account statement', 'neft', 'rtgs', 'imps', 'upi',
-      'payslip', 'salary', 'subscription renewal', 'recharge successful',
-      'order shipped', 'out for delivery', 'order delivered', 'tracking details',
-      'meeting invitation', 'calendar invite', 'zoom meeting', 'google meet',
+      'tax invoice', 'bill payment', 'payment receipt',
+      'payment confirmation', 'payment successful',
+      'account statement', 'payslip', 'salary credited', 'subscription renewal',
+      'order shipped', 'out for delivery', 'order delivered',
+      'meeting invitation', 'calendar invite',
     ];
-
-    const hasCardAttachment = savedAttachmentRecords.some((att) => {
-      const fn = (att.filename || '').toLowerCase();
-      return fn.includes('card') || fn.includes('visiting') || fn.includes('vcard');
-    }) || ocrExtractedTexts.some((t) => {
-      const lt = t.toLowerCase();
-      return lt.includes('visiting card') || lt.includes('director') || lt.includes('partner') || lt.includes('proprietor') || lt.includes('founder');
-    });
 
     const isOperational = operationalKeywords.some((kw) => lowerSub.includes(kw));
-    if (isOperational && !hasCardAttachment) {
-      return { shouldCreateLead: false, reason: 'Operational/Transactional email (invoice, receipt, or notification)' };
+    const hasAttachments = savedAttachmentRecords.length > 0;
+    if (isOperational && !hasAttachments) {
+      return { shouldCreateLead: false, reason: 'Operational/Transactional receipt or notice' };
     }
 
-    // 2. Strong Positive Signal A: Visiting Card / Business Document Detected via OCR
-    if (ocrExtractedTexts.length > 0 && (extractedLeadData.contactPersons?.length || extractedLeadData.organization || extractedLeadData.phone)) {
-      return { shouldCreateLead: true, reason: 'Visiting card / business document with contact info detected via OCR' };
+    // 2. Any new email with an attached file (Visiting card, image, PDF, doc, etc.) -> Create Lead!
+    if (hasAttachments) {
+      return { shouldCreateLead: true, reason: 'Attached file (visiting card, image, PDF, or document) received' };
     }
 
-    // 3. Strong Positive Signal B: Document attachment with RFQ / Inquiry naming
-    const hasInquiryDoc = savedAttachmentRecords.some((att) => {
-      const fn = (att.filename || '').toLowerCase();
-      return fn.includes('rfq') || fn.includes('inquiry') || fn.includes('enquiry') || fn.includes('quote') || fn.includes('quotation') || fn.includes('requirement') || fn.includes('tender');
-    });
-    if (hasInquiryDoc) {
-      return { shouldCreateLead: true, reason: 'Attachment specifies RFQ / Inquiry document' };
+    // 3. Any new email with text body or subject -> Create Lead!
+    if ((textBody && textBody.trim().length > 3) || (subject && subject.trim().length > 2)) {
+      return { shouldCreateLead: true, reason: 'New text message inquiry received' };
     }
 
-    // 4. Strong Positive Signal C: Commercial Inquiry Keywords in Subject or Body
-    const inquiryKeywords = [
-      'inquiry', 'enquiry', 'quotation', 'quote', 'rfq', 'pricing', 'price list',
-      'rates', 'rate list', 'costing', 'proposal', 'requirement', 'require',
-      'needed', 'order for', 'purchase order', 'interested in', 'specification',
-      'supply of', 'distributor', 'dealership', 'product inquiry', 'service inquiry',
-      'catalog', 'catalogue', 'brochure request',
-    ];
-
-    const hasInquiryKeyword = inquiryKeywords.some((kw) => fullText.includes(kw));
-    if (hasInquiryKeyword) {
-      return { shouldCreateLead: true, reason: 'Matched commercial inquiry keywords in subject or body' };
-    }
-
-    // 5. Positive Signal D: Phone and organization/products detected in email body
-    if (extractedLeadData.phone && (extractedLeadData.organization || (extractedLeadData.products && extractedLeadData.products.length > 0))) {
-      return { shouldCreateLead: true, reason: 'Phone and organization/products detected in email body' };
-    }
-
-    // Otherwise, treat as a General Email (store in Mail Inbox, do not auto-create Lead)
-    return { shouldCreateLead: false, reason: 'General email without distinct commercial inquiry signals' };
+    return { shouldCreateLead: false, reason: 'Empty message' };
   }
 
   /**
@@ -343,28 +309,50 @@ export class ImapLeadSyncService {
       const lock = await client.getMailboxLock('INBOX');
 
       try {
-        // STRICT SAFETY: The mailbox contains historical unread emails.
-        // We MUST NOT search { seen: false } without a date, otherwise old unread backlog gets pulled in!
-        // Only inspect emails received in the last 24 hours.
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        let recentRes: any = [];
+        // 1. Read last_synced_uid watermark from core_config
+        let configs: Record<string, any> = {};
         try {
-          recentRes = await client.search({ since: twentyFourHoursAgo });
+          configs = await configService.getAllConfigs();
         } catch { }
+        let lastUid = Number(configs['email.imap.account.last_uid'] || 0);
 
-        const rawUids = (Array.isArray(recentRes) ? recentRes : []).sort((a: number, b: number) => a - b);
-
-        if (!rawUids || rawUids.length === 0) {
-          logger.info('[ImapSync] No new messages in the last 24 hours in INBOX');
-          return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new emails found.' };
+        // If lastUid is not set, initialize it to the highest UID in the mailbox right now
+        // so that ALL historical backlog emails are permanently ignored!
+        if (!lastUid || lastUid <= 0) {
+          const allUids = await client.search({ all: true }).catch(() => []);
+          if (Array.isArray(allUids) && allUids.length > 0) {
+            lastUid = allUids[allUids.length - 1];
+            await configService.saveConfigs({ 'email.imap.account.last_uid': String(lastUid) });
+            logger.info(`[ImapSync] Watermark initialized to UID #${lastUid}. All previous historical emails ignored.`);
+            return {
+              success: true,
+              processedCount: 0,
+              leadsCreatedCount: 0,
+              message: `Watermark initialized to UID #${lastUid}. Historical emails will not be processed. Ready for new incoming emails.`,
+            };
+          }
         }
 
-        // Cap to latest 10 unread emails per sync pass (highest UIDs are newest)
-        const messageUids = rawUids.slice(-10);
-        logger.info(`[ImapSync] Found ${rawUids.length} unread message(s). Processing latest ${messageUids.length} in this pass.`);
+        // 2. Search STRICTLY for messages with UID > lastUid (Strictly new emails only!)
+        const searchRange = `${lastUid + 1}:*`;
+        const searchRes = await client.search({ uid: searchRange }).catch(() => []);
+        const rawUids = (Array.isArray(searchRes) ? searchRes : [])
+          .filter((u: number) => u > lastUid)
+          .sort((a: number, b: number) => a - b);
 
-        for (const uid of messageUids) {
+        if (!rawUids || rawUids.length === 0) {
+          logger.info(`[ImapSync] No new emails received since UID #${lastUid}`);
+          return { success: true, processedCount: 0, leadsCreatedCount: 0, message: 'Inbox is up to date. No new incoming emails.' };
+        }
+
+        logger.info(`[ImapSync] Found ${rawUids.length} brand-new email(s) since UID #${lastUid} to process`);
+
+        let highestProcessedUid = lastUid;
+
+        for (const uid of rawUids) {
           try {
+            highestProcessedUid = Math.max(highestProcessedUid, uid);
+
             // Fetch complete raw email RFC822 message buffer
             const rawMessage = await client.download(String(uid));
             if (!rawMessage || !rawMessage.content) {
@@ -401,8 +389,15 @@ export class ImapLeadSyncService {
             // Mark message as seen/read on IMAP server
             await client.messageFlagsAdd(String(uid), ['\\Seen']);
           } catch (msgErr: any) {
+            highestProcessedUid = Math.max(highestProcessedUid, uid);
             logger.error(`[ImapSync] Error processing message UID ${uid}: ${msgErr.message}`);
           }
+        }
+
+        // Advance watermark in core_config
+        if (highestProcessedUid > lastUid) {
+          await configService.saveConfigs({ 'email.imap.account.last_uid': String(highestProcessedUid) });
+          logger.info(`[ImapSync] Updated watermark last_uid to #${highestProcessedUid}`);
         }
       } finally {
         lock.release();
