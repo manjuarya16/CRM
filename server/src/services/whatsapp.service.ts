@@ -459,7 +459,50 @@ Extract all contact and business information and return pure JSON with keys:
       }
     }
 
-    // Fallback if Vision AI is unavailable
+    // 2. Local Tesseract OCR (Runs completely offline without any API key)
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('eng');
+      const ocrResult = await worker.recognize(imageBuffer);
+      await worker.terminate();
+
+      const ocrText = ocrResult?.data?.text?.trim();
+      if (ocrText && ocrText.length > 5) {
+        logger.info(`[WhatsAppService] Extracted ${ocrText.length} chars via local Tesseract OCR`);
+        const parsedOcrLead = parseLeadDocumentText(ocrText, 'whatsapp_image.jpg');
+        return {
+          leadTitle: parsedOcrLead.title || `WhatsApp Card: ${parsedOcrLead.contactPerson || parsedOcrLead.organization || senderName || senderPhoneNumber}`,
+          contactPersonName: parsedOcrLead.contactPerson || senderName || 'WhatsApp Contact',
+          contactPersons: parsedOcrLead.contactPersons || [],
+          contactPhone: parsedOcrLead.phone || senderPhoneNumber,
+          phones: parsedOcrLead.phones || (parsedOcrLead.phone ? [parsedOcrLead.phone] : []),
+          contactEmail: parsedOcrLead.email || undefined,
+          organizationName: parsedOcrLead.organization || undefined,
+          jobTitle: parsedOcrLead.jobTitle || undefined,
+          leadValue: parsedOcrLead.leadValue || null,
+          expectedCloseDate: parsedOcrLead.expectedCloseDate || null,
+          products: parsedOcrLead.products || [],
+          description: parsedOcrLead.description || `Extracted via Local OCR:\n${ocrText}`,
+          rawText: ocrText,
+          source: 'WhatsApp Card OCR (Offline)',
+        };
+      }
+    } catch (tesseractError: any) {
+      logger.warn(`[WhatsAppService] Local Tesseract OCR failed: ${tesseractError.message}`);
+    }
+
+    // 3. Fallback to caption text if available
+    if (captionText && captionText.trim().length > 3) {
+      const parsedFromCaption = await this.extractLeadFromText(captionText, senderPhoneNumber || '', senderName);
+      if (parsedFromCaption) {
+        return {
+          ...parsedFromCaption,
+          leadTitle: parsedFromCaption.leadTitle || `WhatsApp Image Lead from ${senderName || senderPhoneNumber || 'Contact'}`,
+          description: `WhatsApp Image with caption:\n${captionText}`,
+        };
+      }
+    }
+
     return {
       leadTitle: `WhatsApp Image Lead from ${senderName || senderPhoneNumber || 'Contact'}`,
       contactPersonName: senderName || 'WhatsApp Contact',
@@ -532,71 +575,132 @@ Extract all contact and business information and return pure JSON with keys:
         }
       }
 
-      // 2. Resolve or Create Contact Person using save_person
+      // 2. Resolve or Create Contact Person(s) using save_person
       let contactPersonId: number | null = null;
       let resolvedPersonName: string | null = extractedLeadData.contactPersonName || null;
       let isPersonCreated = false;
 
-      const personEmail = extractedLeadData.contactEmail?.trim();
-      const personPhone = (extractedLeadData.contactPhone || senderPhoneNumber || '').trim();
+      // Prepare list of contact persons to create or link
+      const rawPersonsList = Array.isArray(extractedLeadData.contactPersons) && extractedLeadData.contactPersons.length > 0
+        ? extractedLeadData.contactPersons
+        : (resolvedPersonName ? [{ name: resolvedPersonName, phone: extractedLeadData.contactPhone, email: extractedLeadData.contactEmail, title: extractedLeadData.jobTitle }] : []);
 
-      // Check existing person by email
-      if (personEmail) {
-        const emailPersonQuery = await databaseConnection.query(
-          'SELECT id, name, organization_id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1',
-          [`%${personEmail}%`]
-        );
-        if (emailPersonQuery.rows.length > 0) {
-          contactPersonId = emailPersonQuery.rows[0].id;
-          resolvedPersonName = emailPersonQuery.rows[0].name;
+      const allSavedContactPersons: Array<{ id: number; name: string; phone?: string; email?: string; title?: string }> = [];
+
+      for (let i = 0; i < rawPersonsList.length; i++) {
+        const item = rawPersonsList[i];
+        const itemPersonName = (item.name || '').trim();
+        const itemEmail = item.email?.trim() || (i === 0 ? extractedLeadData.contactEmail?.trim() : undefined);
+        const itemPhone = (item.phone || (i === 0 ? (extractedLeadData.contactPhone || senderPhoneNumber) : '')).trim();
+        const itemTitle = item.title || (i === 0 ? extractedLeadData.jobTitle : undefined);
+
+        let curPersonId: number | null = null;
+        let curPersonName: string = itemPersonName;
+
+        // Check existing person by email
+        if (itemEmail) {
+          const emailPersonQuery = await databaseConnection.query(
+            'SELECT id, name, organization_id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1',
+            [`%${itemEmail}%`]
+          );
+          if (emailPersonQuery.rows.length > 0) {
+            curPersonId = emailPersonQuery.rows[0].id;
+            curPersonName = emailPersonQuery.rows[0].name;
+          }
         }
-      }
 
-      // Check existing person by phone number
-      if (!contactPersonId && personPhone) {
-        const cleanedPhoneNumber = personPhone.replace(/[^0-9+]/g, '');
-        const searchPattern = cleanedPhoneNumber.length >= 6 ? `%${cleanedPhoneNumber.slice(-8)}%` : `%${personPhone}%`;
-        const phonePersonQuery = await databaseConnection.query(
-          'SELECT id, name, organization_id FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1',
-          [searchPattern]
-        );
-        if (phonePersonQuery.rows.length > 0) {
-          contactPersonId = phonePersonQuery.rows[0].id;
-          resolvedPersonName = phonePersonQuery.rows[0].name;
+        // Check existing person by phone number
+        if (!curPersonId && itemPhone) {
+          const cleanedPhoneNumber = itemPhone.replace(/[^0-9+]/g, '');
+          const searchPattern = cleanedPhoneNumber.length >= 6 ? `%${cleanedPhoneNumber.slice(-8)}%` : `%${itemPhone}%`;
+          const phonePersonQuery = await databaseConnection.query(
+            'SELECT id, name, organization_id FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1',
+            [searchPattern]
+          );
+          if (phonePersonQuery.rows.length > 0) {
+            const existingName = phonePersonQuery.rows[0].name;
+            const isGenericName = !itemPersonName || /^(whatsapp|contact|lead|unknown)/i.test(itemPersonName);
+            const isNameMatch = itemPersonName && (existingName.toLowerCase().includes(itemPersonName.toLowerCase()) || itemPersonName.toLowerCase().includes(existingName.toLowerCase()));
+
+            if (isGenericName || isNameMatch) {
+              curPersonId = phonePersonQuery.rows[0].id;
+              curPersonName = existingName;
+            }
+          }
         }
-      }
 
-      // If person does not exist, create new person record via save_person
-      if (!contactPersonId && (resolvedPersonName || personEmail || personPhone)) {
-        const targetPersonName = resolvedPersonName || 'WhatsApp Contact';
-        const emailList = personEmail ? [{ label: 'work', value: personEmail }] : [];
-        const phoneList = personPhone ? [{ label: 'mobile', value: personPhone }] : [];
-
-        const savePersonResult = await databaseConnection.query(
-          'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result',
-          [
-            targetPersonName,
-            JSON.stringify(emailList),
-            JSON.stringify(phoneList),
-            organizationId || null,
-            extractedLeadData.jobTitle || null,
-            1,
-            '{}',
-          ]
-        );
-
-        const createdPerson = savePersonResult.rows[0]?.result;
-        if (createdPerson && createdPerson.id) {
-          contactPersonId = createdPerson.id;
-          resolvedPersonName = createdPerson.name;
-          isPersonCreated = true;
+        // Check existing person by exact name in this organization
+        if (!curPersonId && itemPersonName && organizationId) {
+          const orgPersonQuery = await databaseConnection.query(
+            'SELECT id, name FROM public.persons WHERE organization_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) LIMIT 1',
+            [organizationId, itemPersonName]
+          );
+          if (orgPersonQuery.rows.length > 0) {
+            curPersonId = orgPersonQuery.rows[0].id;
+            curPersonName = orgPersonQuery.rows[0].name;
+          }
         }
-      } else if (contactPersonId && organizationId) {
-        // Link person with organization if missing
-        await databaseConnection.query(
-          'UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL',
-          [organizationId, contactPersonId]
-        );
+
+        // If person does not exist, create new person record via save_person
+        if (!curPersonId && (itemPersonName || itemEmail || itemPhone)) {
+          const targetPersonName = itemPersonName || 'WhatsApp Contact';
+          const emailList = itemEmail ? [{ label: 'work', value: itemEmail }] : [];
+          const phoneList: Array<{ label: string; value: string }> = [];
+
+          if (itemPhone) {
+            phoneList.push({ label: 'mobile', value: itemPhone });
+          }
+
+          // If primary contact has multiple numbers detected, add additional numbers
+          if (i === 0 && Array.isArray(extractedLeadData.phones) && extractedLeadData.phones.length > 0) {
+            extractedLeadData.phones.forEach((p) => {
+              if (!phoneList.some((pl) => pl.value === p)) {
+                phoneList.push({ label: 'work', value: p });
+              }
+            });
+          }
+
+          const savePersonResult = await databaseConnection.query(
+            'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result',
+            [
+              targetPersonName,
+              JSON.stringify(emailList),
+              JSON.stringify(phoneList),
+              organizationId || null,
+              itemTitle || null,
+              1,
+              '{}',
+            ]
+          );
+
+          const createdPerson = savePersonResult.rows[0]?.result;
+          if (createdPerson && createdPerson.id) {
+            curPersonId = createdPerson.id;
+            curPersonName = createdPerson.name;
+            if (i === 0) isPersonCreated = true;
+          }
+        } else if (curPersonId && organizationId) {
+          // Link person with organization if missing
+          await databaseConnection.query(
+            'UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL',
+            [organizationId, curPersonId]
+          );
+        }
+
+        if (curPersonId) {
+          allSavedContactPersons.push({
+            id: curPersonId,
+            name: curPersonName || itemPersonName,
+            phone: itemPhone,
+            email: itemEmail,
+            title: itemTitle,
+          });
+
+          if (i === 0) {
+            contactPersonId = curPersonId;
+            resolvedPersonName = curPersonName || itemPersonName;
+          }
+        }
       }
 
       // 3. Resolve Default Lead Pipeline and First Stage
@@ -655,6 +759,14 @@ Extract all contact and business information and return pure JSON with keys:
         throw new Error('Failed to create lead in database via fn_create_lead');
       }
 
+      // Store additional contacts in custom_attributes if multiple contacts exist
+      if (allSavedContactPersons.length > 1) {
+        await databaseConnection.query(
+          'UPDATE public.leads SET custom_attributes = COALESCE(custom_attributes, \'{}\'::jsonb) || $1::jsonb WHERE id = $2',
+          [JSON.stringify({ additional_contacts: allSavedContactPersons }), createdLead.id]
+        );
+      }
+
       // Update stage if stage exists
       if (stageId) {
         await databaseConnection.query('SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)', [
@@ -681,17 +793,16 @@ Extract all contact and business information and return pure JSON with keys:
             // Create product if new
             const generatedSku = productItem.sku || `PROD-${Date.now().toString().slice(-5)}`;
             const newProductQuery = await databaseConnection.query(
-              'SELECT save_product($1, $2, $3, $4, $5, $6::jsonb) as result',
+              'SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)',
               [
+                generatedSku,
                 productItem.name.trim(),
                 productItem.description || productItem.name,
-                generatedSku,
                 productItem.quantity || 1,
                 productItem.price || 0,
-                '{}',
               ]
             );
-            const savedProduct = newProductQuery.rows[0]?.result;
+            const savedProduct = newProductQuery.rows[0];
             if (savedProduct && savedProduct.id) {
               targetProductId = savedProduct.id;
             }

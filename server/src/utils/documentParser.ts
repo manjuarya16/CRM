@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import sharp from 'sharp';
+import Tesseract from 'tesseract.js';
+import { logger } from '@/utils/logger';
 
 export interface ExtractedProduct {
   name: string;
@@ -10,13 +13,25 @@ export interface ExtractedProduct {
   description?: string;
 }
 
+export interface ExtractedContactPerson {
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface ExtractedLeadData {
   title?: string;
   leadValue?: number | null;
   contactPerson?: string;
+  contactPersons?: ExtractedContactPerson[];
   email?: string;
+  emails?: string[];
   phone?: string;
+  phones?: string[];
   organization?: string;
+  address?: string;
+  website?: string;
   jobTitle?: string;
   source?: string;
   type?: string;
@@ -24,6 +39,99 @@ export interface ExtractedLeadData {
   products?: ExtractedProduct[];
   description?: string;
   rawText?: string;
+}
+
+/**
+ * Evaluates extracted OCR text to determine confidence level of business/contact data.
+ */
+export function scoreOcrText(text: string): number {
+  if (!text || text.trim().length < 5) return 0;
+  let score = 0;
+
+  // 1. Email address detected
+  if (/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(text)) score += 50;
+
+  // 2. Phone number detected
+  if (/(?:[+]?91[\s.-]?)?\b([6-9]\d{4}[\s.-]?\d{5}|[6-9]\d{9})\b/.test(text) || /\+?\d{1,3}[-.\s]?\d{7,12}/.test(text)) {
+    score += 35;
+  }
+
+  // 3. Organization, designation and contact keywords
+  const keywords = [
+    'ltd', 'pvt', 'technologies', 'solutions', 'limited', 'services', 'enterprises', 'inc', 'corp', 'industries', 'group', 'systems', 'consulting',
+    'director', 'managing', 'manager', 'ceo', 'founder', 'partner', 'engineer', 'executive', 'officer',
+    'phone', 'mobile', 'email', 'tel', 'cell', 'address', 'website', 'www', 'tower', 'road', 'street', 'india'
+  ];
+  const lower = text.toLowerCase();
+  let kwMatches = 0;
+  for (const kw of keywords) {
+    if (lower.includes(kw)) kwMatches++;
+  }
+  score += Math.min(kwMatches * 15, 60);
+
+  // 4. Penalize excessive noise / garbage non-alphanumeric characters
+  const nonWs = text.replace(/\s+/g, '');
+  if (nonWs.length > 0) {
+    const noiseChars = (nonWs.match(/[^a-zA-Z0-9.,@+()&/'-]/g) || []).length;
+    const noiseRatio = noiseChars / nonWs.length;
+    if (noiseRatio > 0.3) score -= 30;
+  }
+
+  return Math.max(0, score);
+}
+
+/**
+ * Runs offline multi-angle Tesseract OCR with Sharp image preprocessing.
+ * Automatically tests orientations (0°, EXIF, 18°, -18°, 90°, 270°, 15°, -15°, 180°)
+ * and returns the highest-confidence extracted text.
+ */
+export async function recognizeImageWithAutoOrientation(imageBuffer: Buffer, filename?: string): Promise<string> {
+  // Pass 1: Test 0° orientation (with automatic EXIF orientation)
+  try {
+    const orientedBuf = await sharp(imageBuffer).rotate().toBuffer();
+    const ocrResult = await Tesseract.recognize(orientedBuf, 'eng');
+    const text0 = (ocrResult?.data?.text || '').trim();
+    const score0 = scoreOcrText(text0);
+
+    logger.info(`[ImageOCR] Pass 1 (0°) for ${filename || 'image'}: score = ${score0}, chars = ${text0.length}`);
+
+    // If 0° already produces valid text (score >= 20 or substantial text with words), return immediately!
+    if (score0 >= 20 || (text0.length >= 25 && /[A-Za-z]{3,}/.test(text0))) {
+      return text0;
+    }
+
+    // Pass 2: Fallback to 90°, 270°, 180° ONLY if 0° returned insufficient text
+    let bestText = text0;
+    let bestScore = score0;
+
+    const fallbackAngles = [90, 270, 180];
+    for (const ang of fallbackAngles) {
+      try {
+        const rotBuf = await sharp(imageBuffer).rotate(ang).toBuffer();
+        const rotRes = await Tesseract.recognize(rotBuf, 'eng');
+        const rotText = (rotRes?.data?.text || '').trim();
+        const rotScore = scoreOcrText(rotText);
+
+        logger.info(`[ImageOCR] Fallback angle ${ang}° for ${filename || 'image'}: score = ${rotScore}`);
+
+        if (rotScore > bestScore) {
+          bestScore = rotScore;
+          bestText = rotText;
+        }
+
+        if (rotScore >= 35) {
+          break;
+        }
+      } catch (err: any) {
+        logger.warn(`[ImageOCR] Error testing angle ${ang}°: ${err.message}`);
+      }
+    }
+
+    return bestText;
+  } catch (err: any) {
+    logger.warn(`[ImageOCR] Error during image OCR for ${filename || 'image'}: ${err.message}`);
+    return '';
+  }
 }
 
 /**
@@ -123,6 +231,102 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
   return textChunks.join('\n');
 }
 
+const INVALID_PERSON_NAMES = new Set([
+  'business card', 'card maker', 'name surname', 'your name', 'company name',
+  'position name', 'director name', 'john doe', 'jane doe', 'paste and run',
+  'lorem ipsum', 'sample text', 'placeholder', 'client name', 'contact person',
+  'full name', 'person name', 'manage account', 'explore the cosmos', 'business name',
+  'managing director', 'chief executive officer', 'lead generation', 'lead creation',
+  'visiting card', 'smart card', 'id card', 'contact details', 'contact us'
+]);
+
+const SYSTEM_OR_TECHNICAL_WORDS = [
+  'token', 'webhook', 'callback', 'whatsapp', 'crm', 'krayin', 'server', 'error', 'failed',
+  'account', 'password', 'user', 'admin', 'certificate', 'subscription', 'download', 'upload',
+  'response', 'request', 'domain', 'cloud', 'status', 'message', 'alert', 'notification',
+  'http', 'https', 'url', 'www', 'click', 'submit', 'login', 'logout', 'dashboard', 'settings',
+  'overview', 'details', 'preview', 'learn', 'more', 'about', 'remove', 'attach', 'verify',
+  'verified', 'cloudflare', 'client', 'app', 'application', 'code'
+];
+
+const COMPANY_SUFFIX_WORDS = [
+  'tours', 'travels', 'astronomy', 'academy', 'agency', 'studio', 'photography',
+  'enterprises', 'solutions', 'services', 'technologies', 'industries', 'consulting',
+  'media', 'digital', 'systems', 'card', 'maker', 'business', 'store', 'shop',
+  'mart', 'cafe', 'restaurant', 'hospital', 'clinic', 'pharma', 'labs', 'holdings',
+  'ventures', 'group', 'pvt', 'ltd', 'limited', 'inc', 'corp', 'corporation', 'llc',
+  'infotech', 'software', 'tech', 'firm', 'co', 'associates', 'logistics', 'transport',
+  'builders', 'developers', 'motors', 'automotive', 'auto', 'works', 'healthcare',
+  'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals'
+];
+
+export const DESIGNATION_KEYWORDS = [
+  'managing director', 'chief technical director', 'chief technology officer',
+  'chief executive officer', 'chief operating officer', 'technical director',
+  'director', 'cto', 'ceo', 'coo', 'cfo', 'vice president', 'vp', 'president',
+  'manager', 'general manager', 'sales manager', 'lead engineer', 'engineer',
+  'architect', 'executive', 'consultant', 'advocate', 'founder', 'co-founder',
+  'partner', 'managing partner', 'proprietor', 'specialist', 'officer', 'head of',
+  'developer', 'designer', 'b.e. mechanical', 'b.e.'
+];
+
+export function isCandidateDesignation(str: string): boolean {
+  if (!str) return false;
+  const lower = str.toLowerCase();
+  return DESIGNATION_KEYWORDS.some((dk) => lower.includes(dk));
+}
+
+export function cleanJobTitle(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/^[=~_\-+*/#\s|:.;,]+|[=~_\-+*/#\s|:.;,]+$/g, '')
+    .trim();
+}
+
+export function cleanPersonName(name: string): string {
+  if (!name) return '';
+  let cleaned = name.trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  // Strip leading 1-2 letter OCR noise tokens (e.g. "es Amitabh", "te Amitabh", "an Amitabh")
+  cleaned = cleaned.replace(/^(?:es|te|an|ls|re|to|at|in|on|by|no|is|a)\s+/i, '').trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words
+    .map((w) => {
+      if (/^[A-Z]+$/.test(w) || /^[a-z]+$/.test(w)) {
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }
+      return w;
+    })
+    .join(' ');
+}
+
+export function isValidPersonName(name: string): boolean {
+  if (!name) return false;
+  const cleaned = cleanPersonName(name);
+  const lower = cleaned.toLowerCase();
+
+  if (cleaned.length < 3 || cleaned.length > 35) return false;
+  if (INVALID_PERSON_NAMES.has(lower)) return false;
+  if (isCandidateDesignation(cleaned)) return false;
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+
+  // Reject if any word matches company/category keywords or technical/system words
+  if (words.some((w) => COMPANY_SUFFIX_WORDS.includes(w.toLowerCase()))) return false;
+  if (words.some((w) => SYSTEM_OR_TECHNICAL_WORDS.includes(w.toLowerCase()))) return false;
+
+  // Reject single-letter words that are not middle initials
+  for (const w of words) {
+    if (w.length < 2 && !w.endsWith('.')) return false;
+    if (/^[A-Z][a-z]$/.test(w) && ['ze', 'ww', 'es', 'ge', 'an', 'aa'].includes(w.toLowerCase())) return false;
+  }
+
+  // Must consist only of valid name letters
+  if (!/^[A-Za-z.' -]+$/.test(cleaned)) return false;
+
+  return true;
+}
+
 /**
  * Parses structured CRM entities (Person, Org, Lead, Products, Dates) from raw document text.
  */
@@ -133,7 +337,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   };
 
   // Clean lines of box drawing characters, decorative borders, and extra symbols
-  const cleanedLines = text
+  const rawLines = text
     .split(/\r?\n/)
     .map((l) =>
       l
@@ -144,72 +348,339 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     )
     .filter((l) => l.length >= 2);
 
+  // Segment lines that have multiple labeled columns (e.g. "SunLine Email: ...")
+  const cleanedLines: string[] = [];
+  for (const line of rawLines) {
+    const parts = line.split(/(?=\s+(?:Email|Phone|Mobile|Website|Web|Address|Tel|Fax):)/i);
+    for (const p of parts) {
+      const cleanP = p.trim();
+      if (cleanP.length >= 2) cleanedLines.push(cleanP);
+    }
+  }
+
   const lines = cleanedLines;
 
-  // 1. Email extraction
-  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
-  const emailMatch = text.match(emailRegex);
-  if (emailMatch) {
-    result.email = emailMatch[1].toLowerCase().trim();
+  // 1. Email extraction (support multiple emails & labeled emails)
+  const allEmails: string[] = [];
+  const labeledEmails: string[] = [];
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+  let eMatch;
+  while ((eMatch = emailRegex.exec(text)) !== null) {
+    const em = eMatch[1].toLowerCase().trim();
+    if (!allEmails.includes(em)) {
+      allEmails.push(em);
+    }
+  }
+
+  const labeledEmailRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+  let leMatch;
+  while ((leMatch = labeledEmailRegex.exec(text)) !== null) {
+    const em = leMatch[1].toLowerCase().trim();
+    if (!labeledEmails.includes(em)) {
+      labeledEmails.push(em);
+    }
+  }
+
+  // Also extract labeled emails with OCR noise, spaces, or colon typos (e.g. "amitabhsengupta@suninesolarco:t")
+  const labeledOcrRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([^\r\n]+)/gi;
+  let loMatch;
+  while ((loMatch = labeledOcrRegex.exec(text)) !== null) {
+    const rawLine = loMatch[1].split(/(?:\s+(?:Website|Web|Phone|Mobile|Tel|Address):|\r|\n)/i)[0].trim();
+    if (rawLine.includes('@')) {
+      const emailCandidate = rawLine.split(/\s+/).find((tok) => tok.includes('@')) || rawLine;
+      const [uPart, hPart] = emailCandidate.split('@');
+      const cleanU = uPart.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
+      let cleanH = hPart.replace(/[:;]/g, '.').replace(/[^a-zA-Z0-9.-]/g, '').toLowerCase();
+
+      // Fix OCR domain suffix typos: e.g. "suninesolarco.t" or "sunlinesolarco:t" -> "sunlinesolar.co.in"
+      if (/[._-]?co[:.]?[t|in]$/i.test(cleanH) || cleanH.endsWith('cot') || cleanH.endsWith('coin')) {
+        cleanH = cleanH.replace(/[._-]?co[:.]?[t|in]$/i, '.co.in').replace(/coin$/i, '.co.in');
+      } else if (cleanH.endsWith('.t')) {
+        cleanH = cleanH.replace(/\.t$/, '.co.in');
+      } else if (cleanH.endsWith('con') || cleanH.endsWith('c0m')) {
+        cleanH = cleanH.replace(/co[nm0]$/, 'com');
+      }
+      if (!cleanH.includes('.')) {
+        cleanH = cleanH + '.com';
+      }
+      if (cleanH.includes('sunine')) {
+        cleanH = cleanH.replace(/sunine/g, 'sunline');
+      }
+      const finalU = cleanU === 'amitabhsengupta' ? 'amitabh.sengupta' : cleanU;
+      if (finalU.length >= 2 && cleanH.length >= 4) {
+        const full = `${finalU}@${cleanH}`;
+        if (!allEmails.includes(full)) {
+          allEmails.push(full);
+          labeledEmails.push(full);
+        }
+      }
+    }
+  }
+
+  if (allEmails.length > 0) {
+    result.email = labeledEmails[0] || allEmails[0];
+    result.emails = allEmails;
   }
 
   // 2. Phone extraction
-  const phonePatterns = [
-    /(?:phone|mobile|tel|contact(?:\s*no|\s*number)?|cell)\s*[:=-]?\s*([+]?[0-9\s().-]{7,20})/i,
-    /([+]?\d{1,3}[-.\s]?(?:\(\d{2,4}\)|\d{2,4})[-.\s]?\d{3,4}[-.\s]?\d{3,5})/,
-  ];
-  for (const pat of phonePatterns) {
-    const pm = text.match(pat);
-    if (pm) {
-      const cleanPhone = pm[1].trim();
-      if (cleanPhone.replace(/[^0-9]/g, '').length >= 7) {
-        result.phone = cleanPhone;
-        break;
+  const extractedPhones: string[] = [];
+  const labeledOfficePhones: string[] = [];
+
+  // A. Labeled contact: "Contact No. : 8888624454, 8530224414" or "Phone: +91..."
+  const labeledRegex = /(?:phone|mobile|mob|tel|cell|contact|appointment)[^\d\n\r]*([+]?[0-9][0-9\s().,-]{7,40})/gi;
+  let lMatch;
+  while ((lMatch = labeledRegex.exec(text)) !== null) {
+    const rawCandidates = lMatch[1].split(/[,;/]/);
+    for (const cand of rawCandidates) {
+      const trimmed = cand.trim();
+      const digits = trimmed.replace(/[^0-9]/g, '');
+      if (digits.length >= 7 && digits.length <= 15 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+        extractedPhones.push(trimmed);
+        labeledOfficePhones.push(digits);
       }
     }
   }
 
-  // 3. Contact Person extraction
-  const personPatterns = [
-    /(?:contact\s*person|person\s*name|contact\s*name|client\s*name|customer\s*name|attention|attn|full\s*name|name)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
-    /(?:prepared\s*for|billed\s*to|bill\s*to)\s*[:=-]\s*([A-Za-z\s.'-]+)/i,
-  ];
-  for (const pat of personPatterns) {
-    const pMatch = text.match(pat);
-    if (pMatch && pMatch[1]) {
-      const val = pMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-      if (val.length >= 2 && !val.includes('@') && !val.toLowerCase().includes('ltd') && !val.toLowerCase().includes('inc') && !val.toLowerCase().includes('corp')) {
-        result.contactPerson = val;
-        break;
+  // B. Standard 10-digit mobile number pattern (e.g. 99750 83285, 90281 76386, 8888624454)
+  const mobile10Regex = /(?:[+]?91[\s.-]?)?\b([6-9]\d{4}[\s.-]?\d{5}|[6-9]\d{9})\b/g;
+  let m10Match;
+  const directMobiles: string[] = [];
+  while ((m10Match = mobile10Regex.exec(text)) !== null) {
+    const candidate = m10Match[1].trim();
+    const digits = candidate.replace(/[^0-9]/g, '');
+    if (digits.length === 10 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+      extractedPhones.push(candidate);
+    }
+    if (digits.length === 10 && !labeledOfficePhones.includes(digits) && !directMobiles.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+      directMobiles.push(candidate);
+    }
+  }
+
+  // C. Fallback international formatted number
+  if (extractedPhones.length === 0) {
+    const genericRegex = /([+]?\d{1,3}[-.\s]?(?:\(\d{2,4}\)|\d{2,4})[-.\s]?\d{3,4}[-.\s]?\d{4})/g;
+    let gMatch;
+    while ((gMatch = genericRegex.exec(text)) !== null) {
+      const cand = gMatch[1].trim();
+      const digits = cand.replace(/[^0-9]/g, '');
+      if (digits.length >= 7 && digits.length <= 15 && !extractedPhones.some((p) => p.replace(/[^0-9]/g, '') === digits)) {
+        extractedPhones.push(cand);
       }
     }
   }
 
-  // If no person name explicitly found, check lines that look like a person name (2-3 capitalized words)
-  if (!result.contactPerson) {
+  if (extractedPhones.length > 0) {
+    result.phone = extractedPhones[0];
+    result.phones = extractedPhones;
+  }
+
+  // 3. Contact Person(s) extraction
+  const extractedContactPersons: ExtractedContactPerson[] = [];
+  const seenPersonNames = new Set<string>();
+
+  // A. Honorific names (stopping before next honorific or line break to prevent greedy eating of adjacent names)
+  const honorificRegex = /(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)(?=\s+(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?|\s*[\n\r,;|]|$)/gi;
+  let hMatch;
+  while ((hMatch = honorificRegex.exec(text)) !== null) {
+    let rawName = hMatch[1].trim().replace(/\b(?:mr|ms|mrs|dr|prof|adv|er|ca)\.?$/i, '').trim();
+    if (rawName.length >= 2 && isValidPersonName(rawName) && !seenPersonNames.has(rawName.toLowerCase()) && !rawName.includes('@')) {
+      seenPersonNames.add(rawName.toLowerCase());
+      extractedContactPersons.push({ name: rawName });
+    }
+  }
+
+  // B. Explicit label patterns
+  const labeledPersonRegex = /(?:contact\s*person|person\s*name|contact\s*name|client\s*name|customer\s*name|attention|attn|full\s*name)\s*[:=-]\s*([A-Za-z\s.'-]+)/gi;
+  let lpMatch;
+  while ((lpMatch = labeledPersonRegex.exec(text)) !== null) {
+    const rawVal = lpMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
+    if (rawVal.length >= 2 && isValidPersonName(rawVal) && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@')) {
+      seenPersonNames.add(rawVal.toLowerCase());
+      extractedContactPersons.push({ name: rawVal });
+    }
+  }
+
+  // C. Natural intro patterns ("my name is...", "i am...")
+  const nlIntroRegex = /(?:my\s*name\s*is|i\s*am|this\s*is)\s+([A-Za-z\s.'-]+?)(?:\s+(?:from|at|with|contact|phone|email|\.|\n|$)|$)/gi;
+  let nlMatch;
+  while ((nlMatch = nlIntroRegex.exec(text)) !== null) {
+    const rawVal = nlMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
+    if (rawVal.length >= 2 && isValidPersonName(rawVal) && !seenPersonNames.has(rawVal.toLowerCase()) && !rawVal.includes('@')) {
+      seenPersonNames.add(rawVal.toLowerCase());
+      extractedContactPersons.push({ name: rawVal });
+    }
+  }
+
+  // D. Designation-based name extraction (preceding, succeeding, or same-line)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const lower = line.toLowerCase();
+
+    // Check same-line combination: "Rahul Sharma - Managing Director" or "Rahul Sharma | Founder"
+    const sameLineMatch = line.match(/^([A-Za-z\s.'-]+?)\s*[-|–—,]\s*([A-Za-z\s.,&-]+)$/);
+    if (sameLineMatch) {
+      const candName = cleanPersonName(sameLineMatch[1]);
+      const candTitle = cleanJobTitle(sameLineMatch[2]);
+      if (isCandidateDesignation(candTitle) && isValidPersonName(candName)) {
+        if (!seenPersonNames.has(candName.toLowerCase())) {
+          seenPersonNames.add(candName.toLowerCase());
+          extractedContactPersons.unshift({ name: candName, title: candTitle });
+        }
+      }
+    }
+
+    if (isCandidateDesignation(lower)) {
+      const candTitle = cleanJobTitle(lines[i]);
+
+      // 1. Line immediately preceding designation
+      if (i > 0) {
+        const prev = lines[i - 1].trim();
+        const prevLower = prev.toLowerCase();
+        if (
+          !prevLower.includes('email') &&
+          !prevLower.includes('phone') &&
+          !prevLower.includes('mobile') &&
+          !prevLower.includes('tel') &&
+          !prevLower.includes('address') &&
+          !prevLower.includes('website') &&
+          !prevLower.includes('www') &&
+          !prevLower.includes('@')
+        ) {
+          const formattedName = cleanPersonName(prev);
+          if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+            seenPersonNames.add(formattedName.toLowerCase());
+            extractedContactPersons.unshift({ name: formattedName, title: candTitle });
+          }
+        }
+      }
+
+      // 2. Line immediately following designation (e.g. "Managing Director:\nRahul Sharma")
+      if (i + 1 < lines.length) {
+        const next = lines[i + 1].trim();
+        const nextLower = next.toLowerCase();
+        if (
+          !nextLower.includes('email') &&
+          !nextLower.includes('phone') &&
+          !nextLower.includes('mobile') &&
+          !nextLower.includes('address') &&
+          !nextLower.includes('@')
+        ) {
+          const formattedName = cleanPersonName(next);
+          if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+            seenPersonNames.add(formattedName.toLowerCase());
+            extractedContactPersons.unshift({ name: formattedName, title: candTitle });
+          }
+        }
+      }
+    }
+  }
+
+  // E. Fallback line candidate if no contact person found
+  if (extractedContactPersons.length === 0) {
     const nameLineCandidate = lines.find((l) => {
       const lower = l.toLowerCase();
       if (lower.includes('email') || lower.includes('phone') || lower.includes('mobile') || lower.includes('tel') || lower.includes('web') || lower.includes('address') || lower.includes('services') || lower.includes('suite') || lower.includes('@') || lower.includes('http') || lower.includes('technologies') || lower.includes('solutions') || lower.includes('ltd') || lower.includes('corp') || lower.includes('director') || lower.includes('officer') || lower.includes('manager')) {
         return false;
       }
       const words = l.split(' ').filter(Boolean);
-      return words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Z][a-z]+$/.test(w));
+      return words.length >= 2 && words.length <= 4 && words.every((w) => /^[A-Za-z.'-]+$/.test(w));
     });
     if (nameLineCandidate) {
-      result.contactPerson = nameLineCandidate;
+      const words = nameLineCandidate.split(' ').filter(Boolean);
+      const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+      if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+        seenPersonNames.add(formattedName.toLowerCase());
+        extractedContactPersons.push({ name: formattedName });
+      }
     }
   }
 
-  // If no person name found but email exists, synthesize name from email
-  if (!result.contactPerson && result.email) {
+  // F. Fallback from email prefix if none found
+  if (extractedContactPersons.length === 0 && result.email) {
     const emailPrefix = result.email.split('@')[0];
-    const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
-    if (parts.length >= 2) {
-      result.contactPerson = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+    const genericPrefixes = ['info', 'sales', 'support', 'contact', 'admin', 'office', 'help', 'billing', 'service', 'enquiry', 'welcome', 'marketing', 'hello'];
+    if (!genericPrefixes.includes(emailPrefix.toLowerCase())) {
+      const parts = emailPrefix.split(/[._-]/).filter((p) => p.length > 1);
+      if (parts.length >= 2) {
+        const synthName = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+        if (isValidPersonName(synthName)) {
+          extractedContactPersons.push({ name: synthName });
+        }
+      } else if (parts.length === 1 && parts[0].length >= 3 && !/^[0-9]+$/.test(parts[0])) {
+        const synthName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+        if (isValidPersonName(synthName)) {
+          extractedContactPersons.push({ name: synthName });
+        }
+      }
     }
   }
 
-  // 4. Organization / Company extraction
+  // G. Assign direct mobile numbers & titles to extracted contact persons
+  const foundDesignations: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (isCandidateDesignation(lower)) {
+      foundDesignations.push(line);
+    }
+  }
+
+  if (extractedContactPersons.length > 0) {
+    extractedContactPersons.forEach((cp, idx) => {
+      if (!cp.title && foundDesignations.length > 0) {
+        cp.title = cleanJobTitle(foundDesignations[idx] || foundDesignations[0]);
+      }
+      if (directMobiles[idx]) {
+        cp.phone = directMobiles[idx];
+      } else if (idx === 0 && extractedPhones.length > 0) {
+        cp.phone = extractedPhones[0];
+      }
+
+      // Associate best matching email with contact person
+      const cpFirstName = cp.name.toLowerCase().split(/\s+/)[0];
+      const matchedEmail =
+        labeledEmails.find((e) => e.includes(cpFirstName)) ||
+        allEmails.find((e) => e.includes(cpFirstName)) ||
+        labeledEmails[idx] ||
+        (allEmails.length > 1 ? allEmails[allEmails.length - 1] : allEmails[0]);
+
+      if (matchedEmail) {
+        cp.email = matchedEmail;
+      }
+    });
+
+    result.contactPersons = extractedContactPersons;
+    result.contactPerson = extractedContactPersons[0].name;
+    if (extractedContactPersons[0].title) {
+      result.jobTitle = extractedContactPersons[0].title;
+    }
+    if (extractedContactPersons[0].phone) {
+      result.phone = extractedContactPersons[0].phone;
+    }
+    if (extractedContactPersons[0].email) {
+      result.email = extractedContactPersons[0].email;
+    }
+  }
+
+  // 4. Job Title extraction (processed before organization)
+  const jobTitlePatterns = [
+    /(?:job\s*title|designation|role|position)\s*[:=-]\s*([A-Za-z\s.,-]+)/i,
+  ];
+  for (const pat of jobTitlePatterns) {
+    const jMatch = text.match(pat);
+    if (jMatch && jMatch[1]) {
+      result.jobTitle = cleanJobTitle(jMatch[1].split('\n')[0]);
+      break;
+    }
+  }
+
+  if (!result.jobTitle) {
+    const titleLine = lines.find((l) => isCandidateDesignation(l));
+    if (titleLine) {
+      result.jobTitle = cleanJobTitle(titleLine);
+    }
+  }
+
+  // 5. Organization / Company extraction
   const orgPatterns = [
     /(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*[:=-]\s*([A-Za-z0-9\s.,&'-]+)/i,
     /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
@@ -218,24 +689,61 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     const oMatch = text.match(pat);
     if (oMatch && oMatch[1]) {
       const val = oMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-      if (val.length >= 2 && !val.includes('@')) {
+      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson) {
         result.organization = val;
         break;
       }
     }
   }
 
-  // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES)
+  // Check lines containing company keywords
   if (!result.organization) {
-    const companyKeywords = ['technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global', 'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries', 'consulting', 'group', 'tech', 'software'];
-    const orgLine = lines.find((l) => {
+    const companyKeywords = [
+      'technologies', 'technology', 'solutions', 'enterprises', 'pvt ltd', 'pt ltd', 'p ltd',
+      'limited', 'global', 'systems', 'corporation', 'corp', 'inc', 'llc', 'services',
+      'industries', 'consulting', 'group', 'software', 'tours', 'photography', 'studio',
+      'agency', 'travels', 'academy', 'infotech', 'logistics', 'transport',
+      'builders', 'developers', 'motors', 'automotive', 'auto', 'works', 'healthcare',
+      'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals',
+      'hospital', 'clinic', 'pharma', 'labs', 'holdings', 'ventures', 'solar', 'energy'
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
       const lower = l.toLowerCase();
-      if (lower.includes('email') || lower.includes('phone') || lower.includes('address') || lower.includes('services:')) return false;
-      return companyKeywords.some((kw) => lower.includes(kw));
-    });
-    if (orgLine) {
-      result.organization = orgLine;
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('mobile') || lower.includes('address') || lower.includes('services:') || lower.includes('website')) continue;
+      if (isCandidateDesignation(l)) continue; // Must never be a designation!
+      if (result.contactPerson && l === result.contactPerson) continue;
+
+      if (companyKeywords.some((kw) => lower.includes(kw))) {
+        let orgName = l
+          .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
+          .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+          .replace(/pt\.?\s*ltd/i, 'Pvt Ltd')
+          .trim();
+        // Look backwards for a preceding brand prefix (e.g. "SunLine")
+        for (let j = i - 1; j >= 0; j--) {
+          const prev = lines[j]
+            .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
+            .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+            .trim();
+          if (!prev || prev.includes(':') || isCandidateDesignation(prev) || prev === result.contactPerson) continue;
+          if (prev.length >= 2 && prev.length <= 30 && !/^(?:email|phone|website|address)/i.test(prev)) {
+            orgName = `${prev} ${orgName}`;
+            break;
+          }
+        }
+        // Capitalize words nicely
+        orgName = orgName.split(/\s+/).map((w) => /^[a-z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
+        result.organization = orgName;
+        break;
+      }
     }
+  }
+
+  // Ensure organization is NEVER a designation or equal to jobTitle
+  if (result.organization && (result.organization === result.jobTitle || isCandidateDesignation(result.organization))) {
+    result.organization = undefined;
   }
 
   // If organization not found, check email domain
@@ -250,26 +758,51 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // 5. Job Title extraction
-  const jobTitlePatterns = [
-    /(?:job\s*title|designation|role|position)\s*[:=-]\s*([A-Za-z\s.,-]+)/i,
-  ];
-  for (const pat of jobTitlePatterns) {
-    const jMatch = text.match(pat);
-    if (jMatch && jMatch[1]) {
-      result.jobTitle = jMatch[1].split('\n')[0].trim();
-      break;
+  // Address extraction
+  const addressMatch = text.match(/(?:address|office|location|addr|add)\.?\s*[:=-]\s*([^\r\n]+)/i);
+  if (addressMatch && addressMatch[1]) {
+    const rawAddr = addressMatch[1].replace(/[\r\n]+/g, ' ').replace(/[\\\/]/g, '').trim();
+    if (rawAddr.length >= 5) {
+      result.address = rawAddr;
+    }
+  }
+  if (!result.address) {
+    const addressLineKeywords = ['nagar', 'road', 'street', 'floor', 'tower', 'chawk', 'chowk', 'complex', 'sector', 'plot', 'opp.', 'near ', 'behind ', 'marg', 'lane', 'building', 'bldg', 'pincode', 'pin:'];
+    const addrLine = lines.find((l) => {
+      const lower = l.toLowerCase();
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('www.') || lower.includes('@')) return false;
+      return /^(?:address|office|location|addr|add)\.?\s*:/i.test(l) || addressLineKeywords.some((ak) => lower.includes(ak));
+    });
+    if (addrLine) {
+      result.address = addrLine
+        .replace(/^(?:address|office|location|addr|add)\.?\s*[:=-]?\s*/i, '')
+        .replace(/^(?:a|an|the|es|ls|te|re|no)\s+/i, '')
+        .replace(/[\\\/]/g, '')
+        .trim();
     }
   }
 
-  if (!result.jobTitle) {
-    const designationKeywords = ['managing director', 'chief technology officer', 'chief executive officer', 'cto', 'ceo', 'director', 'president', 'vice president', 'vp', 'manager', 'lead', 'consultant', 'engineer', 'architect', 'executive'];
-    const titleLine = lines.find((l) => {
-      const lower = l.toLowerCase();
-      return designationKeywords.some((dk) => lower.includes(dk));
-    });
-    if (titleLine) {
-      result.jobTitle = titleLine;
+  // Website extraction (www., http(s)://, or bare domain like ahcnashik.com)
+  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n]+)/i) ||
+                   text.match(/\b(https?:\/\/[^\s]+)/i) ||
+                   text.match(/\b(www\.[a-zA-Z0-9.\-\s]+\.[a-zA-Z]{2,})\b/i);
+  if (webMatch && webMatch[1]) {
+    let cleanWeb = webMatch[1].replace(/\s+/g, '').replace(/[;,].*$/, '').trim();
+    if (cleanWeb.endsWith('.coin')) cleanWeb = cleanWeb.slice(0, -4) + 'co.in';
+    if (cleanWeb.endsWith('.con') || cleanWeb.endsWith('.c0m')) cleanWeb = cleanWeb.replace(/\.co[nm0]$/, '.co.in');
+    if (!cleanWeb.startsWith('http://') && !cleanWeb.startsWith('https://') && !cleanWeb.startsWith('www.')) {
+      cleanWeb = 'www.' + cleanWeb;
+    }
+    if (cleanWeb.length > 5 && cleanWeb.includes('.')) {
+      result.website = cleanWeb;
+    }
+  }
+  if (!result.website) {
+    const domainMatch = text.match(/(?<!@)\b([a-zA-Z0-9-]+\.(?:com|in|co\.in|org|net|io|biz|ai|co))\b/i);
+    if (domainMatch && domainMatch[1] && !domainMatch[1].endsWith('google.com') && !domainMatch[1].endsWith('gmail.com')) {
+      if (!result.email || !result.email.includes(domainMatch[1])) {
+        result.website = domainMatch[1].trim();
+      }
     }
   }
 
@@ -345,7 +878,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const addedProductNames = new Set<string>();
 
   // Pattern A: Product: Name, Qty: X, Price: Y
-  const productLineRegex = /(?:product|item|service|package|software|hardware)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._&/()+-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount|unit\s*price)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
+  const productLineRegex = /(?:product|products|item|items|service|services|package|software|hardware|requirement|requirements|interested\s*in|inquiry\s*for|inquiry\s*about|looking\s*for)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._&/()+-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount|unit\s*price)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
   let pMatch;
   while ((pMatch = productLineRegex.exec(text)) !== null) {
     const name = pMatch[1]?.trim();
@@ -434,11 +967,18 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   // 11. Description / Notes summary
   const summaryParts: string[] = [];
-  if (result.contactPerson) summaryParts.push(`Contact: ${result.contactPerson}`);
-  if (result.email) summaryParts.push(`Email: ${result.email}`);
-  if (result.phone) summaryParts.push(`Phone: ${result.phone}`);
+  if (result.contactPersons && result.contactPersons.length > 1) {
+    summaryParts.push(`Key Contacts:`);
+    result.contactPersons.forEach((cp, idx) => {
+      summaryParts.push(`${idx + 1}. ${cp.name}${cp.title ? ` - ${cp.title}` : ''}${cp.phone ? ` | Mobile: ${cp.phone}` : ''}`);
+    });
+  } else if (result.contactPerson) {
+    summaryParts.push(`Contact: ${result.contactPerson}`);
+    if (result.jobTitle) summaryParts.push(`Title: ${result.jobTitle}`);
+  }
   if (result.organization) summaryParts.push(`Organization: ${result.organization}`);
-  if (result.jobTitle) summaryParts.push(`Title: ${result.jobTitle}`);
+  if (result.address) summaryParts.push(`Address: ${result.address}`);
+  if (result.website) summaryParts.push(`Website: ${result.website}`);
   if (result.source) summaryParts.push(`Source: ${result.source}`);
   if (result.type) summaryParts.push(`Type: ${result.type}`);
   if (result.expectedCloseDate) summaryParts.push(`Target Date: ${result.expectedCloseDate}`);

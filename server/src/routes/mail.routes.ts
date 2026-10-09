@@ -80,6 +80,50 @@ router.get('/attachments/:id/download', requireAuth, async (req: Request, res: R
   }
 });
 
+// POST /api/mail/imap/test - Test IMAP connection
+router.post('/imap/test', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ImapLeadSyncService } = await import('@/services/imapLeadSync.service');
+    const result = await ImapLeadSyncService.testConnection(req.body);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mail/imap/sync - Trigger on-demand IMAP sync and lead generation
+router.post('/imap/sync', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ImapLeadSyncService } = await import('@/services/imapLeadSync.service');
+    const result = await ImapLeadSyncService.syncEmailsAndGenerateLeads(req.body);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mail/imap/status - Get current IMAP configuration state
+router.get('/imap/status', requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ImapLeadSyncService } = await import('@/services/imapLeadSync.service');
+    const config = await ImapLeadSyncService.getImapConfig();
+    res.json({
+      success: true,
+      data: {
+        enabled: config.enabled,
+        autoCreateLead: config.autoCreateLead,
+        host: config.host,
+        port: config.port,
+        encryption: config.encryption,
+        username: config.username,
+        hasPassword: Boolean(config.password),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── 2. List & Create Routes ──────────────────────────────────────────────────
 
 // GET /api/mail - List emails in folder
