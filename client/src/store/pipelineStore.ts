@@ -59,8 +59,14 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
       } else {
         res = await API.post("/pipelines", data);
       }
-      set({ loading: false });
-      return res.data?.data || res.data;
+      const saved = res.data?.data || res.data;
+      set((state) => ({
+        pipelines: id
+          ? state.pipelines.map((p) => (String(p.id) === String(id) ? saved : p))
+          : [saved, ...state.pipelines],
+        loading: false,
+      }));
+      return saved;
     } catch (err: any) {
       set({ loading: false, error: err?.message || "Failed to save pipeline" });
       throw err;

@@ -673,15 +673,28 @@ async function executeActions(
 
             const entityCtx = buildSimpleContext(entityType, entity);
             const resolvedEndpoint = replacePlaceholdersSimple(wh.end_point, entityCtx);
-            const resolvedPayload = wh.payload_type === 'default'
-              ? { ...entityCtx, ...basePayload }
-              : basePayload;
+
+            let resolvedPayload: any;
+            if (wh.payload_type === 'raw') {
+              const rawStr = typeof wh.payload === 'string' ? wh.payload : JSON.stringify(wh.payload || {});
+              resolvedPayload = replacePlaceholdersSimple(rawStr, entityCtx);
+            } else if (wh.payload_type === 'default') {
+              resolvedPayload = { ...entityCtx, ...basePayload };
+            } else {
+              resolvedPayload = wh.payload;
+            }
 
             const result = await fireWebhook({
               method: wh.method || 'POST',
               end_point: resolvedEndpoint,
-              headers: wh.headers || [],
-              query_params: wh.query_params || [],
+              headers: (wh.headers || []).map((h: any) => ({
+                key: replacePlaceholdersSimple(h.key, entityCtx),
+                value: replacePlaceholdersSimple(h.value, entityCtx),
+              })),
+              query_params: (wh.query_params || []).map((q: any) => ({
+                key: replacePlaceholdersSimple(q.key, entityCtx),
+                value: replacePlaceholdersSimple(q.value, entityCtx),
+              })),
               payload_type: wh.payload_type || 'default',
               raw_payload_type: wh.raw_payload_type || 'json',
               payload: resolvedPayload,
@@ -717,9 +730,10 @@ function buildSimpleContext(entityType: string, entity: EntityData): Record<stri
   return ctx;
 }
 
-/** Simple {%key%} replacement in a string */
+/** Simple {%key%} or {{key}} replacement in a string */
 function replacePlaceholdersSimple(str: string, ctx: Record<string, string>): string {
-  return str.replace(/\{%\s*([a-zA-Z0-9_.]+)\s*%\}/g, (_, key) => ctx[key] ?? '');
+  if (!str) return str;
+  return str.replace(/(\{\{|\{%\s*)([a-zA-Z0-9_.]+)(\}\}|\s*%\})/g, (_, _open, key) => ctx[key] ?? '');
 }
 
 /** Send email via SMTP mailer and log to database emails table */

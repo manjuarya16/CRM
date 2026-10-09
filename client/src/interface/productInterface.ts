@@ -15,6 +15,7 @@ export interface IProduct {
   description?: string;
   quantity: number;
   price?: number;
+  type?: "Product" | "Service" | string;
   created_at?: string;
   updated_at?: string;
   total_count?: number;

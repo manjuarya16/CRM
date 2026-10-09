@@ -30,12 +30,11 @@ export const productSchema = z.object({
     .refine((val) => val >= 0, { message: "Price cannot be negative" }),
   quantity: z
     .union([z.string(), z.number()])
-    .refine((val) => val !== "" && val !== null && val !== undefined, {
-      message: "Quantity is required",
-    })
-    .transform((val) => (typeof val === "number" ? val : Number(val)))
+    .optional()
+    .transform((val) => (val === undefined || val === null || val === "" ? 0 : typeof val === "number" ? val : Number(val)))
     .refine((val) => !isNaN(val), { message: "Quantity must be a valid number" })
     .refine((val) => val >= 0, { message: "Quantity cannot be negative" }),
+  type: z.enum(["Product", "Service"]).default("Product"),
   inventories: z.array(productInventorySchema).optional(),
 });
 

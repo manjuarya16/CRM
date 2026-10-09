@@ -56,7 +56,7 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
       setValue("submit_success_action", initialData.submit_success_action || "message");
       setValue("submit_success_content", initialData.submit_success_content || "");
       setValue("create_lead", initialData.create_lead ?? true);
-      setValue("lead_pipeline_id", initialData.lead_pipeline_id || null);
+      setValue("lead_pipeline_id", initialData.lead_pipeline_id ? (Number(initialData.lead_pipeline_id) as any) : null);
       setValue("background_color", initialData.background_color || "#f8fafc");
       setValue("form_background_color", initialData.form_background_color || "#ffffff");
       setValue("form_title_color", initialData.form_title_color || "#1e293b");
@@ -67,7 +67,7 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
       setAttributes(attrs);
       setValue("attributes", attrs);
     }
-  }, [initialData, setValue]);
+  }, [initialData, setValue, pipelines]);
 
   const addAttributeField = (attr: IAttribute) => {
     if (attributes.some((a) => a.attribute_id === attr.id)) return;
@@ -110,6 +110,8 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
     try {
       setLoading(true);
       data.attributes = attributes;
+      const pid = data.lead_pipeline_id ? Number(data.lead_pipeline_id) : null;
+      data.lead_pipeline_id = pid && pid > 0 ? pid : null;
 
       if (isEdit && initialData) {
         await useWebFormStore.getState().saveWebform(data, initialData.id);

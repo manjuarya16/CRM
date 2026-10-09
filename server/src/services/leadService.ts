@@ -28,10 +28,30 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
     const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
     const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
     const created_at = req.query.created_at ? String(req.query.created_at) : null;
+    const rawPipelineId = req.query.lead_pipeline_id || req.query.pipeline_id;
+    const lead_pipeline_id = rawPipelineId ? Number(rawPipelineId) : null;
+    const rawStageId = req.query.lead_pipeline_stage_id || req.query.pipeline_stage_id || req.query.stage_id;
+    const lead_pipeline_stage_id = rawStageId ? Number(rawStageId) : null;
+    const tag = req.query.tag ? String(req.query.tag) : null;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_all_leads($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-      [search, page, limit, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at]
+      "SELECT * FROM public.fn_get_all_leads($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+      [
+        search,
+        page,
+        limit,
+        id,
+        lead_value,
+        user_id,
+        person_id,
+        lead_type_id,
+        lead_source_id,
+        expected_close_date,
+        created_at,
+        lead_pipeline_id,
+        lead_pipeline_stage_id,
+        tag,
+      ]
     );
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
@@ -105,12 +125,20 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       person,           // { name, email, phone, organization_id } for new person
       lead_source_id,
       lead_type_id,
-      lead_pipeline_id,
-      lead_pipeline_stage_id,
       expected_close_date,
       products,         // [{ product_id, quantity, price }]
       custom_attributes,
     } = req.body;
+
+    const rawPipelineId = req.body.lead_pipeline_id ?? req.body.pipeline_id;
+    const lead_pipeline_id = rawPipelineId !== undefined && rawPipelineId !== null && rawPipelineId !== "" && !isNaN(Number(rawPipelineId))
+      ? Number(rawPipelineId)
+      : null;
+
+    const rawStageId = req.body.lead_pipeline_stage_id ?? req.body.pipeline_stage_id ?? req.body.stage_id;
+    const lead_pipeline_stage_id = rawStageId !== undefined && rawStageId !== null && rawStageId !== "" && !isNaN(Number(rawStageId))
+      ? Number(rawStageId)
+      : null;
 
     // Resolve person_id: use existing or create new person via procedural function save_person
     let person_id = rawPersonId ? Number(rawPersonId) : null;
@@ -185,8 +213,6 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
 
     // Save products via fn_add_lead_product
     if (lead && Array.isArray(products) && products.length > 0) {
-      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
-      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
@@ -249,12 +275,20 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       person,
       lead_source_id,
       lead_type_id,
-      lead_pipeline_id,
-      lead_pipeline_stage_id,
       expected_close_date,
       products,
       custom_attributes,
     } = req.body;
+
+    const rawPipelineId = req.body.lead_pipeline_id ?? req.body.pipeline_id;
+    const lead_pipeline_id = rawPipelineId !== undefined && rawPipelineId !== null && rawPipelineId !== "" && !isNaN(Number(rawPipelineId))
+      ? Number(rawPipelineId)
+      : null;
+
+    const rawStageId = req.body.lead_pipeline_stage_id ?? req.body.pipeline_stage_id ?? req.body.stage_id;
+    const lead_pipeline_stage_id = rawStageId !== undefined && rawStageId !== null && rawStageId !== "" && !isNaN(Number(rawStageId))
+      ? Number(rawStageId)
+      : null;
 
     // Resolve person_id: use existing or create new person via save_person
     let person_id = rawPersonId ? Number(rawPersonId) : null;
@@ -337,8 +371,6 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     // Update products if array provided using fn_clear_lead_products & fn_add_lead_product
     if (Array.isArray(products)) {
-      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
-      await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
       await connection.query("SELECT public.fn_clear_lead_products($1)", [id]);
       for (const p of products) {
         if (!p.product_id) continue;
@@ -397,6 +429,53 @@ const deleteLead = async (req: Request, res: Response): Promise<void> => {
     res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: error.message,
+    });
+  } finally {
+    connection?.release();
+  }
+};
+
+const deleteBulkLeads = async (req: Request, res: Response): Promise<void> => {
+  let connection: PoolClient | undefined;
+  try {
+    const rawIds = req.body.ids || req.body.lead_ids || req.body.id;
+    const ids: number[] = Array.isArray(rawIds)
+      ? rawIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id) && id > 0)
+      : typeof rawIds === "number" || typeof rawIds === "string"
+      ? [Number(rawIds)].filter((id: number) => !isNaN(id) && id > 0)
+      : [];
+
+    if (!ids || ids.length === 0) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "No valid lead IDs provided for bulk deletion",
+      });
+      return;
+    }
+
+    connection = await pool.connect();
+    const result = await connection.query(
+      "SELECT public.fn_delete_leads_bulk($1::integer[]) AS count",
+      [ids]
+    );
+
+    const deletedCount = Number(result.rows[0]?.count) || 0;
+
+    ids.forEach((id) => {
+      WorkflowService.triggerWorkflows('leads', 'delete', { id }).catch((e: any) => logger.error(e));
+    });
+
+    res.status(HttpStatusCodes.OK).json({
+      success: true,
+      message: `${deletedCount} lead(s) deleted successfully`,
+      deletedCount,
+      ids,
+    });
+  } catch (error: any) {
+    logger.error(error, "deleteBulkLeads failed");
+    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to bulk delete leads",
     });
   } finally {
     connection?.release();
@@ -466,21 +545,9 @@ const getLeadProducts = async (req: Request, res: Response): Promise<void> => {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
     const result = await connection.query(
-      `SELECT lp.id, lp.lead_id, lp.product_id, lp.quantity, lp.price, lp.amount,
-              lp.warehouse_id, lp.warehouse_location_id,
-              p.name AS product_name, p.sku,
-              w.name AS warehouse_name,
-              wl.name AS warehouse_location_name
-       FROM lead_products lp
-       LEFT JOIN products p ON p.id = lp.product_id
-       LEFT JOIN warehouses w ON w.id = lp.warehouse_id
-       LEFT JOIN warehouse_locations wl ON wl.id = lp.warehouse_location_id
-       WHERE lp.lead_id = $1
-       ORDER BY lp.id ASC`,
+      "SELECT * FROM public.fn_get_lead_products($1)",
       [leadId]
-    ).catch(async () => {
-      return (connection as PoolClient).query("SELECT * FROM public.fn_get_lead_products($1)", [leadId]);
-    });
+    );
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
     logger.error(error);
@@ -496,9 +563,6 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
     const { product_id, quantity, price, warehouse_id, warehouse_location_id } = req.body;
-
-    await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_id INT;");
-    await connection.query("ALTER TABLE lead_products ADD COLUMN IF NOT EXISTS warehouse_location_id INT;");
 
     const result = await connection.query(
       "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
@@ -539,158 +603,7 @@ const deleteLeadProduct = async (req: Request, res: Response): Promise<void> => 
 
 const deductStockForWonLead = async (connection: PoolClient, leadId: number): Promise<void> => {
   try {
-    await connection.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_stock_deducted BOOLEAN DEFAULT FALSE;");
-    const checkRes = await connection.query("SELECT is_stock_deducted FROM leads WHERE id = $1", [leadId]);
-    if (checkRes.rows[0]?.is_stock_deducted) {
-      return;
-    }
-
-    const lpRes = await connection.query(
-      "SELECT product_id, quantity, warehouse_id, warehouse_location_id FROM lead_products WHERE lead_id = $1",
-      [leadId]
-    );
-    const leadProducts = lpRes.rows || [];
-    if (leadProducts.length === 0) return;
-
-    for (const lp of leadProducts) {
-      const productId = Number(lp.product_id);
-      const qtyToDeduct = Number(lp.quantity) || 1;
-      const wId = lp.warehouse_id ? Number(lp.warehouse_id) : null;
-      const locId = lp.warehouse_location_id ? Number(lp.warehouse_location_id) : null;
-
-      if (!productId || qtyToDeduct <= 0) continue;
-
-      // Get product name for history logging
-      const pNameRes = await connection.query("SELECT name FROM products WHERE id = $1", [productId]);
-      const prodName = pNameRes.rows[0]?.name || `Product #${productId}`;
-
-      let remaining = qtyToDeduct;
-
-      // Deduct specifically from targeted warehouse_location_id if assigned
-      if (locId) {
-        const locInvRes = await connection.query(
-          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
-           FROM product_inventories pi
-           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
-           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
-           WHERE pi.product_id = $1 AND pi.warehouse_location_id = $2 AND pi.in_stock > 0 LIMIT 1`,
-          [productId, locId]
-        );
-        if (locInvRes.rows.length > 0) {
-          const invRow = locInvRes.rows[0];
-          const currentStock = Number(invRow.in_stock) || 0;
-          const deductAmount = Math.min(currentStock, remaining);
-          const newStock = currentStock - deductAmount;
-          remaining -= deductAmount;
-
-          await connection.query(
-            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
-            [newStock, invRow.id]
-          );
-
-          // Log history activity
-          const actRes = await connection.query(
-            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
-             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
-            [
-              "Inventory Stock Deducted",
-              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'Assigned Location'}") for Lead #${leadId}.`
-            ]
-          );
-          if (actRes.rows[0]?.id) {
-            await connection.query(
-              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-              [leadId, actRes.rows[0].id]
-            );
-          }
-        }
-      } else if (wId) {
-        const wInvRes = await connection.query(
-          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
-           FROM product_inventories pi
-           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
-           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
-           WHERE pi.product_id = $1 AND pi.warehouse_id = $2 AND pi.in_stock > 0 ORDER BY pi.in_stock DESC`,
-          [productId, wId]
-        );
-        for (const invRow of wInvRes.rows) {
-          if (remaining <= 0) break;
-          const currentStock = Number(invRow.in_stock) || 0;
-          const deductAmount = Math.min(currentStock, remaining);
-          const newStock = currentStock - deductAmount;
-          remaining -= deductAmount;
-
-          await connection.query(
-            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
-            [newStock, invRow.id]
-          );
-
-          // Log history activity
-          const actRes = await connection.query(
-            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
-             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
-            [
-              "Inventory Stock Deducted",
-              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'General'}") for Lead #${leadId}.`
-            ]
-          );
-          if (actRes.rows[0]?.id) {
-            await connection.query(
-              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-              [leadId, actRes.rows[0].id]
-            );
-          }
-        }
-      }
-
-      // Fallback: Deduct remaining quantity from any location with available stock
-      if (remaining > 0) {
-        const invRes = await connection.query(
-          `SELECT pi.id, pi.in_stock, w.name as warehouse_name, wl.name as location_name 
-           FROM product_inventories pi
-           LEFT JOIN warehouses w ON w.id = pi.warehouse_id
-           LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
-           WHERE pi.product_id = $1 AND pi.in_stock > 0 ORDER BY pi.in_stock DESC`,
-          [productId]
-        );
-
-        for (const invRow of invRes.rows) {
-          if (remaining <= 0) break;
-          const currentStock = Number(invRow.in_stock) || 0;
-          const deductAmount = Math.min(currentStock, remaining);
-          const newStock = currentStock - deductAmount;
-          remaining -= deductAmount;
-
-          await connection.query(
-            "UPDATE product_inventories SET in_stock = $1, updated_at = NOW() WHERE id = $2",
-            [newStock, invRow.id]
-          );
-
-          // Log history activity
-          const actRes = await connection.query(
-            `INSERT INTO public.activities (title, type, comment, is_done, created_at, updated_at)
-             VALUES ($1, 'system', $2, TRUE, NOW(), NOW()) RETURNING id`,
-            [
-              "Inventory Stock Deducted",
-              `Deducted ${deductAmount} unit(s) of "${prodName}" from Warehouse "${invRow.warehouse_name || 'Main'}" (Location: "${invRow.location_name || 'General'}") for Lead #${leadId}.`
-            ]
-          );
-          if (actRes.rows[0]?.id) {
-            await connection.query(
-              "INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-              [leadId, actRes.rows[0].id]
-            );
-          }
-        }
-      }
-
-      await connection.query(
-        "UPDATE products SET quantity = GREATEST(0, COALESCE(quantity, 0) - $1), updated_at = NOW() WHERE id = $2",
-        [qtyToDeduct, productId]
-      );
-    }
-
-    await connection.query("UPDATE leads SET is_stock_deducted = TRUE WHERE id = $1", [leadId]);
+    await connection.query("SELECT public.fn_deduct_lead_stock($1)", [leadId]);
     logger.info({ leadId }, "Warehouse stock successfully deducted for won lead");
   } catch (err: any) {
     logger.error({ err, leadId }, "Failed to deduct warehouse stock for won lead");
@@ -759,7 +672,8 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
-    const pipelineId = req.query.pipeline_id ? Number(req.query.pipeline_id) : null;
+    const rawPipelineId = req.query.lead_pipeline_id || req.query.pipeline_id;
+    const pipelineId = rawPipelineId ? Number(rawPipelineId) : null;
     const search = String(req.query.search || "");
 
     const id = req.query.id ? Number(req.query.id) : null;
@@ -770,10 +684,26 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
     const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
     const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
     const created_at = req.query.created_at ? String(req.query.created_at) : null;
+    const rawStageId = req.query.lead_pipeline_stage_id || req.query.pipeline_stage_id || req.query.stage_id;
+    const lead_pipeline_stage_id = rawStageId ? Number(rawStageId) : null;
+    const tag = req.query.tag ? String(req.query.tag) : null;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_leads_kanban($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-      [pipelineId, search, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at]
+      "SELECT * FROM public.fn_get_leads_kanban($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+      [
+        pipelineId,
+        search,
+        id,
+        lead_value,
+        user_id,
+        person_id,
+        lead_type_id,
+        lead_source_id,
+        expected_close_date,
+        created_at,
+        lead_pipeline_stage_id,
+        tag,
+      ]
     );
 
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
@@ -837,7 +767,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     if (parsed.organization && parsed.organization.trim()) {
       const orgName = parsed.organization.trim();
       const existingOrgRes = await connection.query(
-        "SELECT id, name FROM public.organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
+        "SELECT * FROM public.fn_find_organization_by_name($1)",
         [orgName]
       );
       if (existingOrgRes.rows.length > 0) {
@@ -862,42 +792,13 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     let resolvedPersonName = parsed.contactPerson || null;
 
     if (parsed.email || parsed.phone || parsed.contactPerson) {
-      // Check existing person by email
-      if (parsed.email) {
-        const pEmailRes = await connection.query(
-          "SELECT id, name, organization_id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1",
-          [`%${parsed.email.trim()}%`]
-        );
-        if (pEmailRes.rows.length > 0) {
-          personId = pEmailRes.rows[0].id;
-          resolvedPersonName = pEmailRes.rows[0].name;
-        }
-      }
-
-      // Check existing person by phone if not found
-      if (!personId && parsed.phone) {
-        const cleanPhone = parsed.phone.replace(/[^0-9+]/g, "");
-        const searchPhone = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${parsed.phone.trim()}%`;
-        const pPhoneRes = await connection.query(
-          "SELECT id, name, organization_id FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1",
-          [searchPhone]
-        );
-        if (pPhoneRes.rows.length > 0) {
-          personId = pPhoneRes.rows[0].id;
-          resolvedPersonName = pPhoneRes.rows[0].name;
-        }
-      }
-
-      // Check existing person by name if not found
-      if (!personId && parsed.contactPerson) {
-        const pNameRes = await connection.query(
-          "SELECT id, name, organization_id FROM public.persons WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1",
-          [parsed.contactPerson.trim()]
-        );
-        if (pNameRes.rows.length > 0) {
-          personId = pNameRes.rows[0].id;
-          resolvedPersonName = pNameRes.rows[0].name;
-        }
+      const pFindRes = await connection.query(
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
+        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
+      );
+      if (pFindRes.rows.length > 0) {
+        personId = pFindRes.rows[0].id;
+        resolvedPersonName = pFindRes.rows[0].name;
       }
 
       // If person not found, create new person
@@ -938,8 +839,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     let sourceId: number | null = null;
     if (parsed.source && parsed.source.trim()) {
       const sRes = await connection.query(
-        "SELECT id FROM public.lead_sources WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
-        [parsed.source.trim(), `%${parsed.source.trim()}%`]
+        "SELECT * FROM public.fn_find_lead_source_by_name($1)",
+        [parsed.source.trim()]
       );
       if (sRes.rows.length > 0) sourceId = sRes.rows[0].id;
     }
@@ -947,8 +848,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     let typeId: number | null = null;
     if (parsed.type && parsed.type.trim()) {
       const tRes = await connection.query(
-        "SELECT id FROM public.lead_types WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR name ILIKE $2 LIMIT 1",
-        [parsed.type.trim(), `%${parsed.type.trim()}%`]
+        "SELECT * FROM public.fn_find_lead_type_by_name($1)",
+        [parsed.type.trim()]
       );
       if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
     }
@@ -1020,7 +921,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
           let prodId: number | null = null;
           const pCheck = await connection.query(
-            "SELECT id, name, price FROM public.products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) OR (sku IS NOT NULL AND LOWER(sku) = LOWER($2)) LIMIT 1",
+            "SELECT * FROM public.fn_find_product_by_name_or_sku($1, $2)",
             [pName, pSku]
           );
 
@@ -1187,6 +1088,7 @@ export default {
   createLead,
   updateLead,
   deleteLead,
+  deleteBulkLeads,
   getLeadSources,
   getLeadTypes,
   getLeadPipelines,

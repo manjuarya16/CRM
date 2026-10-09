@@ -16,7 +16,7 @@ const TABS = [
 ];
 
 const fmtCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+  `₹${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
 
 const getPersonEmail = (person: any): string => {
   if (!person) return "";
@@ -29,6 +29,34 @@ const getPersonEmail = (person: any): string => {
       return typeof first === "object" ? (first.value || first.email || "") : String(first);
     }
     if (typeof emails === "string") return emails;
+  } catch (e) { }
+  return "";
+};
+
+const getPersonOrg = (person: any, orgList: any[] = []): string => {
+  if (!person) return "";
+  if (person.organization_name) return person.organization_name;
+  if (person.organization?.name) return person.organization.name;
+  if (typeof person.organization === "string" && person.organization.trim()) return person.organization;
+  if (person.organization_id && orgList.length > 0) {
+    const found = orgList.find((o: any) => String(o.id) === String(person.organization_id));
+    if (found?.name) return found.name;
+  }
+  return "";
+};
+
+const getPersonPhone = (person: any): string => {
+  if (!person) return "";
+  if (person.phone) return person.phone;
+  if (person.contact_number) return person.contact_number;
+  if (!person.contact_numbers) return "";
+  try {
+    const phones = typeof person.contact_numbers === "string" ? JSON.parse(person.contact_numbers) : person.contact_numbers;
+    if (Array.isArray(phones) && phones.length > 0) {
+      const first = phones[0];
+      return typeof first === "object" ? (first.value || first.number || first.phone || "") : String(first);
+    }
+    if (typeof phones === "string") return phones;
   } catch (e) { }
   return "";
 };
@@ -147,10 +175,22 @@ const CreateLeadPage: React.FC = () => {
         setPersons(sorted);
       }
     }).catch(() => { });
-    useOrganizationStore.getState().getOrganization().then(() => {
-      const org = useOrganizationStore.getState().organization;
-      if (org) setOrganizations([org]);
-    }).catch(() => { });
+    useOrganizationStore.getState().fetchOrganizations(1, 500).then((res: any) => {
+      const list = res?.data || res?.rows || (Array.isArray(res) ? res : []);
+      if (list.length > 0) {
+        setOrganizations(list);
+      } else {
+        useOrganizationStore.getState().getOrganization().then(() => {
+          const org = useOrganizationStore.getState().organization;
+          if (org) setOrganizations([org]);
+        }).catch(() => { });
+      }
+    }).catch(() => {
+      useOrganizationStore.getState().getOrganization().then(() => {
+        const org = useOrganizationStore.getState().organization;
+        if (org) setOrganizations([org]);
+      }).catch(() => { });
+    });
     useProductStore.getState().fetchProducts(1, 500).then(() => {
       const prods = useProductStore.getState().products;
       if (prods) setProducts(prods);
@@ -286,6 +326,11 @@ const CreateLeadPage: React.FC = () => {
         if (prod) {
           next[idx].product_name = prod.name || "";
           next[idx].price = String(prod.price ?? 0);
+          if (prod.type === "Service" || prod.type?.toLowerCase() === "service") {
+            next[idx].quantity = "1";
+            next[idx].warehouse_id = "";
+            next[idx].warehouse_location_id = "";
+          }
         }
         next[idx].warehouse_id = "";
         next[idx].warehouse_location_id = "";
@@ -314,8 +359,53 @@ const CreateLeadPage: React.FC = () => {
     clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
+  const handleSplitProductRow = (idx: number, maxQty: number, remainingQty: number) => {
+    setProductRows((rows) => {
+      const next = [...rows];
+      const currentRow = next[idx];
+      next[idx] = { ...currentRow, quantity: String(maxQty) };
+
+      const newRow: ProductRow = {
+        product_id: currentRow.product_id,
+        product_name: currentRow.product_name,
+        price: currentRow.price,
+        quantity: String(remainingQty),
+        warehouse_id: "",
+        warehouse_location_id: "",
+        inventories: currentRow.inventories,
+      };
+
+      next.splice(idx + 1, 0, newRow);
+      return next;
+    });
+  };
+
+  const triggerStockShortagePopup = (idx: number, locStock: number, shortageQty: number) => {
+    Swal.fire({
+      title: "Stock Shortage Warning",
+      html: `
+        <div class="text-left space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <p>Selected location only has <strong class="text-amber-600">${locStock} unit(s)</strong> in stock.</p>
+          <p>Would you like to keep <strong>${locStock} unit(s)</strong> in this location and add another row with the remaining <strong>${shortageQty} unit(s)</strong> to select another location?</p>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#0088cc",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: `+ Deduct remaining ${shortageQty} from another location`,
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleSplitProductRow(idx, locStock, shortageQty);
+      }
+    });
+  };
+
   const totalLeadValue = productRows.reduce((sum, r) => {
-    const q = parseFloat(r.quantity) || 0;
+    const selectedProd = products.find((p) => String(p.id) === String(r.product_id));
+    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+    const q = isService ? 1 : (parseFloat(r.quantity) || 0);
     const p = parseFloat(r.price) || 0;
     return sum + q * p;
   }, 0);
@@ -326,7 +416,9 @@ const CreateLeadPage: React.FC = () => {
     const q = personSearch.toLowerCase().trim();
     const name = (p.name || "").toLowerCase();
     const email = getPersonEmail(p).toLowerCase();
-    return name.includes(q) || email.includes(q);
+    const phone = getPersonPhone(p).toLowerCase();
+    const org = getPersonOrg(p, organizations).toLowerCase();
+    return name.includes(q) || email.includes(q) || phone.includes(q) || org.includes(q);
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -356,9 +448,13 @@ const CreateLeadPage: React.FC = () => {
         if (!row.product_id) {
           fieldErrors[`product_${idx}`] = "Please select a product";
         }
-        const qty = Number(row.quantity);
-        if (isNaN(qty) || qty <= 0) {
-          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+        const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
+        const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+        if (!isService) {
+          const qty = Number(row.quantity);
+          if (isNaN(qty) || qty <= 0) {
+            fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+          }
         }
         const price = Number(row.price);
         if (isNaN(price) || price < 0) {
@@ -384,11 +480,17 @@ const CreateLeadPage: React.FC = () => {
     try {
       const validProducts = productRows
         .filter((r) => r.product_id)
-        .map((r) => ({
-          product_id: Number(r.product_id),
-          quantity: Number(r.quantity) || 1,
-          price: parseFloat(r.price) || 0,
-        }));
+        .map((r) => {
+          const selectedProd = products.find((p) => String(p.id) === String(r.product_id));
+          const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+          return {
+            product_id: Number(r.product_id),
+            quantity: isService ? 1 : Number(r.quantity) || 1,
+            price: parseFloat(r.price) || 0,
+            warehouse_id: isService ? undefined : (r.warehouse_id ? Number(r.warehouse_id) : undefined),
+            warehouse_location_id: isService ? undefined : (r.warehouse_location_id ? Number(r.warehouse_location_id) : undefined),
+          };
+        });
 
       const leadValue = validProducts.length > 0
         ? totalLeadValue
@@ -496,9 +598,9 @@ const CreateLeadPage: React.FC = () => {
               <p className="text-base font-semibold text-gray-800 dark:text-white">Lead Details</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">Fill in the basic information and sales ownership.</p>
             </div>
-            <div className="w-full md:w-1/2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               {/* Title */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 lg:col-span-4">
                 <label className={labelCls}>
                   Title <span className="text-red-500">*</span>
                 </label>
@@ -536,17 +638,17 @@ const CreateLeadPage: React.FC = () => {
 
               {/* Lead Value */}
               <div>
-                <label className={labelCls}>Lead Value ($)</label>
+                <label className={labelCls}>Lead Value (₹)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={details.lead_value}
                   onChange={(e) => setDetails({ ...details, lead_value: e.target.value })}
                   placeholder="0.00"
-                  className={inputCls}
+                  className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                 />
                 {totalLeadValue > 0 && (
-                  <p className="text-xs text-[#0088cc] mt-1">
+                  <p className="text-xs text-[#0088cc] mt-1 font-medium">
                     Auto from products: {fmtCurrency(totalLeadValue)}
                   </p>
                 )}
@@ -625,7 +727,7 @@ const CreateLeadPage: React.FC = () => {
               </div>
 
               {/* Description */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 lg:col-span-4">
                 <label className={labelCls}>Description</label>
                 <textarea
                   rows={4}
@@ -637,7 +739,7 @@ const CreateLeadPage: React.FC = () => {
               </div>
 
               {/* Tags */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 lg:col-span-4">
                 <label className={labelCls}>Tags</label>
                 <TagPicker
                   selectedTagIds={selectedTagIds}
@@ -658,7 +760,7 @@ const CreateLeadPage: React.FC = () => {
               <p className="text-xs text-gray-500 dark:text-gray-400">Information About the Contact Person</p>
             </div>
 
-            <div className="w-full md:w-2/3 flex flex-col gap-4">
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Name * Searchable Dropdown */}
               <div className="relative" ref={personDropdownRef}>
                 <label className={labelCls}>
@@ -701,14 +803,27 @@ const CreateLeadPage: React.FC = () => {
                     {filteredPersons.length > 0 ? (
                       filteredPersons.map((p) => {
                         const email = getPersonEmail(p);
+                        const phone = getPersonPhone(p);
+                        const org = getPersonOrg(p, organizations);
                         return (
                           <div
                             key={p.id}
                             onClick={() => handleSelectPerson(p)}
                             className="px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex flex-col border-b last:border-b-0 border-gray-100 dark:border-gray-700"
                           >
-                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.name}</span>
-                            {email && <span className="text-xs text-gray-500 dark:text-gray-400">{email}</span>}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                {p.name}
+                                {org && <span className="text-gray-500 dark:text-gray-400 font-normal"> • {org}</span>}
+                              </span>
+                            </div>
+                            {(email || phone) && (
+                              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                {email && <span>{email}</span>}
+                                {email && phone && <span>•</span>}
+                                {phone && <span>{phone}</span>}
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -719,6 +834,21 @@ const CreateLeadPage: React.FC = () => {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Organization */}
+              <div>
+                <label className={labelCls}>Organization</label>
+                <select
+                  value={organizationId}
+                  onChange={(e) => setOrganizationId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Click to add</option>
+                  {organizations.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Email * */}
@@ -744,7 +874,7 @@ const CreateLeadPage: React.FC = () => {
                       <select
                         value={em.label}
                         onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
-                        className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                        className="px-3 py-2 pr-7 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
                       >
                         <option value="Work">Work</option>
                         <option value="Home">Home</option>
@@ -755,7 +885,8 @@ const CreateLeadPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemoveEmailRow(idx)}
-                        className="text-red-500 hover:text-red-700 p-1 text-base font-bold"
+                        className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                        title="Remove email"
                       >
                         ✕
                       </button>
@@ -790,7 +921,7 @@ const CreateLeadPage: React.FC = () => {
                       <select
                         value={pn.label}
                         onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
-                        className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                        className="px-3 py-2 pr-7 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
                       >
                         <option value="Work">Work</option>
                         <option value="Mobile">Mobile</option>
@@ -802,7 +933,8 @@ const CreateLeadPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleRemovePhoneRow(idx)}
-                        className="text-red-500 hover:text-red-700 p-1 text-base font-bold"
+                        className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                        title="Remove phone"
                       >
                         ✕
                       </button>
@@ -816,21 +948,6 @@ const CreateLeadPage: React.FC = () => {
                 >
                   + Add More
                 </button>
-              </div>
-
-              {/* Organization */}
-              <div>
-                <label className={labelCls}>Organization</label>
-                <select
-                  value={organizationId}
-                  onChange={(e) => setOrganizationId(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Click to add</option>
-                  {organizations.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
               </div>
             </div>
           </div>
@@ -848,128 +965,208 @@ const CreateLeadPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                    <th className="py-2.5 px-3">
-                      Product <span className="text-red-500">*</span>
-                    </th>
-                    <th className="py-2.5 px-3 w-40">Warehouse</th>
-                    <th className="py-2.5 px-3 w-40">Location</th>
-                    <th className="py-2.5 px-3 w-24">Quantity</th>
-                    <th className="py-2.5 px-3 w-32">Price (₹)</th>
-                    <th className="py-2.5 px-3 w-32">Amount</th>
-                    <th className="py-2.5 px-3 w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productRows.map((row, idx) => {
-                    const rowAmount = (parseFloat(row.quantity) || 0) * (parseFloat(row.price) || 0);
-                    const prodErr = errors[`product_${idx}`];
-                    const qtyErr = errors[`quantity_${idx}`];
-                    const priceErr = errors[`price_${idx}`];
+            {(() => {
+              const hasPhysicalProduct = productRows.some((r) => {
+                if (!r.product_id) return true;
+                const prod = products.find((p) => String(p.id) === String(r.product_id));
+                return prod && prod.type !== "Service" && prod.type?.toLowerCase() !== "service";
+              });
 
-                    // Dependent Warehouses for selected product
-                    const productInventories = row.inventories || [];
-                    const hasInvRecords = productInventories.length > 0;
-                    const validWarehouseIds = new Set(
-                      productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
-                    );
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                        <th className="py-2.5 px-3 min-w-[220px]">
+                          Product <span className="text-red-500">*</span>
+                        </th>
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
+                        <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
+                        <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
+                        <th className="py-2.5 px-3 w-12 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productRows.map((row, idx) => {
+                        const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
+                        const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+                        const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
+                        const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
+                        const prodErr = errors[`product_${idx}`];
+                        const qtyErr = errors[`quantity_${idx}`];
+                        const priceErr = errors[`price_${idx}`];
 
-                    const availableWarehouses = warehouses.filter((w) => {
-                      if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
-                      return validWarehouseIds.has(Number(w.id));
-                    });
+                        // Dependent Warehouses for selected product
+                        const productInventories = row.inventories || [];
+                        const hasInvRecords = productInventories.length > 0;
+                        const validWarehouseIds = new Set(
+                          productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
+                        );
 
-                    const getWarehouseLabel = (w: any) => {
-                      if (!row.product_id || !hasInvRecords) return w.name;
-                      const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
-                      const totalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
-                      return totalStock > 0 ? `${w.name} (Stock: ${totalStock})` : w.name;
-                    };
+                        // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
+                        const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
+                          if (!row.product_id) return 0;
+                          return productRows.reduce((sum, r, rIdx) => {
+                            if (rIdx === idx) return sum;
+                            if (String(r.product_id) !== String(row.product_id)) return sum;
+                            if (locId && String(r.warehouse_location_id) === String(locId)) {
+                              return sum + (parseFloat(r.quantity) || 0);
+                            }
+                            if (!locId && wId && String(r.warehouse_id) === String(wId)) {
+                              return sum + (parseFloat(r.quantity) || 0);
+                            }
+                            return sum;
+                          }, 0);
+                        };
 
-                    // Dependent Locations for selected warehouse
-                    const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
-                    const allLocations = selectedW?.locations || [];
-                    const locInvsForW = productInventories.filter(
-                      (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
-                    );
-                    const validLocationIds = new Set(
-                      locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
-                    );
+                        const availableWarehouses = warehouses.filter((w) => {
+                          if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
+                          return validWarehouseIds.has(Number(w.id));
+                        });
 
-                    const availableLocations = allLocations.filter((loc: any) => {
-                      if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
-                      return validLocationIds.has(Number(loc.id));
-                    });
+                        const getWarehouseLabel = (w: any) => {
+                          if (!row.product_id || !hasInvRecords) return w.name;
+                          const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
+                          const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
+                          const usedOther = getUsedQtyInOtherRows(undefined, w.id);
+                          const availStock = Math.max(0, dbTotalStock - usedOther);
+                          return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
+                        };
 
-                    const getLocationLabel = (loc: any) => {
-                      if (!row.product_id || !hasInvRecords) return loc.name;
-                      const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
-                      if (!invForLoc) return loc.name;
-                      return `${loc.name} (Stock: ${invForLoc.in_stock ?? 0})`;
-                    };
+                        // Dependent Locations for selected warehouse
+                        const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
+                        const allLocations = selectedW?.locations || [];
+                        const locInvsForW = productInventories.filter(
+                          (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
+                        );
+                        const validLocationIds = new Set(
+                          locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
+                        );
 
-                    return (
-                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2 px-3 align-top">
-                          <select
-                            value={row.product_id}
-                            onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
-                            className={`${inputCls} ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                          >
-                            <option value="">Select a product...</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} {p.sku ? `(${p.sku})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
-                        </td>
-                        <td className="py-2 px-3 align-top">
-                          <select
-                            value={row.warehouse_id || ""}
-                            onChange={(e) => {
-                              handleProductRowChange(idx, "warehouse_id", e.target.value);
-                              handleProductRowChange(idx, "warehouse_location_id", "");
-                            }}
-                            className={inputCls}
-                          >
-                            <option value="">Select Warehouse</option>
-                            {availableWarehouses.map((w) => (
-                              <option key={w.id} value={w.id}>
-                                {getWarehouseLabel(w)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2 px-3 align-top">
-                          <select
-                            value={row.warehouse_location_id || ""}
-                            onChange={(e) => handleProductRowChange(idx, "warehouse_location_id", e.target.value)}
-                            disabled={!row.warehouse_id}
-                            className={`${inputCls} disabled:opacity-50`}
-                          >
-                            <option value="">Select Location</option>
-                            {availableLocations.map((loc: any) => (
-                              <option key={loc.id} value={loc.id}>
-                                {getLocationLabel(loc)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2 px-3 align-top">
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.quantity}
-                            onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
-                            className={`${inputCls} ${qtyErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                          />
-                          {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                        </td>
+                        const availableLocations = allLocations.filter((loc: any) => {
+                          if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
+                          return validLocationIds.has(Number(loc.id));
+                        });
+
+                        const getLocationLabel = (loc: any) => {
+                          if (!row.product_id || !hasInvRecords) return loc.name;
+                          const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
+                          if (!invForLoc) return loc.name;
+                          const dbLocStock = Number(invForLoc.in_stock) || 0;
+                          const usedOther = getUsedQtyInOtherRows(loc.id);
+                          const availStock = Math.max(0, dbLocStock - usedOther);
+                          return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
+                        };
+
+                        const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
+                        const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
+                        const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
+                        const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
+                        const reqQty = Number(row.quantity || 0);
+                        const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
+                        const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
+
+                        return (
+                          <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="py-2 px-3 align-top">
+                              <select
+                                value={row.product_id}
+                                onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
+                                className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                              >
+                                <option value="">Select a product...</option>
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                            </td>
+                            {hasPhysicalProduct && (
+                              <td className="py-2 px-3 align-top">
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <select
+                                    value={row.warehouse_id || ""}
+                                    onChange={(e) => {
+                                      handleProductRowChange(idx, "warehouse_id", e.target.value);
+                                      handleProductRowChange(idx, "warehouse_location_id", "");
+                                    }}
+                                    className={`${inputCls} pr-7 truncate`}
+                                  >
+                                    <option value="">Select Warehouse</option>
+                                    {availableWarehouses.map((w) => (
+                                      <option key={w.id} value={w.id}>
+                                        {getWarehouseLabel(w)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </td>
+                            )}
+                            {hasPhysicalProduct && (
+                              <td className="py-2 px-3 align-top">
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <select
+                                    value={row.warehouse_location_id || ""}
+                                    onChange={(e) => handleProductRowChange(idx, "warehouse_location_id", e.target.value)}
+                                    disabled={!row.warehouse_id}
+                                    className={`${inputCls} pr-7 truncate disabled:opacity-50`}
+                                  >
+                                    <option value="">Select Location</option>
+                                    {availableLocations.map((loc: any) => (
+                                      <option key={loc.id} value={loc.id}>
+                                        {getLocationLabel(loc)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </td>
+                            )}
+                            {hasPhysicalProduct && (
+                              <td className="py-2 px-3 align-top">
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={row.quantity}
+                                      onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
+                                      className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                        qtyErr || isStockShortage
+                                          ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                          : ""
+                                      }`}
+                                    />
+                                    {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                                    {isStockShortage && locStock !== null && (
+                                      locStock > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => triggerStockShortagePopup(idx, locStock, shortageQty)}
+                                          className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                                        >
+                                          <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
+                                          <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                                        </button>
+                                      ) : (
+                                        <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
+                                          ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                                        </div>
+                                      )
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                            )}
                         <td className="py-2 px-3 align-top">
                           <input
                             type="number"
@@ -1001,6 +1198,8 @@ const CreateLeadPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          );
+        })()}
 
             <div className="flex items-center justify-between pt-2">
               <button

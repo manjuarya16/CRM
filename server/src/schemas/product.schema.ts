@@ -6,6 +6,7 @@ export const productSchema = z.object({
   description: z.string().trim().optional().nullable(),
   quantity: z.coerce.number().min(0, 'Quantity cannot be negative').default(0),
   price: z.coerce.number().min(0, 'Price cannot be negative').optional().nullable(),
+  type: z.enum(['Product', 'Service']).optional().default('Product'),
   custom_attributes: z.any().optional().default({}),
   inventories: z.array(z.any()).optional(),
 });

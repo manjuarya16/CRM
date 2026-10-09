@@ -11,6 +11,23 @@ const toNumberParam = (v: any): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+const formatJsonParam = (val: any): string | null => {
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        JSON.parse(trimmed);
+        return trimmed;
+      } catch {
+        // Fallback to stringifying plain text string into JSON string format
+      }
+    }
+    return JSON.stringify(val);
+  }
+  return JSON.stringify(val);
+};
+
 export class OrganizationService {
   public static async getAll(params?: { page?: number; perPage?: number; search?: string }): Promise<{ rows: IOrganization[]; total: number }> {
     try {
@@ -74,13 +91,13 @@ export class OrganizationService {
 
   public static async create(data: CreateOrganizationInput & { custom_attributes?: any }): Promise<IOrganization> {
     try {
-      const addressJson = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
-      const customAttrsJson = typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : (data.custom_attributes || '{}');
+      const addressJson = formatJsonParam(data.address);
+      const customAttrsJson = formatJsonParam(data.custom_attributes) || '{}';
       const userId = toNumberParam(data.user_id);
 
       const { rows } = await pool.query(
         'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result',
-        [data.name.trim(), addressJson || null, userId, customAttrsJson]
+        [data.name.trim(), addressJson, userId, customAttrsJson]
       );
       const createdOrg = rows[0]?.result;
       if (createdOrg) {
@@ -106,14 +123,14 @@ export class OrganizationService {
       const name = data.name !== undefined ? data.name.trim() : existing.name;
       let addressJson: string | null = null;
       if (data.address !== undefined) {
-        addressJson = typeof data.address === 'object' ? JSON.stringify(data.address) : data.address;
+        addressJson = formatJsonParam(data.address);
       } else if (existing.address) {
-        addressJson = typeof existing.address === 'object' ? JSON.stringify(existing.address) : existing.address;
+        addressJson = formatJsonParam(existing.address);
       }
       const userId = data.user_id !== undefined ? toNumberParam(data.user_id) : existing.user_id;
       const customAttrsJson = data.custom_attributes !== undefined
-        ? (typeof data.custom_attributes === 'object' ? JSON.stringify(data.custom_attributes) : data.custom_attributes)
-        : JSON.stringify(existing.custom_attributes || {});
+        ? (formatJsonParam(data.custom_attributes) || '{}')
+        : formatJsonParam(existing.custom_attributes || {});
 
       const { rows } = await pool.query(
         'SELECT save_organization($1, $2::jsonb, $3, $4::jsonb, $5) as result',

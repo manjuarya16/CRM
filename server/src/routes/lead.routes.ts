@@ -85,6 +85,14 @@ router.put("/:id", requireAuth, (req: Request, res: Response) => {
   leadService.updateLead(req, res);
 });
 
+router.post("/bulk-delete", requireAuth, (req: Request, res: Response) => {
+  leadService.deleteBulkLeads(req, res);
+});
+
+router.delete("/bulk-delete", requireAuth, (req: Request, res: Response) => {
+  leadService.deleteBulkLeads(req, res);
+});
+
 router.delete("/delete/:id", requireAuth, (req: Request, res: Response) => {
   leadService.deleteLead(req, res);
 });

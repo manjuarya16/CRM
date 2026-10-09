@@ -169,6 +169,33 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     }
   },
 
+  deleteBulkLeads: async (ids: number[]) => {
+    if (!ids || ids.length === 0) return;
+    set({ loading: true });
+    try {
+      const response = await API.post("/leads/bulk-delete", { ids });
+      if (response.data?.success) {
+        const idSet = new Set(ids);
+        set((state) => ({
+          leads: state.leads.filter((l) => !idSet.has(l.id)),
+          kanbanLeads: state.kanbanLeads.filter((l) => !idSet.has(l.id)),
+          total: Math.max(0, state.total - ids.length),
+          error: null,
+        }));
+        handleSuccessResponse("Leads", "bulk deleted", null);
+      } else {
+        throw new Error(response.data?.message || "Failed to bulk delete leads");
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.message || error.message;
+      set({ error: message });
+      handleErrorResponse("Leads", "bulk delete", error);
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   updateLeadStage: async (id: number, stageId: number, status = true, lostReason?: string) => {
     try {
       const res = await API.put(`/leads/${id}/stage`, { stage_id: stageId, status, lost_reason: lostReason });

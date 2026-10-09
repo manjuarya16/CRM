@@ -5,7 +5,7 @@ import { zodResolver } from "@/utils/zodResolver";
 import Swal from "sweetalert2";
 import { workflowSchema, WorkflowInput } from "@/schemas";
 import { IWorkflow, IWorkflowCondition, IWorkflowAction, WorkflowFormProps } from "@/interface";
-import { useWorkflowStore, useEmailTemplateStore, useUserStore, useTagStore } from "@/store";
+import { useWorkflowStore, useEmailTemplateStore, useUserStore, useTagStore, useWebhookStore } from "@/store";
 
 const ENTITY_ACTION_OPTIONS: Record<string, { label: string; value: string }[]> = {
   leads: [
@@ -82,6 +82,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
   const [emailTemplates, setEmailTemplates] = useState<{ id: number; name: string; subject: string }[]>([]);
   const [users, setUsers] = useState<{ id: number; name: string; email: string }[]>([]);
   const [tags, setTags] = useState<{ id: number; name: string; color: string }[]>([]);
+  const [configuredWebhooks, setConfiguredWebhooks] = useState<any[]>([]);
 
   const {
     register,
@@ -109,10 +110,11 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
     // Fetch helper data for dropdowns
     const fetchHelperData = async () => {
       try {
-        const [tmplList, uList, tagList] = await Promise.all([
+        const [tmplList, uList, tagList, whList] = await Promise.all([
           useEmailTemplateStore.getState().fetchEmailTemplates(),
           useUserStore.getState().fetchUsers(),
           useTagStore.getState().fetchTags(),
+          useWebhookStore.getState().fetchWebhooks(),
         ]);
         if (tmplList) setEmailTemplates(tmplList as any);
         if (uList) {
@@ -120,6 +122,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
           setUsers(userRows);
         }
         if (tagList) setTags(tagList as any);
+        if (whList) setConfiguredWebhooks(whList as any);
       } catch (err) {
         console.error("Failed to load helper options", err);
       }
@@ -609,15 +612,37 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({ initialData, isEdit 
 
                 {a.action_type === "trigger_webhook" && (
                   <>
-                    <div className="md:col-span-2">
-                      <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">Webhook URL</label>
-                      <input
-                        type="url"
-                        placeholder="https://hooks.zapier.com/hooks/catch/12345/abcde"
-                        value={a.target || ""}
-                        onChange={(e) => updateAction(idx, a.action_type, e.target.value, a.value || "")}
-                        className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                      />
+                    <div className="md:col-span-2 space-y-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
+                          Select Configured Webhook (from /settings/webhooks)
+                        </label>
+                        <select
+                          value={!isNaN(Number(a.target)) ? a.target : ""}
+                          onChange={(e) => updateAction(idx, a.action_type, e.target.value, e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 font-semibold"
+                        >
+                          <option value="">-- Pick a Webhook from Settings --</option>
+                          {configuredWebhooks.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              #{w.id} - {w.name} ({w.method} {w.end_point})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 mb-0.5">
+                          Or Direct Custom Webhook URL
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="https://hooks.zapier.com/hooks/catch/12345/abcde"
+                          value={a.target || ""}
+                          onChange={(e) => updateAction(idx, a.action_type, e.target.value, e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                        />
+                      </div>
                     </div>
                   </>
                 )}

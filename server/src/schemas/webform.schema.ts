@@ -15,7 +15,7 @@ export const saveWebFormSchema = z.object({
   submit_success_action: z.enum(['message', 'redirect']).default('message'),
   submit_success_content: z.string().default('Thank you for your submission.'),
   create_lead: z.coerce.boolean().optional().default(false),
-  lead_pipeline_id: z.coerce.number().nullable().optional(),
+  lead_pipeline_id: z.preprocess((val) => (val === '' || val === null || val === undefined || val === 0 ? null : Number(val)), z.number().nullable().optional()),
   background_color: z.string().optional().default('#ffffff'),
   form_background_color: z.string().optional().default('#ffffff'),
   form_title_color: z.string().optional().default('#1e293b'),

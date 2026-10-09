@@ -24,6 +24,12 @@ const poolConfig: PoolConfig = env.DATABASE_URL
 
 export const pool = new Pool(poolConfig);
 
+pool.on('connect', (client) => {
+  client.on('error', (err) => {
+    logger.error({ err }, 'Unexpected PostgreSQL client connection error');
+  });
+});
+
 pool.on('error', (err) => {
   logger.error({ err }, 'Unexpected PostgreSQL pool error');
 });

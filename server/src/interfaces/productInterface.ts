@@ -15,6 +15,7 @@ export interface IProduct {
   description?: string;
   quantity: number;
   price?: number;
+  type?: string;
   created_at?: Date;
   updated_at?: Date;
   total_count?: number;
@@ -28,6 +29,7 @@ export interface IProductCreateInput {
   description?: string;
   quantity?: number;
   price?: number;
+  type?: string;
   custom_attributes?: Record<string, any>;
   inventories?: IProductInventory[];
 }
