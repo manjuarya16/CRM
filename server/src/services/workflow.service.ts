@@ -276,9 +276,9 @@ export class WorkflowService {
         if (!webhookUrl.startsWith('http://') && !webhookUrl.startsWith('https://')) {
           const webhookId = Number(webhookUrl);
           if (Number.isFinite(webhookId)) {
-            const webhookRes = await pool.query('SELECT end_point FROM webhooks WHERE id = $1', [webhookId]);
-            if (webhookRes.rows[0]?.end_point) {
-              webhookUrl = webhookRes.rows[0].end_point;
+            const webhookRes = await pool.query('SELECT get_webhook($1::integer) as result', [webhookId]);
+            if (webhookRes.rows[0]?.result?.end_point) {
+              webhookUrl = webhookRes.rows[0].result.end_point;
             }
           }
         }
@@ -294,13 +294,8 @@ export class WorkflowService {
         if (tagVal) {
           let tagId = Number(tagVal);
           if (!Number.isFinite(tagId)) {
-            const tagRes = await pool.query('SELECT id FROM tags WHERE LOWER(name) = LOWER($1)', [tagVal]);
-            if (tagRes.rows[0]) {
-              tagId = tagRes.rows[0].id;
-            } else {
-              const newTagRes = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [tagVal, '#0088cc', null, null]);
-              tagId = newTagRes.rows[0]?.data?.id;
-            }
+            const newTagRes = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [tagVal, '#0088cc', null, null]);
+            tagId = newTagRes.rows[0]?.data?.id;
           }
           if (tagId) {
             const targetEntityType = entityType.toLowerCase().startsWith('person') ? 'person' : 'lead';
@@ -382,7 +377,7 @@ export class WorkflowService {
               if (colName === 'status') {
                 valToSet = value === 'open' || value === 'true' || value === true || value === 1;
               }
-              await pool.query(`UPDATE leads SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [valToSet, leadId]);
+              await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['leads', leadId, colName, String(valToSet)]);
             }
           }
         }
@@ -394,7 +389,7 @@ export class WorkflowService {
           const colName = target.toLowerCase().trim();
           const personCols = ['name', 'user_id', 'organization_id', 'job_title', 'is_vip'];
           if (personCols.includes(colName)) {
-            await pool.query(`UPDATE persons SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, personId]);
+            await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['persons', personId, colName, String(value)]);
           }
         }
       } else if (action_type === 'update_quote' && target && value !== undefined) {
@@ -403,15 +398,15 @@ export class WorkflowService {
           const colName = target.toLowerCase().trim();
           const quoteCols = ['subject', 'description', 'user_id', 'person_id', 'lead_id', 'grand_total', 'sub_total', 'tax_amount', 'discount_amount'];
           if (quoteCols.includes(colName)) {
-            await pool.query(`UPDATE quotes SET ${colName} = $1, updated_at = NOW() WHERE id = $2`, [value, quoteId]);
+            await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['quotes', quoteId, colName, String(value)]);
           }
         }
       } else if ((action_type === 'send_email_person' || action_type === 'send_email_owner' || action_type === 'send_email_participants' || action_type === 'send_email') && target) {
         const templateId = Number(target);
         if (Number.isFinite(templateId)) {
-          const { rows } = await pool.query(`SELECT * FROM email_templates WHERE id = $1`, [templateId]);
-          if (rows[0]) {
-            const template = rows[0];
+          const { rows } = await pool.query(`SELECT get_email_template($1::integer) as result`, [templateId]);
+          if (rows[0]?.result) {
+            const template = rows[0].result;
             const lowerEntity = entityType.toLowerCase();
 
             // Extract email address helper
@@ -446,8 +441,8 @@ export class WorkflowService {
             if (action_type === 'send_email_owner') {
               const targetUserId = data.user_id || data.assigned_to;
               if (targetUserId) {
-                const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetUserId]);
-                if (userRes.rows[0]?.email) recipientEmail = extractEmailAddress(userRes.rows[0].email);
+                const userRes = await pool.query(`SELECT get_user($1::integer) as result`, [targetUserId]);
+                if (userRes.rows[0]?.result?.email) recipientEmail = extractEmailAddress(userRes.rows[0].result.email);
               }
             } else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanVal)) {
               recipientEmail = cleanVal;
@@ -461,36 +456,37 @@ export class WorkflowService {
                                extractEmailAddress(data.user_email);
             }
 
-            // DB Lookup 1: Related Person Email
+            // DB Lookup 1: Related Person Email via stored procedure
             const targetPersonId = (lowerEntity.includes('person') || lowerEntity.includes('contact'))
               ? entityId
               : (data.person_id || null);
 
             if (!recipientEmail && targetPersonId) {
               try {
-                const personRes = await pool.query(`SELECT emails FROM persons WHERE id = $1`, [targetPersonId]);
-                if (personRes.rows[0]?.emails) recipientEmail = extractEmailAddress(personRes.rows[0].emails);
+                const personRes = await pool.query(`SELECT get_person($1::integer) as result`, [targetPersonId]);
+                if (personRes.rows[0]?.result?.emails) recipientEmail = extractEmailAddress(personRes.rows[0].result.emails);
               } catch {}
             }
 
-            // DB Lookup 2: Related Lead's Person Email
+            // DB Lookup 2: Related Lead's Person Email via stored procedure
             const targetLeadId = lowerEntity.includes('lead') ? entityId : (data.lead_id || null);
             if (!recipientEmail && targetLeadId) {
               try {
-                const leadRes = await pool.query(
-                  `SELECT p.emails FROM leads l JOIN persons p ON p.id = l.person_id WHERE l.id = $1`,
-                  [targetLeadId]
-                );
-                if (leadRes.rows[0]?.emails) recipientEmail = extractEmailAddress(leadRes.rows[0].emails);
+                const leadRes = await pool.query('SELECT * FROM public.fn_get_lead_by_id($1)', [targetLeadId]);
+                const personIdFromLead = leadRes.rows[0]?.person_id;
+                if (personIdFromLead) {
+                  const personRes = await pool.query('SELECT get_person($1::integer) as result', [personIdFromLead]);
+                  if (personRes.rows[0]?.result?.emails) recipientEmail = extractEmailAddress(personRes.rows[0].result.emails);
+                }
               } catch {}
             }
 
-            // DB Lookup 3: Assigned Owner User Email
+            // DB Lookup 3: Assigned Owner User Email via stored procedure
             const targetUserId = data.user_id || data.assigned_to;
             if (!recipientEmail && targetUserId) {
               try {
-                const userRes = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetUserId]);
-                if (userRes.rows[0]?.email) recipientEmail = extractEmailAddress(userRes.rows[0].email);
+                const userRes = await pool.query(`SELECT get_user($1::integer) as result`, [targetUserId]);
+                if (userRes.rows[0]?.result?.email) recipientEmail = extractEmailAddress(userRes.rows[0].result.email);
               } catch {}
             }
 
@@ -519,18 +515,14 @@ export class WorkflowService {
               const uniqueId = `email_wf_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
               const messageId = `<${uniqueId}@crm.local>`;
 
-              // 1. Record email in database
+              // 1. Record email in database via procedural function
               await pool.query(
-                `INSERT INTO public.emails (
-                  subject, source, user_type, name, reply, is_read, folders,
-                  from_email, sender, reply_to, cc, bcc, unique_id, message_id,
-                  person_id, lead_id, user_id, created_at, updated_at
-                ) VALUES (
+                `SELECT * FROM public.fn_save_email(
                   $1, 'mail', 'admin', 'Automated Workflow', $2, true, '["sent"]'::jsonb,
                   '{"name":"CRM Automation","email":"system@crm.local"}'::jsonb,
                   '{"name":"CRM Automation","email":"system@crm.local"}'::jsonb,
-                  $3, '[]'::jsonb, '[]'::jsonb, $4, $5,
-                  $6, $7, $8, NOW(), NOW()
+                  $3::jsonb, '[]'::jsonb, '[]'::jsonb, $4, $5,
+                  $6, $7, NULL, $8
                 )`,
                 [
                   subject,

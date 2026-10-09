@@ -1,17 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '@/utils/logger';
-
-export interface SseClient {
-  id: string;
-  userId?: number;
-  res: Response;
-}
-
-export interface RealtimeEvent<T = any> {
-  type: 'lead:created' | 'lead:updated' | 'lead:deleted' | 'notification:new' | 'notification:count' | 'ping';
-  data: T;
-  timestamp: string;
-}
+import { SseClient, RealtimeEvent } from '@/interfaces';
+export type { SseClient, RealtimeEvent };
 
 export class SseService {
   private static clients: Map<string, SseClient> = new Map();

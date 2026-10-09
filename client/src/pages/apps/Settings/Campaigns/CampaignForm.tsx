@@ -60,9 +60,7 @@ export const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, isEdit 
     }
   }, [initialData, optionsLoaded, reset]);
 
-  const onInvalid = (errs: any) => {
-    console.log("Zod validation errors:", errs);
-  };
+  const onInvalid = (_errs: any) => {};
 
   const onSubmit = async (data: CampaignInput) => {
     try {

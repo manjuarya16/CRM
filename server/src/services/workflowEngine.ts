@@ -183,108 +183,13 @@ async function fetchEntityData(entityType: string, entityId: number): Promise<En
     );
     if (rows[0]?.entity) {
       const data = typeof rows[0].entity === 'string' ? JSON.parse(rows[0].entity) : rows[0].entity;
-      return data;
+      return (data && Object.keys(data).length > 0) ? data : null;
     }
+    return null;
   } catch (err: any) {
-    logger.error({ err: err?.message, entityType, entityId }, '[WorkflowEngine] fetchEntityData stored function failed, trying fallback');
+    logger.error({ err: err?.message, entityType, entityId }, '[WorkflowEngine] fetchEntityData stored function failed');
+    return null;
   }
-
-  try {
-    const lowerType = String(entityType).toLowerCase().trim();
-
-    if (lowerType === 'leads' || lowerType === 'lead') {
-      const { rows } = await pool.query(
-        `SELECT l.*,
-                p.name AS person_name,
-                p.emails AS person_emails,
-                p.contact_numbers AS person_contact_numbers,
-                o.name AS organization_name,
-                u.name AS user_name,
-                u.email AS user_email,
-                s.name AS stage_name,
-                src.name AS source_name,
-                pipe.name AS pipeline_name,
-                lt.name AS type_name
-         FROM public.leads l
-         LEFT JOIN public.persons p ON p.id = l.person_id
-         LEFT JOIN public.organizations o ON o.id = l.organization_id
-         LEFT JOIN public.users u ON u.id = l.user_id
-         LEFT JOIN public.lead_pipeline_stages s ON s.id = l.lead_pipeline_stage_id
-         LEFT JOIN public.lead_sources src ON src.id = l.lead_source_id
-         LEFT JOIN public.lead_pipelines pipe ON pipe.id = l.lead_pipeline_id
-         LEFT JOIN public.lead_types lt ON lt.id = l.lead_type_id
-         WHERE l.id = $1`,
-        [entityId]
-      );
-      return rows[0] || null;
-    }
-
-    if (lowerType === 'persons' || lowerType === 'person' || lowerType === 'contacts' || lowerType === 'contact') {
-      const { rows } = await pool.query(
-        `SELECT p.*,
-                o.name AS organization_name,
-                u.name AS user_name,
-                u.email AS user_email
-         FROM public.persons p
-         LEFT JOIN public.organizations o ON o.id = p.organization_id
-         LEFT JOIN public.users u ON u.id = p.user_id
-         WHERE p.id = $1`,
-        [entityId]
-      );
-      return rows[0] || null;
-    }
-
-    if (lowerType === 'organizations' || lowerType === 'organization') {
-      const { rows } = await pool.query(
-        `SELECT o.*,
-                u.name AS user_name,
-                u.email AS user_email
-         FROM public.organizations o
-         LEFT JOIN public.users u ON u.id = o.user_id
-         WHERE o.id = $1`,
-        [entityId]
-      );
-      return rows[0] || null;
-    }
-
-    if (lowerType === 'quotes' || lowerType === 'quote') {
-      const { rows } = await pool.query(
-        `SELECT q.*,
-                p.name AS person_name,
-                p.emails AS person_emails,
-                l.title AS lead_title,
-                u.name AS user_name,
-                u.email AS user_email
-         FROM public.quotes q
-         LEFT JOIN public.persons p ON p.id = q.person_id
-         LEFT JOIN public.leads l ON l.id = q.lead_id
-         LEFT JOIN public.users u ON u.id = q.user_id
-         WHERE q.id = $1`,
-        [entityId]
-      );
-      return rows[0] || null;
-    }
-
-    if (lowerType === 'activities' || lowerType === 'activity') {
-      const { rows } = await pool.query(
-        `SELECT a.*,
-                u.name AS user_name,
-                u.email AS user_email,
-                la.lead_id,
-                pa.person_id
-         FROM public.activities a
-         LEFT JOIN public.users u ON u.id = a.user_id
-         LEFT JOIN public.lead_activities la ON la.activity_id = a.id
-         LEFT JOIN public.person_activities pa ON pa.activity_id = a.id
-         WHERE a.id = $1`,
-        [entityId]
-      );
-      return rows[0] || null;
-    }
-  } catch (err: any) {
-    logger.error({ err: err?.message, entityType, entityId }, '[WorkflowEngine] fetchEntityData failed');
-  }
-  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,11 +263,11 @@ async function executeActions(
             break;
           }
 
-          const { rows: tRows } = await pool.query(
-            `SELECT id, name, subject, content FROM public.email_templates WHERE id = $1`,
+          const { rows: templateRows } = await pool.query(
+            `SELECT get_email_template($1::integer) as result`,
             [templateId]
           );
-          const tmpl = tRows[0];
+          const tmpl = templateRows[0]?.result;
           if (!tmpl) {
             logger.warn({ templateId }, '[WorkflowEngine] Email template not found in DB');
             break;
@@ -402,22 +307,13 @@ async function executeActions(
 
           if (isParticipantsAction) {
             if (entity.id) {
-              const { rows: pRows } = await pool.query(
-                `SELECT COALESCE(u.email, (
-                   CASE 
-                     WHEN jsonb_typeof(p.emails::jsonb) = 'array' THEN p.emails->0->>'value'
-                     ELSE p.emails::text 
-                   END
-                 )) as email
-                 FROM public.activity_participants ap
-                 LEFT JOIN public.users u ON u.id = ap.user_id
-                 LEFT JOIN public.persons p ON p.id = ap.person_id
-                 WHERE ap.activity_id = $1`,
+              const { rows: participantRows } = await pool.query(
+                `SELECT * FROM public.fn_get_activity_participant_emails($1)`,
                 [entity.id]
               );
-              for (const pr of pRows) {
-                if (!pr.email) continue;
-                await sendWorkflowEmail(pr.email, parsedSubject, parsedBody, {
+              for (const participantRow of participantRows) {
+                if (!participantRow.email) continue;
+                await sendWorkflowEmail(participantRow.email, parsedSubject, parsedBody, {
                   lead_id: ctxParams.lead_id,
                   person_id: ctxParams.person_id,
                   quote_id: ctxParams.quote_id,
@@ -433,8 +329,8 @@ async function executeActions(
           if (isOwnerAction) {
             if (entity.user_email) toEmail = entity.user_email;
             else if (entity.user_id) {
-              const { rows: uRows } = await pool.query('SELECT email FROM public.users WHERE id = $1', [entity.user_id]);
-              toEmail = uRows[0]?.email || null;
+              const { rows: userRows } = await pool.query('SELECT get_user($1::integer) as result', [entity.user_id]);
+              toEmail = userRows[0]?.result?.email || null;
             } else if (ctx.user?.email) {
               toEmail = ctx.user.email;
             }
@@ -451,19 +347,20 @@ async function executeActions(
                         extractEmail(ctx.person?.emails) ||
                         extractEmail(ctx.person?.email);
 
-              // Fallback DB lookup for Person
+              // Fallback DB lookup for Person via stored procedure
               if (!toEmail && ctxParams.person_id) {
-                const { rows: pRows } = await pool.query('SELECT emails FROM public.persons WHERE id = $1', [ctxParams.person_id]);
-                if (pRows[0]?.emails) toEmail = extractEmail(pRows[0].emails);
+                const { rows: personRows } = await pool.query('SELECT get_person($1::integer) as result', [ctxParams.person_id]);
+                if (personRows[0]?.result?.emails) toEmail = extractEmail(personRows[0].result.emails);
               }
 
-              // Fallback DB lookup for Lead's Person
+              // Fallback DB lookup for Lead's Person via stored procedure
               if (!toEmail && ctxParams.lead_id) {
-                const { rows: lpRows } = await pool.query(
-                  'SELECT p.emails FROM public.leads l JOIN public.persons p ON p.id = l.person_id WHERE l.id = $1',
-                  [ctxParams.lead_id]
-                );
-                if (lpRows[0]?.emails) toEmail = extractEmail(lpRows[0].emails);
+                const { rows: leadRows } = await pool.query('SELECT * FROM public.fn_get_lead_by_id($1)', [ctxParams.lead_id]);
+                const personIdFromLead = leadRows[0]?.person_id;
+                if (personIdFromLead) {
+                  const { rows: personRows } = await pool.query('SELECT get_person($1::integer) as result', [personIdFromLead]);
+                  if (personRows[0]?.result?.emails) toEmail = extractEmail(personRows[0].result.emails);
+                }
               }
             }
           }
@@ -492,7 +389,7 @@ async function executeActions(
                         : normEntityType.startsWith('activit') ? 'activities'
                         : null;
             if (table) {
-              await pool.query(`UPDATE public.${table} SET user_id = $1, updated_at = NOW() WHERE id = $2`, [assignedUserId, entity.id]);
+              await pool.query('SELECT public.fn_update_entity_user($1, $2, $3)', [table, entity.id, assignedUserId]);
               logger.info({ table, entityId: entity.id, assignedUserId }, '[WorkflowEngine] assign_user executed successfully');
             }
           }
@@ -511,7 +408,7 @@ async function executeActions(
             if (field === 'stage_id' || field === 'lead_pipeline_stage_id') {
               const stageId = Number(val);
               if (!isNaN(stageId)) {
-                await pool.query('UPDATE public.leads SET lead_pipeline_stage_id = $1, updated_at = NOW() WHERE id = $2', [stageId, leadId]);
+                await pool.query('SELECT public.fn_update_lead_stage($1, $2, true, null)', [leadId, stageId]);
                 logger.info({ leadId, stageId }, '[WorkflowEngine] updated lead stage');
               }
             } else {
@@ -526,7 +423,7 @@ async function executeActions(
                 if (col === 'status') {
                   valToSet = val === 'open' || val === 'true' || val === true || val === 1 || val === '1';
                 }
-                await pool.query(`UPDATE public.leads SET ${col} = $1, updated_at = NOW() WHERE id = $2`, [valToSet, leadId]);
+                await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['leads', leadId, col, String(valToSet)]);
                 logger.info({ leadId, col, valToSet }, '[WorkflowEngine] update_lead executed successfully');
               }
             }
@@ -543,7 +440,7 @@ async function executeActions(
           if (field && val !== undefined && personId) {
             const allowedCols = ['name', 'user_id', 'organization_id', 'job_title', 'is_vip'];
             if (allowedCols.includes(field)) {
-              await pool.query(`UPDATE public.persons SET ${field} = $1, updated_at = NOW() WHERE id = $2`, [val, personId]);
+              await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['persons', personId, field, String(val)]);
               logger.info({ personId, field, val }, '[WorkflowEngine] update_person executed successfully');
             }
           }
@@ -559,7 +456,7 @@ async function executeActions(
           if (field && val !== undefined && quoteId) {
             const allowedCols = ['subject', 'description', 'user_id', 'person_id', 'lead_id', 'grand_total', 'sub_total', 'tax_amount', 'discount_amount'];
             if (allowedCols.includes(field)) {
-              await pool.query(`UPDATE public.quotes SET ${field} = $1, updated_at = NOW() WHERE id = $2`, [val, quoteId]);
+              await pool.query('SELECT public.fn_update_entity_field($1, $2, $3, $4)', ['quotes', quoteId, field, String(val)]);
               logger.info({ quoteId, field, val }, '[WorkflowEngine] update_quote executed successfully');
             }
           }
@@ -572,16 +469,8 @@ async function executeActions(
           if (tagVal && entity.id) {
             let tagId = Number(tagVal);
             if (isNaN(tagId)) {
-              const { rows: tRows } = await pool.query('SELECT id FROM public.tags WHERE LOWER(name) = LOWER($1)', [tagVal]);
-              if (tRows[0]) {
-                tagId = tRows[0].id;
-              } else {
-                const { rows: nRows } = await pool.query(
-                  'INSERT INTO public.tags (name, color, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id',
-                  [tagVal, '#0088cc']
-                );
-                tagId = nRows[0]?.id;
-              }
+              const newTagRes = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [tagVal, '#0088cc', null, null]);
+              tagId = newTagRes.rows[0]?.data?.id;
             }
 
             if (tagId) {
@@ -614,26 +503,16 @@ async function executeActions(
           const userId = entity.user_id || user?.id || 1;
 
           const { rows: actRows } = await pool.query(
-            `INSERT INTO public.activities (title, type, comment, is_done, user_id, created_at, updated_at)
-             VALUES ($1, $2, $3, true, $4, NOW(), NOW())
-             RETURNING id`,
-            [`Workflow: ${comment.slice(0, 60)}`, actType, comment, userId]
+            `SELECT * FROM public.fn_create_activity(
+              $1::varchar, $2::varchar, $3::text,
+              NOW()::timestamp, (NOW() + INTERVAL '30 minutes')::timestamp,
+              true::boolean, $4::integer, null::varchar, $5::integer, $6::integer
+            )`,
+            [`Workflow: ${comment.slice(0, 60)}`, actType, comment, userId, leadId, personId]
           );
 
           const actId = actRows[0]?.id;
           if (actId) {
-            if (leadId) {
-              await pool.query(
-                `INSERT INTO public.lead_activities (lead_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                [leadId, actId]
-              );
-            }
-            if (personId) {
-              await pool.query(
-                `INSERT INTO public.person_activities (person_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                [personId, actId]
-              );
-            }
             logger.info({ actId, leadId, personId }, '[WorkflowEngine] create_activity executed successfully');
           }
           break;
@@ -647,11 +526,10 @@ async function executeActions(
           let wh: any = null;
           if (!isNaN(Number(webhookId))) {
             const { rows: wRows } = await pool.query(
-              `SELECT id, name, method, end_point, headers, query_params, payload_type, raw_payload_type, payload
-               FROM public.webhooks WHERE id = $1`,
+              `SELECT get_webhook($1::integer) as result`,
               [Number(webhookId)]
             );
-            wh = wRows[0];
+            wh = wRows[0]?.result;
           } else if (typeof webhookId === 'string' && webhookId.startsWith('http')) {
             wh = {
               name: 'Direct URL Webhook',
@@ -752,14 +630,10 @@ async function sendWorkflowEmail(
       const fromEmail = { name: 'CRM Automation', email: 'automation@crm.local' };
       const uniqueId = `wf_email_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       await pool.query(
-        `INSERT INTO public.emails (
-          subject, source, user_type, name, reply, is_read, folders,
-          from_email, sender, reply_to, cc, bcc, unique_id, message_id,
-          person_id, lead_id, user_id, created_at, updated_at
-        ) VALUES (
+        `SELECT * FROM public.fn_save_email(
           $1, 'workflow', 'admin', 'Workflow Automation', $2, true, '["sent"]'::jsonb,
-          $3, $3, $4, '[]'::jsonb, '[]'::jsonb, $5, $6,
-          $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          $3::jsonb, $3::jsonb, $4::jsonb, '[]'::jsonb, '[]'::jsonb,
+          $5, $6, $7, $8, NULL, $9
         )`,
         [
           subject,
@@ -811,12 +685,10 @@ export async function processWorkflowsForEvent(
     if (rawType === 'quote' || rawType === 'quotes') aliases.push('quote', 'quotes');
     if (rawType === 'activity' || rawType === 'activities') aliases.push('activity', 'activities');
 
-    // 1. Find all matching workflows for this entityType
+    // 1. Find all matching workflows for this entityType and event via procedural function
     const { rows: allWorkflows } = await pool.query(
-      `SELECT id, name, entity_type, event, condition_type, conditions, actions
-       FROM public.workflows
-       WHERE LOWER(entity_type) = ANY($1::text[])`,
-      [aliases]
+      `SELECT * FROM public.fn_get_matching_workflows($1, $2)`,
+      [aliases, cleanEvent]
     );
 
     // Filter event flexibly (supports 'create', 'created', 'activity.create.after', 'update', 'updated', etc.)

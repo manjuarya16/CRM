@@ -74,7 +74,7 @@ export class PersonService {
       const search = params.search ? String(params.search).trim() : null;
       const offset = (page - 1) * perPage;
 
-      const { rows } = await pool.query('SELECT get_all_persons($1, $2, $3) as result', [
+      const { rows } = await client.query('SELECT get_all_persons($1, $2, $3) as result', [
         search || null,
         perPage,
         offset,
@@ -106,7 +106,8 @@ export class PersonService {
       const personId = toNumberParam(id);
       if (!personId) return null;
 
-      const { rows } = await pool.query('SELECT get_person($1) as result', [personId]);
+      client = await pool.connect();
+      const { rows } = await client.query('SELECT get_person($1) as result', [personId]);
       const person = rows[0]?.result || null;
       if (!person) return null;
 
@@ -125,16 +126,14 @@ export class PersonService {
         job_title: cleanJobTitle(person.job_title),
       };
 
-      const activitiesRes = await pool.query(
-        `SELECT * FROM activities WHERE id IN (
-           SELECT activity_id FROM activity_participants WHERE person_id = $1
-         ) ORDER BY id DESC`,
+      const activitiesRes = await client.query(
+        'SELECT * FROM public.fn_get_all_activities(null, 1, 50, null, $1)',
         [personId]
       ).catch(() => ({ rows: [] }));
 
-      const leadsRes = await pool.query(
-        `SELECT * FROM leads WHERE person_id = $1 ORDER BY id DESC`,
-        [personId]
+      const leadsRes = await client.query(
+        'SELECT * FROM public.fn_get_all_leads($1, $2, $3, $4, $5, $6, $7)',
+        ['', 1, 50, null, null, null, personId]
       ).catch(() => ({ rows: [] }));
 
       return {
@@ -163,39 +162,33 @@ export class PersonService {
       if (params.email && params.email.trim().includes('@')) {
         const emailVal = params.email.trim().toLowerCase();
         const { rows } = await client.query(
-          `SELECT id, name FROM public.persons 
-           WHERE ($1::int IS NULL OR id != $1) 
-             AND emails::text ILIKE $2 
-           LIMIT 1`,
-          [personId, `%${emailVal}%`]
+          'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
+          [emailVal]
         );
-        if (rows.length > 0) {
+        const duplicate = rows.find((r: any) => !personId || r.id !== personId);
+        if (duplicate) {
           return {
             isDuplicate: true,
             field: 'email',
-            message: `Email address "${emailVal}" is already registered to another contact (${rows[0].name}).`,
-            existingPerson: rows[0],
+            message: `Email address "${emailVal}" is already registered to another contact (${duplicate.name}).`,
+            existingPerson: duplicate,
           };
         }
       }
 
       if (params.phone && params.phone.trim().length >= 3) {
         const phoneVal = params.phone.trim();
-        const cleanPhone = phoneVal.replace(/[^0-9+]/g, '');
-        const searchPattern = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${phoneVal}%`;
         const { rows } = await client.query(
-          `SELECT id, name FROM public.persons 
-           WHERE ($1::int IS NULL OR id != $1) 
-             AND (contact_numbers::text ILIKE $2 OR contact_numbers::text ILIKE $3) 
-           LIMIT 1`,
-          [personId, `%${phoneVal}%`, searchPattern]
+          'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
+          [phoneVal]
         );
-        if (rows.length > 0) {
+        const duplicate = rows.find((r: any) => !personId || r.id !== personId);
+        if (duplicate) {
           return {
             isDuplicate: true,
             field: 'phone',
-            message: `Contact number "${phoneVal}" is already registered to another contact (${rows[0].name}).`,
-            existingPerson: rows[0],
+            message: `Contact number "${phoneVal}" is already registered to another contact (${duplicate.name}).`,
+            existingPerson: duplicate,
           };
         }
       }
@@ -278,30 +271,24 @@ export class PersonService {
       // Validate Duplicate Emails
       for (const emailVal of emailList) {
         const { rows: dupEmails } = await client.query(
-          `SELECT id, name FROM public.persons 
-           WHERE ($1::int IS NULL OR id != $1) 
-             AND emails::text ILIKE $2 
-           LIMIT 1`,
-          [personId, `%${emailVal}%`]
+          'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
+          [emailVal]
         );
-        if (dupEmails.length > 0) {
-          throw new ApiError(400, `Email address "${emailVal}" is already registered to another contact (${dupEmails[0].name}).`);
+        const duplicate = dupEmails.find((r: any) => !personId || r.id !== personId);
+        if (duplicate) {
+          throw new ApiError(400, `Email address "${emailVal}" is already registered to another contact (${duplicate.name}).`);
         }
       }
 
       // Validate Duplicate Phones
       for (const phoneVal of phoneList) {
-        const cleanPhone = phoneVal.replace(/[^0-9+]/g, '');
-        const searchPattern = cleanPhone.length >= 5 ? `%${cleanPhone}%` : `%${phoneVal}%`;
         const { rows: dupPhones } = await client.query(
-          `SELECT id, name FROM public.persons 
-           WHERE ($1::int IS NULL OR id != $1) 
-             AND (contact_numbers::text ILIKE $2 OR contact_numbers::text ILIKE $3) 
-           LIMIT 1`,
-          [personId, `%${phoneVal}%`, searchPattern]
+          'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
+          [phoneVal]
         );
-        if (dupPhones.length > 0) {
-          throw new ApiError(400, `Contact number "${phoneVal}" is already registered to another contact (${dupPhones[0].name}).`);
+        const duplicate = dupPhones.find((r: any) => !personId || r.id !== personId);
+        if (duplicate) {
+          throw new ApiError(400, `Contact number "${phoneVal}" is already registered to another contact (${duplicate.name}).`);
         }
       }
 

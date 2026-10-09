@@ -2,17 +2,17 @@ import { pool } from '@/config/db';
 import { IGoogleContactAccount, IContactExportBatch } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
 
-const toNumberParam = (v: any): number | null => {
-  if (v === undefined || v === null || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const toNumberParam = (value: any): number | null => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsedNumber = Number(value);
+  return Number.isFinite(parsedNumber) ? parsedNumber : null;
 };
 
 export class GoogleContactService {
   public static async getAccounts(userId: number | string): Promise<IGoogleContactAccount[]> {
     try {
-      const numUserId = toNumberParam(userId) || 1;
-      const { rows } = await pool.query('SELECT get_google_accounts($1) as result', [numUserId]);
+      const userIdNumber = toNumberParam(userId) || 1;
+      const { rows } = await pool.query('SELECT get_google_accounts($1) as result', [userIdNumber]);
       return rows[0]?.result || [];
     } catch (error: any) {
       logger.error({ error, userId }, 'GoogleContactService.getAccounts failed');
@@ -25,19 +25,21 @@ export class GoogleContactService {
     data: { google_email: string; access_token: string; refresh_token?: string | null; expires_in?: number; token_type?: string }
   ): Promise<IGoogleContactAccount> {
     try {
-      const numUserId = toNumberParam(userId) || 1;
-      const cleanToken = data.access_token ? data.access_token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '') : '';
-      
-      // Delete any previous account records for this user to avoid unique constraint collisions
-      await pool.query('DELETE FROM google_contact_accounts WHERE user_id = $1', [numUserId]);
+      const userIdNumber = toNumberParam(userId) || 1;
+      const cleanedToken = data.access_token ? data.access_token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '') : '';
 
-      const insertRes = await pool.query(
-        `INSERT INTO google_contact_accounts (user_id, google_email, access_token, refresh_token, expires_in, token_type, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW(), NOW())
-         RETURNING id, google_email, is_active`,
-        [numUserId, data.google_email.trim(), cleanToken, data.refresh_token || null, data.expires_in || 3600, data.token_type || 'Bearer']
+      const { rows } = await pool.query(
+        'SELECT save_google_account($1, $2, $3, $4, $5, $6) as result',
+        [
+          userIdNumber,
+          data.google_email.trim(),
+          cleanedToken,
+          data.refresh_token || null,
+          data.expires_in || 3600,
+          data.token_type || 'Bearer',
+        ]
       );
-      return insertRes.rows[0];
+      return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, userId, data }, 'GoogleContactService.saveAccount failed');
       throw error;
@@ -46,10 +48,10 @@ export class GoogleContactService {
 
   public static async disconnectAccount(id: number | string): Promise<boolean> {
     try {
-      const numId = toNumberParam(id);
-      if (!numId) return false;
-      const { rowCount } = await pool.query('DELETE FROM google_contact_accounts WHERE id = $1', [numId]);
-      return Boolean(rowCount && rowCount > 0);
+      const accountId = toNumberParam(id);
+      if (!accountId) return false;
+      const { rows } = await pool.query('SELECT disconnect_google_account($1) as result', [accountId]);
+      return Boolean(rows[0]?.result);
     } catch (error: any) {
       logger.error({ error, id }, 'GoogleContactService.disconnectAccount failed');
       throw error;
@@ -58,13 +60,13 @@ export class GoogleContactService {
 
   public static async syncGoogleContacts(userId: number | string, accountId: number | string): Promise<{ syncedCount: number; status: string; message?: string }> {
     try {
-      const numUserId = toNumberParam(userId) || 1;
-      const numAccountId = toNumberParam(accountId);
+      const userIdNumber = toNumberParam(userId) || 1;
+      const accountIdNumber = toNumberParam(accountId);
 
-      // 1. Fetch account credentials from database
+      // 1. Fetch account credentials from database via procedural function
       const { rows } = await pool.query(
-        'SELECT * FROM google_contact_accounts WHERE id = $1 AND is_active = TRUE',
-        [numAccountId]
+        'SELECT * FROM public.get_google_account($1)',
+        [accountIdNumber]
       );
 
       if (rows.length === 0) {
@@ -123,20 +125,20 @@ export class GoogleContactService {
       let importedCount = 0;
 
       for (const item of allConnections) {
-        const name =
+        const contactName =
           item.names?.[0]?.displayName ||
           item.names?.[0]?.givenName ||
           item.emailAddresses?.[0]?.value ||
           'Unnamed Contact';
 
-        const emails = (item.emailAddresses || []).map((e: any) => ({
-          value: e.value,
-          label: e.type ? String(e.type).toLowerCase() : 'work',
+        const emails = (item.emailAddresses || []).map((emailItem: any) => ({
+          value: emailItem.value,
+          label: emailItem.type ? String(emailItem.type).toLowerCase() : 'work',
         }));
 
-        const phones = (item.phoneNumbers || []).map((p: any) => ({
-          value: p.value || p.canonicalForm,
-          label: p.type ? String(p.type).toLowerCase() : 'mobile',
+        const phones = (item.phoneNumbers || []).map((phoneItem: any) => ({
+          value: phoneItem.value || phoneItem.canonicalForm,
+          label: phoneItem.type ? String(phoneItem.type).toLowerCase() : 'mobile',
         }));
 
         const jobTitle =
@@ -145,20 +147,21 @@ export class GoogleContactService {
           null;
 
         // Skip contacts with completely empty details
-        if (!name && emails.length === 0 && phones.length === 0) {
+        if (!contactName && emails.length === 0 && phones.length === 0) {
           continue;
         }
 
-        // Insert into persons table
+        // Insert into persons table via procedural function save_person
         await pool.query(
-          `INSERT INTO persons (name, emails, contact_numbers, job_title, user_id, created_at, updated_at)
-           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, NOW(), NOW())`,
+          'SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7) as result',
           [
-            name,
+            contactName,
             JSON.stringify(emails.length > 0 ? emails : []),
             JSON.stringify(phones.length > 0 ? phones : []),
+            null,
+            null,
             jobTitle,
-            numUserId,
+            userIdNumber,
           ]
         );
         importedCount++;
@@ -177,8 +180,8 @@ export class GoogleContactService {
 
   public static async getBatches(userId: number | string): Promise<IContactExportBatch[]> {
     try {
-      const numUserId = toNumberParam(userId) || 1;
-      const { rows } = await pool.query('SELECT get_google_export_batches($1) as result', [numUserId]);
+      const userIdNumber = toNumberParam(userId) || 1;
+      const { rows } = await pool.query('SELECT get_google_export_batches($1) as result', [userIdNumber]);
       return rows[0]?.result || [];
     } catch (error: any) {
       logger.error({ error, userId }, 'GoogleContactService.getBatches failed');
@@ -188,18 +191,18 @@ export class GoogleContactService {
 
   public static async createBatch(userId: number | string, personIds?: number[]): Promise<IContactExportBatch> {
     try {
-      const numUserId = toNumberParam(userId) || 1;
+      const userIdNumber = toNumberParam(userId) || 1;
       let total = 0;
       if (personIds && personIds.length > 0) {
         total = personIds.length;
       } else {
-        const { rows } = await pool.query('SELECT COUNT(*)::int as cnt FROM persons');
+        const { rows } = await pool.query('SELECT public.fn_get_total_persons_count() as cnt');
         total = rows[0]?.cnt || 0;
       }
 
       const { rows: batchRes } = await pool.query(
         'SELECT create_google_export_batch($1, $2, $3, $4::jsonb) as result',
-        [numUserId, null, total, JSON.stringify({ person_ids: personIds || 'all', exported_at: new Date().toISOString() })]
+        [userIdNumber, null, total, JSON.stringify({ person_ids: personIds || 'all', exported_at: new Date().toISOString() })]
       );
 
       return batchRes[0]?.result;

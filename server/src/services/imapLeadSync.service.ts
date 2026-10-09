@@ -8,25 +8,8 @@ import { logger } from '@/utils/logger';
 import { configService } from '@/services/configService';
 import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData, recognizeImageWithAutoOrientation } from '@/utils/documentParser';
 import { SseService } from '@/services/sse.service';
-
-export interface ImapAccountConfig {
-  enabled: boolean;
-  autoCreateLead: boolean;
-  host: string;
-  port: number;
-  encryption: 'ssl' | 'tls' | 'none';
-  validateCert: boolean;
-  username: string;
-  password: string;
-}
-
-export interface ImapSyncResult {
-  success: boolean;
-  processedCount: number;
-  leadsCreatedCount: number;
-  message?: string;
-  error?: string;
-}
+import { ImapAccountConfig, ImapSyncResult } from '@/interfaces';
+export type { ImapAccountConfig, ImapSyncResult };
 
 export class ImapLeadSyncService {
   private static isSyncing = false;
@@ -621,7 +604,7 @@ export class ImapLeadSyncService {
 
     // Check if email already recorded in public.emails
     const existingEmailCheck = await pool.query(
-      'SELECT id FROM public.emails WHERE message_id = $1 LIMIT 1',
+      'SELECT * FROM public.fn_get_email_by_message_id($1)',
       [messageId]
     );
     if (existingEmailCheck.rows.length > 0) {
@@ -761,8 +744,8 @@ export class ImapLeadSyncService {
       // Resolve person ID if linked
       if (!contactPersonId && fromAddress) {
         const pSearch = await client.query(
-          'SELECT id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1',
-          [`%${fromAddress}%`]
+          'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
+          [fromAddress]
         );
         if (pSearch.rows.length > 0) {
           contactPersonId = pSearch.rows[0].id;
@@ -772,7 +755,7 @@ export class ImapLeadSyncService {
       // If no new lead was created, check if this contact already has an open lead to link this email thread to
       if (!createdLeadId && contactPersonId) {
         const existingLeadCheck = await client.query(
-          `SELECT id FROM public.leads WHERE person_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          'SELECT * FROM public.fn_get_latest_lead_by_person($1)',
           [contactPersonId]
         );
         if (existingLeadCheck.rows.length > 0) {
@@ -782,31 +765,31 @@ export class ImapLeadSyncService {
       }
 
       const emailInsertResult = await client.query(
-        `INSERT INTO public.emails (
-          name, subject, reply, "from", sender, from_email,
-          reply_to, folders, is_read, lead_id, person_id, user_id, user_type,
-          message_id, source, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb,
-          $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13,
-          $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        ) RETURNING id`,
+        `SELECT * FROM public.fn_save_email(
+          $1, $2, $3, $4, $5, $6, $7::jsonb,
+          $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb,
+          $13, $14, $15, $16, $17, $18, $19
+        )`,
         [
-          fromName,
           subject,
-          htmlBody || textBody,
-          JSON.stringify([fromAddress]),
-          JSON.stringify({ name: fromName, email: fromAddress }),
-          JSON.stringify({ name: fromName, email: fromAddress }),
-          JSON.stringify([fromAddress]),
-          JSON.stringify(['inbox']),
-          false,
-          createdLeadId || null,
-          contactPersonId || null,
-          1,
-          'admin',
-          messageId,
           'imap',
+          'admin',
+          fromName,
+          htmlBody || textBody,
+          false,
+          JSON.stringify(['inbox']),
+          JSON.stringify({ name: fromName, email: fromAddress }),
+          JSON.stringify({ name: fromName, email: fromAddress }),
+          JSON.stringify([fromAddress]),
+          JSON.stringify([]),
+          JSON.stringify([]),
+          messageId,
+          messageId,
+          contactPersonId || null,
+          createdLeadId || null,
+          null,
+          1,
+          null,
         ]
       );
 
@@ -816,8 +799,7 @@ export class ImapLeadSyncService {
       if (emailId && savedAttachmentRecords.length > 0) {
         for (const attRec of savedAttachmentRecords) {
           await client.query(
-            `INSERT INTO public.email_attachments (name, path, size, content_type, email_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+            'SELECT * FROM public.fn_add_email_attachment($1, $2, $3, $4, $5)',
             [attRec.filename, attRec.path, attRec.size, attRec.contentType, emailId]
           );
         }
@@ -896,7 +878,7 @@ export class ImapLeadSyncService {
       let organizationId: number | null = null;
       if (extracted.organization) {
         const orgSearch = await client.query(
-          'SELECT id FROM public.organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1',
+          'SELECT * FROM public.fn_find_organization_by_name($1)',
           [extracted.organization.trim()]
         );
         if (orgSearch.rows.length > 0) {
@@ -924,11 +906,11 @@ export class ImapLeadSyncService {
 
         let curPersonId: number | null = null;
 
-        // Check by email
+        // Check by email via stored procedure
         if (cpEmail) {
           const emailCheck = await client.query(
-            'SELECT id, name FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1',
-            [`%${cpEmail}%`]
+            'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
+            [cpEmail]
           );
           if (emailCheck.rows.length > 0) {
             const foundName = (emailCheck.rows[0].name || '').toLowerCase().trim();
@@ -939,12 +921,12 @@ export class ImapLeadSyncService {
           }
         }
 
-        // Check by phone
+        // Check by phone via stored procedure
         if (!curPersonId && cpPhone) {
           const cleanedPhone = cpPhone.replace(/[^0-9+]/g, '');
-          const pattern = cleanedPhone.length >= 6 ? `%${cleanedPhone.slice(-8)}%` : `%${cpPhone}%`;
+          const pattern = cleanedPhone.length >= 6 ? cleanedPhone.slice(-8) : cpPhone;
           const phoneCheck = await client.query(
-            'SELECT id, name FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1',
+            'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
             [pattern]
           );
           if (phoneCheck.rows.length > 0) {
@@ -956,11 +938,11 @@ export class ImapLeadSyncService {
           }
         }
 
-        // Check by name in organization
+        // Check by name in organization via stored procedure
         if (!curPersonId && cpName && organizationId) {
           const nameCheck = await client.query(
-            'SELECT id FROM public.persons WHERE organization_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) LIMIT 1',
-            [organizationId, cpName]
+            'SELECT * FROM public.fn_find_person_by_contact(null, null, $1, $2)',
+            [cpName, organizationId]
           );
           if (nameCheck.rows.length > 0) {
             curPersonId = nameCheck.rows[0].id;
@@ -995,7 +977,7 @@ export class ImapLeadSyncService {
           curPersonId = savePersonRes.rows[0]?.result?.id || null;
         } else if (curPersonId && organizationId) {
           await client.query(
-            'UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL',
+            'SELECT save_person(null, null, null, $1, null, null, null, $2) as result',
             [organizationId, curPersonId]
           );
         }
@@ -1054,8 +1036,8 @@ export class ImapLeadSyncService {
       // Store additional contacts in custom_attributes if multiple
       if (allSavedPersons.length > 1) {
         await client.query(
-          "UPDATE public.leads SET custom_attributes = COALESCE(custom_attributes, '{}'::jsonb) || $1::jsonb WHERE id = $2",
-          [JSON.stringify({ additional_contacts: allSavedPersons }), leadId]
+          'SELECT public.fn_update_lead_custom_attributes($1, $2::jsonb)',
+          [leadId, JSON.stringify({ additional_contacts: allSavedPersons })]
         );
       }
 
@@ -1066,7 +1048,7 @@ export class ImapLeadSyncService {
 
           let prodId: number | null = null;
           const prodCheck = await client.query(
-            'SELECT id FROM public.products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1',
+            'SELECT * FROM public.fn_find_product_by_name_or_sku($1, null)',
             [prod.name.trim()]
           );
 

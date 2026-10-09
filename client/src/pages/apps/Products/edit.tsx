@@ -6,16 +6,7 @@ import { useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { productSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
-import { IWarehouse } from "@/interface";
-
-interface WarehouseInventoryRow {
-  warehouse_id: number;
-  warehouse_name: string;
-  warehouse_location_id: number | null;
-  warehouse_location_name: string;
-  in_stock: number;
-  allocated: number;
-}
+import { IWarehouse, WarehouseInventoryRow } from "@/interface";
 
 const EditProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();

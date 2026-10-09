@@ -164,13 +164,14 @@ export class UserService {
   public static async create(input: ICreateUserInput): Promise<IUser> {
     try {
       const roleId = toNumberParam(input.roleId) ?? 1;
-      const { rows } = await pool.query<IUser>(
-        `INSERT INTO users (name, email, password, role_id, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-         RETURNING *`,
-        [input.name.trim(), input.email.trim().toLowerCase(), input.passwordHash, roleId, input.status ?? true],
-      );
-      return rows[0];
+      const result = await this.save({
+        name: input.name,
+        email: input.email,
+        password: input.passwordHash,
+        status: input.status,
+        role_id: roleId,
+      });
+      return result;
     } catch (error: any) {
       logger.error({ error, input: { ...input, passwordHash: '[REDACTED]' } }, 'UserService.create failed');
       throw error;
@@ -182,34 +183,22 @@ export class UserService {
       const page = Math.max(1, Number(params.page) || 1);
       const perPage = Math.max(1, Number(params.perPage) || 10);
       const offset = (page - 1) * perPage;
+      const excludeRoleId = params.excludeRole !== null && params.excludeRole !== undefined ? Number(params.excludeRole) : null;
 
-      let whereClause = 'WHERE 1=1';
-      const values: any[] = [];
+      const { rows } = await pool.query('SELECT fn_get_paginated_users($1, $2, $3, $4, $5, $6) as result', [
+        null,
+        null,
+        null,
+        excludeRoleId,
+        perPage,
+        offset,
+      ]);
 
-      if (params.excludeRole !== null && params.excludeRole !== undefined) {
-        values.push(params.excludeRole);
-        whereClause += ` AND u.role_id != $${values.length}`;
-      }
-
-      const countRes = await pool.query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM users u ${whereClause}`,
-        values
-      );
-      const total = parseInt(countRes.rows[0]?.count || '0', 10);
-
-      values.push(perPage, offset);
-      const query = `
-        SELECT u.id, u.name, u.email, u.status, u.view_permission, u.role_id, u.created_by, u.image, u.created_at, u.updated_at,
-               r.name as role_name
-        FROM users u
-        LEFT JOIN roles r ON u.role_id = r.id
-        ${whereClause}
-        ORDER BY u.id ASC
-        LIMIT $${values.length - 1} OFFSET $${values.length}
-      `;
-
-      const { rows } = await pool.query<any>(query, values);
-      return { rows: rows.map(toPublicUser), total };
+      const data = rows[0]?.result || { rows: [], total: 0 };
+      return {
+        rows: (data.rows || []).map(toPublicUser),
+        total: Number(data.total) || 0,
+      };
     } catch (error: any) {
       logger.error({ error, params }, 'UserService.findPaginated failed');
       throw error;
@@ -227,14 +216,15 @@ export class UserService {
       const roleId = data.role_id !== undefined ? data.role_id : existing.role_id;
       const viewPermission = data.view_permission !== undefined ? data.view_permission : existing.view_permission;
 
-      const { rows } = await pool.query<IUser>(
-        `UPDATE users
-         SET name = $1, email = $2, status = $3, role_id = $4, view_permission = $5, updated_at = NOW()
-         WHERE id = $6
-         RETURNING *`,
-        [name, email, status, roleId, viewPermission, id]
-      );
-      return rows[0] ? toPublicUser(rows[0]) : null;
+      const result = await this.save({
+        name,
+        email,
+        status,
+        role_id: roleId,
+        view_permission: viewPermission,
+      }, id);
+
+      return result ? toPublicUser(result) : null;
     } catch (error: any) {
       logger.error({ error, id, data }, 'UserService.update failed');
       throw error;

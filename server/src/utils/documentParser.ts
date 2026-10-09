@@ -4,42 +4,8 @@ import zlib from 'zlib';
 import sharp from 'sharp';
 import Tesseract from 'tesseract.js';
 import { logger } from '@/utils/logger';
-
-export interface ExtractedProduct {
-  name: string;
-  sku?: string;
-  quantity?: number;
-  price?: number;
-  description?: string;
-}
-
-export interface ExtractedContactPerson {
-  name: string;
-  title?: string;
-  phone?: string;
-  email?: string;
-}
-
-export interface ExtractedLeadData {
-  title?: string;
-  leadValue?: number | null;
-  contactPerson?: string;
-  contactPersons?: ExtractedContactPerson[];
-  email?: string;
-  emails?: string[];
-  phone?: string;
-  phones?: string[];
-  organization?: string;
-  address?: string;
-  website?: string;
-  jobTitle?: string;
-  source?: string;
-  type?: string;
-  expectedCloseDate?: string;
-  products?: ExtractedProduct[];
-  description?: string;
-  rawText?: string;
-}
+import { ExtractedProduct, ExtractedContactPerson, ExtractedLeadData } from '@/interfaces';
+export type { ExtractedProduct, ExtractedContactPerson, ExtractedLeadData };
 
 /**
  * Evaluates extracted OCR text to determine confidence level of business/contact data.

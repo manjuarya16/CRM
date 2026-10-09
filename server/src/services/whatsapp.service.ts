@@ -556,7 +556,7 @@ Extract all contact and business information and return pure JSON with keys:
       if (extractedLeadData.organizationName && extractedLeadData.organizationName.trim()) {
         const trimmedOrgName = extractedLeadData.organizationName.trim();
         const existingOrgQuery = await databaseConnection.query(
-          'SELECT id, name FROM public.organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1',
+          'SELECT * FROM public.fn_find_organization_by_name($1)',
           [trimmedOrgName]
         );
 
@@ -597,11 +597,11 @@ Extract all contact and business information and return pure JSON with keys:
         let curPersonId: number | null = null;
         let curPersonName: string = itemPersonName;
 
-        // Check existing person by email
+        // Check existing person via stored procedure fn_find_person_by_contact
         if (itemEmail) {
           const emailPersonQuery = await databaseConnection.query(
-            'SELECT id, name, organization_id FROM public.persons WHERE emails::text ILIKE $1 LIMIT 1',
-            [`%${itemEmail}%`]
+            'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
+            [itemEmail]
           );
           if (emailPersonQuery.rows.length > 0) {
             curPersonId = emailPersonQuery.rows[0].id;
@@ -609,12 +609,12 @@ Extract all contact and business information and return pure JSON with keys:
           }
         }
 
-        // Check existing person by phone number
+        // Check existing person by phone number via stored procedure
         if (!curPersonId && itemPhone) {
           const cleanedPhoneNumber = itemPhone.replace(/[^0-9+]/g, '');
-          const searchPattern = cleanedPhoneNumber.length >= 6 ? `%${cleanedPhoneNumber.slice(-8)}%` : `%${itemPhone}%`;
+          const searchPattern = cleanedPhoneNumber.length >= 6 ? cleanedPhoneNumber.slice(-8) : itemPhone;
           const phonePersonQuery = await databaseConnection.query(
-            'SELECT id, name, organization_id FROM public.persons WHERE contact_numbers::text ILIKE $1 LIMIT 1',
+            'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
             [searchPattern]
           );
           if (phonePersonQuery.rows.length > 0) {
@@ -629,11 +629,11 @@ Extract all contact and business information and return pure JSON with keys:
           }
         }
 
-        // Check existing person by exact name in this organization
+        // Check existing person by exact name in this organization via stored procedure
         if (!curPersonId && itemPersonName && organizationId) {
           const orgPersonQuery = await databaseConnection.query(
-            'SELECT id, name FROM public.persons WHERE organization_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) LIMIT 1',
-            [organizationId, itemPersonName]
+            'SELECT * FROM public.fn_find_person_by_contact(null, null, $1, $2)',
+            [itemPersonName, organizationId]
           );
           if (orgPersonQuery.rows.length > 0) {
             curPersonId = orgPersonQuery.rows[0].id;
@@ -682,7 +682,7 @@ Extract all contact and business information and return pure JSON with keys:
         } else if (curPersonId && organizationId) {
           // Link person with organization if missing
           await databaseConnection.query(
-            'UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL',
+            'SELECT save_person(null, null, null, $1, null, null, null, $2) as result',
             [organizationId, curPersonId]
           );
         }
@@ -720,7 +720,7 @@ Extract all contact and business information and return pure JSON with keys:
       // 4. Resolve Lead Source (WhatsApp)
       let leadSourceId: number | null = null;
       const sourceQuery = await databaseConnection.query(
-        "SELECT id FROM public.lead_sources WHERE LOWER(TRIM(name)) = 'whatsapp' OR name ILIKE '%whatsapp%' LIMIT 1"
+        "SELECT * FROM public.fn_find_lead_source_by_name('whatsapp')"
       );
       if (sourceQuery.rows.length > 0) {
         leadSourceId = sourceQuery.rows[0].id;
@@ -762,8 +762,8 @@ Extract all contact and business information and return pure JSON with keys:
       // Store additional contacts in custom_attributes if multiple contacts exist
       if (allSavedContactPersons.length > 1) {
         await databaseConnection.query(
-          'UPDATE public.leads SET custom_attributes = COALESCE(custom_attributes, \'{}\'::jsonb) || $1::jsonb WHERE id = $2',
-          [JSON.stringify({ additional_contacts: allSavedContactPersons }), createdLead.id]
+          'SELECT public.fn_update_lead_custom_attributes($1, $2::jsonb)',
+          [createdLead.id, JSON.stringify({ additional_contacts: allSavedContactPersons })]
         );
       }
 
@@ -783,7 +783,7 @@ Extract all contact and business information and return pure JSON with keys:
 
           let targetProductId: number | null = null;
           const productSearchQuery = await databaseConnection.query(
-            'SELECT id FROM public.products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1',
+            'SELECT * FROM public.fn_find_product_by_name_or_sku($1, null)',
             [productItem.name.trim()]
           );
 

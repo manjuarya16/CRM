@@ -49,9 +49,7 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
     setValue("content", current + " " + tag + " ");
   };
 
-  const onInvalid = (errs: any) => {
-    console.log("Zod validation errors:", errs);
-  };
+  const onInvalid = (_errs: any) => {};
 
   const onSubmit = async (data: EmailTemplateInput) => {
     try {

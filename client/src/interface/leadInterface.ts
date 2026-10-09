@@ -120,4 +120,9 @@ export interface LeadState {
   clearError: () => void;
 }
 
+export interface ILeadContactItem {
+  label: string;
+  value: string;
+}
+
 export type LeadStore = LeadState;
