@@ -38,6 +38,8 @@ router.get('/health', (_req, res) => {
 
 // Real-time Event Stream (SSE)
 router.use('/realtime', realtimeRoutes);
+router.use('/v1/realtime', realtimeRoutes);
+router.use('/realtimes', realtimeRoutes);
 
 // Core Modules
 router.use('/dashboard', dashboardRoutes);

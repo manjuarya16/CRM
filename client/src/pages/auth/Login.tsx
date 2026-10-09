@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { showErrorAlert } from "../../utils/swalAlert";
-
 import { loginSchemaResolver } from "../../schemas/loginSchema";
-
-// zustand
 import { useAuthStore } from "../../store";
-
-// components
 import {
   VerticalForm,
   FormInput,
@@ -24,9 +19,6 @@ const Login = () => {
     reset();
   }, [reset]);
 
-  /*
-  handle form submission
-  */
   const onSubmit = async (formData: loginData) => {
     try {
       await login(formData.username, formData.password);
@@ -38,8 +30,6 @@ const Login = () => {
   };
 
   const location = useLocation();
-
-  // redirection back to where user got redirected from
   const redirectUrl = location?.search?.slice(6) || "/";
 
   return (
@@ -47,19 +37,9 @@ const Login = () => {
       {(userLoggedIn || user) && <Navigate to={redirectUrl} replace />}
       <PageBreadcrumb title="Login" />
       <AuthLayout
-        authTitle="Welcome Back"
-        helpText="Sign in to your CRM account to continue."
-        bottomLinks={
-          <div className="mt-6 text-center text-xs text-slate-400">
-            <span>Secured PostgreSQL & pgAdmin CRM Portal</span>
-          </div>
-        }
+        authTitle="Sign In"
+        helpText="Enter your credentials to access your workspace."
       >
-        {/* Quick Credentials Info Box */}
-        <div className="mb-5 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
-          <p className="font-semibold mb-1">🔑 Default Admin Credentials:</p>
-          <p><strong>Email:</strong> admin@example.com</p>
-        </div>
 
         <VerticalForm<loginData>
           onSubmit={onSubmit}
@@ -72,8 +52,8 @@ const Login = () => {
             name="username"
             placeholder="admin@example.com"
             containerClass="mb-4"
-            className="form-input w-full rounded-lg border-slate-300 dark:border-slate-700 dark:bg-slate-900 focus:ring-primary focus:border-primary"
-            labelClassName="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5"
+            className="form-input w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent text-slate-800 dark:text-slate-100 transition-all"
+            labelClassName="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider"
             required
           />
 
@@ -83,57 +63,38 @@ const Login = () => {
             name="password"
             placeholder="••••••••"
             containerClass="mb-4"
-            className="form-input w-full rounded-s-lg border-slate-300 dark:border-slate-700 dark:bg-slate-900 focus:ring-primary focus:border-primary"
-            labelClassName="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5"
+            className="form-input w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent text-slate-800 dark:text-slate-100 transition-all"
+            labelClassName="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider"
             required
           />
 
           <div className="flex items-center justify-between mb-6">
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="form-checkbox rounded text-primary focus:ring-primary"
+                className="w-4 h-4 rounded border-slate-300 text-[#0088cc] focus:ring-[#0088cc]"
               />
               <span>Remember me</span>
             </label>
 
             <Link
               to="/auth/recover-password"
-              className="text-sm font-medium text-primary hover:underline"
+              className="text-xs font-semibold text-[#0088cc] hover:underline"
             >
               Forgot Password?
             </Link>
           </div>
 
           <button
-            className="btn w-full text-white bg-primary hover:bg-primary/90 font-semibold py-2.5 rounded-lg shadow-sm transition-all duration-150 flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-[#0088cc] hover:bg-[#0077b5] active:scale-[0.99] text-white text-sm font-bold rounded-xl shadow-md transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             type="submit"
             disabled={loading}
           >
             {loading ? (
               <>
-                <svg
-                  className="animate-spin h-5 w-5 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 <span>Signing in...</span>
               </>
             ) : (
@@ -147,4 +108,3 @@ const Login = () => {
 };
 
 export default Login;
-

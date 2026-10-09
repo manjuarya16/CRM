@@ -7,6 +7,7 @@ import PrivateRoute from "./PrivateRoute";
 
 // auth
 const Login = React.lazy(() => import("../pages/auth/Login"));
+const RecoverPassword = React.lazy(() => import("../pages/auth/RecoverPassword"));
 const PublicFormPage = React.lazy(() => import("../pages/public/PublicFormPage"));
 
 // dashboard
@@ -196,6 +197,11 @@ const publicRoutes: RoutesProps[] = [
     path: "/auth/login",
     name: "Login",
     element: <Login />,
+  },
+  {
+    path: "/auth/recover-password",
+    name: "Recover Password",
+    element: <RecoverPassword />,
   },
   {
     path: "/forms/:form_id",

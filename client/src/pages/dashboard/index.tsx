@@ -237,13 +237,20 @@ export const DashboardPage: React.FC = () => {
     stroke: { show: true, width: 2, colors: ["transparent"] },
     xaxis: {
       categories: timelinePoints.map((t) => t.label || t.date),
+      tickAmount: timelinePoints.length > 10 ? 6 : undefined,
       labels: {
         rotate: -45,
+        rotateAlways: false,
+        hideOverlappingLabels: true,
         style: { colors: "#64748b", fontSize: "10px" },
       },
     },
     yaxis: {
-      labels: { style: { colors: "#64748b", fontSize: "11px" } },
+      forceNiceScale: true,
+      labels: {
+        formatter: (val) => Math.floor(val) === val ? String(val) : "",
+        style: { colors: "#64748b", fontSize: "11px" },
+      },
     },
     legend: { show: false },
     grid: {
@@ -333,21 +340,21 @@ export const DashboardPage: React.FC = () => {
   const maxFunnelCount = Math.max(...funnelStages.map((f) => f.count), 1);
 
   return (
-    <div className="p-4 sm:p-6 space-y-5 max-w-[1700px] mx-auto text-gray-800 dark:text-gray-100 font-sans">
+    <div className="p-3.5 sm:p-6 space-y-5 max-w-[1700px] mx-auto text-gray-800 dark:text-gray-100 font-sans">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
           {loading && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>}
         </div>
 
         {/* Date Filter & Export Button */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full lg:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5">
           {/* Pipeline selector */}
           <select
             value={selectedPipelineId}
             onChange={(e) => setSelectedPipelineId(e.target.value)}
-            className="h-[38px] px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-gray-200"
+            className="h-10 px-3.5 py-2 text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-200 cursor-pointer"
           >
             <option value="all">All Pipelines</option>
             {(data.pipelines || []).map((p) => (
@@ -357,34 +364,32 @@ export const DashboardPage: React.FC = () => {
             ))}
           </select>
 
-          {/* Start Date */}
-          <div className="flex items-center gap-2 h-[38px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 shadow-sm">
+          {/* Start & End Date Inputs */}
+          <div className="flex items-center gap-2">
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="text-xs bg-transparent focus:outline-none text-gray-700 dark:text-gray-200"
+              className="flex-1 sm:flex-none h-10 px-3 py-2 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-200 cursor-pointer"
+              title="Start Date"
             />
-            <i className="mgc_calendar_line text-gray-400 text-sm"></i>
-          </div>
-
-          {/* End Date */}
-          <div className="flex items-center gap-2 h-[38px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-3 shadow-sm">
+            <span className="text-xs font-bold text-gray-400">to</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="text-xs bg-transparent focus:outline-none text-gray-700 dark:text-gray-200"
+              className="flex-1 sm:flex-none h-10 px-3 py-2 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-200 cursor-pointer"
+              title="End Date"
             />
-            <i className="mgc_calendar_line text-gray-400 text-sm"></i>
           </div>
 
           {/* Export PDF Button */}
           <button
             onClick={handleExportPDF}
-            className="h-[38px] px-4 text-xs font-semibold text-blue-600 bg-white dark:bg-gray-800 border border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-md shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+            className="h-10 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
           >
-            Export PDF
+            <i className="mgc_file_download_line text-sm"></i>
+            <span>Export PDF</span>
           </button>
         </div>
       </div>
@@ -527,7 +532,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Row 2: 6 KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {/* Card 1: Average Lead Value */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-800 p-4 shadow-sm space-y-1">
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Average Lead Value</p>

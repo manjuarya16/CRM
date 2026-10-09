@@ -398,7 +398,7 @@ const EditLeadPage: React.FC = () => {
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
 
     clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
@@ -634,8 +634,8 @@ const EditLeadPage: React.FC = () => {
               type="button"
               onClick={() => scrollToSection(tab.id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${activeTab === tab.id
-                  ? "text-[#0088cc] border-[#0088cc]"
-                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
+                ? "text-[#0088cc] border-[#0088cc]"
+                : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
                 }`}
             >
               {tab.label}
@@ -911,9 +911,8 @@ const EditLeadPage: React.FC = () => {
                 </label>
                 {contactEmails.map((em, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${
-                      errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
-                    }`}>
+                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
+                      }`}>
                       <input
                         type="email"
                         value={em.value}
@@ -1049,17 +1048,15 @@ const EditLeadPage: React.FC = () => {
                         return (
                           <div
                             key={contact.id}
-                            className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${
-                              isPrimary
-                                ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
-                                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                            }`}
+                            className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${isPrimary
+                              ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
+                              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                                  isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                }`}>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                  }`}>
                                   {contact.name?.substring(0, 2).toUpperCase()}
                                 </div>
                                 <div>
@@ -1301,11 +1298,10 @@ const EditLeadPage: React.FC = () => {
                                       min="1"
                                       value={row.quantity}
                                       onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
-                                      className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                        qtyErr || isStockShortage
-                                          ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
-                                          : ""
-                                      }`}
+                                      className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
+                                        ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                        : ""
+                                        }`}
                                     />
                                     {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
                                     {isStockShortage && locStock !== null && (
@@ -1328,39 +1324,39 @@ const EditLeadPage: React.FC = () => {
                                 )}
                               </td>
                             )}
-                        <td className="py-2 px-3 align-top">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={row.price}
-                            onChange={(e) => updateProductRow(index, "price", e.target.value)}
-                            disabled
-                            className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                          />
-                          {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
-                          {fmtCurrency(rowAmount)}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {productRows.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeProductRow(index)}
-                              className="text-gray-400 hover:text-red-500 font-bold"
-                            >
-                              &times;
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          );
-        })()}
+                            <td className="py-2 px-3 align-top">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={row.price}
+                                onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                                disabled
+                                className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                              />
+                              {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
+                              {fmtCurrency(rowAmount)}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {productRows.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeProductRow(index)}
+                                  className="text-gray-400 hover:text-red-500 font-bold"
+                                >
+                                  &times;
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
             <div className="flex items-center justify-between pt-2">
               <button
