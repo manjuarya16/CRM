@@ -32,7 +32,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+router.post(['/', '/add'], async (req, res, next) => {
   try {
     const validated = userSaveSchema.parse(req.body);
     const user = await UserService.save(validated);
@@ -42,19 +42,27 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put(['/:id', '/update', '/update/:id'], async (req, res, next) => {
   try {
+    const targetId = req.params.id || req.body?.id;
+    if (!targetId) {
+      throw new ApiError(400, 'User ID is required for update');
+    }
     const validated = userSaveSchema.parse(req.body);
-    const user = await UserService.save(validated, String(req.params.id));
+    const user = await UserService.save(validated, String(targetId));
     res.json({ success: true, data: user });
   } catch (err) {
     next(err);
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete(['/:id', '/delete/:id'], async (req, res, next) => {
   try {
-    const deleted = await UserService.delete(String(req.params.id));
+    const targetId = req.params.id || req.body?.id;
+    if (!targetId) {
+      throw new ApiError(400, 'User ID is required for delete');
+    }
+    const deleted = await UserService.delete(String(targetId));
     if (!deleted) {
       throw new ApiError(404, 'User not found');
     }

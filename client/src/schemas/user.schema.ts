@@ -4,7 +4,7 @@ import { zodResolver } from "@/utils/zodResolver";
 export const userFormSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required").max(191, "Name is too long"),
-    email: z.string().trim().email("Invalid email address"),
+    email: z.string().trim().email("Invalid email address").optional().or(z.literal("")),
     password: z
       .string()
       .min(6, "Password must be at least 6 characters")

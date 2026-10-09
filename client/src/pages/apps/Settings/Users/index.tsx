@@ -157,16 +157,22 @@ const UsersPage: React.FC = () => {
         return;
       }
 
-      const validated = userFormSchema.parse(formData);
+      const existingEmail = editingUser?.email || formData.email || "";
+      const dataToValidate = {
+        ...formData,
+        email: existingEmail || "user@crm.com",
+      };
+
+      const validated = userFormSchema.parse(dataToValidate);
       setSaving(true);
 
       const payload: any = {
         name: validated.name,
-        email: validated.email,
         status: validated.status,
         role_id: validated.role_id,
         group_ids: validated.group_ids,
         view_permission: validated.view_permission,
+        email: editingUser?.email || formData.email || undefined,
       };
 
       if (validated.password) {
@@ -199,16 +205,23 @@ const UsersPage: React.FC = () => {
         const fieldErrors: Record<string, string> = {};
         err.issues.forEach((issue) => {
           const field = issue.path[0];
-          if (field) {
+          if (field && (!editingUser || field !== "email")) {
             fieldErrors[String(field)] = issue.message;
           }
         });
         setErrors(fieldErrors);
         return;
       }
+      const rawMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to save user";
+      if (!editingUser && (rawMsg.toLowerCase().includes("users_email_key") || rawMsg.toLowerCase().includes("email address already exists"))) {
+        const cleanMsg = "A user with this email address already exists. Please use a different email.";
+        setErrors({ email: cleanMsg });
+        Swal.fire("Email Already Exists", cleanMsg, "error");
+        return;
+      }
       Swal.fire(
         "Error",
-        err?.response?.data?.message || "Failed to save user",
+        rawMsg,
         "error"
       );
     } finally {
@@ -901,10 +914,13 @@ const UsersPage: React.FC = () => {
                     type="email"
                     placeholder="john@example.com"
                     value={formData.email}
+                    disabled={Boolean(editingUser)}
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
                     className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      editingUser ? "opacity-75 bg-gray-200 dark:bg-gray-800 cursor-not-allowed text-gray-500" : ""
+                    } ${
                       errors.email
                         ? "border-red-500 focus:border-red-500"
                         : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
