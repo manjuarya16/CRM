@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const userSaveSchema = z.object({
   name: z.string().min(1, 'Name is required').max(191, 'Name is too long'),
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').optional().nullable(),
   password: z.string().min(6, 'Password must be at least 6 characters').optional().nullable().or(z.literal('')),
   status: z.boolean().optional().default(true),
   view_permission: z.enum(['global', 'group', 'individual']).optional().default('global'),

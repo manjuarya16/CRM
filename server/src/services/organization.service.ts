@@ -83,6 +83,9 @@ export class OrganizationService {
       return createdOrg;
     } catch (error: any) {
       logger.error({ error, data }, 'OrganizationService.create failed');
+      if (error?.code === '23505' || (error?.message && error.message.includes('organizations_name_key'))) {
+        throw new ApiError(400, 'An organization with this name already exists. Please choose a different name.');
+      }
       throw error;
     }
   }
@@ -120,6 +123,9 @@ export class OrganizationService {
       return updatedOrg;
     } catch (error: any) {
       logger.error({ error, id, data }, 'OrganizationService.update failed');
+      if (error?.code === '23505' || (error?.message && error.message.includes('organizations_name_key'))) {
+        throw new ApiError(400, 'An organization with this name already exists. Please choose a different name.');
+      }
       throw error;
     }
   }

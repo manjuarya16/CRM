@@ -1,6 +1,7 @@
 import { pool } from '@/config/db';
 import { IUser, PublicUser, ICreateUserInput, toPublicUser } from '@/interfaces';
 import { logger } from '@/utils/logger';
+import { ApiError } from '@/middleware/errorHandler';
 import bcrypt from 'bcrypt';
 
 const toNumberParam = (v: any): number | null => {
@@ -49,7 +50,7 @@ export class UserService {
   public static async save(
     data: {
       name: string;
-      email: string;
+      email?: string | null;
       password?: string | null;
       status?: boolean;
       view_permission?: string;
@@ -59,10 +60,18 @@ export class UserService {
     },
     id?: number | string
   ): Promise<any> {
+    const userId = toNumberParam(id);
     try {
-      const userId = toNumberParam(id);
-      let passwordHash: string | null = null;
+      let emailParam = data.email && data.email.trim() ? data.email.trim().toLowerCase() : null;
 
+      if (userId && !emailParam) {
+        const existing = await this.findById(userId);
+        if (existing && existing.email) {
+          emailParam = existing.email.trim().toLowerCase();
+        }
+      }
+
+      let passwordHash: string | null = null;
       if (data.password && data.password.trim()) {
         passwordHash = await bcrypt.hash(data.password.trim(), 10);
       }
@@ -76,7 +85,7 @@ export class UserService {
         'SELECT save_user($1, $2, $3, $4, $5, $6, $7, $8, $9) as result',
         [
           data.name.trim(),
-          data.email.trim().toLowerCase(),
+          emailParam,
           passwordHash,
           status,
           viewPermission,
@@ -90,6 +99,12 @@ export class UserService {
       return rows[0]?.result;
     } catch (error: any) {
       logger.error({ error, data: { ...data, password: '[REDACTED]' }, id }, 'UserService.save failed');
+      if (error?.code === '23502' || (error?.message && error.message.includes('null value in column "email"'))) {
+        throw new ApiError(400, 'Email address is required and cannot be empty.');
+      }
+      if (!userId && (error?.code === '23505' || (error?.message && error.message.includes('users_email_key')))) {
+        throw new ApiError(400, 'A user with this email address already exists. Please use a different email.');
+      }
       throw error;
     }
   }

@@ -697,8 +697,9 @@ return (
                     type="email"
                     name="email"
                     value={formData.email}
+                    disabled={true}
                     onChange={handleChange}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 dark:bg-slate-700 dark:border-slate-600 ${
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 bg-gray-100 dark:bg-slate-800 text-gray-500 cursor-not-allowed border-gray-300 dark:border-slate-600 ${
                       errors.email
                         ? "border-red-500 focus:ring-red-500"
                         : "border-gray-300 focus:ring-primary"
