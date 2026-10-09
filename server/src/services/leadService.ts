@@ -28,30 +28,13 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
     const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
     const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
     const created_at = req.query.created_at ? String(req.query.created_at) : null;
-    const rawPipelineId = req.query.lead_pipeline_id || req.query.pipeline_id;
-    const lead_pipeline_id = rawPipelineId ? Number(rawPipelineId) : null;
-    const rawStageId = req.query.lead_pipeline_stage_id || req.query.pipeline_stage_id || req.query.stage_id;
-    const lead_pipeline_stage_id = rawStageId ? Number(rawStageId) : null;
+    const lead_pipeline_id = req.query.lead_pipeline_id || req.query.pipeline_id ? Number(req.query.lead_pipeline_id || req.query.pipeline_id) : null;
+    const lead_pipeline_stage_id = req.query.lead_pipeline_stage_id || req.query.stage_id ? Number(req.query.lead_pipeline_stage_id || req.query.stage_id) : null;
     const tag = req.query.tag ? String(req.query.tag) : null;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_all_leads($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
-      [
-        search,
-        page,
-        limit,
-        id,
-        lead_value,
-        user_id,
-        person_id,
-        lead_type_id,
-        lead_source_id,
-        expected_close_date,
-        created_at,
-        lead_pipeline_id,
-        lead_pipeline_stage_id,
-        tag,
-      ]
+      "SELECT * FROM public.fn_get_all_leads($1::varchar, $2::int, $3::int, $4::int, $5::numeric, $6::int, $7::int, $8::int, $9::int, $10::date, $11::date, $12::int, $13::int, $14::varchar)",
+      [search, page, limit, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at, lead_pipeline_id, lead_pipeline_stage_id, tag]
     );
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
@@ -684,26 +667,12 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
     const lead_source_id = req.query.lead_source_id ? Number(req.query.lead_source_id) : null;
     const expected_close_date = req.query.expected_close_date ? String(req.query.expected_close_date) : null;
     const created_at = req.query.created_at ? String(req.query.created_at) : null;
-    const rawStageId = req.query.lead_pipeline_stage_id || req.query.pipeline_stage_id || req.query.stage_id;
-    const lead_pipeline_stage_id = rawStageId ? Number(rawStageId) : null;
+    const lead_pipeline_stage_id = req.query.lead_pipeline_stage_id || req.query.stage_id ? Number(req.query.lead_pipeline_stage_id || req.query.stage_id) : null;
     const tag = req.query.tag ? String(req.query.tag) : null;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_get_leads_kanban($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-      [
-        pipelineId,
-        search,
-        id,
-        lead_value,
-        user_id,
-        person_id,
-        lead_type_id,
-        lead_source_id,
-        expected_close_date,
-        created_at,
-        lead_pipeline_stage_id,
-        tag,
-      ]
+      "SELECT * FROM public.fn_get_leads_kanban($1::int, $2::varchar, $3::int, $4::numeric, $5::int, $6::int, $7::int, $8::int, $9::date, $10::date, $11::int, $12::varchar)",
+      [pipelineId, search, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at, lead_pipeline_stage_id, tag]
     );
 
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });

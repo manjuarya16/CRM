@@ -4,6 +4,7 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import { logger } from "@/utils/logger";
 import { ICreateNotificationInput, INotificationItem } from "@/interfaces";
+import { SseService } from "@/services/sse.service";
 
 const getNotifications = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -131,6 +132,10 @@ const markAllAsRead = async (req: Request, res: Response): Promise<void> => {
 
     const updatedCount = Number(result.rows[0]?.updated_count || 0);
 
+    if (userId) {
+      SseService.emitNotificationEvent({ userId: Number(userId), unreadCount: 0 });
+    }
+
     res.status(HttpStatusCodes.OK).json({
       success: true,
       message: `Marked ${updatedCount} notifications as read`,
@@ -186,6 +191,10 @@ const clearAllNotifications = async (req: Request, res: Response): Promise<void>
     );
 
     const deletedCount = Number(result.rows[0]?.deleted_count || 0);
+
+    if (userId) {
+      SseService.emitNotificationEvent({ userId: Number(userId), unreadCount: 0 });
+    }
 
     res.status(HttpStatusCodes.OK).json({
       success: true,

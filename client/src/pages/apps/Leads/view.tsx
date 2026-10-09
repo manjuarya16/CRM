@@ -503,22 +503,66 @@ const getPersonEmail = (person: any): string => {
                 </Link>
               </div>
 
-              {person ? (
-                <div className="flex items-start gap-3 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
-                  <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-bold flex items-center justify-center text-xs shrink-0">
-                    {person.name?.substring(0, 2).toUpperCase()}
+              {(() => {
+                const leadOrgId = selectedLead.organization_id;
+                const otherOrgPersons = leadOrgId
+                  ? personsList.filter(
+                      (p) => String(p.organization_id) === String(leadOrgId) && String(p.id) !== String(selectedLead.person_id)
+                    )
+                  : [];
+
+                if (!person && otherOrgPersons.length === 0) {
+                  return selectedLead.person_name ? (
+                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{selectedLead.person_name}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400">No person linked.</p>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2.5">
+                    {/* Primary Contact Person */}
+                    {person && (
+                      <div className="flex items-start gap-3 bg-blue-50/50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                        <div className="w-8 h-8 rounded-full bg-[#0088cc] text-white font-bold flex items-center justify-center text-xs shrink-0">
+                          {person.name?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="space-y-0.5 text-xs flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-[#0088cc]">{person.name}</p>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-[#0088cc] text-white rounded">Primary</span>
+                          </div>
+                          {person.job_title && <p className="text-gray-600 dark:text-gray-300 font-medium text-[11px]">{person.job_title}</p>}
+                          {person.emails?.[0] && <p className="text-gray-500">{person.emails[0].value || person.emails[0]} (work)</p>}
+                          {person.contact_numbers?.[0] && <p className="text-gray-500">{person.contact_numbers[0].value || person.contact_numbers[0]}</p>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Secondary Organization Contacts */}
+                    {otherOrgPersons.map((op) => {
+                      const emailVal = Array.isArray(op.emails) ? (op.emails[0]?.value || op.emails[0]) : op.email;
+                      const phoneVal = Array.isArray(op.contact_numbers) ? (op.contact_numbers[0]?.value || op.contact_numbers[0]) : op.phone;
+                      return (
+                        <div key={op.id} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                          <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-bold flex items-center justify-center text-xs shrink-0">
+                            {op.name?.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="space-y-0.5 text-xs flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="font-bold text-gray-800 dark:text-gray-200">{op.name}</p>
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded">Org Contact</span>
+                            </div>
+                            {op.job_title && <p className="text-gray-600 dark:text-gray-300 font-medium text-[11px]">{op.job_title}</p>}
+                            {emailVal && <p className="text-gray-500">{emailVal}</p>}
+                            {phoneVal && <p className="text-gray-500">{phoneVal}</p>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-0.5 text-xs">
-                    <p className="font-bold text-[#0088cc]">{person.name}</p>
-                    {person.emails?.[0] && <p className="text-gray-500">{person.emails[0].value || person.emails[0]} (work)</p>}
-                    {person.contact_numbers?.[0] && <p className="text-gray-500">{person.contact_numbers[0].value || person.contact_numbers[0]} (home)</p>}
-                  </div>
-                </div>
-              ) : selectedLead.person_name ? (
-                <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{selectedLead.person_name}</p>
-              ) : (
-                <p className="text-xs text-gray-400">No person linked.</p>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

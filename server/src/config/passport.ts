@@ -7,7 +7,10 @@ import { toPublicUser } from '@/interfaces';
 passport.use(
   new JwtStrategy(
     {
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromUrlQueryParameter('token'),
+      ]),
       secretOrKey: env.JWT_SECRET,
     },
     async (payload: { sub: string }, done) => {
