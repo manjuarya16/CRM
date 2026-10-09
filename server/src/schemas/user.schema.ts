@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const userSaveSchema = z.object({
+  id: z.coerce.number().optional().nullable(),
   name: z.string().min(1, 'Name is required').max(191, 'Name is too long'),
   email: z.string().email('Invalid email address').optional().nullable(),
   password: z.string().min(6, 'Password must be at least 6 characters').optional().nullable().or(z.literal('')),
