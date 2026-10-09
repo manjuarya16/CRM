@@ -32,6 +32,7 @@ const CreateProductPage: React.FC = () => {
   const [formData, setFormData] = useState({
     sku: "",
     name: "",
+    type: "Product",
     description: "",
     quantity: "0",
     price: "",
@@ -103,11 +104,13 @@ const CreateProductPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isService = formData.type === "Service";
     const validation = productSchema.safeParse({
       sku: formData.sku.trim(),
       name: formData.name.trim(),
+      type: formData.type,
       description: formData.description || undefined,
-      quantity: formData.quantity,
+      quantity: isService ? "0" : formData.quantity,
       price: formData.price,
     });
 
@@ -136,11 +139,12 @@ const CreateProductPage: React.FC = () => {
       const res: any = await addProduct({
         sku: validation.data.sku,
         name: validation.data.name,
+        type: validation.data.type,
         description: validation.data.description || undefined,
-        quantity: validation.data.quantity,
+        quantity: isService ? "0" : validation.data.quantity,
         price: validation.data.price,
         custom_attributes: customAttributes,
-        inventories: payloadInventories.length > 0 ? payloadInventories : undefined,
+        inventories: isService ? undefined : payloadInventories.length > 0 ? payloadInventories : undefined,
       } as any);
 
       if (res?.id && selectedTagIds.length > 0) {
@@ -203,6 +207,37 @@ const CreateProductPage: React.FC = () => {
             <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
               General
             </h2>
+
+            {/* Product Type Switch on Top */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Product Type <span className="text-red-500">*</span>
+              </label>
+              <div className="inline-flex p-1 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: "Product" })}
+                  className={`px-5 py-2 text-sm font-semibold rounded-md transition-all ${
+                    formData.type === "Product"
+                      ? "bg-[#0e90d9] text-white shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  Product
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: "Service" })}
+                  className={`px-5 py-2 text-sm font-semibold rounded-md transition-all ${
+                    formData.type === "Service"
+                      ? "bg-[#0e90d9] text-white shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  Service
+                </button>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -314,35 +349,17 @@ const CreateProductPage: React.FC = () => {
                     placeholder="1200.5000"
                     className={`w-full px-3.5 py-2 bg-white dark:bg-gray-900 border ${
                       errors.price ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0e90d9]"
-                    } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200 transition`}
+                    } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
                   {errors.price && <p className="mt-1 text-xs text-red-500 font-medium">{errors.price}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Quantity <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.quantity}
-                    onChange={(e) => {
-                      setFormData({ ...formData, quantity: e.target.value });
-                      if (errors.quantity) setErrors((prev) => ({ ...prev, quantity: "" }));
-                    }}
-                    placeholder="1000"
-                    className={`w-full px-3.5 py-2 bg-white dark:bg-gray-900 border ${
-                      errors.quantity ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0e90d9]"
-                    } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200 transition`}
-                  />
-                  {errors.quantity && <p className="mt-1 text-xs text-red-500 font-medium">{errors.quantity}</p>}
                 </div>
               </div>
             )}
           </div>
 
           {/* Warehouse Inventories Section */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          {formData.type !== "Service" && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
             <div
               onClick={() => setIsInventoryOpen(!isInventoryOpen)}
               className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none bg-gray-50/70 dark:bg-gray-800/80 hover:bg-gray-100/60 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700"
@@ -482,7 +499,7 @@ const CreateProductPage: React.FC = () => {
                                             onChange={(e) =>
                                               handleInventoryChange(index, "in_stock", Number(e.target.value))
                                             }
-                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
+                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                           />
                                         </td>
                                         <td className="py-2 px-1">
@@ -493,7 +510,7 @@ const CreateProductPage: React.FC = () => {
                                             onChange={(e) =>
                                               handleInventoryChange(index, "allocated", Number(e.target.value))
                                             }
-                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200"
+                                            className="w-full px-2 py-1 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#0e90d9] dark:text-gray-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                           />
                                         </td>
                                       </tr>
@@ -519,6 +536,7 @@ const CreateProductPage: React.FC = () => {
               </div>
             )}
           </div>
+          )}
         </div>
       </form>
     </div>

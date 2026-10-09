@@ -262,19 +262,31 @@ const LeadViewPage: React.FC = () => {
   };
 
 
+const getPersonEmail = (person: any): string => {
+  if (!person) return "";
+  if (person.email) return person.email;
+  if (!person.emails) return "";
+  try {
+    const emails = typeof person.emails === "string" ? JSON.parse(person.emails) : person.emails;
+    if (Array.isArray(emails) && emails.length > 0) {
+      const first = emails[0];
+      return typeof first === "object" ? (first.value || first.email || "") : String(first);
+    }
+    if (typeof emails === "string") return emails;
+  } catch (e) { }
+  return "";
+};
+
   const mailInitialData = useMemo(() => {
-    const recipient = person?.email
-      ? [person.email]
-      : selectedLead?.person_name && selectedLead?.custom_attributes?.email
-        ? [selectedLead.custom_attributes.email]
-        : [];
+    const emailStr = getPersonEmail(person) || (selectedLead?.custom_attributes?.email || "");
+    const recipient = emailStr ? [emailStr] : [];
     return {
       lead_id: leadId,
       person_id: selectedLead?.person_id,
       to: recipient,
       subject: selectedLead?.title ? `Regarding ${selectedLead.title}` : "",
     };
-  }, [leadId, selectedLead?.person_id, selectedLead?.title, person?.email]);
+  }, [leadId, selectedLead?.person_id, selectedLead?.title, person]);
 
   if (loading || !selectedLead) {
     return (

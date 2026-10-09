@@ -19,7 +19,7 @@ const LeadsPage: React.FC = () => {
     kanbanLeads, fetchKanbanLeads,
     pipelines, fetchPipelines,
     stages, fetchStages,
-    deleteLead, updateLeadStage
+    deleteLead, deleteBulkLeads, updateLeadStage
   } = useLeadStore();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -28,6 +28,7 @@ const LeadsPage: React.FC = () => {
   const [onlyRotten, setOnlyRotten] = useState<boolean>(false);
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
 
   // Magic AI Configuration state
   const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
@@ -43,18 +44,31 @@ const LeadsPage: React.FC = () => {
   const [personsList, setPersonsList] = useState<any[]>([]);
   const [sourcesList, setSourcesList] = useState<any[]>([]);
   const [typesList, setTypesList] = useState<any[]>([]);
+  const [filterStages, setFilterStages] = useState<any[]>([]);
 
   const [filterForm, setFilterForm] = useState({
     id: "",
     lead_value: "",
     user_id: "",
     person_id: "",
+    lead_pipeline_id: "",
+    lead_pipeline_stage_id: "",
     lead_type_id: "",
     lead_source_id: "",
     tag: "",
     expected_close_date: "",
     created_at: "",
   });
+
+  useEffect(() => {
+    if (filterForm.lead_pipeline_id) {
+      API.get(`/leads/pipeline-stages?pipeline_id=${filterForm.lead_pipeline_id}`)
+        .then((res) => { if (res.data?.data) setFilterStages(res.data.data); })
+        .catch(() => setFilterStages([]));
+    } else {
+      setFilterStages([]);
+    }
+  }, [filterForm.lead_pipeline_id]);
 
   useEffect(() => {
     fetchPipelines();
@@ -126,6 +140,8 @@ const LeadsPage: React.FC = () => {
       lead_value: "",
       user_id: "",
       person_id: "",
+      lead_pipeline_id: "",
+      lead_pipeline_stage_id: "",
       lead_type_id: "",
       lead_source_id: "",
       tag: "",
@@ -164,6 +180,47 @@ const LeadsPage: React.FC = () => {
         }
       } catch (e: any) {
         Swal.fire("Error", e.message || "Failed to delete lead", "error");
+      }
+    }
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>, currentLeads: ILead[]) => {
+    if (e.target.checked) {
+      setSelectedLeadIds(currentLeads.map((l) => l.id));
+    } else {
+      setSelectedLeadIds([]);
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    setSelectedLeadIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.length === 0) return;
+    const result = await Swal.fire({
+      title: "Bulk Delete Leads",
+      text: `Are you sure you want to delete ${selectedLeadIds.length} selected lead(s)?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#64748b",
+      confirmButtonText: `Yes, delete ${selectedLeadIds.length} lead(s)`,
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await deleteBulkLeads(selectedLeadIds);
+        setSelectedLeadIds([]);
+        if (viewMode === "kanban") {
+          fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
+        } else {
+          fetchLeads(page, perPage, search, filterForm);
+        }
+      } catch (e: any) {
+        Swal.fire("Error", e.message || "Failed to bulk delete leads", "error");
       }
     }
   };
@@ -568,10 +625,46 @@ const LeadsPage: React.FC = () => {
       {/* TABLE GRID VIEW */}
       {viewMode === "table" && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+          {/* Bulk Selection Header Action Banner */}
+          {selectedLeadIds.length > 0 && (
+            <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-900/60 px-4 py-2.5 flex items-center justify-between animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-red-700 dark:text-red-300">
+                  {selectedLeadIds.length} lead(s) selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLeadIds([])}
+                  className="text-[11px] text-red-600 underline hover:text-red-800 ml-2"
+                >
+                  Clear Selection
+                </button>
+              </div>
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <i className="mgc_delete_line text-sm"></i>
+                  Delete Selected Leads ({selectedLeadIds.length})
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-gray-600 dark:text-gray-300">
               <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-700 dark:text-gray-300 uppercase font-semibold border-b border-gray-100 dark:border-gray-700">
                 <tr>
+                  <th className="py-3 px-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={displayLeads.length > 0 && selectedLeadIds.length === displayLeads.length}
+                      onChange={(e) => handleSelectAll(e, displayLeads)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3 px-4">Title</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Value</th>
@@ -585,21 +678,30 @@ const LeadsPage: React.FC = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                    <td colSpan={9} className="text-center py-12 text-gray-400">
                       <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0088cc] border-t-transparent"></div>
                     </td>
                   </tr>
                 ) : displayLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-14 text-gray-400 dark:text-gray-500 text-sm font-medium">
+                    <td colSpan={9} className="text-center py-14 text-gray-400 dark:text-gray-500 text-sm font-medium">
                       {onlyRotten ? "No Rotten Leads Found." : "No Records Available."}
                     </td>
                   </tr>
                 ) : (
                   displayLeads.map((lead) => {
                     const rottenInfo = getRottenInfo(lead, currentPipeline);
+                    const isSelected = selectedLeadIds.includes(lead.id);
                     return (
-                      <tr key={lead.id} className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 ${rottenInfo.isRotten ? "bg-rose-50/20 dark:bg-rose-950/10" : ""}`}>
+                      <tr key={lead.id} className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 ${isSelected ? "bg-blue-50/50 dark:bg-blue-950/30" : rottenInfo.isRotten ? "bg-rose-50/20 dark:bg-rose-950/10" : ""}`}>
+                        <td className="py-3 px-4 w-10">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectOne(lead.id)}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-4 font-medium text-[#0088cc]">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <Link to={`/leads/view/${lead.id}`} className="hover:underline font-bold">
@@ -790,7 +892,38 @@ const LeadsPage: React.FC = () => {
                   </select>
                 </div>
 
-                {/* 5. Lead Type */}
+                {/* 5. Pipeline */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Pipeline</label>
+                  <select
+                    value={filterForm.lead_pipeline_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_id: e.target.value, lead_pipeline_stage_id: "" })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Select Pipeline</option>
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 6. Stage */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Stage</label>
+                  <select
+                    value={filterForm.lead_pipeline_stage_id}
+                    onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_stage_id: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                    disabled={!filterForm.lead_pipeline_id && filterStages.length === 0}
+                  >
+                    <option value="">Select Stage</option>
+                    {filterStages.map((st) => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 7. Lead Type */}
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Type</label>
                   <select

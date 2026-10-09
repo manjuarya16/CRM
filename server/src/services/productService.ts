@@ -25,12 +25,14 @@ const getProducts = async (req: Request, res: Response): Promise<void> => {
     if (products.length > 0) {
       const ids = products.map((p: any) => p.id);
       const attrRes = await connection.query(
-        "SELECT id, custom_attributes FROM products WHERE id = ANY($1::int[])",
+        "SELECT id, type, custom_attributes FROM products WHERE id = ANY($1::int[])",
         [ids]
       );
-      const attrMap = new Map(attrRes.rows.map((r: any) => [r.id, r.custom_attributes || {}]));
+      const attrMap = new Map(attrRes.rows.map((r: any) => [r.id, r]));
       products.forEach((p: any) => {
-        p.custom_attributes = attrMap.get(p.id) || {};
+        const row = attrMap.get(p.id);
+        p.type = row?.type || "Product";
+        p.custom_attributes = row?.custom_attributes || {};
       });
     }
 
@@ -77,9 +79,12 @@ const getProductById = async (req: Request, res: Response): Promise<void> => {
     }
 
     const productData = result.rows[0];
-    if (productData && (productData.custom_attributes === undefined || productData.custom_attributes === null)) {
-      const pRes = await connection.query("SELECT custom_attributes FROM products WHERE id = $1", [id]);
-      productData.custom_attributes = pRes.rows[0]?.custom_attributes || {};
+    if (productData) {
+      const pRes = await connection.query("SELECT type, custom_attributes FROM products WHERE id = $1", [id]);
+      productData.type = pRes.rows[0]?.type || "Product";
+      if (productData.custom_attributes === undefined || productData.custom_attributes === null) {
+        productData.custom_attributes = pRes.rows[0]?.custom_attributes || {};
+      }
     }
 
     // DB Function call: get_product_inventories(p_product_id)
@@ -167,6 +172,10 @@ const createProduct = async (req: Request, res: Response): Promise<void> => {
 
     const createdProduct = result.rows[0];
     if (createdProduct?.id) {
+      const productType = validation.data.type || "Product";
+      await connection.query("UPDATE products SET type = $1 WHERE id = $2", [productType, createdProduct.id]);
+      createdProduct.type = productType;
+
       if (custom_attributes) {
         const customAttrsJson = JSON.stringify(custom_attributes);
         await connection.query(
@@ -276,6 +285,11 @@ const updateProduct = async (req: Request, res: Response): Promise<void> => {
 
     const updatedProduct = result.rows[0];
     if (id) {
+      if (validation.data.type) {
+        await connection.query("UPDATE products SET type = $1 WHERE id = $2", [validation.data.type, id]);
+        if (updatedProduct) updatedProduct.type = validation.data.type;
+      }
+
       if (custom_attributes !== undefined) {
         const customAttrsJson = JSON.stringify(custom_attributes || {});
         await connection.query(

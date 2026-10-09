@@ -100,6 +100,7 @@ export interface LeadState {
   addLead: (leadData: any) => Promise<any>;
   updateLead: (id: number, leadData: any) => Promise<any>;
   deleteLead: (id: number) => Promise<void>;
+  deleteBulkLeads: (ids: number[]) => Promise<void>;
   updateLeadStage: (id: number, stageId: number, status?: boolean, lostReason?: string) => Promise<any>;
   fetchLeadProducts: (leadId: number) => Promise<void>;
   addLeadProduct: (

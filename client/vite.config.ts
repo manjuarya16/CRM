@@ -5,7 +5,7 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const target = env.VITE_DEV_API_TARGET || env.VITE_SERVER_URL || "https://crmsrv.imorse.digital";
+  const target = env.VITE_DEV_API_TARGET || env.VITE_SERVER_URL || "http://localhost:3040";
 
   return {
     plugins: [react()],

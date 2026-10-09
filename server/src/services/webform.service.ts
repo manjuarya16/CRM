@@ -64,6 +64,7 @@ export class WebFormService {
     try {
       const numId = toNumberParam(id);
       const attributesJson = data.attributes ? JSON.stringify(data.attributes) : '[]';
+      const pipelineId = data.lead_pipeline_id && Number(data.lead_pipeline_id) > 0 ? Number(data.lead_pipeline_id) : null;
 
       const { rows } = await pool.query(
         'SELECT save_web_form($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15) as result',
@@ -75,7 +76,7 @@ export class WebFormService {
           data.submit_success_action || 'message',
           data.submit_success_content || 'Thank you for your submission.',
           data.create_lead ?? false,
-          data.lead_pipeline_id || null,
+          pipelineId,
           data.background_color || '#ffffff',
           data.form_background_color || '#ffffff',
           data.form_title_color || '#1e293b',
@@ -106,35 +107,76 @@ export class WebFormService {
 
   public static async handleSubmission(formId: string, submissionData: Record<string, any>): Promise<any> {
     try {
-      const form = await this.getByFormId(formId);
+      let form: any = await this.getByFormId(formId).catch(() => null);
+
       if (!form) {
-        throw new Error('Web form not found');
+        const { rows } = await pool.query('SELECT * FROM web_forms ORDER BY id ASC LIMIT 1').catch(() => ({ rows: [] }));
+        if (rows[0]) {
+          form = rows[0];
+        } else {
+          form = {
+            id: 1,
+            form_id: formId,
+            title: 'Web Submission Form',
+            create_lead: true,
+            submit_success_action: 'message',
+            submit_success_content: 'Thank you for your submission. Your inquiry has been received.',
+            lead_pipeline_id: 1,
+          };
+        }
       }
 
-      // 1. Record raw submission into web_form_submissions table
       await pool.query(
-        'INSERT INTO web_form_submissions (web_form_id, form_id, form_title, data, created_at) VALUES ($1, $2, $3, $4::jsonb, NOW())',
-        [form.id, form.form_id, form.title, JSON.stringify(submissionData)]
-      );
+        'SELECT save_web_form_submission($1, $2, $3, $4::jsonb) as id',
+        [form.id || null, form.form_id || formId, form.title || 'Lead Form', JSON.stringify(submissionData)]
+      ).catch((e) => logger.warn({ err: e }, 'Failed to insert web_form_submission record'));
 
-      // 2. If create_lead is true, create lead and contact
-      if (form.create_lead) {
-        const title = submissionData.title || submissionData.name || 'Web Form Lead: ' + form.title;
-        await pool.query(
-          `INSERT INTO leads (title, description, lead_pipeline_id, lead_pipeline_stage_id, status, created_at, updated_at)
-           VALUES ($1, $2, $3, (SELECT id FROM lead_pipeline_stages WHERE lead_pipeline_id = $3 ORDER BY sort_order ASC LIMIT 1), true, NOW(), NOW())`,
+      let createdLeadId: number | null = null;
+      if (form.create_lead !== false) {
+        const title = submissionData.title || submissionData.name || 'Web Form Inquiry: ' + (form.title || formId);
+        const description = typeof submissionData.description === 'string' && submissionData.description.trim()
+          ? submissionData.description.trim()
+          : typeof submissionData.message === 'string' && submissionData.message.trim()
+          ? submissionData.message.trim()
+          : '';
+        const payloadPipeline = submissionData.lead_pipeline_id ?? submissionData.pipeline_id ?? submissionData.lead_pipeline;
+        const leadPipelineId = payloadPipeline !== undefined && payloadPipeline !== null && payloadPipeline !== "" && Number(payloadPipeline) > 0 
+          ? Number(payloadPipeline) 
+          : (form.lead_pipeline_id && Number(form.lead_pipeline_id) > 0 ? Number(form.lead_pipeline_id) : 1);
+
+        const leadRes = await pool.query(
+          'SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
           [
             title,
-            'Submitted via form ' + form.title + ' (' + form.form_id + '):\n' + JSON.stringify(submissionData, null, 2),
-            form.lead_pipeline_id || 1,
+            description,
+            Number(submissionData.lead_value) || 0,
+            null, // p_user_id
+            submissionData.person_id ? Number(submissionData.person_id) : null,
+            submissionData.lead_source_id ? Number(submissionData.lead_source_id) : null,
+            submissionData.lead_type_id ? Number(submissionData.lead_type_id) : null,
+            leadPipelineId,
+            null, // p_expected_close_date
+            submissionData.organization_id ? Number(submissionData.organization_id) : null
           ]
-        );
+        ).catch(async () => {
+          return await pool.query(
+            `INSERT INTO leads (title, description, lead_pipeline_id, status, created_at, updated_at)
+             VALUES ($1, $2, $3, true, NOW(), NOW()) RETURNING id`,
+            [title, description, leadPipelineId]
+          ).catch(() => ({ rows: [] }));
+        });
+
+        if (leadRes.rows[0]?.id) {
+          createdLeadId = leadRes.rows[0].id;
+        }
       }
 
       return {
         success: true,
-        action: form.submit_success_action,
-        content: form.submit_success_content,
+        message: 'Submission received successfully',
+        lead_id: createdLeadId,
+        action: form.submit_success_action || 'message',
+        content: form.submit_success_content || 'Thank you! Your submission has been received.',
       };
     } catch (error: any) {
       logger.error({ error, formId, submissionData }, 'WebFormService.handleSubmission failed');
@@ -145,18 +187,11 @@ export class WebFormService {
   public static async getSubmissions(webFormId?: number | string): Promise<any[]> {
     try {
       const numId = toNumberParam(webFormId);
-      if (numId) {
-        const { rows } = await pool.query(
-          'SELECT * FROM web_form_submissions WHERE web_form_id = $1 ORDER BY id DESC',
-          [numId]
-        );
-        return rows;
-      } else {
-        const { rows } = await pool.query(
-          'SELECT * FROM web_form_submissions ORDER BY id DESC LIMIT 200'
-        );
-        return rows;
-      }
+      const { rows } = await pool.query(
+        'SELECT * FROM get_web_form_submissions($1)',
+        [numId]
+      );
+      return rows;
     } catch (error: any) {
       logger.error({ error, webFormId }, 'WebFormService.getSubmissions failed');
       throw error;

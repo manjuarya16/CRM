@@ -143,6 +143,7 @@ const ProductsPage: React.FC = () => {
               <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
                 <th className="py-3 px-4 font-semibold">SKU</th>
                 <th className="py-3 px-4 font-semibold">Name</th>
+                <th className="py-3 px-4 font-semibold">Type</th>
                 <th className="py-3 px-4 font-semibold">Quantity / Status</th>
                 <th className="py-3 px-4 font-semibold">Price</th>
                 <th className="py-3 px-4 font-semibold">Created At</th>
@@ -152,7 +153,7 @@ const ProductsPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-400">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0088cc] border-t-transparent"></div>
                   </td>
                 </tr>
@@ -167,7 +168,7 @@ const ProductsPage: React.FC = () => {
                 if (displayedProducts.length === 0) {
                   return (
                     <tr>
-                      <td colSpan={6} className="text-center py-14 text-gray-400 dark:text-gray-500 text-sm font-medium">
+                      <td colSpan={7} className="text-center py-14 text-gray-400 dark:text-gray-500 text-sm font-medium">
                         No Records Available.
                       </td>
                     </tr>
@@ -187,8 +188,19 @@ const ProductsPage: React.FC = () => {
                         {p.name || "-"}
                       </button>
                     </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        p.type === 'Service'
+                          ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                          : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                      }`}>
+                        {p.type || 'Product'}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 font-medium">
-                      {Number(p.quantity) > 0 ? (
+                      {p.type?.toLowerCase() === "service" ? (
+                        <span className="text-gray-400 font-semibold px-2">-</span>
+                      ) : Number(p.quantity) > 0 ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold rounded-full text-xs border border-emerald-200 dark:border-emerald-800">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                           {p.quantity} In Stock (Sellable)
@@ -326,7 +338,7 @@ const ProductsPage: React.FC = () => {
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
                       <div className="text-[11px] text-gray-500 uppercase font-semibold">Total Stock</div>
                       <div className="text-xs font-bold text-[#0088cc] mt-1">
-                        {viewingProduct.quantity ?? 0} units
+                        {viewingProduct.type?.toLowerCase() === "service" ? "-" : `${viewingProduct.quantity ?? 0} units`}
                       </div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
@@ -370,53 +382,55 @@ const ProductsPage: React.FC = () => {
                   )}
 
                   {/* Multi-Warehouse Stock Breakdown */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center justify-between">
-                      <span>Warehouse Stock Breakdown</span>
-                      {Array.isArray(viewingProduct.inventories) && (
-                        <span className="text-[11px] text-[#0088cc] font-medium lowercase">
-                          {viewingProduct.inventories.length} location(s)
-                        </span>
-                      )}
-                    </h3>
+                  {viewingProduct.type?.toLowerCase() !== "service" && (
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center justify-between">
+                        <span>Warehouse Stock Breakdown</span>
+                        {Array.isArray(viewingProduct.inventories) && (
+                          <span className="text-[11px] text-[#0088cc] font-medium lowercase">
+                            {viewingProduct.inventories.length} location(s)
+                          </span>
+                        )}
+                      </h3>
 
-                    {!Array.isArray(viewingProduct.inventories) || viewingProduct.inventories.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700">
-                        No warehouse inventory assigned yet.
-                      </div>
-                    ) : (
-                      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                              <th className="py-2.5 px-4 font-semibold">Warehouse</th>
-                              <th className="py-2.5 px-4 font-semibold">Location</th>
-                              <th className="py-2.5 px-4 font-semibold text-center">In Stock</th>
-                              <th className="py-2.5 px-4 font-semibold text-center">Allocated</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
-                            {viewingProduct.inventories.map((inv: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-750">
-                                <td className="py-2.5 px-4 font-medium text-gray-800 dark:text-gray-200">
-                                  {inv.warehouse_name || `Warehouse #${inv.warehouse_id}`}
-                                </td>
-                                <td className="py-2.5 px-4 text-gray-500 font-mono">
-                                  {inv.warehouse_location_name || "Default Location"}
-                                </td>
-                                <td className="py-2.5 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">
-                                  {inv.in_stock || 0}
-                                </td>
-                                <td className="py-2.5 px-4 text-center font-bold text-amber-600 dark:text-amber-400">
-                                  {inv.allocated || 0}
-                                </td>
+                      {!Array.isArray(viewingProduct.inventories) || viewingProduct.inventories.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                          No warehouse inventory assigned yet.
+                        </div>
+                      ) : (
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                <th className="py-2.5 px-4 font-semibold">Warehouse</th>
+                                <th className="py-2.5 px-4 font-semibold">Location</th>
+                                <th className="py-2.5 px-4 font-semibold text-center">In Stock</th>
+                                <th className="py-2.5 px-4 font-semibold text-center">Allocated</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                              {viewingProduct.inventories.map((inv: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-750">
+                                  <td className="py-2.5 px-4 font-medium text-gray-800 dark:text-gray-200">
+                                    {inv.warehouse_name || `Warehouse #${inv.warehouse_id}`}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-gray-500 font-mono">
+                                    {inv.warehouse_location_name || "Default Location"}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">
+                                    {inv.in_stock || 0}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-center font-bold text-amber-600 dark:text-amber-400">
+                                    {inv.allocated || 0}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Custom Attributes */}
                   {viewingProduct.custom_attributes && typeof viewingProduct.custom_attributes === "object" && Object.keys(viewingProduct.custom_attributes).length > 0 && (

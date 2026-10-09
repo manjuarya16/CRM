@@ -6,6 +6,43 @@ import Swal from "sweetalert2";
 import { webhookSchema, WebhookInput } from "@/schemas";
 import { WebhookFormProps } from "@/interface";
 import { useWebhookStore } from "@/store";
+import { API } from "@/config";
+import { getToken } from "@/lib/auth-utils";
+
+const ENTITY_CONFIG: Record<
+  string,
+  {
+    placeholders: string[];
+    defaultRawTemplate: string;
+    defaultJsonPreview: string;
+  }
+> = {
+  leads: {
+    placeholders: ["{{id}}", "{{title}}", "{{lead_value}}", "{{email}}", "{{phone}}", "{{lead_pipeline_id}}"],
+    defaultRawTemplate: `{\n  "event_name": "lead.created",\n  "lead_id": "{{id}}",\n  "lead_title": "{{title}}",\n  "contact_email": "{{email}}",\n  "deal_value": "{{lead_value}}"\n}`,
+    defaultJsonPreview: `{\n  "id": 101,\n  "title": "New Business Lead",\n  "lead_value": 5000,\n  "email": "lead@example.com",\n  "phone": "+1234567890",\n  "lead_pipeline_id": 5,\n  "stage_name": "In Process"\n}`,
+  },
+  persons: {
+    placeholders: ["{{id}}", "{{name}}", "{{emails}}", "{{contact_numbers}}", "{{job_title}}", "{{organization_id}}"],
+    defaultRawTemplate: `{\n  "event_name": "person.created",\n  "person_id": "{{id}}",\n  "person_name": "{{name}}",\n  "emails": "{{emails}}",\n  "contact_numbers": "{{contact_numbers}}",\n  "job_title": "{{job_title}}"\n}`,
+    defaultJsonPreview: `{\n  "id": 42,\n  "name": "John Doe",\n  "emails": ["john@example.com"],\n  "contact_numbers": ["+1987654321"],\n  "job_title": "Sales Manager",\n  "organization_id": 12\n}`,
+  },
+  organizations: {
+    placeholders: ["{{id}}", "{{name}}", "{{address}}", "{{user_id}}"],
+    defaultRawTemplate: `{\n  "event_name": "organization.created",\n  "organization_id": "{{id}}",\n  "org_name": "{{name}}",\n  "address": "{{address}}"\n}`,
+    defaultJsonPreview: `{\n  "id": 12,\n  "name": "Acme Corp",\n  "address": "123 Business St, Tech City",\n  "user_id": 1\n}`,
+  },
+  quotes: {
+    placeholders: ["{{id}}", "{{subject}}", "{{grand_total}}", "{{user_id}}", "{{person_id}}", "{{lead_id}}"],
+    defaultRawTemplate: `{\n  "event_name": "quote.created",\n  "quote_id": "{{id}}",\n  "subject": "{{subject}}",\n  "grand_total": "{{grand_total}}",\n  "user_id": "{{user_id}}"\n}`,
+    defaultJsonPreview: `{\n  "id": 88,\n  "subject": "Enterprise Plan Proposal",\n  "grand_total": 12500,\n  "sub_total": 10000,\n  "tax_amount": 2500,\n  "user_id": 1,\n  "person_id": 42,\n  "lead_id": 101\n}`,
+  },
+  activities: {
+    placeholders: ["{{id}}", "{{title}}", "{{type}}", "{{comment}}", "{{user_id}}"],
+    defaultRawTemplate: `{\n  "event_name": "activity.created",\n  "activity_id": "{{id}}",\n  "title": "{{title}}",\n  "activity_type": "{{type}}",\n  "comment": "{{comment}}"\n}`,
+    defaultJsonPreview: `{\n  "id": 305,\n  "title": "Follow up call with client",\n  "type": "call",\n  "comment": "Discussed contract details",\n  "is_done": true,\n  "user_id": 1\n}`,
+  },
+};
 
 export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
@@ -34,6 +71,18 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
     },
   });
 
+  const payloadType = watch("payload_type");
+  const entityType = watch("entity_type") || "leads";
+  const currentEntityConfig = ENTITY_CONFIG[entityType] || ENTITY_CONFIG.leads;
+  const prevEntityType = React.useRef(entityType);
+
+  useEffect(() => {
+    if (prevEntityType.current !== entityType) {
+      prevEntityType.current = entityType;
+      setValue("payload", currentEntityConfig.defaultRawTemplate);
+    }
+  }, [entityType, currentEntityConfig, setValue]);
+
   useEffect(() => {
     if (initialData) {
       setValue("name", initialData.name);
@@ -43,6 +92,11 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
       setValue("end_point", initialData.end_point || "");
       setValue("payload_type", initialData.payload_type || "default");
       setValue("raw_payload_type", initialData.raw_payload_type || "json");
+
+      const payloadStr = typeof initialData.payload === "object"
+        ? JSON.stringify(initialData.payload, null, 2)
+        : (initialData.payload || currentEntityConfig.defaultRawTemplate);
+      setValue("payload", payloadStr);
 
       const h = Array.isArray(initialData.headers) ? initialData.headers : [];
       setHeaders(h);
@@ -101,6 +155,14 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
       setLoading(true);
       data.headers = headers.filter((h) => h.key.trim() !== "");
       data.query_params = queryParams.filter((q) => q.key.trim() !== "");
+
+      if (typeof data.payload === "string" && data.payload.trim()) {
+        try {
+          data.payload = JSON.parse(data.payload);
+        } catch {
+          // Keep as string template
+        }
+      }
 
       if (isEdit && initialData) {
         await useWebhookStore.getState().saveWebhook(data, initialData.id);
@@ -208,6 +270,71 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
           </select>
         </div>
 
+        {payloadType === "default" && (
+          <div className="md:col-span-2 bg-blue-50 dark:bg-gray-900/50 p-3 rounded-lg border border-blue-100 dark:border-gray-700 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                Default Payload Structure ({entityType.toUpperCase()})
+              </span>
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-mono">
+                All {entityType} entity attributes automatically included in POST body
+              </span>
+            </div>
+            <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 p-2.5 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto">
+              {currentEntityConfig.defaultJsonPreview}
+            </pre>
+          </div>
+        )}
+
+        {payloadType === "raw" && (
+          <div className="md:col-span-2 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Custom Payload / Template (JSON or Text)
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setValue("payload", currentEntityConfig.defaultRawTemplate)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                >
+                  Reset to {entityType} template
+                </button>
+              </div>
+            </div>
+
+            {/* Interactive Placeholder Picker Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gray-50 dark:bg-gray-900/60 rounded-lg border border-gray-200 dark:border-gray-700">
+              <span className="text-[11px] text-gray-500 font-semibold mr-1">Insert Placeholders:</span>
+              {currentEntityConfig.placeholders.map((ph) => (
+                <button
+                  key={ph}
+                  type="button"
+                  onClick={() => {
+                    const cur = watch("payload") || "";
+                    setValue("payload", cur ? `${cur}\n  "field": "${ph}"` : ph);
+                  }}
+                  className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-700 rounded border border-blue-200 dark:border-gray-600 transition-colors shadow-xs flex items-center gap-1"
+                  title={`Click to insert ${ph}`}
+                >
+                  <i className="mgc_add_line text-[10px]"></i>
+                  {ph}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              rows={6}
+              {...register("payload")}
+              placeholder={currentEntityConfig.defaultRawTemplate}
+              className="w-full px-3 py-2 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 bg-gray-50 dark:bg-gray-900"
+            ></textarea>
+            <p className="text-[11px] text-gray-400">
+              Enter custom JSON template or text. Dynamic placeholders starting with <code>{"{{"}</code> and ending with <code>{"}}"}</code> will automatically be replaced with entity attributes upon webhook execution.
+            </p>
+          </div>
+        )}
+
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Description
@@ -223,15 +350,43 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
 
       {/* Headers Section */}
       <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Custom HTTP Headers</h3>
-          <button
-            type="button"
-            onClick={addHeader}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
-          >
-            <i className="mgc_add_line"></i> Add Header
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const token = getToken() || localStorage.getItem("token") || localStorage.getItem("jwt_token") || "";
+                if (!token) {
+                  Swal.fire({
+                    icon: "info",
+                    title: "No Session Token Found",
+                    text: "Please log in to auto-populate your active JWT token, or type your Bearer token manually into the header value field.",
+                  });
+                }
+                const tokenVal = token ? `Bearer ${token}` : "Bearer <YOUR_JWT_TOKEN>";
+                const existingIndex = headers.findIndex(h => h.key.toLowerCase() === "authorization");
+                let updated = [...headers];
+                if (existingIndex >= 0) {
+                  updated[existingIndex] = { key: "Authorization", value: tokenVal };
+                } else {
+                  updated.push({ key: "Authorization", value: tokenVal });
+                }
+                setHeaders(updated);
+                setValue("headers", updated);
+              }}
+              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800"
+            >
+              <i className="mgc_key_2_line"></i> + Add Bearer Token Header
+            </button>
+            <button
+              type="button"
+              onClick={addHeader}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+            >
+              <i className="mgc_add_line"></i> Add Header
+            </button>
+          </div>
         </div>
         {headers.length === 0 ? (
           <p className="text-xs text-gray-400 italic">No custom headers configured.</p>
@@ -307,21 +462,78 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
         )}
       </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
         <button
           type="button"
-          onClick={() => navigate("/settings/webhooks")}
-          className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          onClick={async () => {
+            const endpoint = watch("end_point");
+            if (!endpoint || !endpoint.startsWith("http")) {
+              Swal.fire({ icon: "warning", title: "Endpoint Required", text: "Please enter a valid Target Endpoint URL to test." });
+              return;
+            }
+            try {
+              Swal.fire({ title: "Testing Webhook Endpoint...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+              
+              let payloadVal = watch("payload");
+              if (typeof payloadVal === "string" && payloadVal.trim()) {
+                try {
+                  payloadVal = JSON.parse(payloadVal);
+                } catch {
+                  // Keep as string template
+                }
+              }
+
+              const res = await API.post("/webhooks/test-direct", {
+                name: watch("name") || "Test Webhook",
+                entity_type: watch("entity_type") || "leads",
+                method: watch("method") || "POST",
+                end_point: endpoint,
+                payload_type: watch("payload_type") || "default",
+                raw_payload_type: watch("raw_payload_type") || "json",
+                headers,
+                query_params: queryParams,
+                payload: payloadVal,
+              });
+
+              const resData = res.data;
+              Swal.fire({
+                icon: "success",
+                title: "Test Webhook Dispatched!",
+                html: `
+                  <div style="text-align: left; font-size: 13px;">
+                    <p><strong>Status:</strong> <span style="color: green; font-weight: bold;">${resData?.result?.status_code || 200} OK</span></p>
+                    <p><strong>Endpoint:</strong> <code style="word-break: break-all; font-size: 11px;">${endpoint}</code></p>
+                    <p style="margin-top: 10px;"><strong>Sent Custom Payload:</strong></p>
+                    <pre style="background: #f4f4f4; padding: 10px; border-radius: 6px; max-height: 180px; overflow-y: auto; font-size: 11px; color: #111;">${JSON.stringify(resData?.sent_payload, null, 2)}</pre>
+                  </div>
+                `,
+                confirmButtonColor: "#0088cc",
+              });
+            } catch (err: any) {
+              Swal.fire({ icon: "error", title: "Test Failed", text: err.response?.data?.message || err.message || "Endpoint test failed" });
+            }
+          }}
+          className="px-3.5 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1.5"
         >
-          Cancel
+          <i className="mgc_send_line text-sm"></i> Test Endpoint
         </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-5 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg transition-colors flex items-center gap-2"
-        >
-          {loading ? "Saving..." : isEdit ? "Update Webhook" : "Create Webhook"}
-        </button>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/settings/webhooks")}
+            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-5 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg transition-colors flex items-center gap-2"
+          >
+            {loading ? "Saving..." : isEdit ? "Update Webhook" : "Create Webhook"}
+          </button>
+        </div>
       </div>
     </form>
   );

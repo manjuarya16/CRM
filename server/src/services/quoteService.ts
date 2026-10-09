@@ -114,12 +114,28 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
     const sAddrJson = JSON.stringify(shipping_address || {});
     const customAttrsJson = JSON.stringify(custom_attributes || {});
 
+    let validPersonId = person_id ? Number(person_id) : null;
+    if (validPersonId && Number.isFinite(validPersonId)) {
+      const pCheck = await connection.query("SELECT id FROM persons WHERE id = $1", [validPersonId]);
+      if (pCheck.rows.length === 0) validPersonId = null;
+    } else {
+      validPersonId = null;
+    }
+
+    let validLeadId = lead_id ? Number(lead_id) : null;
+    if (validLeadId && Number.isFinite(validLeadId)) {
+      const lCheck = await connection.query("SELECT id FROM leads WHERE id = $1", [validLeadId]);
+      if (lCheck.rows.length === 0) validLeadId = null;
+    } else {
+      validLeadId = null;
+    }
+
     const result = await connection.query(
       "SELECT * FROM public.fn_create_quote($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15::jsonb)",
       [
         subject,
         description || null,
-        person_id || null,
+        validPersonId,
         currentUserId,
         discount_percent || 0,
         discount_amount || 0,
@@ -128,7 +144,7 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         sub_total || 0,
         grand_total || 0,
         expired_at || null,
-        lead_id ? Number(lead_id) : null,
+        validLeadId,
         bAddrJson,
         sAddrJson,
         customAttrsJson,
