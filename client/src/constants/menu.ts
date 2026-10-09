@@ -15,14 +15,14 @@ const MENU_ITEMS: MenuItemTypes[] = [
     key: "dashboard",
     label: "Dashboard",
     isTitle: false,
-    icon: "mgc_speed_line",
+    icon: "mgc_home_3_line",
     url: "/dashboard",
   },
   {
     key: "leads",
     label: "Leads",
     isTitle: false,
-    icon: "mgc_cube_3_line",
+    icon: "mgc_target_line",
     url: "/leads",
   },
   {

@@ -7,12 +7,23 @@
     width: $sidenav-width;
     min-width: $sidenav-width;
     background: $menu-bg;
-    @apply sticky top-0 h-screen z-40 shadow transition-all duration-300;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: 0;
+    height: 100vh;
+    z-index: 40;
+    @apply shadow transition-all duration-300;
 
     .srcollbar {
-        height: calc(100% - $topbar-height);
+        height: calc(100vh - #{$topbar-height});
         @apply border-t border-dashed border-gray-500/25;
     }
+}
+
+.app-menu + .page-content {
+    margin-inline-start: $sidenav-width;
+    @apply transition-all duration-300;
 }
 
 // Page Content
@@ -314,14 +325,19 @@ html[data-sidenav-view="hover-active"] {
 
 // Small Sidenav Width ( 'sm' width || item Hover View )
 html[data-sidenav-view="sm"] {
+    .app-menu + .page-content {
+        margin-inline-start: $sidenav-width-sm;
+    }
 
     // Side menu
     .app-menu {
         width: $sidenav-width-sm;
         min-width: $sidenav-width-sm;
-        min-height: $sidenav-sm-height;
-        height: unset;
-        position: static;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        inset-inline-start: 0;
+        height: 100vh;
 
         .simplebar-mask,
         .simplebar-content-wrapper {
@@ -466,6 +482,10 @@ html[data-sidenav-view="sm"] {
 
 // Compact Menu ( 'md' width )
 html[data-sidenav-view="md"] {
+    .app-menu + .page-content {
+        margin-inline-start: $sidenav-width-md;
+    }
+
     .app-menu {
         width: $sidenav-width-md;
         min-width: $sidenav-width-md;

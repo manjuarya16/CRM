@@ -6,10 +6,11 @@ interface PasswordInputProps {
   name: string;
   placeholder?: string;
   refCallback?: any;
-  errors: any;
+  errors?: any;
   control?: Control<any>;
   register?: any;
   className?: string;
+  [key: string]: any;
 }
 
 /* Password Input */
@@ -21,12 +22,13 @@ const PasswordInput = ({
   control,
   register,
   className,
+  ...otherProps
 }: PasswordInputProps) => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   return (
     <>
-      <div className="flex items-center">
+      <div className="relative flex items-center">
         <input
           type={showPassword ? "text" : "password"}
           placeholder={placeholder}
@@ -35,28 +37,23 @@ const PasswordInput = ({
           ref={(r: HTMLInputElement) => {
             if (refCallback) refCallback(r);
           }}
-          className={` rounded-e-none ${className} ${errors && errors[name] ? "border-red-500 text-red-700 -me-px" : ""} `}
+          className={`${className} pe-10 ${errors && errors[name] ? "border-red-500 text-red-700" : ""}`}
           {...(register ? register(name) : {})}
+          {...otherProps}
           autoComplete={name}
         />
-        {errors && errors[name] && (
-          <div className="absolute end-10 flex items-center pointer-events-none pe-3">
-            <i className="mgc_warning_fill text-xl text-red-500" />
-          </div>
-        )}
-        <span
-          className="flex items-center bg-slate-500/5 px-3 h-[38px] py-1 border rounded-e -ms-px dark:border-white/10 dark:bg-white/5"
-          onClick={() => {
-            setShowPassword(!showPassword);
-          }}
+        <button
+          type="button"
+          onClick={() => setShowPassword(!showPassword)}
+          className="absolute end-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
         >
           <i
-            className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-xl`}
+            className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-lg block`}
           ></i>
-        </span>
+        </button>
       </div>
       {errors && errors[name] && (
-        <p className="text-xs text-red-600 mt-2"> {errors[name]["message"]}</p>
+        <p className="text-xs text-red-600 mt-1"> {errors[name]["message"]}</p>
       )}
     </>
   );
@@ -115,7 +112,7 @@ const FormInput = ({
                 {label && (
                   <>
                     <label className={labelClassName ?? ""} htmlFor={name}>
-                      Password
+                      {label || "Password"}
                     </label>
                     {children}
                   </>
@@ -127,6 +124,7 @@ const FormInput = ({
                   errors={errors}
                   register={register}
                   className={className}
+                  {...otherProps}
                 />
               </div>
             </>
