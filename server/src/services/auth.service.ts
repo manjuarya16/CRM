@@ -96,7 +96,7 @@ export class AuthService {
     try {
       const user = await UserService.findByEmail(email);
       if (!user) {
-        throw new ApiError(404, 'Email not found. Please check and try again.');
+        throw new ApiError(404, 'Email address is not registered in our system. Please check your email address.');
       }
       return true;
     } catch (error: any) {

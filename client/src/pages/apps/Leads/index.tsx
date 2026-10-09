@@ -308,6 +308,15 @@ const LeadsPage: React.FC = () => {
     "bg-[#b5c4d1] text-gray-800",
   ];
 
+  const stageColors = [
+    "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200 border-blue-300",
+    "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200 border-amber-300",
+    "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200 border-purple-300",
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 border-emerald-300",
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200 border-indigo-300",
+    "bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-200 border-sky-300",
+  ];
+
   const currentPipeline = pipelines.find((p) => Number(p.id) === Number(selectedPipelineId)) || pipelines[0];
 
   const totalRottenInKanban = kanbanLeads.filter((l) => getRottenInfo(l, currentPipeline).isRotten).length;
@@ -322,30 +331,30 @@ const LeadsPage: React.FC = () => {
     : leads;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6">
       {/* Top Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="text-xs text-gray-500 mb-0.5">Dashboard / Leads</div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Leads</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Leads</h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Upload File button (Conditional upon Magic AI / DOC Generation setting) */}
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+          {/* Upload File button */}
           {isDocGenEnabled && canCreate && (
             <button
               onClick={() => setShowUploadModal(true)}
-              className="px-4 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2"
+              className="px-3.5 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
               <i className="mgc_upload_line text-base"></i>
-              Upload File
+              <span>Upload File</span>
             </button>
           )}
 
           {canCreate && (
             <Link
               to="/leads/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
             >
               + Create Lead
             </Link>
@@ -354,38 +363,39 @@ const LeadsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar & Pipeline Selector & View Switcher */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 flex flex-wrap items-center justify-between gap-3">
-        <form onSubmit={handleFilter} className="flex items-center gap-2 flex-1 min-w-[220px] max-w-lg">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <form onSubmit={handleFilter} className="flex items-center gap-2 w-full md:w-auto flex-1 min-w-0 max-w-lg">
           <input
             type="text"
             placeholder="Search leads or persons..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            className="flex-1 min-w-0 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
           />
           <button
             type="button"
             onClick={() => setShowFilterDrawer(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold text-sm rounded-lg border border-gray-300 dark:border-gray-600 whitespace-nowrap transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold text-xs sm:text-sm rounded-lg border border-gray-300 dark:border-gray-600 whitespace-nowrap transition-colors shrink-0"
           >
             <i className="mgc_filter_line text-base"></i>
-            Filter
+            <span>Filter</span>
           </button>
         </form>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-between md:justify-end">
           {/* Rotten Leads Quick Filter Toggle */}
           <button
             type="button"
             onClick={() => setOnlyRotten(!onlyRotten)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${onlyRotten
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-all ${onlyRotten
                 ? "bg-rose-600 text-white border-rose-600 shadow-sm"
                 : "bg-white dark:bg-gray-900 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30"
               }`}
             title={`Show only rotten/stale leads exceeding pipeline limit (${currentPipeline?.rotten_days || 30} days)`}
           >
             <span>🍅</span>
-            <span>Rotten Leads</span>
+            <span className="hidden xs:inline">Rotten</span>
+            <span className="xs:hidden">Stale</span>
             {(viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable) > 0 && (
               <span className={`ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${onlyRotten ? "bg-white text-rose-700" : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
                 }`}>
@@ -398,7 +408,7 @@ const LeadsPage: React.FC = () => {
           <select
             value={selectedPipelineId}
             onChange={(e) => setSelectedPipelineId(Number(e.target.value))}
-            className="px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] text-gray-700 dark:text-gray-200"
+            className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] text-gray-700 dark:text-gray-200 flex-1 sm:flex-none max-w-[170px] truncate"
           >
             {pipelines.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -433,225 +443,326 @@ const LeadsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KANBAN BOARD VIEW */}
+      {/* KANBAN / CARDS VIEW */}
       {viewMode === "kanban" && (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-max items-start">
-            {(() => {
-              const validStageIds = new Set(stages.map((s) => s.id));
-              return stages.map((stage, idx) => {
-                const stageLeads = displayKanbanLeads.filter(
-                  (l) => l.lead_pipeline_stage_id === stage.id || (idx === 0 && (!l.lead_pipeline_stage_id || !validStageIds.has(l.lead_pipeline_stage_id)))
-                );
-                const stageValueTotal = stageLeads.reduce((acc, l) => acc + Number(l.lead_value || 0), 0);
-                const colorClass = avatarColors[idx % avatarColors.length];
+        <>
+          {/* SLEEK MOBILE CARDS LIST VIEW (Shown on mobile < md) */}
+          <div className="block md:hidden space-y-3">
+            {displayKanbanLeads.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 text-center space-y-2">
+                <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                  {onlyRotten ? "No Rotten Leads Found" : "No Leads Found"}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {onlyRotten ? "No leads have exceeded rotten limit." : "Try adjusting your filters or create a new lead."}
+                </p>
+              </div>
+            ) : (
+              displayKanbanLeads.map((lead) => {
+                const stageObj = stages.find((s) => s.id === lead.lead_pipeline_stage_id);
+                const stageIdx = stages.findIndex((s) => s.id === lead.lead_pipeline_stage_id);
+                const stageColorClass = stageColors[(stageIdx >= 0 ? stageIdx : 0) % stageColors.length];
+                const avatarColor = avatarColors[(lead.id || 0) % avatarColors.length];
 
-              return (
-                <div
-                  key={stage.id}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                  }}
-                  onDrop={async (e) => {
-                    e.preventDefault();
-                    const leadIdStr = e.dataTransfer.getData("text/plain");
-                    if (!leadIdStr) return;
-                    const leadId = Number(leadIdStr);
-                    await updateLeadStage(leadId, stage.id, true);
-                    fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
-                  }}
-                  className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
-                        {stage.name}
-                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">({stageLeads.length})</span>
-                      </h3>
-                      <p className="text-xs font-bold text-gray-600 dark:text-gray-300 mt-0.5">
-                        ${stageValueTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
+                return (
+                  <div
+                    key={lead.id}
+                    className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3"
+                  >
+                    {/* Header: Stage Badge & Actions */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${stageColorClass}`}>
+                        {stageObj?.name || lead.stage_name || "New Stage"}
+                      </span>
 
-                    {canCreate && (
-                      <Link
-                        to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                        className="p-1 text-gray-400 hover:text-[#0088cc] hover:bg-white dark:hover:bg-gray-800 rounded transition-colors"
-                        title={`Quick add lead to ${stage.name}`}
-                      >
-                        <i className="mgc_add_line text-lg"></i>
-                      </Link>
-                    )}
-                  </div>
-
-                  <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#0088cc] rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, (stageLeads.length / Math.max(1, kanbanLeads.length)) * 100 * 2)}%` }}
-                    ></div>
-                  </div>
-
-                  <div className="space-y-3 min-h-[120px]">
-                    {loading ? (
-                      <div className="text-center py-8">
-                        <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent"></div>
-                      </div>
-                    ) : stageLeads.length === 0 ? (
-                      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
-                        <div className="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
-                          <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                          </svg>
-                        </div>
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">
-                            {onlyRotten ? "No Rotten Leads" : "Your Leads List is Empty"}
-                          </h4>
-                          <p className="text-[11px] text-gray-400 leading-tight">
-                            {onlyRotten ? "No leads have exceeded rotten days limit." : "Create a lead to organize your goals."}
-                          </p>
-                        </div>
-                        {!onlyRotten && canCreate && (
-                          <Link
-                            to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                            className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
-                          >
-                            Create Lead
+                      <div className="flex items-center gap-2">
+                        {canEdit && (
+                          <Link to={`/leads/edit/${lead.id}`} className="p-1 text-gray-400 hover:text-[#0088cc]">
+                            <i className="mgc_edit_line text-base"></i>
                           </Link>
                         )}
+                        {canDelete && (
+                          <button onClick={() => handleDelete(lead)} className="p-1 text-gray-400 hover:text-red-500">
+                            <i className="mgc_delete_line text-base"></i>
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      stageLeads.map((lead) => (
-                        <div
-                          key={lead.id}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData("text/plain", String(lead.id));
-                            e.dataTransfer.effectAllowed = "move";
-                          }}
-                          className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                    </div>
+
+                    {/* Person / Contact info & Avatar */}
+                    <div className="flex items-center gap-3">
+                      <span className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${avatarColor}`}>
+                        {getInitials(lead.person_name || lead.title)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                          {lead.person_name || "No Person"}
+                        </p>
+                        <p className="text-xs text-[#0088cc] dark:text-[#4ab8f5] truncate font-medium">
+                          {(lead as any).organization_name || (lead as any).company_name || "No Company"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Lead Title */}
+                    <Link
+                      to={`/leads/view/${lead.id}`}
+                      className="block text-sm font-bold text-gray-800 dark:text-gray-100 hover:text-[#0088cc] leading-snug"
+                    >
+                      {lead.title}
+                    </Link>
+
+                    {/* Meta info pills: Sales Rep & Value */}
+                    <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 font-medium">
+                        <i className="mgc_user_3_line text-gray-400"></i>
+                        {lead.user_name || "Unassigned"}
+                      </span>
+                      <span className="text-sm font-extrabold text-gray-900 dark:text-white">
+                        ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Footer: Date & Status */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700/60 text-[11px] text-gray-500">
+                      {lead.expected_close_date ? (
+                        <span className="flex items-center gap-1">
+                          <i className="mgc_calendar_line"></i>
+                          {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      ) : (
+                        <span>No close date</span>
+                      )}
+
+                      <span className={`px-2 py-0.5 rounded-full font-semibold ${lead.status !== false ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400"}`}>
+                        {lead.status !== false ? "Open" : "Lost"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* DESKTOP KANBAN BOARD VIEW (Shown on >= md) */}
+          <div className="hidden md:block overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max items-start">
+              {(() => {
+                const validStageIds = new Set(stages.map((s) => s.id));
+                return stages.map((stage, idx) => {
+                  const stageLeads = displayKanbanLeads.filter(
+                    (l) => l.lead_pipeline_stage_id === stage.id || (idx === 0 && (!l.lead_pipeline_stage_id || !validStageIds.has(l.lead_pipeline_stage_id)))
+                  );
+                  const stageValueTotal = stageLeads.reduce((acc, l) => acc + Number(l.lead_value || 0), 0);
+                  const colorClass = avatarColors[idx % avatarColors.length];
+
+                return (
+                  <div
+                    key={stage.id}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      const leadIdStr = e.dataTransfer.getData("text/plain");
+                      if (!leadIdStr) return;
+                      const leadId = Number(leadIdStr);
+                      await updateLeadStage(leadId, stage.id, true);
+                      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
+                    }}
+                    className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
+                          {stage.name}
+                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">({stageLeads.length})</span>
+                        </h3>
+                        <p className="text-xs font-bold text-gray-600 dark:text-gray-300 mt-0.5">
+                          ${stageValueTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+
+                      {canCreate && (
+                        <Link
+                          to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
+                          className="p-1 text-gray-400 hover:text-[#0088cc] hover:bg-white dark:hover:bg-gray-800 rounded transition-colors"
+                          title={`Quick add lead to ${stage.name}`}
                         >
-                          {/* ROW 1: Avatar + Person + Company + alert icon */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {/* Solid color avatar */}
-                              <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
-                                {getInitials(lead.person_name || lead.title)}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
-                                  {lead.person_name || "No Person"}
-                                </p>
-                                {/* Company name in teal/blue like the screenshot */}
-                                <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
-                                  {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
-                                </p>
-                              </div>
-                            </div>
-                            {/* Alert triangle (always visible) + edit/delete on hover */}
-                            <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
-                              <span className="text-red-400 opacity-70" title="Lead Alert">
-                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                </svg>
-                              </span>
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
-                                <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
-                                  <i className="mgc_edit_line text-xs"></i>
-                                </Link>
-                                <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
-                                  <i className="mgc_delete_line text-xs"></i>
-                                </button>
-                              </div>
-                            </div>
+                          <i className="mgc_add_line text-lg"></i>
+                        </Link>
+                      )}
+                    </div>
+
+                    <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#0088cc] rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, (stageLeads.length / Math.max(1, kanbanLeads.length)) * 100 * 2)}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="space-y-3 min-h-[120px]">
+                      {loading ? (
+                        <div className="text-center py-8">
+                          <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent"></div>
+                        </div>
+                      ) : stageLeads.length === 0 ? (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
+                          <div className="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
+                            <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
                           </div>
-
-                          {/* ROW 2: Lead title */}
-                          <Link
-                            to={`/leads/view/${lead.id}`}
-                            className="block text-[12.5px] font-medium text-gray-800 dark:text-gray-200 hover:text-[#0088cc] line-clamp-2 leading-snug"
-                          >
-                            {lead.title}
-                          </Link>
-
-                          {/* ROW 3: User icon+name pill  +  value pill — matching screenshot */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
-                              <i className="mgc_user_3_line text-[11px] text-gray-400"></i>
-                              {lead.user_name || "Unassigned"}
-                            </span>
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
-                              ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                            </span>
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">
+                              {onlyRotten ? "No Rotten Leads" : "Your Leads List is Empty"}
+                            </h4>
+                            <p className="text-[11px] text-gray-400 leading-tight">
+                              {onlyRotten ? "No leads have exceeded rotten days limit." : "Create a lead to organize your goals."}
+                            </p>
                           </div>
-
-                          {/* ROW 4: Source + Type — gray rounded pills */}
-                          {(lead.source_name || lead.type_name) && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {lead.source_name && (
-                                <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
-                                  {lead.source_name}
-                                </span>
-                              )}
-                              {lead.type_name && (
-                                <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
-                                  {lead.type_name}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* ROW 5: Tag chips — colored border + text, white/transparent bg like screenshot */}
-                          {Array.isArray((lead.custom_attributes as any)?.tags) && (lead.custom_attributes as any).tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {((lead.custom_attributes as any).tags as string[]).slice(0, 4).map((tag: string, ti: number) => {
-                                const tagStyles = [
-                                  "border-orange-400 text-orange-600 dark:text-orange-400",
-                                  "border-red-400 text-red-600 dark:text-red-400",
-                                  "border-blue-400 text-blue-600 dark:text-blue-400",
-                                  "border-yellow-500 text-yellow-600 dark:text-yellow-400",
-                                  "border-purple-400 text-purple-600 dark:text-purple-400",
-                                  "border-green-500 text-green-600 dark:text-green-400",
-                                ];
-                                return (
-                                  <span
-                                    key={ti}
-                                    className={`px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border font-medium text-[11px] ${tagStyles[ti % tagStyles.length]}`}
-                                  >
-                                    {tag}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* ROW 6: Expected close date + Status */}
-                          {(lead.expected_close_date || lead.status !== undefined) && (
-                            <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
-                              {lead.expected_close_date && (
-                                <span className="flex items-center gap-1 text-gray-400">
-                                  <i className="mgc_calendar_line text-[11px]"></i>
-                                  {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                                </span>
-                              )}
-                              {lead.status !== undefined && (
-                                <span className={`ml-auto px-2 py-0.5 rounded-full font-semibold text-[10px] ${lead.status ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400"}`}>
-                                  {lead.status ? "Open" : "Lost"}
-                                </span>
-                              )}
-                            </div>
+                          {!onlyRotten && canCreate && (
+                            <Link
+                              to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
+                              className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                            >
+                              Create Lead
+                            </Link>
                           )}
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        stageLeads.map((lead) => (
+                          <div
+                            key={lead.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", String(lead.id));
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                          >
+                            {/* ROW 1: Avatar + Person + Company + alert icon */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {/* Solid color avatar */}
+                                <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
+                                  {getInitials(lead.person_name || lead.title)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
+                                    {lead.person_name || "No Person"}
+                                  </p>
+                                  {/* Company name in teal/blue like the screenshot */}
+                                  <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
+                                    {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
+                                  </p>
+                                </div>
+                              </div>
+                              {/* Alert triangle (always visible) + edit/delete on hover */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
+                                <span className="text-red-400 opacity-70" title="Lead Alert">
+                                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                  </svg>
+                                </span>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
+                                  <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
+                                    <i className="mgc_edit_line text-xs"></i>
+                                  </Link>
+                                  <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
+                                    <i className="mgc_delete_line text-xs"></i>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* ROW 2: Lead title */}
+                            <Link
+                              to={`/leads/view/${lead.id}`}
+                              className="block text-[12.5px] font-medium text-gray-800 dark:text-gray-200 hover:text-[#0088cc] line-clamp-2 leading-snug"
+                            >
+                              {lead.title}
+                            </Link>
+
+                            {/* ROW 3: User icon+name pill  +  value pill — matching screenshot */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                                <i className="mgc_user_3_line text-[11px] text-gray-400"></i>
+                                {lead.user_name || "Unassigned"}
+                              </span>
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
+                                ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+
+                            {/* ROW 4: Source + Type — gray rounded pills */}
+                            {(lead.source_name || lead.type_name) && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {lead.source_name && (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                                    {lead.source_name}
+                                  </span>
+                                )}
+                                {lead.type_name && (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-[11px] text-gray-600 dark:text-gray-300 font-medium shadow-sm">
+                                    {lead.type_name}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* ROW 5: Tag chips — colored border + text, white/transparent bg like screenshot */}
+                            {Array.isArray((lead.custom_attributes as any)?.tags) && (lead.custom_attributes as any).tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {((lead.custom_attributes as any).tags as string[]).slice(0, 4).map((tag: string, ti: number) => {
+                                  const tagStyles = [
+                                    "border-orange-400 text-orange-600 dark:text-orange-400",
+                                    "border-red-400 text-red-600 dark:text-red-400",
+                                    "border-blue-400 text-blue-600 dark:text-blue-400",
+                                    "border-yellow-500 text-yellow-600 dark:text-yellow-400",
+                                    "border-purple-400 text-purple-600 dark:text-purple-400",
+                                    "border-green-500 text-green-600 dark:text-green-400",
+                                  ];
+                                  return (
+                                    <span
+                                      key={ti}
+                                      className={`px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 border font-medium text-[11px] ${tagStyles[ti % tagStyles.length]}`}
+                                    >
+                                      {tag}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* ROW 6: Expected close date + Status */}
+                            {(lead.expected_close_date || lead.status !== undefined) && (
+                              <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
+                                {lead.expected_close_date && (
+                                  <span className="flex items-center gap-1 text-gray-400">
+                                    <i className="mgc_calendar_line text-[11px]"></i>
+                                    {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                  </span>
+                                )}
+                                {lead.status !== undefined && (
+                                  <span className={`ml-auto px-2 py-0.5 rounded-full font-semibold text-[10px] ${lead.status ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400"}`}>
+                                    {lead.status ? "Open" : "Lost"}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            });
-          })()}
+                );
+              });
+            })()}
+          </div>
         </div>
-        </div>
+        </>
       )}
 
 

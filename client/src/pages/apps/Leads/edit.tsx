@@ -48,6 +48,18 @@ const getPersonPhone = (person: any): string => {
   return "";
 };
 
+const getPersonOrg = (person: any, orgList: any[] = []): string => {
+  if (!person) return "";
+  if (person.organization_name) return person.organization_name;
+  if (person.organization?.name) return person.organization.name;
+  if (typeof person.organization === "string" && person.organization.trim()) return person.organization;
+  if (person.organization_id && orgList.length > 0) {
+    const found = orgList.find((o: any) => String(o.id) === String(person.organization_id));
+    if (found?.name) return found.name;
+  }
+  return "";
+};
+
 interface ContactItem {
   label: string;
   value: string;
