@@ -35,9 +35,7 @@ export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => 
     }
   }, [initialData, reset]);
 
-  const onInvalid = (errs: any) => {
-    console.log("Zod validation errors:", errs);
-  };
+  const onInvalid = (_errs: any) => {};
 
   const onSubmit = async (data: EventInput) => {
     try {

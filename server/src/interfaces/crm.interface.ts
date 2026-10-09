@@ -1,3 +1,5 @@
+import type { Response } from 'express';
+
 export interface IOrganization {
   id: number;
   name: string;
@@ -263,4 +265,81 @@ export interface IContactExportBatch {
   details?: any;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface SseClient {
+  id: string;
+  userId?: number;
+  res: Response;
+}
+
+export interface RealtimeEvent<T = any> {
+  type: 'lead:created' | 'lead:updated' | 'lead:deleted' | 'notification:new' | 'notification:count' | 'ping';
+  data: T;
+  timestamp: string;
+}
+
+export interface IDashboardStatsParams {
+  start_date?: string;
+  end_date?: string;
+  pipeline_id?: number | string;
+  startDate?: string;
+  endDate?: string;
+  pipelineId?: number | string;
+}
+
+export interface ImapAccountConfig {
+  enabled: boolean;
+  autoCreateLead: boolean;
+  host: string;
+  port: number;
+  encryption: 'ssl' | 'tls' | 'none';
+  validateCert: boolean;
+  username: string;
+  password: string;
+}
+
+export interface ImapSyncResult {
+  success: boolean;
+  processedCount: number;
+  leadsCreatedCount: number;
+  message?: string;
+  error?: string;
+}
+
+export interface ExtractedProduct {
+  name: string;
+  sku?: string;
+  quantity?: number;
+  price?: number;
+  description?: string;
+}
+
+export interface ExtractedContactPerson {
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface ExtractedLeadData {
+  title?: string;
+  leadValue?: number | null;
+  contactPerson?: string;
+  contactPersons?: ExtractedContactPerson[];
+  email?: string;
+  emails?: string[];
+  phone?: string;
+  phones?: string[];
+  organization?: string;
+  address?: string;
+  website?: string;
+  jobTitle?: string;
+  source?: string;
+  type?: string;
+  expectedCloseDate?: string;
+  products?: ExtractedProduct[];
+  notes?: string;
+  description?: string;
+  rawText?: string;
 }

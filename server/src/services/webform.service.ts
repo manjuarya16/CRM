@@ -110,9 +110,10 @@ export class WebFormService {
       let form: any = await this.getByFormId(formId).catch(() => null);
 
       if (!form) {
-        const { rows } = await pool.query('SELECT * FROM web_forms ORDER BY id ASC LIMIT 1').catch(() => ({ rows: [] }));
-        if (rows[0]) {
-          form = rows[0];
+        const { rows } = await pool.query('SELECT get_all_web_forms(null) as result').catch(() => ({ rows: [] }));
+        const formsList = rows[0]?.result;
+        if (Array.isArray(formsList) && formsList[0]) {
+          form = formsList[0];
         } else {
           form = {
             id: 1,
@@ -158,13 +159,7 @@ export class WebFormService {
             null, // p_expected_close_date
             submissionData.organization_id ? Number(submissionData.organization_id) : null
           ]
-        ).catch(async () => {
-          return await pool.query(
-            `INSERT INTO leads (title, description, lead_pipeline_id, status, created_at, updated_at)
-             VALUES ($1, $2, $3, true, NOW(), NOW()) RETURNING id`,
-            [title, description, leadPipelineId]
-          ).catch(() => ({ rows: [] }));
-        });
+        );
 
         if (leadRes.rows[0]?.id) {
           createdLeadId = leadRes.rows[0].id;

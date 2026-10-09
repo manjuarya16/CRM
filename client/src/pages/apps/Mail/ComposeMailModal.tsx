@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLeadStore, useMailStore } from "@/store";
-import { ComposeMailModalProps, IEmailTemplate } from "@/interface";
+import { ComposeMailModalProps, IEmailTemplate, PlaceholderItem, PlaceholderCategory } from "@/interface";
 import API from "@/config";
 import Swal from "sweetalert2";
 import { SearchableLeadSelect } from "@/components/SearchableLeadSelect";
-
-interface PlaceholderItem {
-  label: string;
-  tag: string;
-}
-
-interface PlaceholderCategory {
-  name: string;
-  items: PlaceholderItem[];
-}
 
 // Categorized Placeholders matching Krayin CRM exact specification
 const PLACEHOLDER_CATEGORIES: PlaceholderCategory[] = [

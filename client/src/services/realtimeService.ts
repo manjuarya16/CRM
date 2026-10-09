@@ -1,7 +1,5 @@
 import { API_URL } from "@/config";
-
-type LeadEventCallback = (event: { type: string; data: any; timestamp: string }) => void;
-type NotificationEventCallback = (event: { type: string; data: any; timestamp: string }) => void;
+import type { LeadEventCallback, NotificationEventCallback } from "@/interface";
 
 class RealtimeService {
   private eventSource: EventSource | null = null;

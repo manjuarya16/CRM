@@ -798,7 +798,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       } else if (personId && organizationId) {
         // If person already exists without organization, link the organization
         await connection.query(
-          "UPDATE public.persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL",
+          "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
           [organizationId, personId]
         );
       }

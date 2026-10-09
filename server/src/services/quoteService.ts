@@ -110,22 +110,22 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
     }: IQuoteCreateInput & { custom_attributes?: any } = req.body;
 
     const currentUserId = user_id || (req as any).user?.id || null;
-    const bAddrJson = JSON.stringify(billing_address || {});
-    const sAddrJson = JSON.stringify(shipping_address || {});
-    const customAttrsJson = JSON.stringify(custom_attributes || {});
+    const billingAddressJson = JSON.stringify(billing_address || {});
+    const shippingAddressJson = JSON.stringify(shipping_address || {});
+    const customAttributesJson = JSON.stringify(custom_attributes || {});
 
     let validPersonId = person_id ? Number(person_id) : null;
     if (validPersonId && Number.isFinite(validPersonId)) {
-      const pCheck = await connection.query("SELECT id FROM persons WHERE id = $1", [validPersonId]);
-      if (pCheck.rows.length === 0) validPersonId = null;
+      const personCheckResult = await connection.query("SELECT get_person($1::integer) as result", [validPersonId]);
+      if (!personCheckResult.rows[0]?.result?.id) validPersonId = null;
     } else {
       validPersonId = null;
     }
 
     let validLeadId = lead_id ? Number(lead_id) : null;
     if (validLeadId && Number.isFinite(validLeadId)) {
-      const lCheck = await connection.query("SELECT id FROM leads WHERE id = $1", [validLeadId]);
-      if (lCheck.rows.length === 0) validLeadId = null;
+      const leadCheckResult = await connection.query("SELECT id FROM public.fn_get_lead_by_id($1)", [validLeadId]);
+      if (leadCheckResult.rows.length === 0) validLeadId = null;
     } else {
       validLeadId = null;
     }
@@ -145,9 +145,9 @@ const createQuote = async (req: Request, res: Response): Promise<void> => {
         grand_total || 0,
         expired_at || null,
         validLeadId,
-        bAddrJson,
-        sAddrJson,
-        customAttrsJson,
+        billingAddressJson,
+        shippingAddressJson,
+        customAttributesJson,
       ]
     );
 
@@ -216,9 +216,9 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
       custom_attributes,
     }: IQuoteUpdateInput & { custom_attributes?: any } = req.body;
 
-    const bAddrJson = billing_address ? JSON.stringify(billing_address) : null;
-    const sAddrJson = shipping_address ? JSON.stringify(shipping_address) : null;
-    const customAttrsJson = custom_attributes ? JSON.stringify(custom_attributes) : null;
+    const billingAddressJson = billing_address ? JSON.stringify(billing_address) : null;
+    const shippingAddressJson = shipping_address ? JSON.stringify(shipping_address) : null;
+    const customAttributesJson = custom_attributes ? JSON.stringify(custom_attributes) : null;
 
     const result = await connection.query(
       "SELECT * FROM public.fn_update_quote($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb)",
@@ -236,9 +236,9 @@ const updateQuote = async (req: Request, res: Response): Promise<void> => {
         grand_total ?? null,
         expired_at ?? null,
         lead_id ? Number(lead_id) : null,
-        bAddrJson,
-        sAddrJson,
-        customAttrsJson,
+        billingAddressJson,
+        shippingAddressJson,
+        customAttributesJson,
       ]
     );
 

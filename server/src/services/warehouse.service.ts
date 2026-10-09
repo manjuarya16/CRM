@@ -2,10 +2,10 @@ import { pool } from '@/config/db';
 import { IWarehouse } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
 
-const toNumberParam = (v: any): number | null => {
-  if (v === undefined || v === null || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const toNumberParam = (value: any): number | null => {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
 };
 
 export class WarehouseService {
@@ -14,56 +14,46 @@ export class WarehouseService {
     try {
       const searchTerm = search?.trim() || null;
       const { rows } = await pool.query(
-        'SELECT get_all_warehouses($1::text) as result',
+        'SELECT get_all_warehouses($1) as result',
         [searchTerm]
       );
       const warehouses: IWarehouse[] = rows[0]?.result || [];
 
-      // Attach locations and product_count to each warehouse
+      // Attach locations and product_count to each warehouse via DB procedural functions
       if (warehouses.length > 0) {
-        const ids = warehouses.map((w: any) => w.id);
+        const warehouseIds = warehouses.map((warehouse: any) => warehouse.id);
 
-        // DB Function call: get_warehouse_locations(p_warehouse_ids)
-        const locRes = await pool.query(
-          'SELECT get_warehouse_locations($1::int[]) as result',
-          [ids]
-        ).catch(async () => {
-          return pool.query(
-            'SELECT id, warehouse_id, name, created_at FROM warehouse_locations WHERE warehouse_id = ANY($1::int[]) ORDER BY id ASC',
-            [ids]
-          );
-        });
+        // DB Function call: fn_get_warehouse_locations(p_warehouse_ids)
+        const locationQueryResult = await pool.query(
+          'SELECT * FROM public.fn_get_warehouse_locations($1::int[])',
+          [warehouseIds]
+        );
+        const locationsList = locationQueryResult.rows || [];
 
-        const locationsList = Array.isArray(locRes.rows[0]?.result)
-          ? locRes.rows[0].result
-          : locRes.rows;
-
-        const locMap: Record<number, any[]> = {};
-        for (const loc of locationsList) {
-          const wId = Number(loc.warehouse_id);
-          if (!locMap[wId]) locMap[wId] = [];
-          locMap[wId].push({
-            id: loc.id,
-            name: loc.name,
-            created_at: loc.created_at,
+        const locationsMap: Record<number, any[]> = {};
+        for (const locationItem of locationsList) {
+          const warehouseId = Number(locationItem.warehouse_id);
+          if (!locationsMap[warehouseId]) locationsMap[warehouseId] = [];
+          locationsMap[warehouseId].push({
+            id: locationItem.id,
+            name: locationItem.name,
+            created_at: locationItem.created_at,
           });
         }
 
-        const countRes = await pool.query(
-          `SELECT warehouse_id, COUNT(DISTINCT product_id)::int AS product_count
-           FROM product_inventories
-           WHERE warehouse_id = ANY($1::int[])
-           GROUP BY warehouse_id`,
-          [ids]
+        // DB Function call: fn_get_warehouse_product_counts(p_warehouse_ids)
+        const countQueryResult = await pool.query(
+          'SELECT * FROM public.fn_get_warehouse_product_counts($1::int[])',
+          [warehouseIds]
         );
         const countMap: Record<number, number> = {};
-        for (const r of countRes.rows) {
-          countMap[r.warehouse_id] = r.product_count;
+        for (const countRow of countQueryResult.rows) {
+          countMap[countRow.warehouse_id] = countRow.product_count;
         }
 
-        for (const w of warehouses as any[]) {
-          w.locations = locMap[w.id] || w.locations || [];
-          w.product_count = countMap[w.id] ?? 0;
+        for (const warehouse of warehouses as any[]) {
+          warehouse.locations = locationsMap[warehouse.id] || warehouse.locations || [];
+          warehouse.product_count = countMap[warehouse.id] ?? 0;
         }
       }
 
@@ -74,18 +64,11 @@ export class WarehouseService {
     }
   }
 
-  // Get all products linked to a warehouse via product_inventories
+  // DB Function call: fn_get_warehouse_products(p_warehouse_id)
   public static async getProductsByWarehouse(warehouseId: number): Promise<any[]> {
     try {
       const { rows } = await pool.query(
-        `SELECT p.id, p.sku, p.name, p.description, p.price, p.quantity,
-                pi.in_stock, pi.allocated,
-                wl.name AS warehouse_location_name
-         FROM product_inventories pi
-         JOIN products p ON p.id = pi.product_id
-         LEFT JOIN warehouse_locations wl ON wl.id = pi.warehouse_location_id
-         WHERE pi.warehouse_id = $1
-         ORDER BY p.name ASC`,
+        'SELECT * FROM public.fn_get_warehouse_products($1::int)',
         [warehouseId]
       );
       return rows;
@@ -132,7 +115,7 @@ export class WarehouseService {
       const numbersJson = JSON.stringify(data.contact_numbers || []);
       const addressJson = JSON.stringify(data.contact_address || {});
       const locationsJson = data.locations ? JSON.stringify(data.locations) : null;
-      const customAttrsJson = JSON.stringify(data.custom_attributes || {});
+      const customAttributesJson = JSON.stringify(data.custom_attributes || {});
 
       const { rows } = await pool.query(
         'SELECT save_warehouse($1::varchar, $2::text, $3::varchar, $4::jsonb, $5::jsonb, $6::jsonb, $7::integer, $8::jsonb, $9::jsonb) as result',
@@ -145,7 +128,7 @@ export class WarehouseService {
           addressJson,
           warehouseId,
           locationsJson,
-          customAttrsJson,
+          customAttributesJson,
         ]
       );
 

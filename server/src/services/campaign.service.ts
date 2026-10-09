@@ -97,45 +97,23 @@ export class CampaignService {
     }
 
     const { rows: tRows } = await pool.query(
-      'SELECT id, name, subject, content FROM public.email_templates WHERE id = $1',
+      'SELECT get_email_template($1) as result',
       [campaign.marketing_template_id]
     );
-    const tmpl = tRows[0];
+    const tmpl = tRows[0]?.result;
     if (!tmpl) throw new Error('Email template not found');
 
-    // Fetch target recipient email addresses
+    // Fetch target recipient email addresses via procedural function
     const recipientEmails: string[] = [];
+    const targetAudience = campaign.mail_to === 'leads' ? 'leads' : 'persons';
+    const { rows: recipientRows } = await pool.query(
+      'SELECT * FROM public.fn_get_campaign_recipients($1)',
+      [targetAudience]
+    );
 
-    if (campaign.mail_to === 'leads') {
-      const { rows: lRows } = await pool.query(`
-        SELECT DISTINCT
-          COALESCE(
-            CASE 
-              WHEN jsonb_typeof(p.emails::jsonb) = 'array' THEN p.emails->0->>'value' 
-              ELSE p.emails::text 
-            END,
-            NULL
-          ) as email
-        FROM public.leads l
-        JOIN public.persons p ON p.id = l.person_id
-        WHERE p.emails IS NOT NULL
-      `);
-      for (const r of lRows) {
-        if (r.email && r.email.includes('@')) recipientEmails.push(r.email.trim());
-      }
-    } else {
-      // Default to persons / contacts
-      const { rows: pRows } = await pool.query(`
-        SELECT DISTINCT
-          CASE 
-            WHEN jsonb_typeof(emails::jsonb) = 'array' THEN emails->0->>'value' 
-            ELSE emails::text 
-          END as email
-        FROM public.persons
-        WHERE emails IS NOT NULL
-      `);
-      for (const r of pRows) {
-        if (r.email && r.email.includes('@')) recipientEmails.push(r.email.trim());
+    for (const recipientRow of recipientRows) {
+      if (recipientRow.email && recipientRow.email.includes('@')) {
+        recipientEmails.push(recipientRow.email.trim());
       }
     }
 
@@ -168,13 +146,10 @@ export class CampaignService {
    */
   public static async processDueCampaigns(): Promise<number> {
     const today = new Date().toISOString().split('T')[0];
-    const { rows: dueCampaigns } = await pool.query(`
-      SELECT c.id
-      FROM public.marketing_campaigns c
-      LEFT JOIN public.marketing_events e ON c.marketing_event_id = e.id
-      WHERE c.status = TRUE
-        AND (e.date IS NULL OR e.date = $1::date)
-    `, [today]);
+    const { rows: dueCampaigns } = await pool.query(
+      'SELECT * FROM public.fn_get_due_campaigns($1::date)',
+      [today]
+    );
 
     let totalDispatched = 0;
     for (const row of dueCampaigns) {

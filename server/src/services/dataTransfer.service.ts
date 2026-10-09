@@ -102,21 +102,24 @@ const parseField = (val: any, defaultLabel = 'work'): Array<{ label: string; val
 // Safe Foreign Key Resolvers to prevent FK Constraint Violations
 const resolveOrgId = async (client: any, rawVal: any, nameVal?: any): Promise<number | null> => {
   const num = toNumberParam(rawVal);
-  if (num) {
-    const exists = await client.query('SELECT id FROM organizations WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
-  }
   const n = String(nameVal || rawVal || '').trim();
+
+  if (num || n) {
+    const existing = await client.query(
+      'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+      ['organizations', num || null, n && isNaN(Number(n)) ? n : null]
+    );
+    if (existing.rows.length > 0) return existing.rows[0].id;
+  }
+
+  // Auto-create organization if a non-numeric name was specified
   if (n && isNaN(Number(n))) {
-    const match = await client.query('SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [n]);
-    if (match.rows.length > 0) return match.rows[0].id;
-    // Auto-create organization if a non-numeric name was specified
     try {
       const created = await client.query(
-        'INSERT INTO organizations (name, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id',
+        'SELECT save_organization($1, null, 1, \'{}\') as result',
         [n]
       );
-      return created.rows[0]?.id || null;
+      return created.rows[0]?.result?.id || null;
     } catch {}
   }
   return null;
@@ -125,75 +128,82 @@ const resolveOrgId = async (client: any, rawVal: any, nameVal?: any): Promise<nu
 const resolveUserId = async (client: any, rawVal: any, nameVal?: any): Promise<number | null> => {
   const num = toNumberParam(rawVal);
   if (num) {
-    const exists = await client.query('SELECT id FROM users WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
+    const userRes = await client.query('SELECT get_user($1) as result', [num]);
+    if (userRes.rows[0]?.result) return num;
   }
   const n = String(nameVal || rawVal || '').trim();
   if (n && isNaN(Number(n))) {
-    const match = await client.query(
-      'SELECT id FROM users WHERE LOWER(TRIM(name)) = LOWER($1) OR LOWER(TRIM(email)) = LOWER($1) LIMIT 1',
-      [n]
-    );
-    if (match.rows.length > 0) return match.rows[0].id;
+    const usersRes = await client.query('SELECT get_all_users($1) as result', [n]);
+    const users: any[] = usersRes.rows[0]?.result || [];
+    const match = users.find((u) => (u.name || '').trim().toLowerCase() === n.toLowerCase() || (u.email || '').trim().toLowerCase() === n.toLowerCase());
+    if (match) return match.id;
   }
   return null;
 };
 
 const resolvePersonId = async (client: any, rawVal: any, nameVal?: any): Promise<number | null> => {
   const num = toNumberParam(rawVal);
-  if (num) {
-    const exists = await client.query('SELECT id FROM persons WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
-  }
   const n = String(nameVal || rawVal || '').trim();
-  if (n && isNaN(Number(n))) {
-    const match = await client.query('SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [n]);
-    if (match.rows.length > 0) return match.rows[0].id;
+  if (num || n) {
+    const existing = await client.query(
+      'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+      ['persons', num || null, n && isNaN(Number(n)) ? n : null]
+    );
+    if (existing.rows.length > 0) return existing.rows[0].id;
   }
   return null;
 };
 
 const resolveLeadSourceId = async (client: any, rawVal: any): Promise<number | null> => {
+  const sourcesRes = await client.query('SELECT * FROM public.fn_get_lead_sources()');
+  const sources: any[] = sourcesRes.rows || [];
+
   const num = toNumberParam(rawVal);
   if (num) {
-    const exists = await client.query('SELECT id FROM lead_sources WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
+    const match = sources.find((s) => Number(s.id) === num);
+    if (match) return match.id;
   }
   const n = String(rawVal || '').trim();
   if (n && isNaN(Number(n))) {
-    const match = await client.query('SELECT id FROM lead_sources WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [n]);
-    if (match.rows.length > 0) return match.rows[0].id;
+    const match = sources.find((s) => (s.name || '').trim().toLowerCase() === n.toLowerCase());
+    if (match) return match.id;
   }
   return null;
 };
 
 const resolveLeadTypeId = async (client: any, rawVal: any): Promise<number | null> => {
+  const typesRes = await client.query('SELECT * FROM public.fn_get_lead_types()');
+  const types: any[] = typesRes.rows || [];
+
   const num = toNumberParam(rawVal);
   if (num) {
-    const exists = await client.query('SELECT id FROM lead_types WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
+    const match = types.find((t) => Number(t.id) === num);
+    if (match) return match.id;
   }
   const n = String(rawVal || '').trim();
   if (n && isNaN(Number(n))) {
-    const match = await client.query('SELECT id FROM lead_types WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [n]);
-    if (match.rows.length > 0) return match.rows[0].id;
+    const match = types.find((t) => (t.name || '').trim().toLowerCase() === n.toLowerCase());
+    if (match) return match.id;
   }
   return null;
 };
 
 const resolveLeadPipelineId = async (client: any, rawVal: any): Promise<number | null> => {
+  const pipelinesRes = await client.query('SELECT * FROM public.fn_get_lead_pipelines()');
+  const pipelines: any[] = pipelinesRes.rows || [];
+
   const num = toNumberParam(rawVal);
   if (num) {
-    const exists = await client.query('SELECT id FROM lead_pipelines WHERE id = $1 LIMIT 1', [num]);
-    if (exists.rows.length > 0) return num;
+    const match = pipelines.find((p) => Number(p.id) === num);
+    if (match) return match.id;
   }
   const n = String(rawVal || '').trim();
   if (n && isNaN(Number(n))) {
-    const match = await client.query('SELECT id FROM lead_pipelines WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [n]);
-    if (match.rows.length > 0) return match.rows[0].id;
+    const match = pipelines.find((p) => (p.name || '').trim().toLowerCase() === n.toLowerCase());
+    if (match) return match.id;
   }
-  const def = await client.query('SELECT id FROM lead_pipelines ORDER BY is_default DESC, id ASC LIMIT 1');
-  return def.rows[0]?.id || null;
+  const defaultPipeline = pipelines.find((p) => p.is_default) || pipelines[0];
+  return defaultPipeline?.id || null;
 };
 
 const resolveLeadPipelineStageId = async (
@@ -201,37 +211,24 @@ const resolveLeadPipelineStageId = async (
   rawVal: any,
   pipelineId?: number | null
 ): Promise<number | null> => {
+  const stagesRes = await client.query('SELECT * FROM public.fn_get_pipeline_stages($1)', [pipelineId || null]);
+  const stages: any[] = stagesRes.rows || [];
+
   const num = toNumberParam(rawVal);
   if (num) {
-    if (pipelineId) {
-      const existsInPipeline = await client.query(
-        'SELECT id FROM lead_pipeline_stages WHERE id = $1 AND lead_pipeline_id = $2 LIMIT 1',
-        [num, pipelineId]
-      );
-      if (existsInPipeline.rows.length > 0) return num;
-    } else {
-      const exists = await client.query('SELECT id FROM lead_pipeline_stages WHERE id = $1 LIMIT 1', [num]);
-      if (exists.rows.length > 0) return num;
-    }
+    const match = stages.find((s) => Number(s.id) === num);
+    if (match) return match.id;
   }
 
   const n = String(rawVal || '').trim();
   if (n && isNaN(Number(n))) {
-    const query = pipelineId
-      ? 'SELECT id FROM lead_pipeline_stages WHERE LOWER(TRIM(name)) = LOWER($1) AND lead_pipeline_id = $2 LIMIT 1'
-      : 'SELECT id FROM lead_pipeline_stages WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1';
-    const params = pipelineId ? [n, pipelineId] : [n];
-    const match = await client.query(query, params);
-    if (match.rows.length > 0) return match.rows[0].id;
+    const match = stages.find((s) => (s.name || '').trim().toLowerCase() === n.toLowerCase());
+    if (match) return match.id;
   }
 
   // Fallback: Default to first stage of the resolved pipeline
-  if (pipelineId) {
-    const firstStage = await client.query(
-      'SELECT id FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC, id ASC LIMIT 1',
-      [pipelineId]
-    );
-    if (firstStage.rows.length > 0) return firstStage.rows[0].id;
+  if (stages.length > 0) {
+    return stages[0].id;
   }
 
   return null;
@@ -333,21 +330,11 @@ export const saveEntityAttributeValues = async (
   if (!customAttrs || typeof customAttrs !== 'object' || Object.keys(customAttrs).length === 0) return;
 
   try {
-    const { rows: dbAttrs } = await client.query(
-      'SELECT id, code, type FROM attributes WHERE entity_type = $1',
+    const { rows: attrResult } = await client.query(
+      'SELECT get_all_attributes(null, $1) AS data',
       [entityType]
     );
-
-    const attrIds = dbAttrs.map((a: any) => a.id);
-    let optRows: any[] = [];
-    if (attrIds.length > 0) {
-      const placeholders = attrIds.map((_: any, i: number) => `$${i + 1}`).join(',');
-      const optRes = await client.query(
-        `SELECT id, attribute_id, name FROM attribute_options WHERE attribute_id IN (${placeholders})`,
-        attrIds
-      );
-      optRows = optRes.rows;
-    }
+    const dbAttrs: any[] = attrResult[0]?.data || [];
 
     for (const [code, rawVal] of Object.entries(customAttrs)) {
       if (rawVal === undefined || rawVal === null || rawVal === '') continue;
@@ -355,7 +342,7 @@ export const saveEntityAttributeValues = async (
       const attr = dbAttrs.find((a: any) => a.code.toLowerCase() === code.toLowerCase());
       if (!attr) continue;
 
-      const attrOpts = optRows.filter((o: any) => o.attribute_id === attr.id);
+      const attrOpts = attr.options || [];
 
       let textVal: string | null = null;
       let boolVal: boolean | null = null;
@@ -402,20 +389,7 @@ export const saveEntityAttributeValues = async (
       const uniqueId = `${entityId}|${attr.id}`;
 
       await client.query(
-        `INSERT INTO attribute_values (
-          entity_type, entity_id, attribute_id, unique_id,
-          text_value, boolean_value, integer_value, float_value, date_value, datetime_value, json_value
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
-        ON CONFLICT (entity_type, entity_id, attribute_id)
-        DO UPDATE SET
-          unique_id = EXCLUDED.unique_id,
-          text_value = EXCLUDED.text_value,
-          boolean_value = EXCLUDED.boolean_value,
-          integer_value = EXCLUDED.integer_value,
-          float_value = EXCLUDED.float_value,
-          date_value = EXCLUDED.date_value,
-          datetime_value = EXCLUDED.datetime_value,
-          json_value = EXCLUDED.json_value`,
+        'SELECT public.fn_save_attribute_value($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::timestamp, $11::jsonb)',
         [
           entityType,
           entityId,
@@ -449,8 +423,8 @@ export class DataTransferService {
 
   public static async deleteImport(id: number): Promise<boolean> {
     try {
-      const { rowCount } = await pool.query('DELETE FROM imports WHERE id = $1', [id]);
-      return (rowCount ?? 0) > 0;
+      const { rows } = await pool.query('SELECT delete_import_record($1::integer) as result', [id]);
+      return Boolean(rows[0]?.result);
     } catch (error: any) {
       logger.error({ error, id }, 'DataTransferService.deleteImport failed');
       throw error;
@@ -497,37 +471,47 @@ export class DataTransferService {
     );
 
     // Fetch real existing IDs from the database to ensure the sample is 100% valid for immediate re-import
+    // Fetch real existing IDs from the database via procedural functions
     const [orgsDb, usersDb, personsDb, sourcesDb, typesDb, defaultPipelineDb] = await Promise.all([
-      pool.query('SELECT id FROM organizations ORDER BY id ASC LIMIT 2'),
-      pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 2'),
-      pool.query('SELECT id FROM persons ORDER BY id ASC LIMIT 2'),
-      pool.query('SELECT id FROM lead_sources ORDER BY id ASC LIMIT 2'),
-      pool.query('SELECT id FROM lead_types ORDER BY id ASC LIMIT 2'),
-      pool.query('SELECT id FROM lead_pipelines ORDER BY is_default DESC, id ASC LIMIT 1'),
+      pool.query('SELECT get_all_organizations(null) as result'),
+      pool.query('SELECT get_all_users(null) as result'),
+      pool.query('SELECT get_all_persons(null) as result'),
+      pool.query('SELECT * FROM public.fn_get_lead_sources()'),
+      pool.query('SELECT * FROM public.fn_get_lead_types()'),
+      pool.query('SELECT * FROM public.fn_get_lead_pipelines()'),
     ]);
 
-    const sOrgId1 = orgsDb.rows[0]?.id ?? null;
-    const sOrgId2 = orgsDb.rows[1]?.id ?? sOrgId1;
-    const sUserId1 = usersDb.rows[0]?.id ?? null;
-    const sUserId2 = usersDb.rows[1]?.id ?? sUserId1;
-    const sPersonId1 = personsDb.rows[0]?.id ?? null;
-    const sPersonId2 = personsDb.rows[1]?.id ?? sPersonId1;
-    const sSourceId1 = sourcesDb.rows[0]?.id ?? null;
-    const sSourceId2 = sourcesDb.rows[1]?.id ?? sSourceId1;
-    const sTypeId1 = typesDb.rows[0]?.id ?? null;
-    const sTypeId2 = typesDb.rows[1]?.id ?? sTypeId1;
+    const organizationsList = orgsDb.rows[0]?.result || [];
+    const usersList = usersDb.rows[0]?.result || [];
+    const personsList = personsDb.rows[0]?.result || [];
+    const sourcesList = sourcesDb.rows || [];
+    const typesList = typesDb.rows || [];
+    const pipelinesList = defaultPipelineDb.rows || [];
 
-    // Both sample leads belong to the active default pipeline so they both appear together on the Kanban board
-    const sPipelineId1 = defaultPipelineDb.rows[0]?.id ?? 1;
-    const sPipelineId2 = sPipelineId1;
+    const sampleOrgId1 = organizationsList[0]?.id ?? null;
+    const sampleOrgId2 = organizationsList[1]?.id ?? sampleOrgId1;
+    const sampleUserId1 = usersList[0]?.id ?? null;
+    const sampleUserId2 = usersList[1]?.id ?? sampleUserId1;
+    const samplePersonId1 = personsList[0]?.id ?? null;
+    const samplePersonId2 = personsList[1]?.id ?? samplePersonId1;
+    const sampleSourceId1 = sourcesList[0]?.id ?? null;
+    const sampleSourceId2 = sourcesList[1]?.id ?? sampleSourceId1;
+    const sampleTypeId1 = typesList[0]?.id ?? null;
+    const sampleTypeId2 = typesList[1]?.id ?? sampleTypeId1;
 
-    // Fetch valid stages belonging strictly to this pipeline
+    // Both sample leads belong to the active default pipeline
+    const defaultPipeline = pipelinesList.find((pipelineItem: any) => pipelineItem.is_default) || pipelinesList[0];
+    const samplePipelineId1 = defaultPipeline?.id ?? 1;
+    const samplePipelineId2 = samplePipelineId1;
+
+    // Fetch valid stages belonging strictly to this pipeline via procedural function
     const stagesDb = await pool.query(
-      'SELECT id FROM lead_pipeline_stages WHERE lead_pipeline_id = $1 ORDER BY sort_order ASC, id ASC LIMIT 2',
-      [sPipelineId1]
+      'SELECT * FROM public.fn_get_pipeline_stages($1)',
+      [samplePipelineId1]
     );
-    const sStageId1 = stagesDb.rows[0]?.id ?? null;
-    const sStageId2 = stagesDb.rows[1]?.id ?? sStageId1;
+    const stagesList = stagesDb.rows || [];
+    const sampleStageId1 = stagesList[0]?.id ?? null;
+    const sampleStageId2 = stagesList[1]?.id ?? sampleStageId1;
 
     let standardHeaders: string[] = [];
     let baseRows: Record<string, any>[] = [];
@@ -540,16 +524,16 @@ export class DataTransferService {
           emails: 'wilson.fisk@example.com',
           contact_numbers: '+1-555-0101',
           job_title: 'Chief Executive Officer',
-          organization_id: sOrgId1,
-          user_id: sUserId1,
+          organization_id: sampleOrgId1,
+          user_id: sampleUserId1,
         },
         {
           name: 'Sasha Calle',
           emails: 'sasha.calle@example.com',
           contact_numbers: '+1-555-0102',
           job_title: 'Sales Director',
-          organization_id: sOrgId2,
-          user_id: sUserId2,
+          organization_id: sampleOrgId2,
+          user_id: sampleUserId2,
         },
       ];
     } else if (normType === 'leads') {
@@ -573,13 +557,13 @@ export class DataTransferService {
           description: 'Interested in CRM migration and integrations',
           lead_value: 50000,
           status: 'Open',
-          person_id: sPersonId1,
-          organization_id: sOrgId1,
-          user_id: sUserId1,
-          lead_source_id: sSourceId1,
-          lead_type_id: sTypeId1,
-          lead_pipeline_id: sPipelineId1,
-          lead_pipeline_stage_id: sStageId1,
+          person_id: samplePersonId1,
+          organization_id: sampleOrgId1,
+          user_id: sampleUserId1,
+          lead_source_id: sampleSourceId1,
+          lead_type_id: sampleTypeId1,
+          lead_pipeline_id: samplePipelineId1,
+          lead_pipeline_stage_id: sampleStageId1,
           expected_close_date: '2026-12-31',
         },
         {
@@ -587,13 +571,13 @@ export class DataTransferService {
           description: 'Renewal contract for 200 software seats',
           lead_value: 25000,
           status: 'Open',
-          person_id: sPersonId2,
-          organization_id: sOrgId2,
-          user_id: sUserId2,
-          lead_source_id: sSourceId2,
-          lead_type_id: sTypeId2,
-          lead_pipeline_id: sPipelineId2,
-          lead_pipeline_stage_id: sStageId2,
+          person_id: samplePersonId2,
+          organization_id: sampleOrgId2,
+          user_id: sampleUserId2,
+          lead_source_id: sampleSourceId2,
+          lead_type_id: sampleTypeId2,
+          lead_pipeline_id: samplePipelineId2,
+          lead_pipeline_stage_id: sampleStageId2,
           expected_close_date: '2026-11-15',
         },
       ];
@@ -607,7 +591,7 @@ export class DataTransferService {
           state: 'California',
           country: 'USA',
           postcode: '94105',
-          user_id: sUserId1,
+          user_id: sampleUserId1,
         },
         {
           name: 'Global Logistics Ltd',
@@ -616,7 +600,7 @@ export class DataTransferService {
           state: 'Greater London',
           country: 'UK',
           postcode: 'EC1A 1BB',
-          user_id: sUserId2,
+          user_id: sampleUserId2,
         },
       ];
     } else if (normType === 'products') {
@@ -922,10 +906,11 @@ export class DataTransferService {
             const status = typeof statusRaw === 'boolean' ? statusRaw : String(statusRaw).toLowerCase() !== 'false' && String(statusRaw) !== '0' && String(statusRaw).toLowerCase() !== 'lost';
             const expectedCloseDate = row.expected_close_date || null;
 
-            // Existing record check by id or title
-            const existingLead = idVal
-              ? await client.query('SELECT id, custom_attributes FROM leads WHERE id = $1 LIMIT 1', [idVal])
-              : await client.query('SELECT id, custom_attributes FROM leads WHERE LOWER(TRIM(title)) = LOWER($1) LIMIT 1', [titleStr]);
+            // Existing record check by id or title via procedural function
+            const existingLead = await client.query(
+              'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+              ['leads', idVal || null, titleStr || null]
+            );
             const exists = existingLead.rows.length > 0;
 
             if (action === 'delete') {
@@ -950,22 +935,10 @@ export class DataTransferService {
             if (exists) {
               const mergedAttrs = { ...(existingLead.rows[0].custom_attributes || {}), ...rowCustomAttrs };
               await client.query(
-                `UPDATE leads 
-                 SET description = COALESCE($1, description), 
-                     lead_value = COALESCE($2, lead_value), 
-                     person_id = COALESCE($3, person_id), 
-                     organization_id = COALESCE($4, organization_id), 
-                     user_id = COALESCE($5, user_id), 
-                     status = COALESCE($6, status),
-                     lead_source_id = COALESCE($7, lead_source_id),
-                     lead_type_id = COALESCE($8, lead_type_id),
-                     lead_pipeline_id = COALESCE($9, lead_pipeline_id),
-                     lead_pipeline_stage_id = COALESCE($10, lead_pipeline_stage_id),
-                     expected_close_date = COALESCE($11, expected_close_date),
-                     custom_attributes = $12::jsonb,
-                     updated_at = NOW() 
-                 WHERE id = $13`,
+                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb)',
                 [
+                  existingLead.rows[0].id,
+                  titleStr,
                   description,
                   leadValue,
                   finalPersonId,
@@ -978,19 +951,14 @@ export class DataTransferService {
                   leadPipelineStageId,
                   expectedCloseDate,
                   JSON.stringify(mergedAttrs),
-                  existingLead.rows[0].id,
                 ]
               );
               await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
-                `INSERT INTO leads (
-                   title, description, lead_value, person_id, organization_id, user_id, status,
-                   lead_source_id, lead_type_id, lead_pipeline_id, lead_pipeline_stage_id, expected_close_date,
-                   custom_attributes, created_at, updated_at
-                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW())
-                 RETURNING id`,
+                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb) AS id',
                 [
+                  null,
                   titleStr,
                   description,
                   leadValue,
@@ -1039,10 +1007,11 @@ export class DataTransferService {
               row.user_name || row.sales_owner || row['Sales Owner'] || row.User
             );
 
-            // Duplicate entry check by id or name
-            const existing = idVal
-              ? await client.query('SELECT id, emails, contact_numbers, custom_attributes FROM persons WHERE id = $1 LIMIT 1', [idVal])
-              : await client.query('SELECT id, emails, contact_numbers, custom_attributes FROM persons WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [nameStr]);
+            // Duplicate entry check by id or name via procedural function
+            const existing = await client.query(
+              'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+              ['persons', idVal || null, nameStr || null]
+            );
             const exists = existing.rows.length > 0;
 
             if (action === 'delete') {
@@ -1088,23 +1057,16 @@ export class DataTransferService {
               const mergedAttrs = { ...(existingPerson.custom_attributes || {}), ...rowCustomAttrs };
 
               await client.query(
-                `UPDATE persons 
-                 SET emails = $1::jsonb, 
-                     contact_numbers = $2::jsonb, 
-                     job_title = COALESCE($3, job_title), 
-                     organization_id = COALESCE($4, organization_id), 
-                     user_id = COALESCE($5, user_id), 
-                     custom_attributes = $6::jsonb,
-                     updated_at = NOW() 
-                 WHERE id = $7`,
+                'SELECT public.fn_import_upsert_person($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb)',
                 [
+                  existingPerson.id,
+                  nameStr,
                   JSON.stringify(mergedEmails),
                   JSON.stringify(mergedNumbers),
                   cleanJobTitle(row.job_title || row.JobTitle),
                   finalOrgId,
                   finalUserId,
                   JSON.stringify(mergedAttrs),
-                  existingPerson.id,
                 ]
               );
               await saveEntityAttributeValues(client, 'persons', existingPerson.id, mergedAttrs);
@@ -1126,10 +1088,9 @@ export class DataTransferService {
               const uniqueNumbers = Array.from(uniqueNumbersMap.entries()).map(([value, label]) => ({ label, value }));
 
               const ins = await client.query(
-                `INSERT INTO persons (name, emails, contact_numbers, job_title, organization_id, user_id, custom_attributes, created_at, updated_at) 
-                 VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb, NOW(), NOW())
-                 RETURNING id`,
+                'SELECT public.fn_import_upsert_person($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb) AS id',
                 [
+                  null,
                   nameStr,
                   JSON.stringify(uniqueEmails),
                   JSON.stringify(uniqueNumbers),
@@ -1164,9 +1125,10 @@ export class DataTransferService {
               postcode: row.postcode || row.zip || row.Postcode || '',
             };
 
-            const existingOrg = idVal
-              ? await client.query('SELECT id, address, custom_attributes FROM organizations WHERE id = $1 LIMIT 1', [idVal])
-              : await client.query('SELECT id, address, custom_attributes FROM organizations WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [nameStr]);
+            const existingOrg = await client.query(
+              'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+              ['organizations', idVal || null, nameStr || null]
+            );
             const exists = existingOrg.rows.length > 0;
 
             if (action === 'delete') {
@@ -1194,21 +1156,14 @@ export class DataTransferService {
               const mergedAttrs = { ...(existingOrg.rows[0].custom_attributes || {}), ...rowCustomAttrs };
 
               await client.query(
-                `UPDATE organizations 
-                 SET address = $1::jsonb, 
-                     user_id = COALESCE($2, user_id), 
-                     custom_attributes = $3::jsonb, 
-                     updated_at = NOW() 
-                 WHERE id = $4`,
-                [JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs), existingOrg.rows[0].id]
+                'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb)',
+                [existingOrg.rows[0].id, nameStr, JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs)]
               );
               await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
-                `INSERT INTO organizations (name, address, user_id, custom_attributes, created_at, updated_at) 
-                 VALUES ($1, $2::jsonb, $3, $4::jsonb, NOW(), NOW())
-                 RETURNING id`,
-                [nameStr, JSON.stringify(addressObj), finalUserId, JSON.stringify(rowCustomAttrs)]
+                'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb) AS id',
+                [null, nameStr, JSON.stringify(addressObj), finalUserId, JSON.stringify(rowCustomAttrs)]
               );
               const newOrgId = ins.rows[0]?.id;
               if (newOrgId) {
@@ -1225,12 +1180,10 @@ export class DataTransferService {
             const quantity = Number(row.quantity || row.Quantity || 0);
             const price = Number(row.price || row.Price || 0);
 
-            const existingProd = idVal
-              ? await client.query('SELECT id, custom_attributes FROM products WHERE id = $1 LIMIT 1', [idVal])
-              : await client.query(
-                  'SELECT id, custom_attributes FROM products WHERE LOWER(TRIM(sku)) = LOWER($1) OR LOWER(TRIM(name)) = LOWER($2) LIMIT 1',
-                  [skuStr, String(prodName).trim()]
-                );
+            const existingProd = await client.query(
+              'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
+              ['products', idVal || null, skuStr || null, String(prodName).trim() || null]
+            );
             const exists = existingProd.rows.length > 0;
 
             if (action === 'delete') {
@@ -1255,23 +1208,14 @@ export class DataTransferService {
             if (exists) {
               const mergedAttrs = { ...(existingProd.rows[0].custom_attributes || {}), ...rowCustomAttrs };
               await client.query(
-                `UPDATE products 
-                 SET name = COALESCE($1, name), 
-                     description = COALESCE($2, description), 
-                     quantity = COALESCE($3, quantity), 
-                     price = COALESCE($4, price), 
-                     custom_attributes = $5::jsonb, 
-                     updated_at = NOW() 
-                 WHERE id = $6`,
-                [prodName, description, quantity, price, JSON.stringify(mergedAttrs), existingProd.rows[0].id]
+                'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb)',
+                [existingProd.rows[0].id, skuStr, prodName, description, quantity, price, JSON.stringify(mergedAttrs)]
               );
               await saveEntityAttributeValues(client, 'products', existingProd.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
-                `INSERT INTO products (sku, name, description, quantity, price, custom_attributes, created_at, updated_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())
-                 RETURNING id`,
-                [skuStr, prodName, description, quantity, price, JSON.stringify(rowCustomAttrs)]
+                'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb) AS id',
+                [null, skuStr, prodName, description, quantity, price, JSON.stringify(rowCustomAttrs)]
               );
               const newProdId = ins.rows[0]?.id;
               if (newProdId) {
@@ -1513,7 +1457,7 @@ export class DataTransferService {
     try {
       // Fetch required custom attributes for this entity type
       const { rows: reqAttrs } = await client.query(
-        'SELECT code, name FROM attributes WHERE entity_type = $1 AND is_required = true',
+        'SELECT * FROM public.fn_get_required_attributes($1)',
         [type]
       );
 
@@ -1540,9 +1484,10 @@ export class DataTransferService {
               rowError = 'Field "title" or "id" is required';
             } else {
               const titleStr = titleVal ? String(titleVal).trim() : '';
-              const existingLead = idVal
-                ? await client.query('SELECT id FROM leads WHERE id = $1 LIMIT 1', [idVal])
-                : await client.query('SELECT id FROM leads WHERE LOWER(TRIM(title)) = LOWER($1) LIMIT 1', [titleStr]);
+              const existingLead = await client.query(
+                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                ['leads', idVal || null, titleStr || null]
+              );
               const exists = existingLead.rows.length > 0;
               if (action === 'delete' && !exists) {
                 rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for deletion`;
@@ -1559,9 +1504,10 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existing = idVal
-                ? await client.query('SELECT id FROM persons WHERE id = $1 LIMIT 1', [idVal])
-                : await client.query('SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [nameStr]);
+              const existing = await client.query(
+                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                ['persons', idVal || null, nameStr || null]
+              );
               const exists = existing.rows.length > 0;
               if (action === 'delete' && !exists) {
                 rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
@@ -1578,9 +1524,10 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existingOrg = idVal
-                ? await client.query('SELECT id FROM organizations WHERE id = $1 LIMIT 1', [idVal])
-                : await client.query('SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER($1) LIMIT 1', [nameStr]);
+              const existingOrg = await client.query(
+                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                ['organizations', idVal || null, nameStr || null]
+              );
               const exists = existingOrg.rows.length > 0;
               if (action === 'delete' && !exists) {
                 rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
@@ -1599,12 +1546,10 @@ export class DataTransferService {
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
               const prodName = nameVal ? String(nameVal).trim() : skuStr;
-              const existingProd = idVal
-                ? await client.query('SELECT id FROM products WHERE id = $1 LIMIT 1', [idVal])
-                : await client.query(
-                    'SELECT id FROM products WHERE LOWER(TRIM(sku)) = LOWER($1) OR LOWER(TRIM(name)) = LOWER($2) LIMIT 1',
-                    [skuStr, prodName]
-                  );
+              const existingProd = await client.query(
+                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
+                ['products', idVal || null, skuStr || null, prodName || null]
+              );
               const exists = existingProd.rows.length > 0;
               if (action === 'delete' && !exists) {
                 rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for deletion`;
@@ -1651,22 +1596,18 @@ export class DataTransferService {
     try {
       if (type === 'leads') {
         const { rows } = await pool.query(
-          'SELECT id, title, description, lead_value, status, expected_close_date, custom_attributes, created_at FROM leads ORDER BY id DESC'
+          "SELECT * FROM public.fn_get_all_leads('', 1, 100000)"
         );
         return rows;
       } else if (type === 'persons') {
-        const { rows } = await pool.query(
-          'SELECT id, name, emails, contact_numbers, job_title, organization_id, custom_attributes, created_at FROM persons ORDER BY id DESC'
-        );
-        return rows;
+        const { rows } = await pool.query('SELECT get_all_persons(null) as result');
+        return rows[0]?.result || [];
       } else if (type === 'organizations') {
-        const { rows } = await pool.query(
-          'SELECT id, name, address, custom_attributes, created_at FROM organizations ORDER BY id DESC'
-        );
-        return rows;
+        const { rows } = await pool.query('SELECT get_all_organizations(null::text, 100000, 0) as result');
+        return rows[0]?.result?.rows || [];
       } else if (type === 'products') {
         const { rows } = await pool.query(
-          'SELECT id, sku, name, description, quantity, price, custom_attributes, created_at FROM products ORDER BY id DESC'
+          "SELECT * FROM public.fn_get_all_products('', 1, 100000)"
         );
         return rows;
       }

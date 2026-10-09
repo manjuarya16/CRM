@@ -106,3 +106,13 @@ export interface ComposeMailModalProps {
     draftId?: number | null;
   };
 }
+
+export interface PlaceholderItem {
+  label: string;
+  tag: string;
+}
+
+export interface PlaceholderCategory {
+  name: string;
+  items: PlaceholderItem[];
+}

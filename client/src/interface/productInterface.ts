@@ -37,3 +37,12 @@ export interface ProductStore {
   setSelectedProduct: (product: IProduct | null) => void;
   clearError: () => void;
 }
+
+export interface WarehouseInventoryRow {
+  warehouse_id: number;
+  warehouse_name: string;
+  warehouse_location_id: number | null;
+  warehouse_location_name: string;
+  in_stock: number;
+  allocated: number;
+}

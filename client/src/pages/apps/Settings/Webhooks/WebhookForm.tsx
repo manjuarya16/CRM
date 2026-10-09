@@ -146,9 +146,7 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
     setValue("query_params", updated);
   };
 
-  const onInvalid = (errs: any) => {
-    console.log("Zod validation errors:", errs);
-  };
+  const onInvalid = (_errs: any) => {};
 
   const onSubmit = async (data: WebhookInput) => {
     try {

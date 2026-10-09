@@ -23,4 +23,6 @@ export * from "./attributeInterface";
 export * from "./automationInterfaces";
 export * from "./tagInterface";
 export * from "./notificationInterface";
+export * from "./dashboardInterface";
+export * from "./realtimeInterface";
 

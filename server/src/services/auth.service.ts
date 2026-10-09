@@ -115,7 +115,7 @@ export class AuthService {
         throw new ApiError(404, 'User not found');
       }
       const hashedPassword = await bcrypt.hash(input.new_password, 10);
-      await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, user.id]);
+      await pool.query('SELECT save_user(null, null, $1, null, null, null, null, null, $2) as result', [hashedPassword, user.id]);
       return true;
     } catch (error: any) {
       logger.error({ error, email: input.email }, 'AuthService.resetPassword failed');

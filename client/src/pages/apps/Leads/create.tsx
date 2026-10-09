@@ -6,7 +6,7 @@ import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
-import { ProductRow } from "@/interface";
+import { ProductRow, ILeadContactItem } from "@/interface";
 
 const TABS = [
   { id: "lead-details", label: "Lead Details" },
@@ -61,12 +61,7 @@ const getPersonPhone = (person: any): string => {
   return "";
 };
 
-interface ContactItem {
-  label: string;
-  value: string;
-}
-
-const parseContactItems = (data: any, defaultLabel: string = "Work"): ContactItem[] => {
+const parseContactItems = (data: any, defaultLabel: string = "Work"): ILeadContactItem[] => {
   if (!data) return [{ label: defaultLabel, value: "" }];
   let parsed = data;
   if (typeof data === "string") {
@@ -126,8 +121,8 @@ const CreateLeadPage: React.FC = () => {
   const [personName, setPersonName] = useState("");
   const [personSearch, setPersonSearch] = useState("");
   const [isPersonDropdownOpen, setIsPersonDropdownOpen] = useState(false);
-  const [contactEmails, setContactEmails] = useState<ContactItem[]>([{ label: "Work", value: "" }]);
-  const [contactPhones, setContactPhones] = useState<ContactItem[]>([{ label: "Work", value: "" }]);
+  const [contactEmails, setContactEmails] = useState<ILeadContactItem[]>([{ label: "Work", value: "" }]);
+  const [contactPhones, setContactPhones] = useState<ILeadContactItem[]>([{ label: "Work", value: "" }]);
   const [organizationId, setOrganizationId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
   const personDropdownRef = useRef<HTMLDivElement>(null);
@@ -402,23 +397,23 @@ const CreateLeadPage: React.FC = () => {
     });
   };
 
-  const totalLeadValue = productRows.reduce((sum, r) => {
-    const selectedProd = products.find((p) => String(p.id) === String(r.product_id));
+  const totalLeadValue = productRows.reduce((runningTotal, row) => {
+    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
     const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-    const q = isService ? 1 : (parseFloat(r.quantity) || 0);
-    const p = parseFloat(r.price) || 0;
-    return sum + q * p;
+    const itemQuantity = isService ? 1 : (parseFloat(row.quantity) || 0);
+    const itemPrice = parseFloat(row.price) || 0;
+    return runningTotal + itemQuantity * itemPrice;
   }, 0);
 
-  const filteredPersons = persons.filter((p) => {
+  const filteredPersons = persons.filter((person) => {
     if (!personSearch) return true;
     if (personId && personName && personSearch === personName) return true;
-    const q = personSearch.toLowerCase().trim();
-    const name = (p.name || "").toLowerCase();
-    const email = getPersonEmail(p).toLowerCase();
-    const phone = getPersonPhone(p).toLowerCase();
-    const org = getPersonOrg(p, organizations).toLowerCase();
-    return name.includes(q) || email.includes(q) || phone.includes(q) || org.includes(q);
+    const query = personSearch.toLowerCase().trim();
+    const name = (person.name || "").toLowerCase();
+    const email = getPersonEmail(person).toLowerCase();
+    const phone = getPersonPhone(person).toLowerCase();
+    const organizationName = getPersonOrg(person, organizations).toLowerCase();
+    return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
   });
 
   const handleSubmit = async (e: React.FormEvent) => {

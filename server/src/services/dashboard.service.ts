@@ -1,14 +1,7 @@
 import { pool } from "@/config/db";
 import { logger } from "@/utils/logger";
-
-export interface IDashboardStatsParams {
-  start_date?: string;
-  end_date?: string;
-  pipeline_id?: number | string;
-  startDate?: string;
-  endDate?: string;
-  pipelineId?: number | string;
-}
+import { IDashboardStatsParams } from "@/interfaces";
+export type { IDashboardStatsParams };
 
 function parseFlexibleDate(dateStr?: string | null): Date | null {
   if (!dateStr || typeof dateStr !== "string") return null;
@@ -72,7 +65,7 @@ export class DashboardService {
 
       // 1. Fetch available pipelines
       const pipelinesRes = await pool.query(
-        "SELECT id, name, is_default FROM lead_pipelines ORDER BY id ASC"
+        "SELECT * FROM public.fn_get_lead_pipelines()"
       );
       const pipelines: any[] = pipelinesRes.rows;
       // Default pipeline preference: id 1 (Default Pipeline) or is_default
@@ -84,14 +77,10 @@ export class DashboardService {
       }
 
       // 2. Fetch stages for selected pipeline or all (with sort_order)
-      let stagesQuery = "SELECT id, name, code, sort_order, lead_pipeline_id FROM lead_pipeline_stages";
-      const stagesQueryParams: any[] = [];
-      if (targetPipelineId) {
-        stagesQuery += " WHERE lead_pipeline_id = $1";
-        stagesQueryParams.push(targetPipelineId);
-      }
-      stagesQuery += " ORDER BY sort_order ASC, id ASC";
-      const stagesRes = await pool.query(stagesQuery, stagesQueryParams);
+      const stagesRes = await pool.query(
+        "SELECT * FROM public.fn_get_pipeline_stages($1)",
+        [targetPipelineId]
+      );
       const stages: any[] = stagesRes.rows;
 
       // 3. Fetch Leads within date range and pipeline
@@ -158,27 +147,17 @@ export class DashboardService {
         }
       });
 
-      // 4. Over All Stats (Quotations, Persons, Organizations)
-      const quotesRes = await pool.query(
-        "SELECT COUNT(*) as count FROM quotes WHERE created_at >= $1 AND created_at <= $2",
+      // 4. Over All Stats (Quotations, Persons, Organizations) via procedural function
+      const countsRes = await pool.query(
+        "SELECT * FROM public.fn_get_dashboard_counts($1::timestamp, $2::timestamp)",
         [startDateStr, endDateStr]
       );
-      const totalQuotations = Number(quotesRes.rows[0]?.count || 0);
-
-      const personsRes = await pool.query(
-        "SELECT COUNT(*) as count FROM persons WHERE created_at >= $1 AND created_at <= $2",
-        [startDateStr, endDateStr]
-      );
-      const totalPersons = Number(personsRes.rows[0]?.count || 0);
-
-      const orgsRes = await pool.query(
-        "SELECT COUNT(*) as count FROM organizations WHERE created_at >= $1 AND created_at <= $2",
-        [startDateStr, endDateStr]
-      );
-      const totalOrganizations = Number(orgsRes.rows[0]?.count || 0);
+      const totalQuotations = Number(countsRes.rows[0]?.quotes_count || 0);
+      const totalPersons = Number(countsRes.rows[0]?.persons_count || 0);
+      const totalOrganizations = Number(countsRes.rows[0]?.organizations_count || 0);
 
       // 5. Sources Map
-      const sourcesRes = await pool.query("SELECT id, name FROM lead_sources ORDER BY id ASC");
+      const sourcesRes = await pool.query("SELECT * FROM public.fn_get_lead_sources()");
       const sourceMap: Record<number, string> = {};
       sourcesRes.rows.forEach((s: any) => (sourceMap[s.id] = s.name));
 
@@ -193,7 +172,7 @@ export class DashboardService {
       });
 
       // 6. Types Map
-      const typesRes = await pool.query("SELECT id, name FROM lead_types ORDER BY id ASC");
+      const typesRes = await pool.query("SELECT * FROM public.fn_get_lead_types()");
       const typeMap: Record<number, string> = {};
       typesRes.rows.forEach((t: any) => (typeMap[t.id] = t.name));
 

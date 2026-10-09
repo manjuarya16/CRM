@@ -10,7 +10,6 @@ interface ModalProps {
 }
 
 const Modal = ({ isOpen, onClose, size, animation, centered, children }: ModalProps) => {
-  console.log(isOpen);
   const [isMounted, setIsMounted] = useState<boolean>(false)
 
   useEffect(() => {
