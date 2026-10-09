@@ -29,6 +29,8 @@ const getModuleIcon = (module: string) => {
   }
 };
 
+import { realtimeService } from "@/services/realtimeService";
+
 const NotificationDropdown = () => {
   const navigate = useNavigate();
   const {
@@ -37,13 +39,19 @@ const NotificationDropdown = () => {
     fetchNotifications,
     markAsRead,
     markAllAsRead,
-    startPolling,
+    fetchUnreadCount,
   } = useNotificationStore();
 
   useEffect(() => {
-    const cleanup = startPolling(30000);
+    // Initial fetch once on mount
+    fetchUnreadCount();
+
+    // Listen to real-time push events via Server-Sent Events (Zero polling)
+    const cleanup = realtimeService.onNotificationChange(() => {
+      fetchUnreadCount();
+    });
     return cleanup;
-  }, [startPolling]);
+  }, [fetchUnreadCount]);
 
   const handleNotificationClick = async (item: INotificationItem) => {
     if (!item.is_read) {

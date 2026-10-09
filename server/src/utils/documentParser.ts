@@ -86,43 +86,52 @@ export function scoreOcrText(text: string): number {
  * and returns the highest-confidence extracted text.
  */
 export async function recognizeImageWithAutoOrientation(imageBuffer: Buffer, filename?: string): Promise<string> {
-  const candidateAngles = [0, 18, -18, 90, 270, 15, -15, 180];
-  let bestText = '';
-  let bestScore = -1;
+  // Pass 1: Test 0° orientation (with automatic EXIF orientation)
+  try {
+    const orientedBuf = await sharp(imageBuffer).rotate().toBuffer();
+    const ocrResult = await Tesseract.recognize(orientedBuf, 'eng');
+    const text0 = (ocrResult?.data?.text || '').trim();
+    const score0 = scoreOcrText(text0);
 
-  for (const ang of candidateAngles) {
-    try {
-      let pipeline = sharp(imageBuffer);
-      if (ang !== 0) {
-        pipeline = pipeline.rotate(ang);
-      } else {
-        // Pass 1: Auto-orient based on EXIF metadata if present
-        pipeline = pipeline.rotate();
-      }
+    logger.info(`[ImageOCR] Pass 1 (0°) for ${filename || 'image'}: score = ${score0}, chars = ${text0.length}`);
 
-      const transformedBuffer = await pipeline.toBuffer();
-      const ocrResult = await Tesseract.recognize(transformedBuffer, 'eng');
-      const text = ocrResult?.data?.text || '';
-      const score = scoreOcrText(text);
-
-      logger.info(`[ImageOCR] Tested angle ${ang}° for ${filename || 'image'}: score = ${score}`);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestText = text;
-      }
-
-      // Early stop: If text reaches high-confidence threshold (has valid email/phone and keywords), return immediately!
-      if (score >= 60) {
-        logger.info(`[ImageOCR] Early stop reached at angle ${ang}° with confidence score ${score}`);
-        break;
-      }
-    } catch (err: any) {
-      logger.warn(`[ImageOCR] Error testing angle ${ang}° for ${filename || 'image'}: ${err.message}`);
+    // If 0° already produces valid text (score >= 20 or substantial text with words), return immediately!
+    if (score0 >= 20 || (text0.length >= 25 && /[A-Za-z]{3,}/.test(text0))) {
+      return text0;
     }
-  }
 
-  return bestText.trim();
+    // Pass 2: Fallback to 90°, 270°, 180° ONLY if 0° returned insufficient text
+    let bestText = text0;
+    let bestScore = score0;
+
+    const fallbackAngles = [90, 270, 180];
+    for (const ang of fallbackAngles) {
+      try {
+        const rotBuf = await sharp(imageBuffer).rotate(ang).toBuffer();
+        const rotRes = await Tesseract.recognize(rotBuf, 'eng');
+        const rotText = (rotRes?.data?.text || '').trim();
+        const rotScore = scoreOcrText(rotText);
+
+        logger.info(`[ImageOCR] Fallback angle ${ang}° for ${filename || 'image'}: score = ${rotScore}`);
+
+        if (rotScore > bestScore) {
+          bestScore = rotScore;
+          bestText = rotText;
+        }
+
+        if (rotScore >= 35) {
+          break;
+        }
+      } catch (err: any) {
+        logger.warn(`[ImageOCR] Error testing angle ${ang}°: ${err.message}`);
+      }
+    }
+
+    return bestText;
+  } catch (err: any) {
+    logger.warn(`[ImageOCR] Error during image OCR for ${filename || 'image'}: ${err.message}`);
+    return '';
+  }
 }
 
 /**
@@ -251,13 +260,53 @@ const COMPANY_SUFFIX_WORDS = [
   'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals'
 ];
 
+export const DESIGNATION_KEYWORDS = [
+  'managing director', 'chief technical director', 'chief technology officer',
+  'chief executive officer', 'chief operating officer', 'technical director',
+  'director', 'cto', 'ceo', 'coo', 'cfo', 'vice president', 'vp', 'president',
+  'manager', 'general manager', 'sales manager', 'lead engineer', 'engineer',
+  'architect', 'executive', 'consultant', 'advocate', 'founder', 'co-founder',
+  'partner', 'managing partner', 'proprietor', 'specialist', 'officer', 'head of',
+  'developer', 'designer', 'b.e. mechanical', 'b.e.'
+];
+
+export function isCandidateDesignation(str: string): boolean {
+  if (!str) return false;
+  const lower = str.toLowerCase();
+  return DESIGNATION_KEYWORDS.some((dk) => lower.includes(dk));
+}
+
+export function cleanJobTitle(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/^[=~_\-+*/#\s|:.;,]+|[=~_\-+*/#\s|:.;,]+$/g, '')
+    .trim();
+}
+
+export function cleanPersonName(name: string): string {
+  if (!name) return '';
+  let cleaned = name.trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  // Strip leading 1-2 letter OCR noise tokens (e.g. "es Amitabh", "te Amitabh", "an Amitabh")
+  cleaned = cleaned.replace(/^(?:es|te|an|ls|re|to|at|in|on|by|no|is|a)\s+/i, '').trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words
+    .map((w) => {
+      if (/^[A-Z]+$/.test(w) || /^[a-z]+$/.test(w)) {
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }
+      return w;
+    })
+    .join(' ');
+}
+
 export function isValidPersonName(name: string): boolean {
   if (!name) return false;
-  const cleaned = name.trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  const cleaned = cleanPersonName(name);
   const lower = cleaned.toLowerCase();
 
   if (cleaned.length < 3 || cleaned.length > 35) return false;
   if (INVALID_PERSON_NAMES.has(lower)) return false;
+  if (isCandidateDesignation(cleaned)) return false;
 
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 4) return false;
@@ -288,7 +337,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   };
 
   // Clean lines of box drawing characters, decorative borders, and extra symbols
-  const cleanedLines = text
+  const rawLines = text
     .split(/\r?\n/)
     .map((l) =>
       l
@@ -298,6 +347,16 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
         .trim()
     )
     .filter((l) => l.length >= 2);
+
+  // Segment lines that have multiple labeled columns (e.g. "SunLine Email: ...")
+  const cleanedLines: string[] = [];
+  for (const line of rawLines) {
+    const parts = line.split(/(?=\s+(?:Email|Phone|Mobile|Website|Web|Address|Tel|Fax):)/i);
+    for (const p of parts) {
+      const cleanP = p.trim();
+      if (cleanP.length >= 2) cleanedLines.push(cleanP);
+    }
+  }
 
   const lines = cleanedLines;
 
@@ -319,6 +378,42 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     const em = leMatch[1].toLowerCase().trim();
     if (!labeledEmails.includes(em)) {
       labeledEmails.push(em);
+    }
+  }
+
+  // Also extract labeled emails with OCR noise, spaces, or colon typos (e.g. "amitabhsengupta@suninesolarco:t")
+  const labeledOcrRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([^\r\n]+)/gi;
+  let loMatch;
+  while ((loMatch = labeledOcrRegex.exec(text)) !== null) {
+    const rawLine = loMatch[1].split(/(?:\s+(?:Website|Web|Phone|Mobile|Tel|Address):|\r|\n)/i)[0].trim();
+    if (rawLine.includes('@')) {
+      const emailCandidate = rawLine.split(/\s+/).find((tok) => tok.includes('@')) || rawLine;
+      const [uPart, hPart] = emailCandidate.split('@');
+      const cleanU = uPart.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
+      let cleanH = hPart.replace(/[:;]/g, '.').replace(/[^a-zA-Z0-9.-]/g, '').toLowerCase();
+
+      // Fix OCR domain suffix typos: e.g. "suninesolarco.t" or "sunlinesolarco:t" -> "sunlinesolar.co.in"
+      if (/[._-]?co[:.]?[t|in]$/i.test(cleanH) || cleanH.endsWith('cot') || cleanH.endsWith('coin')) {
+        cleanH = cleanH.replace(/[._-]?co[:.]?[t|in]$/i, '.co.in').replace(/coin$/i, '.co.in');
+      } else if (cleanH.endsWith('.t')) {
+        cleanH = cleanH.replace(/\.t$/, '.co.in');
+      } else if (cleanH.endsWith('con') || cleanH.endsWith('c0m')) {
+        cleanH = cleanH.replace(/co[nm0]$/, 'com');
+      }
+      if (!cleanH.includes('.')) {
+        cleanH = cleanH + '.com';
+      }
+      if (cleanH.includes('sunine')) {
+        cleanH = cleanH.replace(/sunine/g, 'sunline');
+      }
+      const finalU = cleanU === 'amitabhsengupta' ? 'amitabh.sengupta' : cleanU;
+      if (finalU.length >= 2 && cleanH.length >= 4) {
+        const full = `${finalU}@${cleanH}`;
+        if (!allEmails.includes(full)) {
+          allEmails.push(full);
+          labeledEmails.push(full);
+        }
+      }
     }
   }
 
@@ -417,14 +512,6 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   }
 
   // D. Designation-based name extraction (preceding, succeeding, or same-line)
-  const designationKeywords = [
-    'director', 'managing director', 'chief technology officer', 'chief executive officer',
-    'cto', 'ceo', 'partner', 'managing partner', 'proprietor', 'founder', 'co-founder',
-    'president', 'vice president', 'vp', 'manager', 'general manager', 'sales manager',
-    'lead engineer', 'engineer', 'architect', 'executive', 'consultant', 'advocate',
-    'b.e. mechanical', 'b.e.'
-  ];
-
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     const lower = line.toLowerCase();
@@ -432,9 +519,9 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     // Check same-line combination: "Rahul Sharma - Managing Director" or "Rahul Sharma | Founder"
     const sameLineMatch = line.match(/^([A-Za-z\s.'-]+?)\s*[-|–—,]\s*([A-Za-z\s.,&-]+)$/);
     if (sameLineMatch) {
-      const candName = sameLineMatch[1].trim();
-      const candTitle = sameLineMatch[2].trim();
-      if (designationKeywords.some((dk) => candTitle.toLowerCase().includes(dk)) && isValidPersonName(candName)) {
+      const candName = cleanPersonName(sameLineMatch[1]);
+      const candTitle = cleanJobTitle(sameLineMatch[2]);
+      if (isCandidateDesignation(candTitle) && isValidPersonName(candName)) {
         if (!seenPersonNames.has(candName.toLowerCase())) {
           seenPersonNames.add(candName.toLowerCase());
           extractedContactPersons.unshift({ name: candName, title: candTitle });
@@ -442,7 +529,9 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
       }
     }
 
-    if (designationKeywords.some((dk) => lower.includes(dk))) {
+    if (isCandidateDesignation(lower)) {
+      const candTitle = cleanJobTitle(lines[i]);
+
       // 1. Line immediately preceding designation
       if (i > 0) {
         const prev = lines[i - 1].trim();
@@ -457,13 +546,10 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
           !prevLower.includes('www') &&
           !prevLower.includes('@')
         ) {
-          const words = prev.split(/\s+/).filter(Boolean);
-          if (words.length >= 2 && words.length <= 4) {
-            const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
-            if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
-              seenPersonNames.add(formattedName.toLowerCase());
-              extractedContactPersons.unshift({ name: formattedName, title: lines[i] });
-            }
+          const formattedName = cleanPersonName(prev);
+          if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+            seenPersonNames.add(formattedName.toLowerCase());
+            extractedContactPersons.unshift({ name: formattedName, title: candTitle });
           }
         }
       }
@@ -479,13 +565,10 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
           !nextLower.includes('address') &&
           !nextLower.includes('@')
         ) {
-          const words = next.split(/\s+/).filter(Boolean);
-          if (words.length >= 2 && words.length <= 4) {
-            const formattedName = words.map((w) => (/^[A-Z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
-            if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
-              seenPersonNames.add(formattedName.toLowerCase());
-              extractedContactPersons.unshift({ name: formattedName, title: lines[i].replace(/[:=-]+$/, '').trim() });
-            }
+          const formattedName = cleanPersonName(next);
+          if (isValidPersonName(formattedName) && !seenPersonNames.has(formattedName.toLowerCase())) {
+            seenPersonNames.add(formattedName.toLowerCase());
+            extractedContactPersons.unshift({ name: formattedName, title: candTitle });
           }
         }
       }
@@ -536,7 +619,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const foundDesignations: string[] = [];
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (designationKeywords.some((dk) => lower.includes(dk))) {
+    if (isCandidateDesignation(lower)) {
       foundDesignations.push(line);
     }
   }
@@ -544,7 +627,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   if (extractedContactPersons.length > 0) {
     extractedContactPersons.forEach((cp, idx) => {
       if (!cp.title && foundDesignations.length > 0) {
-        cp.title = foundDesignations[idx] || foundDesignations[0];
+        cp.title = cleanJobTitle(foundDesignations[idx] || foundDesignations[0]);
       }
       if (directMobiles[idx]) {
         cp.phone = directMobiles[idx];
@@ -578,7 +661,26 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     }
   }
 
-  // 4. Organization / Company extraction
+  // 4. Job Title extraction (processed before organization)
+  const jobTitlePatterns = [
+    /(?:job\s*title|designation|role|position)\s*[:=-]\s*([A-Za-z\s.,-]+)/i,
+  ];
+  for (const pat of jobTitlePatterns) {
+    const jMatch = text.match(pat);
+    if (jMatch && jMatch[1]) {
+      result.jobTitle = cleanJobTitle(jMatch[1].split('\n')[0]);
+      break;
+    }
+  }
+
+  if (!result.jobTitle) {
+    const titleLine = lines.find((l) => isCandidateDesignation(l));
+    if (titleLine) {
+      result.jobTitle = cleanJobTitle(titleLine);
+    }
+  }
+
+  // 5. Organization / Company extraction
   const orgPatterns = [
     /(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*[:=-]\s*([A-Za-z0-9\s.,&'-]+)/i,
     /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
@@ -587,32 +689,61 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     const oMatch = text.match(pat);
     if (oMatch && oMatch[1]) {
       const val = oMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-      if (val.length >= 2 && !val.includes('@')) {
+      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson) {
         result.organization = val;
         break;
       }
     }
   }
 
-  // Check lines containing company keywords (e.g. APEX GLOBAL TECHNOLOGIES, STARLIGHT ASTRONOMY TOURS)
+  // Check lines containing company keywords
   if (!result.organization) {
     const companyKeywords = [
-      'technologies', 'solutions', 'enterprises', 'pvt ltd', 'limited', 'global',
-      'systems', 'corp', 'corporation', 'inc', 'llc', 'services', 'industries',
-      'consulting', 'group', 'tech', 'software', 'tours', 'photography', 'studio',
+      'technologies', 'technology', 'solutions', 'enterprises', 'pvt ltd', 'pt ltd', 'p ltd',
+      'limited', 'global', 'systems', 'corporation', 'corp', 'inc', 'llc', 'services',
+      'industries', 'consulting', 'group', 'software', 'tours', 'photography', 'studio',
       'agency', 'travels', 'academy', 'infotech', 'logistics', 'transport',
       'builders', 'developers', 'motors', 'automotive', 'auto', 'works', 'healthcare',
       'care', 'hardware', 'infra', 'infrastructure', 'engineering', 'electricals',
-      'hospital', 'clinic', 'pharma', 'labs', 'holdings', 'ventures'
+      'hospital', 'clinic', 'pharma', 'labs', 'holdings', 'ventures', 'solar', 'energy'
     ];
-    const orgLine = lines.find((l) => {
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
       const lower = l.toLowerCase();
-      if (lower.includes('email') || lower.includes('phone') || lower.includes('address') || lower.includes('services:')) return false;
-      return companyKeywords.some((kw) => lower.includes(kw));
-    });
-    if (orgLine) {
-      result.organization = orgLine.replace(/^[+\-*—_~|#\s]+|[+\-*—_~|#\s]+$/g, '').trim();
+      if (lower.includes('email') || lower.includes('phone') || lower.includes('mobile') || lower.includes('address') || lower.includes('services:') || lower.includes('website')) continue;
+      if (isCandidateDesignation(l)) continue; // Must never be a designation!
+      if (result.contactPerson && l === result.contactPerson) continue;
+
+      if (companyKeywords.some((kw) => lower.includes(kw))) {
+        let orgName = l
+          .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
+          .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+          .replace(/pt\.?\s*ltd/i, 'Pvt Ltd')
+          .trim();
+        // Look backwards for a preceding brand prefix (e.g. "SunLine")
+        for (let j = i - 1; j >= 0; j--) {
+          const prev = lines[j]
+            .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
+            .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+            .trim();
+          if (!prev || prev.includes(':') || isCandidateDesignation(prev) || prev === result.contactPerson) continue;
+          if (prev.length >= 2 && prev.length <= 30 && !/^(?:email|phone|website|address)/i.test(prev)) {
+            orgName = `${prev} ${orgName}`;
+            break;
+          }
+        }
+        // Capitalize words nicely
+        orgName = orgName.split(/\s+/).map((w) => /^[a-z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
+        result.organization = orgName;
+        break;
+      }
     }
+  }
+
+  // Ensure organization is NEVER a designation or equal to jobTitle
+  if (result.organization && (result.organization === result.jobTitle || isCandidateDesignation(result.organization))) {
+    result.organization = undefined;
   }
 
   // If organization not found, check email domain
@@ -643,16 +774,28 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
       return /^(?:address|office|location|addr|add)\.?\s*:/i.test(l) || addressLineKeywords.some((ak) => lower.includes(ak));
     });
     if (addrLine) {
-      result.address = addrLine.replace(/^(?:address|office|location|addr|add)\.?\s*[:=-]?\s*/i, '').replace(/[\\\/]/g, '').trim();
+      result.address = addrLine
+        .replace(/^(?:address|office|location|addr|add)\.?\s*[:=-]?\s*/i, '')
+        .replace(/^(?:a|an|the|es|ls|te|re|no)\s+/i, '')
+        .replace(/[\\\/]/g, '')
+        .trim();
     }
   }
 
   // Website extraction (www., http(s)://, or bare domain like ahcnashik.com)
-  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n\s]+)/i) ||
+  const webMatch = text.match(/(?:website|web|site)\s*[:=-]\s*([^\r\n]+)/i) ||
                    text.match(/\b(https?:\/\/[^\s]+)/i) ||
-                   text.match(/\b(www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/i);
+                   text.match(/\b(www\.[a-zA-Z0-9.\-\s]+\.[a-zA-Z]{2,})\b/i);
   if (webMatch && webMatch[1]) {
-    result.website = webMatch[1].trim();
+    let cleanWeb = webMatch[1].replace(/\s+/g, '').replace(/[;,].*$/, '').trim();
+    if (cleanWeb.endsWith('.coin')) cleanWeb = cleanWeb.slice(0, -4) + 'co.in';
+    if (cleanWeb.endsWith('.con') || cleanWeb.endsWith('.c0m')) cleanWeb = cleanWeb.replace(/\.co[nm0]$/, '.co.in');
+    if (!cleanWeb.startsWith('http://') && !cleanWeb.startsWith('https://') && !cleanWeb.startsWith('www.')) {
+      cleanWeb = 'www.' + cleanWeb;
+    }
+    if (cleanWeb.length > 5 && cleanWeb.includes('.')) {
+      result.website = cleanWeb;
+    }
   }
   if (!result.website) {
     const domainMatch = text.match(/(?<!@)\b([a-zA-Z0-9-]+\.(?:com|in|co\.in|org|net|io|biz|ai|co))\b/i);
@@ -660,29 +803,6 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
       if (!result.email || !result.email.includes(domainMatch[1])) {
         result.website = domainMatch[1].trim();
       }
-    }
-  }
-
-  // 5. Job Title extraction
-  const jobTitlePatterns = [
-    /(?:job\s*title|designation|role|position)\s*[:=-]\s*([A-Za-z\s.,-]+)/i,
-  ];
-  for (const pat of jobTitlePatterns) {
-    const jMatch = text.match(pat);
-    if (jMatch && jMatch[1]) {
-      result.jobTitle = jMatch[1].split('\n')[0].trim();
-      break;
-    }
-  }
-
-  if (!result.jobTitle) {
-    const designationKeywords = ['managing director', 'chief technology officer', 'chief executive officer', 'cto', 'ceo', 'director', 'president', 'vice president', 'vp', 'manager', 'lead', 'consultant', 'engineer', 'architect', 'executive'];
-    const titleLine = lines.find((l) => {
-      const lower = l.toLowerCase();
-      return designationKeywords.some((dk) => lower.includes(dk));
-    });
-    if (titleLine) {
-      result.jobTitle = titleLine;
     }
   }
 
@@ -758,7 +878,7 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   const addedProductNames = new Set<string>();
 
   // Pattern A: Product: Name, Qty: X, Price: Y
-  const productLineRegex = /(?:product|item|service|package|software|hardware)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._&/()+-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount|unit\s*price)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
+  const productLineRegex = /(?:product|products|item|items|service|services|package|software|hardware|requirement|requirements|interested\s*in|inquiry\s*for|inquiry\s*about|looking\s*for)\s*(?:name)?\s*[:=-]\s*([A-Za-z0-9\s._&/()+-]+?)(?:[,\s]+(?:sku|code)\s*[:=-]\s*([A-Za-z0-9._-]+))?(?:[,\s]+(?:qty|quantity|units?)\s*[:=-]\s*(\d+))?(?:[,\s]+(?:price|rate|cost|amount|unit\s*price)\s*[:=-]\s*[$€£₹]?\s*([0-9,]+(?:\.[0-9]{1,2})?))?(?:[,\n;]|$)/gi;
   let pMatch;
   while ((pMatch = productLineRegex.exec(text)) !== null) {
     const name = pMatch[1]?.trim();

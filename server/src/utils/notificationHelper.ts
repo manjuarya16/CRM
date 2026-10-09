@@ -1,4 +1,5 @@
 import { createActivityNotification } from "@/services/notificationService";
+import { SseService } from "@/services/sse.service";
 import { logger } from "@/utils/logger";
 
 export const notifyCRMActivity = async ({
@@ -28,6 +29,21 @@ export const notifyCRMActivity = async ({
       userId: userId ?? null,
       createdBy: createdBy ?? null,
     });
+
+    // Real-time SSE push for notification badge & alert
+    SseService.emitNotificationEvent({
+      userId: userId ?? undefined,
+      notification: { title, message, module, entityId, actionType },
+    });
+
+    // Real-time SSE push for leads Kanban / Table
+    if (module === 'lead' || module === 'leads') {
+      const eventType = actionType === 'deleted' ? 'lead:deleted' : (actionType === 'created' ? 'lead:created' : 'lead:updated');
+      SseService.emitLeadEvent(eventType, {
+        id: entityId,
+        actionType,
+      });
+    }
   } catch (error) {
     logger.warn({ error, title, module }, "notifyCRMActivity failed silently without blocking main transaction");
   }

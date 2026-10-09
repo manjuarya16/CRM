@@ -28,12 +28,16 @@ import mailRoutes from '@/routes/mail.routes';
 import dashboardRoutes from '@/routes/dashboard.routes';
 import notificationRoutes from '@/routes/notification.routes';
 import whatsappRoutes from '@/routes/whatsapp.routes';
+import realtimeRoutes from '@/routes/realtime.routes';
 
 const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Real-time Event Stream (SSE)
+router.use('/realtime', realtimeRoutes);
 
 // Core Modules
 router.use('/dashboard', dashboardRoutes);

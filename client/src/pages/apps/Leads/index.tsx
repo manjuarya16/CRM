@@ -6,6 +6,7 @@ import { ILead, ILeadStage } from "@/interface";
 import { getRottenInfo } from "@/utils/rottenHelper";
 import API from "@/config";
 import { usePermission } from "@/hooks/usePermission";
+import { realtimeService } from "@/services/realtimeService";
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -98,6 +99,38 @@ const LeadsPage: React.FC = () => {
       fetchLeads(page, perPage, search, filterForm);
     }
   }, [selectedPipelineId, viewMode, page, perPage]);
+
+  // Real-time Push via SSE + Tab Focus sync (Zero continuous polling)
+  useEffect(() => {
+    // 1. Listen to real-time SSE push events (fires instantly <1s when lead is created/updated from email)
+    const cleanupRealtime = realtimeService.onLeadChange(() => {
+      if (selectedPipelineId !== "") {
+        if (viewMode === "kanban") {
+          fetchKanbanLeads(Number(selectedPipelineId), search, filterForm);
+        } else {
+          fetchLeads(page, perPage, search, filterForm);
+        }
+      }
+    });
+
+    // 2. Sync once when user switches back to this tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && selectedPipelineId !== "") {
+        if (viewMode === "kanban") {
+          fetchKanbanLeads(Number(selectedPipelineId), search, filterForm);
+        } else {
+          fetchLeads(page, perPage, search, filterForm);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cleanupRealtime();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedPipelineId, viewMode, page, perPage, search, filterForm, fetchKanbanLeads, fetchLeads]);
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();

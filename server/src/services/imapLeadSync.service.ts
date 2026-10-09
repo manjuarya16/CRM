@@ -7,6 +7,7 @@ import { pool } from '@/config/db';
 import { logger } from '@/utils/logger';
 import { configService } from '@/services/configService';
 import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData, recognizeImageWithAutoOrientation } from '@/utils/documentParser';
+import { SseService } from '@/services/sse.service';
 
 export interface ImapAccountConfig {
   enabled: boolean;
@@ -323,7 +324,8 @@ export class ImapLeadSyncService {
       // Immediately process any messages waiting since last watermark
       await this.triggerPersistentSync();
 
-      // Gentle liveness interval every 60s
+      // Fast sync heartbeat: every 15s check on the active persistent socket
+      // Guarantees lead creation within 15-20 seconds even if Gmail push is delayed
       if (!this.livenessInterval) {
         this.livenessInterval = setInterval(async () => {
           if (!this.persistentClient || !this.persistentClient.usable) {
@@ -331,8 +333,10 @@ export class ImapLeadSyncService {
             this.startPersistentSync().catch((err) => {
               logger.warn(`[ImapSync] Liveness reconnect failed: ${err.message}`);
             });
+          } else if (!this.isProcessing) {
+            this.triggerPersistentSync().catch(() => {});
           }
-        }, 60 * 1000);
+        }, 15 * 1000);
       }
     } catch (err: any) {
       logger.error(`[ImapSync] Persistent IMAP connection failed: ${err.message}`);
@@ -422,7 +426,7 @@ export class ImapLeadSyncService {
 
       // Initialize watermark to highest UID if not set, ignoring all historical backlog
       if (!lastUid || lastUid <= 0) {
-        const allUids = await client.search({ all: true }).catch(() => []);
+        const allUids = await client.search({ all: true }, { uid: true }).catch(() => []);
         if (Array.isArray(allUids) && allUids.length > 0) {
           lastUid = allUids[allUids.length - 1];
           await configService.saveConfigs({ 'email.imap.account.last_uid': String(lastUid) });
@@ -431,19 +435,39 @@ export class ImapLeadSyncService {
         }
       }
 
+      // Refresh mailbox status with Gmail server to guarantee latest server state and uidNext
+      await client.status('INBOX', { messages: true, uidNext: true }).catch(() => {});
+
       // 2. Search STRICTLY for messages with UID > lastUid (strictly new emails only!)
       const searchRange = `${lastUid + 1}:*`;
-      const searchRes = await client.search({ uid: searchRange }).catch(() => []);
-      const rawUids = (Array.isArray(searchRes) ? searchRes : [])
-        .filter((u: number) => u > lastUid)
-        .sort((a: number, b: number) => a - b);
+      let rawUids: number[] = [];
+      try {
+        const searchRes = await client.search({ uid: searchRange }, { uid: true });
+        if (Array.isArray(searchRes)) {
+          rawUids = searchRes.filter((u: number) => u > lastUid).sort((a: number, b: number) => a - b);
+        }
+      } catch (err: any) {
+        logger.warn(`[ImapSync] Search with range ${searchRange} error: ${err.message}`);
+      }
+
+      // Fallback: If search returned nothing, use fetch to inspect any messages above lastUid
+      if (rawUids.length === 0) {
+        try {
+          for await (const msg of client.fetch(`${lastUid + 1}:*`, { uid: true }, { uid: true })) {
+            if (msg.uid && msg.uid > lastUid && !rawUids.includes(msg.uid)) {
+              rawUids.push(msg.uid);
+            }
+          }
+          rawUids.sort((a, b) => a - b);
+        } catch { }
+      }
 
       if (!rawUids || rawUids.length === 0) {
         logger.info(`[ImapSync] No new emails received since UID #${lastUid}`);
         return { processedCount: 0, leadsCreatedCount: 0 };
       }
 
-      logger.info(`[ImapSync] Found ${rawUids.length} brand-new email(s) since UID #${lastUid} to process`);
+      logger.info(`[ImapSync] Found ${rawUids.length} brand-new email(s) since UID #${lastUid} to process: [${rawUids.join(', ')}]`);
 
       let highestProcessedUid = lastUid;
 
@@ -451,18 +475,12 @@ export class ImapLeadSyncService {
         try {
           highestProcessedUid = Math.max(highestProcessedUid, uid);
 
-          // Fetch complete raw email RFC822 message buffer
-          const rawMessage = await client.download(String(uid));
-          if (!rawMessage || !rawMessage.content) {
+          // Fetch complete raw email RFC822 message buffer via UID
+          const rawMessage = await client.fetchOne(String(uid), { source: true }, { uid: true });
+          if (!rawMessage || !rawMessage.source) {
             continue;
           }
-
-          // Read download stream into Buffer
-          const chunks: Buffer[] = [];
-          for await (const chunk of rawMessage.content) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          const emailBuffer = Buffer.concat(chunks);
+          const emailBuffer = rawMessage.source;
 
           // Parse MIME message
           const parsed = await simpleParser(emailBuffer);
@@ -472,7 +490,7 @@ export class ImapLeadSyncService {
           const subj = parsed.subject || '';
           if (this.isAutomatedOrSystemEmail(fromAddr, subj)) {
             logger.info(`[ImapSync] Skipping automated/notification email from ${fromAddr}: "${subj}"`);
-            await client.messageFlagsAdd(String(uid), ['\\Seen']);
+            await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
             processedCount++;
             continue;
           }
@@ -485,7 +503,7 @@ export class ImapLeadSyncService {
           }
 
           // Mark message as seen/read on IMAP server
-          await client.messageFlagsAdd(String(uid), ['\\Seen']);
+          await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
         } catch (msgErr: any) {
           highestProcessedUid = Math.max(highestProcessedUid, uid);
           logger.error(`[ImapSync] Error processing message UID ${uid}: ${msgErr.message}`);
@@ -684,7 +702,7 @@ export class ImapLeadSyncService {
         rawText: `${attachmentCorpus}\n\n${textBody}`,
       };
 
-      if (!extractedLeadData.email && fromAddress) {
+      if (!extractedLeadData.email && !extractedLeadData.contactPerson && fromAddress) {
         extractedLeadData.email = fromAddress;
       }
       combinedCorpus = `${attachmentCorpus}\n\nSubject: ${subject}\nEmail Body:\n${textBody}`;
@@ -853,17 +871,19 @@ export class ImapLeadSyncService {
     // Use passed extracted data or run comprehensive document parser
     const extracted: ExtractedLeadData = extractedData || parseLeadDocumentText(combinedCorpus, subject);
 
-    // Fallbacks: Only fallback contactPerson to fromName if there are NO attachments
-    if (!extracted.email && fromEmail) extracted.email = fromEmail;
+    // Fallbacks: Only fallback contactPerson & email to sender if there are NO attachments and no contactPerson extracted
     if (!extracted.contactPerson && !hasAttachments && fromName) {
       extracted.contactPerson = fromName;
+    }
+    if (!extracted.email && !hasAttachments && fromEmail) {
+      extracted.email = fromEmail;
     }
 
     // Contact Persons list: only create contact person if valid contact extracted, or if direct text email
     const contactPersons = extracted.contactPersons && extracted.contactPersons.length > 0
       ? extracted.contactPersons
       : (extracted.contactPerson
-          ? [{ name: extracted.contactPerson, phone: extracted.phone, email: extracted.email || fromEmail, title: extracted.jobTitle }]
+          ? [{ name: extracted.contactPerson, phone: extracted.phone, email: extracted.email, title: extracted.jobTitle }]
           : (!hasAttachments && fromName
               ? [{ name: fromName, phone: extracted.phone, email: extracted.email || fromEmail, title: extracted.jobTitle }]
               : []));
@@ -898,7 +918,7 @@ export class ImapLeadSyncService {
       for (let i = 0; i < contactPersons.length; i++) {
         const cp = contactPersons[i];
         const cpName = cp.name.trim();
-        const cpEmail = cp.email?.trim() || (i === 0 ? (extracted.email || fromEmail) : undefined);
+        const cpEmail = cp.email?.trim() || (i === 0 ? extracted.email : undefined);
         const cpPhone = cp.phone?.trim();
         const cpTitle = cp.title || (i === 0 ? extracted.jobTitle : undefined);
 
@@ -911,7 +931,11 @@ export class ImapLeadSyncService {
             [`%${cpEmail}%`]
           );
           if (emailCheck.rows.length > 0) {
-            curPersonId = emailCheck.rows[0].id;
+            const foundName = (emailCheck.rows[0].name || '').toLowerCase().trim();
+            const candName = cpName.toLowerCase().trim();
+            if (!candName || foundName === candName || foundName.includes(candName) || candName.includes(foundName)) {
+              curPersonId = emailCheck.rows[0].id;
+            }
           }
         }
 
@@ -924,7 +948,11 @@ export class ImapLeadSyncService {
             [pattern]
           );
           if (phoneCheck.rows.length > 0) {
-            curPersonId = phoneCheck.rows[0].id;
+            const foundName = (phoneCheck.rows[0].name || '').toLowerCase().trim();
+            const candName = cpName.toLowerCase().trim();
+            if (!candName || foundName === candName || foundName.includes(candName) || candName.includes(foundName)) {
+              curPersonId = phoneCheck.rows[0].id;
+            }
           }
         }
 
@@ -1064,6 +1092,35 @@ export class ImapLeadSyncService {
 
       await client.query('COMMIT');
       logger.info(`[ImapSync] Successfully created Lead #${leadId} ("${leadTitle}") from email`);
+
+      // Real-time Push via SSE (instant Kanban update & notification update)
+      SseService.emitLeadEvent('lead:created', {
+        id: leadId,
+        leadId,
+        title: leadTitle,
+        pipelineId,
+        stageId,
+        personId: primaryPersonId,
+        organizationId,
+      });
+
+      try {
+        await client.query(
+          'SELECT public.fn_create_notification($1, $2, $3, $4, $5, $6, $7)',
+          [null, 'New Inbound Lead', `New lead "${leadTitle}" received from email`, 'leads', leadId, 'created', null]
+        );
+        SseService.emitNotificationEvent({
+          notification: {
+            title: 'New Inbound Lead',
+            message: `New lead "${leadTitle}" received from email`,
+            module: 'leads',
+            entityId: leadId,
+          },
+        });
+      } catch (notifErr: any) {
+        logger.warn(`[ImapSync] Could not create in-app notification: ${notifErr.message}`);
+      }
+
       return { leadId, personId: primaryPersonId, organizationId };
     } catch (err: any) {
       await client.query('ROLLBACK');
