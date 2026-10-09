@@ -32,21 +32,37 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+const handleSaveUser = async (req: any, res: any, next: any) => {
   try {
+    const rawId = (req.params.id && req.params.id !== 'update' && req.params.id !== 'add')
+      ? req.params.id
+      : (req.body.id ?? req.query.id);
+
     const validated = userSaveSchema.parse(req.body);
-    const user = await UserService.save(validated);
-    res.status(201).json({ success: true, data: user });
+    const targetId = rawId ?? validated.id;
+
+    const user = await UserService.save(validated, targetId ? String(targetId) : undefined);
+    const statusCode = targetId ? 200 : 201;
+    res.status(statusCode).json({ success: true, data: user });
   } catch (err) {
     next(err);
   }
-});
+};
 
-router.put('/:id', async (req, res, next) => {
+router.post('/add', handleSaveUser);
+router.post('/', handleSaveUser);
+
+router.put('/update', handleSaveUser);
+router.put('/update/:id', handleSaveUser);
+router.put('/:id', handleSaveUser);
+
+router.delete('/delete/:id', async (req, res, next) => {
   try {
-    const validated = userSaveSchema.parse(req.body);
-    const user = await UserService.save(validated, String(req.params.id));
-    res.json({ success: true, data: user });
+    const deleted = await UserService.delete(String(req.params.id));
+    if (!deleted) {
+      throw new ApiError(404, 'User not found');
+    }
+    res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
     next(err);
   }

@@ -473,7 +473,7 @@ export class DataTransferService {
     // Fetch real existing IDs from the database to ensure the sample is 100% valid for immediate re-import
     // Fetch real existing IDs from the database via procedural functions
     const [orgsDb, usersDb, personsDb, sourcesDb, typesDb, defaultPipelineDb] = await Promise.all([
-      pool.query('SELECT get_all_organizations(null) as result'),
+      pool.query('SELECT public.get_all_organizations($1::text, $2::int, $3::int) as result', [null, 10, 0]),
       pool.query('SELECT get_all_users(null) as result'),
       pool.query('SELECT get_all_persons(null) as result'),
       pool.query('SELECT * FROM public.fn_get_lead_sources()'),
@@ -481,9 +481,9 @@ export class DataTransferService {
       pool.query('SELECT * FROM public.fn_get_lead_pipelines()'),
     ]);
 
-    const organizationsList = orgsDb.rows[0]?.result || [];
-    const usersList = usersDb.rows[0]?.result || [];
-    const personsList = personsDb.rows[0]?.result || [];
+    const organizationsList = orgsDb.rows[0]?.result?.rows || orgsDb.rows[0]?.result || [];
+    const usersList = Array.isArray(usersDb.rows[0]?.result) ? usersDb.rows[0]?.result : (usersDb.rows[0]?.result?.rows || []);
+    const personsList = personsDb.rows[0]?.result?.rows || personsDb.rows[0]?.result || [];
     const sourcesList = sourcesDb.rows || [];
     const typesList = typesDb.rows || [];
     const pipelinesList = defaultPipelineDb.rows || [];

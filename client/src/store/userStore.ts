@@ -110,7 +110,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   updateUser: async (id: number, userData: any) => {
     set({ loading: true });
     try {
-      const response = await API.put("/users/update/", { id, ...userData });
+      const response = await API.put(`/users/${id}`, { id, ...userData });
       if (response.data?.success) {
         set((state) => ({
           users: state.users.map((u) =>

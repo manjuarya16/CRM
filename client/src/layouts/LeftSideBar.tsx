@@ -165,7 +165,15 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
       <div className="app-menu">
         <Link to="/" className="logo-box flex items-center gap-2.5 px-4 h-16">
           {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="h-9 max-w-[160px] object-contain" />
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className={
+                isCondensed
+                  ? "h-9 w-9 max-w-[42px] object-contain"
+                  : "h-11 max-h-12 max-w-[185px] w-auto object-contain transition-all"
+              }
+            />
           ) : (
             <div className="flex items-center gap-2">
               <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
