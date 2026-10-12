@@ -724,6 +724,14 @@ const CreateQuotePage: React.FC = () => {
           </div>
         </div>
 
+        {/* ⚙️ CUSTOM ATTRIBUTES (renders only when custom attributes exist) */}
+        <DynamicAttributeFields
+          entityType="quotes"
+          values={customAttributes}
+          onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          containerClassName="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6"
+        />
+
         {/* 📦 CARD 3: LINE ITEMS */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
@@ -1032,38 +1040,6 @@ const CreateQuotePage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* ⚙️ CARD 5: CUSTOM ATTRIBUTES */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6">
-          <DynamicAttributeFields
-            entityType="quotes"
-            values={customAttributes}
-            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-          />
-        </div>
-
-        {/* BOTTOM ACTION BUTTONS */}
-        <div className="flex items-center justify-end gap-3 pt-4">
-          <Link
-            to="/quotes"
-            className="px-5 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs sm:text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-          >
-            Cancel
-          </Link>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-6 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
-          >
-            {saving ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <i className="mgc_check_line text-base"></i>
-            )}
-            <span>Save Quote</span>
-          </button>
         </div>
       </form>
     </div>

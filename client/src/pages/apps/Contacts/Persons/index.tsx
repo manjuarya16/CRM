@@ -18,6 +18,25 @@ const PersonsPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
+  const AVATAR_COLORS = [
+    "bg-purple-600 text-white",
+    "bg-amber-600 text-white",
+    "bg-teal-600 text-white",
+    "bg-blue-600 text-white",
+    "bg-emerald-600 text-white",
+    "bg-rose-500 text-white",
+    "bg-indigo-600 text-white",
+    "bg-cyan-600 text-white",
+  ];
+
+  const getInitials = (name?: string) => {
+    if (!name) return "PR";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   useEffect(() => {
     loadPersons();
@@ -266,31 +285,208 @@ const PersonsPage: React.FC = () => {
   const endIndex = total > 0 ? Math.min(page * perPage, total) : 0;
   const isAllSelected = persons.length > 0 && selectedIds.length === persons.length;
 
-  return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Breadcrumbs and Top Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <nav className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-            <Link to="/dashboard" className="text-[#0088cc] hover:underline">
-              Dashboard
-            </Link>{" "}
-            /{" "}
-            <Link to="/contacts/persons" className="text-[#0088cc] hover:underline">
-              Contacts
-            </Link>{" "}
-            / <span className="text-gray-700 dark:text-gray-300">Persons</span>
-          </nav>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-            Persons
-          </h1>
+  const renderPersonCard = (person: IPerson, idx: number) => {
+    const isSelected = selectedIds.includes(person.id);
+    const emailList = parseItems(person.emails);
+    const contactList = parseItems(person.contact_numbers);
+    const avatarColor = AVATAR_COLORS[(person.id || idx) % AVATAR_COLORS.length];
+
+    return (
+      <div
+        key={person.id}
+        className={`bg-white dark:bg-gray-800 rounded-2xl p-4 border transition-all flex flex-col justify-between gap-3 ${
+          isSelected
+            ? "border-[#0088cc] shadow-sm bg-blue-50/20 dark:bg-blue-900/10"
+            : "border-gray-200 dark:border-gray-700/80 shadow-2xs hover:shadow-xs"
+        }`}
+      >
+        {/* Top Row: Checkbox + Avatar + Name + ID Badge */}
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => handleSelectOne(person.id)}
+              className="mt-1 rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer shrink-0"
+            />
+            <Link
+              to={canView ? `/contacts/persons/view/${person.id}` : canEdit ? `/contacts/persons/edit/${person.id}` : "#"}
+              className="flex items-start gap-2.5 min-w-0 flex-1 group"
+            >
+              <span className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${avatarColor}`}>
+                {getInitials(person.name)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] dark:group-hover:text-[#38bdf8] truncate leading-tight">
+                  {person.name}
+                </p>
+                {person.job_title ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
+                    {person.job_title}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-0.5">Contact #{person.id}</p>
+                )}
+              </div>
+            </Link>
+          </div>
+
+          <div className="text-right shrink-0">
+            <span className="text-xs font-mono font-bold text-[#0088cc] dark:text-[#38bdf8] bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-100 dark:border-sky-900/50">
+              #PR-{person.id}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Middle Body: Full Details as shown on desktop table (All Emails, All Contacts, Organization) */}
+        <div className="space-y-2.5 py-2.5 border-y border-gray-100 dark:border-gray-700/60 text-xs">
+          {/* All Emails */}
+          <div className="flex items-start gap-2">
+            <i className="mgc_mail_line text-sm text-gray-400 mt-0.5 shrink-0"></i>
+            <div className="min-w-0 flex-1">
+              {emailList.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  {emailList.map((item, index) => (
+                    <div key={index} className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium text-gray-800 dark:text-gray-200">{item.value}</span>
+                      {item.label && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-gray-700/70 text-gray-500 dark:text-gray-400 font-medium">
+                          {item.label}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-gray-400 italic">No email</span>
+              )}
+            </div>
+          </div>
+
+          {/* All Contact Numbers */}
+          <div className="flex items-start gap-2">
+            <i className="mgc_phone_line text-sm text-gray-400 mt-0.5 shrink-0"></i>
+            <div className="min-w-0 flex-1">
+              {contactList.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  {contactList.map((item, index) => (
+                    <div key={index} className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-[#0e90d9] dark:text-[#38bdf8]">{item.value}</span>
+                      {item.label && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-50 dark:bg-sky-950/60 text-[#0284c7] dark:text-sky-300 font-medium">
+                          {item.label}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-gray-400 italic">No phone</span>
+              )}
+            </div>
+          </div>
+
+          {/* Organization Info */}
+          {person.organization_name && (
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+              <i className="mgc_building_2_line text-sm text-gray-400 shrink-0"></i>
+              <span className="font-medium truncate">{person.organization_name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Row: Organization / Job Pill + Sales Owner + Quick Actions */}
+        <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+          <div className="min-w-0">
+            {person.organization_name ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800 truncate max-w-[130px] sm:max-w-[160px]" title={person.organization_name}>
+                <i className="mgc_building_2_line text-xs shrink-0"></i>
+                <span className="truncate">{person.organization_name}</span>
+              </span>
+            ) : person.job_title ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 truncate max-w-[130px] sm:max-w-[160px]">
+                <span className="truncate">{person.job_title}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                Individual
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs">
+            <span className="truncate max-w-[85px] sm:max-w-[110px] flex items-center gap-1" title={person.sales_owner_name || "Unassigned"}>
+              <i className="mgc_user_3_line text-xs shrink-0"></i>
+              <span className="truncate">{person.sales_owner_name || "Unassigned"}</span>
+            </span>
+
+            <div className="flex items-center gap-0.5 shrink-0 text-gray-400">
+              {canView && (
+                <Link
+                  to={`/contacts/persons/view/${person.id}`}
+                  className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                  title="View Person"
+                >
+                  <i className="mgc_eye_line text-sm"></i>
+                </Link>
+              )}
+              {canEdit && (
+                <Link
+                  to={`/contacts/persons/edit/${person.id}`}
+                  className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                  title="Edit Person"
+                >
+                  <i className="mgc_edit_line text-sm"></i>
+                </Link>
+              )}
+              {canDelete && (
+                <button
+                  onClick={() => handleDelete(person)}
+                  className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                  title="Delete Person"
+                >
+                  <i className="mgc_delete_line text-sm"></i>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
+          Contacts
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Persons</span>
+      </div>
+
+      {/* 🏷️ Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            Persons
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            Manage your individual client contacts and relationships
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition"
             >
               <i className="mgc_delete_line text-base mr-1.5"></i>
               Delete ({selectedIds.length})
@@ -299,15 +495,16 @@ const PersonsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 transition-colors shadow-sm"
+            className="inline-flex items-center px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 transition shadow-2xs"
           >
+            <i className="mgc_download_line text-base mr-1.5 text-gray-500"></i>
             Export
           </button>
           {total > 0 && canDelete && (
             <button
               type="button"
               onClick={handleClearAll}
-              className="inline-flex items-center px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm font-medium rounded-lg border border-red-200 dark:border-red-800 transition-colors shadow-sm"
+              className="inline-flex items-center px-3.5 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs sm:text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 transition shadow-2xs"
             >
               <i className="mgc_delete_line text-base mr-1.5"></i>
               Clear All
@@ -316,20 +513,20 @@ const PersonsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/contacts/persons/create"
-              className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
             >
+              <i className="mgc_add_line text-base"></i>
               Create Person
             </Link>
           )}
         </div>
-
       </div>
 
       {/* Main Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        {/* Toolbar Header (Search, Filter, Per Page, Pagination) */}
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4">
-          <form onSubmit={handleFilter} className="flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
+        {/* Toolbar Header (Search, View Mode, Per Page, Pagination) */}
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+          <form onSubmit={handleFilter} className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                 <i className="mgc_search_line text-base"></i>
@@ -338,39 +535,65 @@ const PersonsPage: React.FC = () => {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search"
-                className="pl-9 pr-3.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] w-56 dark:text-gray-200 placeholder-gray-400"
+                placeholder="Search persons..."
+                className="pl-9 pr-3.5 py-2 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 w-44 sm:w-60 dark:text-gray-200 placeholder-gray-400 transition"
               />
             </div>
             <button
               type="submit"
-              className="px-4 py-1.5 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold text-sm rounded-lg border border-[#bae6fd] transition-colors"
+              className="px-3.5 py-2 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold text-xs sm:text-sm rounded-xl border border-[#bae6fd] transition shadow-2xs"
             >
               Filter
             </button>
           </form>
 
-          {/* Right side: Per Page & Pagination controls */}
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-            <div className="flex items-center gap-2">
-              <span>Per Page</span>
+          {/* Right side: View Mode, Per Page & Pagination controls */}
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2.5 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
                 <option value={50}>50</option>
               </select>
             </div>
-
-            <span>
-              {startIndex} - {endIndex} of {total}
-            </span>
 
             <div className="flex items-center gap-1">
               <button
@@ -395,117 +618,135 @@ const PersonsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
-                <th className="py-3.5 px-4 w-10 text-center">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={handleSelectAll}
-                    className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
-                  />
-                </th>
-                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">ID</th>
-                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Name</th>
-                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Emails</th>
-                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Contact Numbers</th>
-                <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Organization Name</th>
-                <th className="py-3.5 px-4 font-semibold text-right text-gray-600 dark:text-gray-300"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-14 text-gray-400">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0088cc] border-t-transparent"></div>
-                  </td>
-                </tr>
-              ) : persons.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="text-center py-16 text-gray-400 dark:text-gray-500 text-sm font-medium"
-                  >
-                    No Records Available.
-                  </td>
-                </tr>
-              ) : (
-                persons.map((person) => {
-                  const isSelected = selectedIds.includes(person.id);
-                  return (
-                    <tr
-                      key={person.id}
-                      className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors ${
-                        isSelected ? "bg-blue-50/30 dark:bg-blue-900/10" : ""
-                      }`}
-                    >
-                      <td className="py-3.5 px-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleSelectOne(person.id)}
-                          className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
-                        />
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-500 dark:text-gray-400 font-medium">
-                        {person.id}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-[#0088cc]">
-                        <Link
-                          to={`/contacts/persons/view/${person.id}`}
-                          className="hover:underline"
-                        >
-                          {person.name}
-                        </Link>
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
-                        {formatEmails(person.emails)}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
-                        {formatContacts(person.contact_numbers)}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
-                        {person.organization_name || "-"}
-                      </td>
-                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
-                        {canView && (
+        {/* 📊 Summary Sub-Header */}
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-50/70 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700/80 text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            Showing <strong className="text-gray-800 dark:text-gray-200">{persons.length}</strong> {persons.length === 1 ? "person" : "persons"}
+          </span>
+          <span>
+            {startIndex} - {endIndex} of <strong className="text-gray-800 dark:text-gray-200">{total}</strong>
+          </span>
+        </div>
+
+        {/* LOADING & EMPTY STATES */}
+        {loading ? (
+          <div className="text-center py-16 text-gray-400">
+            <div className="inline-block animate-spin rounded-full h-7 w-7 border-2 border-[#0088cc] border-t-transparent"></div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Loading persons...</p>
+          </div>
+        ) : persons.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 dark:text-gray-500 text-sm font-medium">
+            No Records Available.
+          </div>
+        ) : viewMode === "cards" ? (
+          /* 📱 CARDS VIEW (Full details matching desktop info in clean responsive cards) */
+          <div className="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {persons.map((person, idx) => renderPersonCard(person, idx))}
+          </div>
+        ) : (
+          /* 📋 TABLE VIEW (With Full-Detail Mobile Cards Fallback) */
+          <>
+            {/* Mobile Fallback Cards for Table View */}
+            <div className="block md:hidden p-3 space-y-3">
+              {persons.map((person, idx) => renderPersonCard(person, idx))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
+                    <th className="py-3.5 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
+                      />
+                    </th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">ID</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Name</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Emails</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Contact Numbers</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Organization Name</th>
+                    <th className="py-3.5 px-4 font-semibold text-right text-gray-600 dark:text-gray-300">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {persons.map((person) => {
+                    const isSelected = selectedIds.includes(person.id);
+                    return (
+                      <tr
+                        key={person.id}
+                        className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors ${
+                          isSelected ? "bg-blue-50/30 dark:bg-blue-900/10" : ""
+                        }`}
+                      >
+                        <td className="py-3.5 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectOne(person.id)}
+                            className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-500 dark:text-gray-400 font-medium">
+                          {person.id}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-[#0088cc]">
                           <Link
                             to={`/contacts/persons/view/${person.id}`}
-                            className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            title="View Details"
+                            className="hover:underline"
                           >
-                            <i className="mgc_eye_line text-base"></i>
+                            {person.name}
                           </Link>
-                        )}
-                        {canEdit && (
-                          <Link
-                            to={`/contacts/persons/edit/${person.id}`}
-                            className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            title="Edit"
-                          >
-                            <i className="mgc_edit_line text-base"></i>
-                          </Link>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDelete(person)}
-                            className="inline-flex items-center text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
-                            title="Delete"
-                          >
-                            <i className="mgc_delete_line text-base"></i>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
+                          {formatEmails(person.emails)}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
+                          {formatContacts(person.contact_numbers)}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
+                          {person.organization_name || "-"}
+                        </td>
+                        <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          {canView && (
+                            <Link
+                              to={`/contacts/persons/view/${person.id}`}
+                              className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              title="View Details"
+                            >
+                              <i className="mgc_eye_line text-base"></i>
+                            </Link>
+                          )}
+                          {canEdit && (
+                            <Link
+                              to={`/contacts/persons/edit/${person.id}`}
+                              className="inline-flex items-center text-gray-400 hover:text-[#0088cc] p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              title="Edit"
+                            >
+                              <i className="mgc_edit_line text-base"></i>
+                            </Link>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(person)}
+                              className="inline-flex items-center text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
+                              title="Delete"
+                            >
+                              <i className="mgc_delete_line text-base"></i>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

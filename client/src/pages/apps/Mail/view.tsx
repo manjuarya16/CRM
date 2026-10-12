@@ -278,51 +278,65 @@ const MailViewPage: React.FC = () => {
   const senderEmail = email.sender?.email || email.from_email?.email || "";
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
-      {/* Top Header & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/mail" className="text-[#0e90d9] hover:underline">
+          Mail
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Conversation</span>
+      </div>
+
+      {/* 🏷️ Top Header & Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div className="flex items-center gap-3 min-w-0">
           <Link
             to="/mail"
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 hover:text-[#0e90d9] flex items-center justify-center transition shadow-2xs shrink-0"
             title="Back to Mailbox"
           >
-            <i className="mgc_arrow_left_line text-xl"></i>
+            <i className="mgc_arrow_left_line text-lg"></i>
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100 line-clamp-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight truncate">
                 {email.subject || "(No Subject)"}
               </h1>
               {Array.isArray(email.folders) && email.folders.length > 0 && (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-blue-50 text-[#0088cc] dark:bg-blue-900/40 dark:text-blue-300">
+                <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] dark:text-blue-400 font-mono text-xs font-bold border border-blue-100 dark:border-blue-800/60 shrink-0 capitalize">
                   {email.folders[0]}
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5 truncate">
               Conversation with {senderName}
             </p>
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleToggleRead}
-            className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl shadow-2xs flex items-center gap-1.5 transition"
             title="Toggle Read Status"
           >
-            <i className={email.is_read ? "mgc_mail_line" : "mgc_mail_open_line"}></i>
+            <i className={email.is_read ? "mgc_mail_line text-base" : "mgc_mail_open_line text-base"}></i>
             <span>{email.is_read ? "Mark Unread" : "Mark Read"}</span>
           </button>
 
           <button
             onClick={handleDeleteEmail}
-            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg shadow-2xs flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 text-xs sm:text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl shadow-2xs flex items-center gap-1.5 transition"
             title="Move to Trash"
           >
-            <i className="mgc_delete_2_line"></i>
+            <i className="mgc_delete_2_line text-base"></i>
             <span>Trash</span>
           </button>
         </div>
@@ -333,7 +347,7 @@ const MailViewPage: React.FC = () => {
         {/* Left / Center: Conversation Thread (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
           {/* 1. Root Email Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs p-6 space-y-5">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
             {/* Header / Sender details */}
             <div className="flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
               <div className="flex items-center gap-3.5">
@@ -773,7 +787,7 @@ const MailViewPage: React.FC = () => {
         {/* Right: CRM Context Panel (4 Cols) */}
         <div className="lg:col-span-4 space-y-4">
           {/* 1. Contact Person Context Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs p-5 space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
               <div className="flex items-center gap-2">
                 <i className="mgc_user_3_line text-base text-[#0088cc]"></i>
@@ -810,7 +824,7 @@ const MailViewPage: React.FC = () => {
 
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                   <Link
-                    to={`/contacts/persons/${email.person_id}/edit`}
+                    to={`/contacts/persons/view/${email.person_id}`}
                     className="inline-flex items-center gap-1.5 text-xs text-[#0088cc] hover:underline font-medium"
                   >
                     <span>View Contact Profile</span>
@@ -834,7 +848,7 @@ const MailViewPage: React.FC = () => {
                       if (e.target.value) handleLinkPerson(Number(e.target.value));
                     }}
                     disabled={isLinking}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                   >
                     <option value="">-- Select Contact --</option>
                     {persons.map((p) => (
@@ -849,7 +863,7 @@ const MailViewPage: React.FC = () => {
           </div>
 
           {/* 2. Lead Context Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs p-5 space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
               <div className="flex items-center gap-2">
                 <i className="mgc_flag_3_line text-base text-amber-600"></i>

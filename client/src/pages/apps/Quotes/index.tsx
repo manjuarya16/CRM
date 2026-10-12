@@ -788,7 +788,7 @@ const QuotesPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleOpenPrintPreview(quote)}
-                        className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-50 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                        className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-red-50/50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-800/50 hover:text-red-600 dark:hover:text-red-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                         title="Download / Print PDF"
                       >
                         <i className="mgc_pdf_line text-red-500 text-sm shrink-0"></i>
@@ -798,7 +798,7 @@ const QuotesPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleOpenSendEmail(quote)}
-                        className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                        className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800/50 hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                         title="Send Quote to Email"
                       >
                         <i className="mgc_send_line text-emerald-600 text-sm shrink-0"></i>
@@ -808,10 +808,10 @@ const QuotesPage: React.FC = () => {
                       {canEdit && (
                         <Link
                           to={`/quotes/edit/${quote.id}`}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-sky-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-sky-50/50 dark:hover:bg-sky-950/20 hover:border-sky-200 dark:hover:border-sky-800/50 hover:text-[#0088cc] dark:hover:text-sky-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                           title="Edit Quote"
                         >
-                          <i className="mgc_edit_line text-sky-600 text-sm shrink-0"></i>
+                          <i className="mgc_edit_line text-[#0088cc] text-sm shrink-0"></i>
                           <span>Edit Quote</span>
                         </Link>
                       )}
@@ -820,10 +820,10 @@ const QuotesPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleDelete(quote)}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-rose-50/50 dark:hover:bg-rose-950/20 hover:border-rose-200 dark:hover:border-rose-800/50 hover:text-rose-600 dark:hover:text-rose-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                           title="Delete Quote"
                         >
-                          <i className="mgc_delete_line text-sm shrink-0"></i>
+                          <i className="mgc_delete_line text-rose-500 text-sm shrink-0"></i>
                           <span>Delete</span>
                         </button>
                       )}
@@ -1006,7 +1006,7 @@ const QuotesPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenPrintPreview(quote)}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-50 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-red-50/50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-800/50 hover:text-red-600 dark:hover:text-red-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                           title="Download / Print PDF"
                         >
                           <i className="mgc_pdf_line text-red-500 text-sm shrink-0"></i>
@@ -1016,7 +1016,7 @@ const QuotesPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenSendEmail(quote)}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800/50 hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                           title="Send Quote to Email"
                         >
                           <i className="mgc_send_line text-emerald-600 text-sm shrink-0"></i>
@@ -1026,10 +1026,10 @@ const QuotesPage: React.FC = () => {
                         {canEdit && (
                           <Link
                             to={`/quotes/edit/${quote.id}`}
-                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-xs font-semibold hover:bg-blue-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-sky-50/50 dark:hover:bg-sky-950/20 hover:border-sky-200 dark:hover:border-sky-800/50 hover:text-[#0088cc] dark:hover:text-sky-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                             title="Edit Quote"
                           >
-                            <i className="mgc_edit_line text-blue-600 text-sm shrink-0"></i>
+                            <i className="mgc_edit_line text-[#0088cc] text-sm shrink-0"></i>
                             <span>Edit Quote</span>
                           </Link>
                         )}
@@ -1038,10 +1038,10 @@ const QuotesPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleDelete(quote)}
-                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-300 hover:bg-rose-100 active:scale-95 transition shadow-2xs whitespace-nowrap"
+                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-rose-50/50 dark:hover:bg-rose-950/20 hover:border-rose-200 dark:hover:border-rose-800/50 hover:text-rose-600 dark:hover:text-rose-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
                             title="Delete Quote"
                           >
-                            <i className="mgc_delete_line text-sm shrink-0"></i>
+                            <i className="mgc_delete_line text-rose-500 text-sm shrink-0"></i>
                             <span>Delete</span>
                           </button>
                         )}

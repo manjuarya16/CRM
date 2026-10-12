@@ -133,176 +133,220 @@ const CreateOrganizationPage: React.FC = () => {
     }
   };
 
+  const inputCls =
+    "w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-[#0088cc] dark:focus:border-[#0088cc] rounded-xl text-xs sm:text-sm font-medium transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-100 placeholder-gray-400";
+  const labelCls = "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Breadcrumbs & Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <nav className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-            <Link to="/dashboard" className="text-[#0088cc] hover:underline">
-              Dashboard
-            </Link>{" "}
-            /{" "}
-            <Link to="/contacts/persons" className="text-[#0088cc] hover:underline">
-              Contacts
-            </Link>{" "}
-            /{" "}
-            <Link to="/contacts/organizations" className="text-[#0088cc] hover:underline">
-              Organizations
-            </Link>{" "}
-            / <span className="text-gray-700 dark:text-gray-300">Create Organization</span>
-          </nav>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-            Create Organization
-          </h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
+          Contacts
+        </Link>
+        <span>/</span>
+        <Link to="/contacts/organizations" className="text-[#0e90d9] hover:underline">
+          Organizations
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Create Organization</span>
+      </div>
+
+      {/* 🏷️ Page Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/contacts/organizations"
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 hover:text-[#0e90d9] flex items-center justify-center transition shadow-2xs shrink-0"
+            title="Back to Organizations"
+          >
+            <i className="mgc_arrow_left_line text-lg"></i>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                Create Organization
+              </h1>
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] dark:text-blue-400 font-mono text-xs font-bold border border-blue-100 dark:border-blue-800/60 shrink-0">
+                New
+              </span>
+            </div>
+            {formData.name ? (
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
+                {formData.name}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 truncate mt-0.5">
+                Add an enterprise, partner, or company profile
+              </p>
+            )}
+          </div>
         </div>
 
-        <div>
+        <div className="flex items-center gap-3 justify-end shrink-0">
+          <Link
+            to="/contacts/organizations"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
+          >
+            Cancel
+          </Link>
+
           <button
             type="button"
             onClick={handleSubmit}
             disabled={saving}
-            className="inline-flex items-center justify-center px-5 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
           >
             {saving ? (
-              <>
-                <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></span>
-                Saving...
-              </>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              "Save Organization"
+              <i className="mgc_check_line text-base"></i>
             )}
+            <span>Save Organization</span>
           </button>
         </div>
       </div>
 
-      {/* Main Form Card */}
-      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8 space-y-6">
-        {/* Name Field */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            placeholder="Organization Name"
-            value={formData.name}
-            onChange={(e) => {
-              setFormData({ ...formData, name: e.target.value });
-              if (errors.name) setErrors({ ...errors, name: "" });
-            }}
-            className={`w-full px-4 py-2.5 bg-white dark:bg-gray-900 border rounded-lg text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors ${
-              errors.name ? "border-red-500" : "border-gray-300 dark:border-gray-600"
-            }`}
-          />
-          {errors.name && <p className="text-red-500 text-xs mt-1.5">{errors.name}</p>}
-        </div>
-
-        {/* Address Section */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Address
-          </label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left: Textarea */}
+      {/* Main Form Box */}
+      <form noValidate onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#0088cc] flex items-center justify-center font-bold">
+              <i className="mgc_community_line text-lg"></i>
+            </div>
             <div>
-              <textarea
-                rows={7}
-                placeholder="Street address or full address..."
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full h-full min-h-[160px] px-4 py-3 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors resize-none"
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Organization Details
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Company identity, location, and owner</p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {/* Name Field */}
+            <div>
+              <label className={labelCls}>
+                Organization Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Acme Corporation"
+                value={formData.name}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  if (errors.name) setErrors({ ...errors, name: "" });
+                }}
+                className={`${inputCls} ${errors.name ? "!border-red-500 !ring-red-500/20" : ""}`}
               />
+              {errors.name && <p className="text-red-500 text-xs mt-1.5 font-medium">{errors.name}</p>}
             </div>
 
-            {/* Right: Country, State, City, Postcode Stack */}
-            <div className="space-y-3">
+            {/* Address Section */}
+            <div>
+              <label className={labelCls}>
+                Office Address
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left: Textarea */}
+                <div>
+                  <textarea
+                    rows={6}
+                    placeholder="Street address, building, suite..."
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className={`${inputCls} min-h-[140px] resize-none`}
+                  />
+                </div>
+
+                {/* Right: Country, State, City, Postcode */}
+                <div className="space-y-3">
+                  <div>
+                    <select
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">Select Country</option>
+                      {COUNTRIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="State / Region"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      className={inputCls}
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="City"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Postcode / ZIP"
+                      value={formData.postcode}
+                      onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales Owner & Tags Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 pt-1">
               <div>
+                <label className={labelCls}>Sales Owner</label>
                 <select
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors"
+                  value={formData.user_id}
+                  onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+                  className={inputCls}
                 >
-                  <option value="">Select Country</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  <option value="">-- Unassigned --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || u.first_name || u.email || `User #${u.id}`}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <input
-                  type="text"
-                  placeholder="State"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  placeholder="City"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  placeholder="Postcode"
-                  value={formData.postcode}
-                  onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors"
+                <label className={labelCls}>Tags</label>
+                <TagPicker
+                  selectedTagIds={selectedTagIds}
+                  onChange={setSelectedTagIds}
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Sales Owner */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Sales Owner
-          </label>
-          <select
-            value={formData.user_id}
-            onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition-colors"
-          >
-            <option value="">Click to add</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.first_name || u.email || `User #${u.id}`}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-            Tags
-          </label>
-          <TagPicker
-            selectedTagIds={selectedTagIds}
-            onChange={setSelectedTagIds}
-          />
-        </div>
-
         {/* Dynamic Custom Attributes for Organizations */}
-        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-          <DynamicAttributeFields
-            entityType="organizations"
-            values={customAttributes}
-            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-          />
-        </div>
+        <DynamicAttributeFields
+          entityType="organizations"
+          values={customAttributes}
+          onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          containerClassName="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+        />
       </form>
     </div>
   );

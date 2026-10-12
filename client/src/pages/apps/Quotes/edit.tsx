@@ -405,7 +405,7 @@ const EditQuotePage: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* 🧭 Top Breadcrumb Navigation */}
       <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
         <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
@@ -479,22 +479,21 @@ const EditQuotePage: React.FC = () => {
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="space-y-6">
-        {/* 📌 CARD 1: GENERAL INFORMATION */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-50/80 dark:bg-slate-900/60 px-5 py-3.5 border-b border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-[#0088cc] flex items-center justify-center">
-                <i className="mgc_document_line text-base"></i>
-              </div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                General Quotation Information
-              </h2>
+        {/* 📋 CARD 1: GENERAL INFORMATION */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#0088cc] flex items-center justify-center font-bold">
+              <i className="mgc_document_line text-lg"></i>
             </div>
-            <span className="text-[11px] font-semibold text-gray-400">Basic Details</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Quote Information
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Basic details, customer relation, and validity</p>
+            </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
               {/* Subject */}
               <div className="md:col-span-3">
                 <label className={labelCls}>
@@ -593,19 +592,21 @@ const EditQuotePage: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
         </div>
 
         {/* 📍 CARD 2: ADDRESS INFORMATION */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-50/80 dark:bg-slate-900/60 px-5 py-3.5 border-b border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center">
-                <i className="mgc_location_line text-base"></i>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center font-bold">
+                <i className="mgc_location_line text-lg"></i>
               </div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                Billing & Shipping Addresses
-              </h2>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Billing & Shipping Addresses
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Invoicing destination and dispatch address</p>
+              </div>
             </div>
             <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-700 dark:text-gray-300">
               <input
@@ -618,7 +619,7 @@ const EditQuotePage: React.FC = () => {
             </label>
           </div>
 
-          <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Billing Address */}
             <div className="p-4 rounded-xl bg-gray-50/60 dark:bg-gray-900/40 border border-gray-200/60 dark:border-gray-700 space-y-3.5">
               <h3 className="text-xs font-bold text-[#0088cc] uppercase tracking-wider flex items-center gap-1.5">
@@ -759,21 +760,29 @@ const EditQuotePage: React.FC = () => {
           </div>
         </div>
 
-        {/* 📦 CARD 3: LINE ITEMS & PRODUCTS */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-50/80 dark:bg-slate-900/60 px-5 py-3.5 border-b border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
-                <i className="mgc_box_line text-base"></i>
-              </div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                Quotation Line Items & Products ({items.length})
-              </h2>
-            </div>
-            <span className="text-[11px] font-semibold text-gray-400">Products & Quantities</span>
-          </div>
+        {/* ⚙️ CUSTOM ATTRIBUTES (renders only when custom attributes exist) */}
+        <DynamicAttributeFields
+          entityType="quotes"
+          values={customAttributes}
+          onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+          containerClassName="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+        />
 
-          <div className="p-5 sm:p-6 space-y-5">
+        {/* 📦 CARD 4: LINE ITEMS */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center font-bold">
+                <i className="mgc_box_line text-lg"></i>
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Line Items ({items.length})
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Products and custom services included</p>
+              </div>
+            </div>
+          </div>
             {/* Add New Line Item Box */}
             <div className="bg-gradient-to-r from-gray-50 to-sky-50/30 dark:from-gray-900/60 dark:to-sky-950/20 p-4 border border-gray-200/80 dark:border-gray-700 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
@@ -965,24 +974,23 @@ const EditQuotePage: React.FC = () => {
               )}
             </div>
             {errors.items && <p className="text-xs text-red-500 font-medium">{errors.items}</p>}
-          </div>
         </div>
 
-        {/* 💰 CARD 4: FINANCIAL SUMMARY & TOTALS */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-50/80 dark:bg-slate-900/60 px-5 py-3.5 border-b border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
-                <i className="mgc_wallet_line text-base"></i>
-              </div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                Financial Summary & Grand Total
-              </h2>
+        {/* 💳 CARD 5: FINANCIAL SUMMARY & TOTALS */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-600 flex items-center justify-center font-bold">
+              <i className="mgc_wallet_line text-lg"></i>
             </div>
-            <span className="text-[11px] font-semibold text-gray-400">Calculations</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Financial Summary
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Taxes, discounts, and final calculated payable</p>
+            </div>
           </div>
 
-          <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             {/* Left Controls: Global Discount, Tax & Adjustments */}
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
@@ -1076,38 +1084,6 @@ const EditQuotePage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* ⚙️ CARD 5: CUSTOM ATTRIBUTES */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6">
-          <DynamicAttributeFields
-            entityType="quotes"
-            values={customAttributes}
-            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-          />
-        </div>
-
-        {/* BOTTOM ACTION BUTTONS */}
-        <div className="flex items-center justify-end gap-3 pt-4">
-          <Link
-            to="/quotes"
-            className="px-5 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs sm:text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-          >
-            Cancel
-          </Link>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-6 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
-          >
-            {saving ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <i className="mgc_check_line text-base"></i>
-            )}
-            <span>Save Quote Changes</span>
-          </button>
         </div>
       </form>
     </div>

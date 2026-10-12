@@ -135,6 +135,8 @@ export interface DynamicAttributeFieldsProps {
   errors?: Record<string, string>;
   title?: string;
   excludeCodes?: string[];
+  containerClassName?: string;
+  onAttributesLoaded?: (attributes: IAttribute[]) => void;
 }
 
 export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
@@ -145,6 +147,8 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
   errors = {},
   title = "Custom Attributes",
   excludeCodes = DEFAULT_EXCLUDE_CODES,
+  containerClassName,
+  onAttributesLoaded,
 }) => {
   const [attributes, setAttributes] = useState<IAttribute[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -177,10 +181,14 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
             }
           );
           setAttributes(filtered);
+          onAttributesLoaded?.(filtered);
         }
       })
       .catch(() => {
-        if (isMounted) setAttributes([]);
+        if (isMounted) {
+          setAttributes([]);
+          onAttributesLoaded?.([]);
+        }
       })
       .finally(() => {
         if (isMounted) setLoading(false);
@@ -204,14 +212,19 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
     return null;
   }
 
-  return (
-    <div className="space-y-4 pt-2">
+  const content = (
+    <div className="space-y-4">
       {title && (
-        <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 pb-2">
-          <i className="mgc_list_check_3_line text-primary text-base"></i>
-          <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">
-            {title} ({attributes.length})
-          </h4>
+        <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-600 flex items-center justify-center font-bold">
+            <i className="mgc_list_check_3_line text-lg"></i>
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+              {title} ({attributes.length})
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Additional customized fields</p>
+          </div>
         </div>
       )}
 
@@ -512,4 +525,6 @@ export const DynamicAttributeFields: React.FC<DynamicAttributeFieldsProps> = ({
       </div>
     </div>
   );
+
+  return containerClassName ? <div className={containerClassName}>{content}</div> : content;
 };
