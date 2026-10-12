@@ -67,13 +67,7 @@ const AuthLayout = ({
           {bottomLinks}
         </div>
 
-        {/* Security Footer Note */}
-        <div className="text-center pt-1">
-          <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-700/50 text-xs text-slate-400 font-medium shadow-sm backdrop-blur-sm">
-            <i className="mgc_lock_line text-sm text-slate-400"></i>
-            <span>Secure 256-bit Encrypted Portal</span>
-          </div>
-        </div>
+
       </div>
     </div>
   );
