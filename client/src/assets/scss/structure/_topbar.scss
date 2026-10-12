@@ -3,10 +3,12 @@
 //
 
 .app-header {
-    @apply sticky top-0 shadow-sm;
+    position: sticky !important;
+    top: 0 !important;
     z-index: 35;
     background: $topbar-bg;
     height: $topbar-height;
+    @apply shadow-sm;
 
     .nav-link {
         color: $topbar-item-color;

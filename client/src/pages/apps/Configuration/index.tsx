@@ -451,7 +451,7 @@ const ConfigurationPage: React.FC = () => {
   const labelCls = "block text-xs font-semibold text-gray-700 dark:text-gray-300";
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="p-1 sm:p-4 lg:p-6 max-w-[1600px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div>

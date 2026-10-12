@@ -7,6 +7,164 @@ import { extractFileUrl } from "@/utils/fileHelper";
 import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
 import { getRottenInfo } from "@/utils/rottenHelper";
 
+const getActivityBadge = (type: string) => {
+  switch (type?.toLowerCase()) {
+    case "email":
+    case "mail":
+      return {
+        badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+        icon: "mgc_mail_line",
+        label: "Email",
+      };
+    case "call":
+      return {
+        badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
+        icon: "mgc_phone_line",
+        label: "Call",
+      };
+    case "meeting":
+      return {
+        badgeClass: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
+        icon: "mgc_calendar_line",
+        label: "Meeting",
+      };
+    case "lunch":
+      return {
+        badgeClass: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800",
+        icon: "mgc_restaurant_line",
+        label: "Lunch",
+      };
+    case "note":
+      return {
+        badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+        icon: "mgc_edit_line",
+        label: "Note",
+      };
+    case "file":
+      return {
+        badgeClass: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800",
+        icon: "mgc_file_text_line",
+        label: "File",
+      };
+    default:
+      return {
+        badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+        icon: "mgc_information_line",
+        label: type || "Activity",
+      };
+  }
+};
+
+const ActivityCommentContent: React.FC<{ comment: string; type: string }> = ({ comment, type }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!comment) return null;
+
+  // 1. Clean boilerplate text if present
+  let cleaned = comment
+    .replace(/unfortunately,\s*your\s*email\s*client\s*cannot\s*display\s*html[^\n\r]*(\r?\n[^\n\r]*)*/gi, '')
+    .replace(/to\s*view\s*this\s*email[^.\n]*into\s*your\s*browser\.?/gi, '')
+    .replace(/(\*{4,}|\-{4,}|_{4,})/g, '')
+    .trim();
+
+  // 2. Check for sender/recipient headers
+  let senderHeader = '';
+  const fromMatch = cleaned.match(/^(Received email from [^\n\r]+)/i);
+  const toMatch = cleaned.match(/^(To:\s*[^\n\r]+)/i);
+
+  if (fromMatch) {
+    senderHeader = fromMatch[1];
+    cleaned = cleaned.replace(/^(Received email from [^\n\r]+)\s*/i, '').trim();
+  } else if (toMatch) {
+    senderHeader = toMatch[1];
+    cleaned = cleaned.replace(/^(To:\s*[^\n\r]+)\s*/i, '').trim();
+  }
+
+  // 3. Extract "View web version: <url>"
+  let webVersionUrl = '';
+  const webVersionMatch = cleaned.match(/view\s*web\s*version:\s*(https?:\/\/[^\s]+)/i);
+  if (webVersionMatch) {
+    webVersionUrl = webVersionMatch[1];
+    cleaned = cleaned.replace(/view\s*web\s*version:\s*https?:\/\/[^\s]+\s*/gi, '').trim();
+  }
+
+  // Fallback if cleaned is empty but webVersionUrl exists
+  if (!cleaned && !senderHeader && !webVersionUrl) {
+    cleaned = comment;
+  }
+
+  const isLong = cleaned.length > 280;
+  const displayText = (!expanded && isLong) ? cleaned.slice(0, 260) + '...' : cleaned;
+
+  // Helper to render text with clickable links
+  const renderFormattedText = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, idx) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={idx}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#0088cc] underline hover:text-[#006699] break-all inline-flex items-center gap-0.5 font-medium"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span>{part.length > 55 ? part.slice(0, 50) + '...' : part}</span>
+            <i className="mgc_external_link_line text-[10px]"></i>
+          </a>
+        );
+      }
+      return <span key={idx}>{part}</span>;
+    });
+  };
+
+  return (
+    <div className="space-y-2 mt-1.5 min-w-0">
+      {senderHeader && (
+        <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 max-w-full">
+          <i className="mgc_user_3_line text-xs text-[#0088cc] shrink-0"></i>
+          <span className="truncate">{senderHeader}</span>
+        </div>
+      )}
+
+      {cleaned && (
+        <div className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed font-normal">
+          {renderFormattedText(displayText)}
+        </div>
+      )}
+
+      {isLong && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-[#0088cc] hover:underline font-semibold inline-flex items-center gap-1"
+          >
+            {expanded ? "Show less" : "Show full message"}
+            <i className={expanded ? "mgc_up_line text-xs" : "mgc_down_line text-xs"}></i>
+          </button>
+        </div>
+      )}
+
+      {webVersionUrl && (
+        <div className="pt-1">
+          <a
+            href={webVersionUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0088cc] hover:text-[#0077bb] bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
+          >
+            <i className="mgc_external_link_line text-xs"></i>
+            View Web Version
+          </a>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LeadViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -571,7 +729,14 @@ const getPersonEmail = (person: any): string => {
         <div className="lg:col-span-8 space-y-4">
           {/* Stage Stepper Bar (Chevron Ribbon style matching Krayin view/stages.blade.php) */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 p-2 overflow-hidden">
-            <div className="flex items-center w-full overflow-x-auto rounded-lg py-1 px-1">
+            <div
+              className="flex items-center w-full overflow-x-auto no-scrollbar scroll-smooth rounded-lg py-1 px-1"
+              onWheel={(e) => {
+                if (e.deltaY !== 0) {
+                  e.currentTarget.scrollLeft += e.deltaY;
+                }
+              }}
+            >
               {stages.map((stage, idx) => {
                 const currentStageSort = stages.find((s) => s.id === selectedLead.lead_pipeline_stage_id)?.sort_order || 0;
                 const stageSort = stage.sort_order || idx;
@@ -588,7 +753,7 @@ const getPersonEmail = (person: any): string => {
                         ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
                         : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)"
                     }}
-                    className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${isLost
+                    className={`px-5 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${isLost
                         ? "bg-red-500 text-white"
                         : isPassed
                           ? "bg-[#10b981] text-white"
@@ -608,7 +773,7 @@ const getPersonEmail = (person: any): string => {
                 style={{
                   clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
                 }}
-                className={`px-6 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 rounded-r-lg ${!selectedLead.status
+                className={`px-5 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[110px] shrink-0 rounded-r-lg ${!selectedLead.status
                     ? "bg-red-500 text-white"
                     : selectedLead.status && selectedLead.stage_name?.toLowerCase() === "won"
                       ? "bg-[#10b981] text-white"
@@ -622,12 +787,19 @@ const getPersonEmail = (person: any): string => {
 
           {/* Sub-Tabs Filter Navigation Bar */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 overflow-hidden">
-            <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
+            <div
+              className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar scroll-smooth px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300"
+              onWheel={(e) => {
+                if (e.deltaY !== 0) {
+                  e.currentTarget.scrollLeft += e.deltaY;
+                }
+              }}
+            >
               {(["all", "planned", "notes", "calls", "meetings", "lunches", "files", "emails", "changelogs", "description", "products", "quotes"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${activeTab === tab
+                  className={`px-3 py-1.5 rounded-lg capitalize whitespace-nowrap transition-colors shrink-0 ${activeTab === tab
                       ? "bg-[#0088cc] text-white shadow-sm font-bold"
                       : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
                     }`}
@@ -708,42 +880,67 @@ const getPersonEmail = (person: any): string => {
                       <div className="space-y-3">
                         {filtered.map((act) => {
                           const fileUrl = extractFileUrl(act.comment);
+                          const badge = getActivityBadge(act.type);
+                          const isEmail = act.type === "email" || act.type === "mail";
                           return (
-                            <div key={act.id} className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded">
-                                      {act.type}
+                            <div
+                              key={act.id}
+                              className={`p-4 rounded-xl border transition-all ${
+                                isEmail
+                                  ? "bg-white dark:bg-gray-900/60 border-indigo-100 dark:border-indigo-900/30 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700"
+                                  : "bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
+                              } space-y-2.5 overflow-hidden`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1.5 min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded inline-flex items-center gap-1 ${badge.badgeClass}`}>
+                                      <i className={`${badge.icon} text-xs`}></i>
+                                      {badge.label}
                                     </span>
                                     {act.created_at && (
-                                      <span className="text-[11px] text-gray-400">
+                                      <span className="text-[11px] text-gray-400 inline-flex items-center gap-1">
+                                        <i className="mgc_time_line text-xs"></i>
                                         {new Date(act.created_at).toLocaleString()}
                                       </span>
                                     )}
                                   </div>
-                                  <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100">{act.title}</h4>
+                                  <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100 break-words">{act.title}</h4>
                                   {act.comment && act.type !== "file" && (
-                                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{act.comment}</p>
+                                    <ActivityCommentContent comment={act.comment} type={act.type} />
                                   )}
                                 </div>
 
-                                {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
-                                {["call", "meeting", "lunch"].includes(act.type) && (
-                                  <button
-                                    onClick={async () => {
-                                      await updateActivity(act.id, { is_done: !act.is_done });
-                                      fetchActivities(1, 100, "", leadId);
-                                    }}
-                                    title="Click to toggle Done/Pending"
-                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${act.is_done
-                                        ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
-                                        : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
-                                      }`}
-                                  >
-                                    {act.is_done ? "Done ✓" : "Pending ⏳"}
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* For email activities: quick link to Mailbox */}
+                                  {isEmail && (
+                                    <Link
+                                      to="/mail"
+                                      className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-colors inline-flex items-center gap-1"
+                                      title="Open in Mailbox"
+                                    >
+                                      <i className="mgc_mail_line text-xs"></i>
+                                      <span className="hidden sm:inline">Mailbox</span>
+                                    </Link>
+                                  )}
+
+                                  {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
+                                  {["call", "meeting", "lunch"].includes(act.type) && (
+                                    <button
+                                      onClick={async () => {
+                                        await updateActivity(act.id, { is_done: !act.is_done });
+                                        fetchActivities(1, 100, "", leadId);
+                                      }}
+                                      title="Click to toggle Done/Pending"
+                                      className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${act.is_done
+                                          ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300"
+                                          : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
+                                        }`}
+                                    >
+                                      {act.is_done ? "Done ✓" : "Pending ⏳"}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
                               {/* File Card with Download Link */}

@@ -118,163 +118,236 @@ const EditActivityPage: React.FC = () => {
     );
   }
 
+  const inputCls =
+    "w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-[#0088cc] dark:focus:border-[#0088cc] rounded-xl text-xs sm:text-sm font-medium transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-100 placeholder-gray-400";
+  const labelCls = "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link to="/activities" className="text-sm text-[#0088cc] hover:underline flex items-center gap-1 mb-1">
-            &larr; Back to Activities
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Edit Activity</h1>
-        </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/activities" className="text-[#0e90d9] hover:underline">
+          Activities
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Edit Activity</span>
       </div>
 
-      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => {
-                setFormData({ ...formData, title: e.target.value });
-                if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
-              }}
-              className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
-                errors.title ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
-              } rounded-lg text-sm focus:outline-none focus:ring-1 dark:text-gray-200`}
-            />
-            {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Type *</label>
-            <select
-              value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200 capitalize"
-            >
-              <option value="call">Call</option>
-              <option value="meeting">Meeting</option>
-              <option value="lunch">Lunch</option>
-              <option value="email">Email</option>
-              <option value="note">Note</option>
-              <option value="follow_up">Follow Up</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Location</label>
-            <input
-              type="text"
-              value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Schedule From</label>
-            <input
-              type="datetime-local"
-              value={formData.schedule_from}
-              onChange={(e) => setFormData({ ...formData, schedule_from: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Schedule To</label>
-            <input
-              type="datetime-local"
-              value={formData.schedule_to}
-              onChange={(e) => setFormData({ ...formData, schedule_to: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            />
-          </div>
-
-          {/* CRM Associations */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Link Lead</label>
-            <select
-              value={formData.lead_id}
-              onChange={(e) => setFormData({ ...formData, lead_id: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            >
-              <option value="">Select Lead (Optional)</option>
-              {leads.map((l) => (
-                <option key={l.id} value={l.id}>{l.title}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assigned User</label>
-            <select
-              value={formData.user_id}
-              onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            >
-              <option value="">Select User (Optional)</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Link Person</label>
-            <select
-              value={formData.person_id}
-              onChange={(e) => setFormData({ ...formData, person_id: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            >
-              <option value="">Select Person (Optional)</option>
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="md:col-span-2 flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_done_edit"
-              checked={formData.is_done}
-              onChange={(e) => setFormData({ ...formData, is_done: e.target.checked })}
-              className="h-4 w-4 text-[#0088cc] rounded border-gray-300 focus:ring-[#0088cc]"
-            />
-            <label htmlFor="is_done_edit" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Mark as Done
-            </label>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Comment / Notes</label>
-            <textarea
-              rows={4}
-              value={formData.comment}
-              onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-            />
+      {/* 🏷️ Page Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/activities"
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 hover:text-[#0e90d9] flex items-center justify-center transition shadow-2xs shrink-0"
+            title="Back to Activities"
+          >
+            <i className="mgc_arrow_left_line text-lg"></i>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                Edit Activity
+              </h1>
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] dark:text-blue-400 font-mono text-xs font-bold border border-blue-100 dark:border-blue-800/60 shrink-0">
+                #ACT-{id}
+              </span>
+            </div>
+            {formData.title ? (
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
+                {formData.title}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 truncate mt-0.5">
+                Update activity schedule, participants, and status
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+        <div className="flex items-center gap-3 justify-end shrink-0">
           <Link
             to="/activities"
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
           >
             Cancel
           </Link>
+
           <button
-            type="submit"
+            type="button"
+            onClick={handleSubmit}
             disabled={saving}
-            className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
+            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
           >
-            {saving ? "Saving..." : "Update Activity"}
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <i className="mgc_check_line text-base"></i>
+            )}
+            <span>Update Activity</span>
           </button>
+        </div>
+      </div>
+
+      {/* Main Form Box */}
+      <form noValidate onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+              <i className="mgc_time_line text-lg"></i>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Activity Details
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Timing, participants, and associated CRM records</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {/* Title */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className={labelCls}>
+                Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.title}
+                onChange={(e) => {
+                  setFormData({ ...formData, title: e.target.value });
+                  if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
+                }}
+                className={`${inputCls} ${errors.title ? "!border-red-500 !ring-red-500/20" : ""}`}
+              />
+              {errors.title && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.title}</p>}
+            </div>
+
+            {/* Type */}
+            <div>
+              <label className={labelCls}>Type <span className="text-red-500">*</span></label>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                className={`${inputCls} capitalize`}
+              >
+                <option value="call">Call</option>
+                <option value="meeting">Meeting</option>
+                <option value="lunch">Lunch</option>
+                <option value="email">Email</option>
+                <option value="note">Note</option>
+                <option value="follow_up">Follow Up</option>
+              </select>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label className={labelCls}>Location</label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+
+            {/* Is Done Status */}
+            <div className="flex flex-col justify-end">
+              <label className="flex items-center gap-2.5 p-2.5 bg-gray-50/70 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-100/50 transition">
+                <input
+                  type="checkbox"
+                  id="is_done_edit"
+                  checked={formData.is_done}
+                  onChange={(e) => setFormData({ ...formData, is_done: e.target.checked })}
+                  className="w-4 h-4 rounded text-[#0088cc] focus:ring-[#0088cc] border-gray-300 dark:border-gray-600 dark:bg-gray-800"
+                />
+                <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Mark as Done
+                </span>
+              </label>
+            </div>
+
+            {/* Schedule From */}
+            <div>
+              <label className={labelCls}>Schedule From</label>
+              <input
+                type="datetime-local"
+                value={formData.schedule_from}
+                onChange={(e) => setFormData({ ...formData, schedule_from: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+
+            {/* Schedule To */}
+            <div>
+              <label className={labelCls}>Schedule To</label>
+              <input
+                type="datetime-local"
+                value={formData.schedule_to}
+                onChange={(e) => setFormData({ ...formData, schedule_to: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+
+            {/* Link Lead */}
+            <div>
+              <label className={labelCls}>Link Lead</label>
+              <select
+                value={formData.lead_id}
+                onChange={(e) => setFormData({ ...formData, lead_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- None / Select Lead --</option>
+                {leads.map((l) => (
+                  <option key={l.id} value={l.id}>{l.title}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Link Person */}
+            <div>
+              <label className={labelCls}>Link Person</label>
+              <select
+                value={formData.person_id}
+                onChange={(e) => setFormData({ ...formData, person_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- None / Select Person --</option>
+                {persons.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Assigned User */}
+            <div>
+              <label className={labelCls}>Assigned User</label>
+              <select
+                value={formData.user_id}
+                onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- None / Select User --</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Comment / Notes */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className={labelCls}>Comment / Notes</label>
+              <textarea
+                rows={4}
+                value={formData.comment}
+                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                className={`${inputCls} min-h-[100px]`}
+              />
+            </div>
+          </div>
         </div>
       </form>
     </div>

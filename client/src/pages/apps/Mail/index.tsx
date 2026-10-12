@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useMailStore } from "@/store";
 import { ComposeMailModal } from "./ComposeMailModal";
 import { EmailItem } from "@/interface";
@@ -141,22 +141,33 @@ const MailPage: React.FC = () => {
   const isPartiallySelected = selectedEmailIds.length > 0 && !allSelected;
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Mail</span>
+      </div>
+
+      {/* 🏷️ Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-            className="md:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="md:hidden w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center transition shadow-2xs"
+            title="Toggle Folders"
           >
-            <i className="mgc_menu_line text-xl"></i>
+            <i className="mgc_menu_line text-lg"></i>
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-              <i className="mgc_mail_line text-[#0088cc]"></i> Mail
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2">
+              <i className="mgc_mail_line text-[#0e90d9]"></i> Mail
             </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Manage your emails, conversations, and communications.
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Manage your emails, conversations, and communications
             </p>
           </div>
         </div>
@@ -167,22 +178,76 @@ const MailPage: React.FC = () => {
               setEditingDraft(null);
               setIsComposeOpen(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
           >
-            <i className="mgc_add_line text-lg"></i>
+            <i className="mgc_add_line text-base"></i>
             <span>Compose Mail</span>
           </button>
         </div>
       </div>
 
+      {/* Mobile Folder Slide-over Drawer */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileSidebarOpen(false)}
+          ></div>
+          <div className="relative w-72 max-w-[85vw] bg-white dark:bg-gray-800 p-4 shadow-2xl flex flex-col h-full z-10 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+              <span className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <i className="mgc_mail_line text-[#0e90d9]"></i> Mail Folders
+              </span>
+              <button
+                onClick={() => setMobileSidebarOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <i className="mgc_close_line text-lg"></i>
+              </button>
+            </div>
+            <nav className="space-y-1 flex-1 overflow-y-auto">
+              {FOLDERS.map((f) => {
+                const isActive = activeFolder === f.id;
+                const badge = getFolderBadge(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => handleFolderChange(f.id)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      isActive
+                        ? "bg-blue-50 text-[#0088cc] dark:bg-blue-900/30 dark:text-blue-400 font-bold"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <i className={`${f.icon} text-base`}></i>
+                      <span>{f.label}</span>
+                    </div>
+                    {badge !== null && (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                          isActive
+                            ? "bg-[#0088cc] text-white"
+                            : f.id === "inbox"
+                            ? "bg-blue-100 text-[#0088cc] dark:bg-blue-900/50 dark:text-blue-300"
+                            : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+      )}
+
       {/* Main Mail Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-        {/* Left Sidebar (Folders) */}
-        <div
-          className={`md:col-span-3 lg:col-span-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2 shadow-2xs ${
-            mobileSidebarOpen ? "block" : "hidden md:block"
-          }`}
-        >
+        {/* Left Sidebar (Folders) for Desktop */}
+        <div className="hidden md:block md:col-span-3 lg:col-span-2.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 p-3 space-y-2 shadow-sm">
           <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Folders
           </div>
@@ -194,9 +259,9 @@ const MailPage: React.FC = () => {
                 <button
                   key={f.id}
                   onClick={() => handleFolderChange(f.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition ${
                     isActive
-                      ? "bg-blue-50 text-[#0088cc] dark:bg-blue-900/30 dark:text-blue-400 font-semibold"
+                      ? "bg-blue-50 text-[#0088cc] dark:bg-blue-900/30 dark:text-blue-400 font-bold"
                       : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60"
                   }`}
                 >
@@ -224,7 +289,7 @@ const MailPage: React.FC = () => {
         </div>
 
         {/* Right Mailbox Content (Toolbar + List) */}
-        <div className="md:col-span-9 lg:col-span-9.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs overflow-hidden flex flex-col min-h-[550px]">
+        <div className="md:col-span-9 lg:col-span-9.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col min-h-[550px]">
           {/* Top Mailbox Toolbar */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3 bg-gray-50/50 dark:bg-gray-800/50">
             {/* Left Toolbar Controls */}
@@ -368,13 +433,13 @@ const MailPage: React.FC = () => {
                     }`}
                   >
                     {/* Left: Checkbox + Unread Dot + Avatar + Sender */}
-                    <div className="flex items-center gap-3 min-w-[200px] max-w-[260px] truncate">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-[110px] sm:min-w-[170px] max-w-[130px] sm:max-w-[220px] truncate shrink-0">
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleSelectEmail(email.id);
                         }}
-                        className="flex items-center"
+                        className="flex items-center shrink-0"
                       >
                         <input
                           type="checkbox"
@@ -384,18 +449,18 @@ const MailPage: React.FC = () => {
                         />
                       </div>
 
-                      <div className="w-2 flex justify-center">
+                      <div className="w-2 flex justify-center shrink-0">
                         {isUnread && (
                           <span className="w-2 h-2 rounded-full bg-[#0088cc] shadow-xs"></span>
                         )}
                       </div>
 
-                      <div className="w-7 h-7 rounded-full bg-blue-100 text-[#0088cc] dark:bg-blue-900/60 dark:text-blue-300 flex items-center justify-center font-bold text-[11px] flex-shrink-0">
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-100 text-[#0088cc] dark:bg-blue-900/60 dark:text-blue-300 flex items-center justify-center font-bold text-[10px] sm:text-[11px] shrink-0">
                         {senderName.charAt(0).toUpperCase()}
                       </div>
 
                       <span
-                        className={`truncate ${
+                        className={`truncate text-xs ${
                           isUnread
                             ? "text-gray-900 dark:text-white font-bold"
                             : "text-gray-700 dark:text-gray-300"
@@ -406,10 +471,10 @@ const MailPage: React.FC = () => {
                     </div>
 
                     {/* Middle: Subject + Content Snippet + Badges */}
-                    <div className="flex-1 mx-4 min-w-0 flex items-center gap-2">
+                    <div className="flex-1 mx-2 sm:mx-4 min-w-0 flex items-center gap-1.5 sm:gap-2 overflow-hidden">
                       {/* Attached Lead Badge */}
                       {email.lead_title && (
-                        <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-medium border border-amber-200 dark:border-amber-800 flex-shrink-0">
+                        <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-medium border border-amber-200 dark:border-amber-800 shrink-0">
                           <i className="mgc_flag_3_line"></i>
                           <span className="max-w-[100px] truncate">{email.lead_title}</span>
                         </span>
@@ -417,7 +482,7 @@ const MailPage: React.FC = () => {
 
                       {/* Attached Person Badge */}
                       {email.person_name && (
-                        <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] font-medium border border-purple-200 dark:border-purple-800 flex-shrink-0">
+                        <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] font-medium border border-purple-200 dark:border-purple-800 shrink-0">
                           <i className="mgc_user_3_line"></i>
                           <span className="max-w-[100px] truncate">{email.person_name}</span>
                         </span>
@@ -441,7 +506,7 @@ const MailPage: React.FC = () => {
                     </div>
 
                     {/* Right: Attachments + Date + Row Actions */}
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                       {email.attachments_count && email.attachments_count > 0 ? (
                         <span
                           className="text-gray-400 flex items-center gap-0.5"

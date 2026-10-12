@@ -115,7 +115,15 @@ const EditLeadPage: React.FC = () => {
   });
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
+  const [hasCustomAttributes, setHasCustomAttributes] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const tabs = [
+    { id: "lead-details", label: "Lead Details" },
+    { id: "contact-person", label: "Contact Person" },
+    ...(hasCustomAttributes ? [{ id: "custom-attributes", label: "Custom Fields" }] : []),
+    { id: "products", label: "Products" },
+  ];
 
   // Tab 2 – Contact Person
   const [persons, setPersons] = useState<any[]>([]);
@@ -588,75 +596,111 @@ const EditLeadPage: React.FC = () => {
   };
 
   const inputCls =
-    "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
-  const labelCls = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
+    "w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-[#0088cc] dark:focus:border-[#0088cc] rounded-xl text-xs sm:text-sm font-medium transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-100 placeholder-gray-400";
+  const labelCls = "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
 
   if (loading) {
     return (
-      <div className="p-12 text-center">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#0088cc] border-t-transparent"></div>
-        <p className="mt-2 text-xs text-gray-400">Loading lead details...</p>
+      <div className="p-16 text-center space-y-3">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-[#0088cc] border-t-transparent"></div>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading lead details...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-4">
-      {/* Header + Tabs unified sticky card */}
-      <div className="sticky top-[60px] z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-        <div className="flex items-center justify-between px-4 pt-3 pb-0">
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-              <Link to="/leads" className="text-[#0088cc] hover:underline">Leads</Link> / Edit
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/leads" className="text-[#0e90d9] hover:underline">
+          Leads
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Edit Lead #{id}</span>
+      </div>
+
+      {/* 🏷️ Page Header with Actions & Live Total */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/leads"
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 hover:text-[#0e90d9] flex items-center justify-center transition shadow-2xs shrink-0"
+            title="Back to Leads"
+          >
+            <i className="mgc_arrow_left_line text-lg"></i>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                Edit Lead
+              </h1>
+              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] dark:text-blue-400 border border-blue-200 dark:border-blue-800 shrink-0">
+                #LD-{id}
+              </span>
             </div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">Edit Lead #{id}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              to="/leads"
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              Cancel
-            </Link>
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="px-6 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save Lead"}
-            </button>
+            {details.title && (
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
+                {details.title}
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 mt-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => scrollToSection(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${activeTab === tab.id
-                ? "text-[#0088cc] border-[#0088cc]"
-                : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-white"
-                }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+
+        <div className="flex items-center gap-3 justify-end shrink-0">
+          <div className="hidden md:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Value</span>
+            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+              {fmtCurrency(totalLeadValue > 0 ? totalLeadValue : (parseFloat(details.lead_value) || 0))}
+            </span>
+          </div>
+
+          <Link
+            to="/leads"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
+          >
+            Cancel
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
+          >
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <i className="mgc_check_line text-base"></i>
+            )}
+            <span>Save Lead</span>
+          </button>
         </div>
       </div>
 
-      <form noValidate onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-        <div className="flex flex-col gap-8 px-6 py-6">
-          {/* TAB 1: Lead Details */}
-          <div
-            id="lead-details"
-            ref={(el) => { sectionRefs.current["lead-details"] = el; }}
-            className="flex flex-col gap-4"
-          >
-            <div>
-              <p className="text-base font-semibold text-gray-800 dark:text-white">Lead Details</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Update general information and sales ownership.</p>
+      <form noValidate onSubmit={handleSubmit} className="space-y-6">
+        {/* 📋 CARD 1: LEAD INFORMATION */}
+        <div
+          id="lead-details"
+          ref={(el) => { sectionRefs.current["lead-details"] = el; }}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#0088cc] flex items-center justify-center font-bold">
+              <i className="mgc_document_line text-lg"></i>
             </div>
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Lead Information
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Basic opportunity details, pipeline, and valuation</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               {/* Title */}
               <div className="md:col-span-2 lg:col-span-4">
                 <label className={labelCls}>
@@ -802,16 +846,23 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
 
-          {/* TAB 2: Contact Person */}
-          <div
-            id="contact-person"
-            ref={(el) => { sectionRefs.current["contact-person"] = el; }}
-            className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
-          >
-            <div>
-              <p className="text-base font-semibold text-gray-800 dark:text-white">Contact Person</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Information About the Contact Person</p>
+        {/* 👤 CARD 2: CONTACT PERSON */}
+        <div
+          id="contact-person"
+          ref={(el) => { sectionRefs.current["contact-person"] = el; }}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center font-bold">
+              <i className="mgc_user_3_line text-lg"></i>
             </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Contact Person
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Information about the primary contact person and organization</p>
+            </div>
+          </div>
 
             <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Name * Searchable Dropdown */}
@@ -926,7 +977,7 @@ const EditLeadPage: React.FC = () => {
                       <select
                         value={em.label}
                         onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
-                        className="px-3 py-2 pr-7 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                        className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
                       >
                         <option value="Work">Work</option>
                         <option value="Home">Home</option>
@@ -973,7 +1024,7 @@ const EditLeadPage: React.FC = () => {
                       <select
                         value={pn.label}
                         onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
-                        className="px-3 py-2 pr-7 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                        className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
                       >
                         <option value="Work">Work</option>
                         <option value="Mobile">Mobile</option>
@@ -1110,18 +1161,49 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
 
-          {/* TAB 3: Products */}
-          <div
-            id="products"
-            ref={(el) => { sectionRefs.current["products"] = el; }}
-            className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
-          >
-            <div>
-              <p className="text-base font-semibold text-gray-800 dark:text-white">Products</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Attach products to this lead to automatically calculate the total deal value.
-              </p>
+        {/* ⚙️ CARD 3: CUSTOM FIELDS */}
+        <div
+          id="custom-attributes"
+          ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
+        >
+          <DynamicAttributeFields
+            entityType="leads"
+            values={customAttributes}
+            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
+            onAttributesLoaded={(attrs) => setHasCustomAttributes(attrs.length > 0)}
+            containerClassName="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+          />
+        </div>
+
+        {/* 📦 CARD 4: PRODUCTS */}
+        <div
+          id="products"
+          ref={(el) => { sectionRefs.current["products"] = el; }}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center font-bold">
+                <i className="mgc_box_line text-lg"></i>
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Products ({productRows.filter((r) => r.product_id).length})
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Attach products to automatically calculate the total deal value
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={addProductRow}
+              className="px-3 py-1.5 bg-[#0e90d9]/10 hover:bg-[#0e90d9]/20 text-[#0e90d9] rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <i className="mgc_add_line text-sm"></i>
+              <span>Add Product</span>
+            </button>
+          </div>
 
             {(() => {
               const hasPhysicalProduct = productRows.some((r) => {
@@ -1130,268 +1212,459 @@ const EditLeadPage: React.FC = () => {
                 return prod && prod.type !== "Service" && prod.type?.toLowerCase() !== "service";
               });
 
+              const getRowData = (row: any, index: number) => {
+                const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
+                const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+                const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
+                const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
+                const prodErr = errors[`product_${index}`];
+                const qtyErr = errors[`quantity_${index}`];
+                const priceErr = errors[`price_${index}`];
+
+                // Dependent Warehouses for selected product
+                const productInventories = row.inventories || [];
+                const hasInvRecords = productInventories.length > 0;
+                const validWarehouseIds = new Set(
+                  productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
+                );
+
+                // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
+                const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
+                  if (!row.product_id) return 0;
+                  return productRows.reduce((sum, r, rIdx) => {
+                    if (rIdx === index) return sum;
+                    if (String(r.product_id) !== String(row.product_id)) return sum;
+                    if (locId && String(r.warehouse_location_id) === String(locId)) {
+                      return sum + (parseFloat(r.quantity) || 0);
+                    }
+                    if (!locId && wId && String(r.warehouse_id) === String(wId)) {
+                      return sum + (parseFloat(r.quantity) || 0);
+                    }
+                    return sum;
+                  }, 0);
+                };
+
+                const availableWarehouses = warehouses.filter((w) => {
+                  if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
+                  return validWarehouseIds.has(Number(w.id));
+                });
+
+                const getWarehouseLabel = (w: any) => {
+                  if (!row.product_id || !hasInvRecords) return w.name;
+                  const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
+                  const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
+                  const usedOther = getUsedQtyInOtherRows(undefined, w.id);
+                  const availStock = Math.max(0, dbTotalStock - usedOther);
+                  return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
+                };
+
+                // Dependent Locations for selected warehouse
+                const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
+                const allLocations = selectedW?.locations || [];
+                const locInvsForW = productInventories.filter(
+                  (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
+                );
+                const validLocationIds = new Set(
+                  locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
+                );
+
+                const availableLocations = allLocations.filter((loc: any) => {
+                  if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
+                  return validLocationIds.has(Number(loc.id));
+                });
+
+                const getLocationLabel = (loc: any) => {
+                  if (!row.product_id || !hasInvRecords) return loc.name;
+                  const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
+                  if (!invForLoc) return loc.name;
+                  const dbLocStock = Number(invForLoc.in_stock) || 0;
+                  const usedOther = getUsedQtyInOtherRows(loc.id);
+                  const availStock = Math.max(0, dbLocStock - usedOther);
+                  return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
+                };
+
+                const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
+                const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
+                const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
+                const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
+                const reqQty = Number(row.quantity || 0);
+                const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
+                const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
+
+                return {
+                  selectedProd,
+                  isService,
+                  effectiveQty,
+                  rowAmount,
+                  prodErr,
+                  qtyErr,
+                  priceErr,
+                  availableWarehouses,
+                  getWarehouseLabel,
+                  availableLocations,
+                  getLocationLabel,
+                  locStock,
+                  isStockShortage,
+                  shortageQty,
+                };
+              };
+
               return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                        <th className="py-2.5 px-3 min-w-[220px]">
-                          Product <span className="text-red-500">*</span>
-                        </th>
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
-                        <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
-                        <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
-                        <th className="py-2.5 px-3 w-12 text-center"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {productRows.map((row, index) => {
-                        const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
-                        const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-                        const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
-                        const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
-                        const prodErr = errors[`product_${index}`];
-                        const qtyErr = errors[`quantity_${index}`];
-                        const priceErr = errors[`price_${index}`];
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                          <th className="py-2.5 px-3 min-w-[220px]">
+                            Product <span className="text-red-500">*</span>
+                          </th>
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
+                          <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
+                          <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
+                          <th className="py-2.5 px-3 w-12 text-center"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productRows.map((row, index) => {
+                          const {
+                            isService,
+                            rowAmount,
+                            prodErr,
+                            qtyErr,
+                            priceErr,
+                            availableWarehouses,
+                            getWarehouseLabel,
+                            availableLocations,
+                            getLocationLabel,
+                            locStock,
+                            isStockShortage,
+                            shortageQty,
+                          } = getRowData(row, index);
 
-                        // Dependent Warehouses for selected product
-                        const productInventories = row.inventories || [];
-                        const hasInvRecords = productInventories.length > 0;
-                        const validWarehouseIds = new Set(
-                          productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
-                        );
+                          return (
+                            <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="py-2 px-3 align-top">
+                                <select
+                                  value={row.product_id}
+                                  onChange={(e) => selectProduct(index, e.target.value)}
+                                  className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                >
+                                  <option value="">Select a product...</option>
+                                  {products.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                                {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                              </td>
+                              {hasPhysicalProduct && (
+                                <td className="py-2 px-3 align-top">
+                                  {isService ? (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                  ) : (
+                                    <select
+                                      value={row.warehouse_id || ""}
+                                      onChange={(e) => {
+                                        updateProductRow(index, "warehouse_id", e.target.value);
+                                        updateProductRow(index, "warehouse_location_id", "");
+                                      }}
+                                      className={`${inputCls} pr-7 truncate`}
+                                    >
+                                      <option value="">Select Warehouse</option>
+                                      {availableWarehouses.map((w) => (
+                                        <option key={w.id} value={w.id}>
+                                          {getWarehouseLabel(w)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </td>
+                              )}
+                              {hasPhysicalProduct && (
+                                <td className="py-2 px-3 align-top">
+                                  {isService ? (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                  ) : (
+                                    <select
+                                      value={row.warehouse_location_id || ""}
+                                      onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                      disabled={!row.warehouse_id}
+                                      className={`${inputCls} pr-7 truncate disabled:opacity-50`}
+                                    >
+                                      <option value="">Select Location</option>
+                                      {availableLocations.map((loc: any) => (
+                                        <option key={loc.id} value={loc.id}>
+                                          {getLocationLabel(loc)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </td>
+                              )}
+                              {hasPhysicalProduct && (
+                                <td className="py-2 px-3 align-top">
+                                  {isService ? (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                  ) : (
+                                    <>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={row.quantity}
+                                        onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                        className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
+                                          ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                          : ""
+                                          }`}
+                                      />
+                                      {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                                      {isStockShortage && locStock !== null && (
+                                        locStock > 0 ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                                            className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                                          >
+                                            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
+                                            <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                                          </button>
+                                        ) : (
+                                          <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
+                                            ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                                          </div>
+                                        )
+                                      )}
+                                    </>
+                                  )}
+                                </td>
+                              )}
+                              <td className="py-2 px-3 align-top">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.price}
+                                  onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                                  disabled
+                                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                />
+                                {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                              </td>
+                              <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
+                                {fmtCurrency(rowAmount)}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {productRows.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeProductRow(index)}
+                                    className="text-gray-400 hover:text-red-500 font-bold p-1"
+                                    title="Remove item"
+                                  >
+                                    &times;
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
-                        const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
-                          if (!row.product_id) return 0;
-                          return productRows.reduce((sum, r, rIdx) => {
-                            if (rIdx === index) return sum;
-                            if (String(r.product_id) !== String(row.product_id)) return sum;
-                            if (locId && String(r.warehouse_location_id) === String(locId)) {
-                              return sum + (parseFloat(r.quantity) || 0);
-                            }
-                            if (!locId && wId && String(r.warehouse_id) === String(wId)) {
-                              return sum + (parseFloat(r.quantity) || 0);
-                            }
-                            return sum;
-                          }, 0);
-                        };
+                  {/* Mobile Cards View */}
+                  <div className="md:hidden space-y-3">
+                    {productRows.map((row, index) => {
+                      const {
+                        isService,
+                        rowAmount,
+                        prodErr,
+                        qtyErr,
+                        priceErr,
+                        availableWarehouses,
+                        getWarehouseLabel,
+                        availableLocations,
+                        getLocationLabel,
+                        locStock,
+                        isStockShortage,
+                        shortageQty,
+                      } = getRowData(row, index);
 
-                        const availableWarehouses = warehouses.filter((w) => {
-                          if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
-                          return validWarehouseIds.has(Number(w.id));
-                        });
-
-                        const getWarehouseLabel = (w: any) => {
-                          if (!row.product_id || !hasInvRecords) return w.name;
-                          const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
-                          const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
-                          const usedOther = getUsedQtyInOtherRows(undefined, w.id);
-                          const availStock = Math.max(0, dbTotalStock - usedOther);
-                          return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
-                        };
-
-                        // Dependent Locations for selected warehouse
-                        const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
-                        const allLocations = selectedW?.locations || [];
-                        const locInvsForW = productInventories.filter(
-                          (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
-                        );
-                        const validLocationIds = new Set(
-                          locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
-                        );
-
-                        const availableLocations = allLocations.filter((loc: any) => {
-                          if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
-                          return validLocationIds.has(Number(loc.id));
-                        });
-
-                        const getLocationLabel = (loc: any) => {
-                          if (!row.product_id || !hasInvRecords) return loc.name;
-                          const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
-                          if (!invForLoc) return loc.name;
-                          const dbLocStock = Number(invForLoc.in_stock) || 0;
-                          const usedOther = getUsedQtyInOtherRows(loc.id);
-                          const availStock = Math.max(0, dbLocStock - usedOther);
-                          return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
-                        };
-
-                        const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
-                        const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
-                        const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
-                        const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
-                        const reqQty = Number(row.quantity || 0);
-                        const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
-                        const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
-
-                        return (
-                          <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
-                            <td className="py-2 px-3 align-top">
-                              <select
-                                value={row.product_id}
-                                onChange={(e) => selectProduct(index, e.target.value)}
-                                className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                      return (
+                        <div
+                          key={index}
+                          className="p-3.5 bg-gray-50/70 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3 relative shadow-xs"
+                        >
+                          <div className="flex items-center justify-between border-b border-gray-200/70 dark:border-gray-700 pb-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Item #{index + 1} {isService && <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">Service</span>}
+                            </span>
+                            {productRows.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeProductRow(index)}
+                                className="text-xs font-medium text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1"
                               >
-                                <option value="">Select a product...</option>
-                                {products.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
-                                  </option>
-                                ))}
-                              </select>
-                              {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
-                            </td>
-                            {hasPhysicalProduct && (
-                              <td className="py-2 px-3 align-top">
-                                {isService ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                ) : (
-                                  <select
-                                    value={row.warehouse_id || ""}
-                                    onChange={(e) => {
-                                      updateProductRow(index, "warehouse_id", e.target.value);
-                                      updateProductRow(index, "warehouse_location_id", "");
-                                    }}
-                                    className={`${inputCls} pr-7 truncate`}
-                                  >
-                                    <option value="">Select Warehouse</option>
-                                    {availableWarehouses.map((w) => (
-                                      <option key={w.id} value={w.id}>
-                                        {getWarehouseLabel(w)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                              </td>
+                                <span className="text-base leading-none">&times;</span> Remove
+                              </button>
                             )}
-                            {hasPhysicalProduct && (
-                              <td className="py-2 px-3 align-top">
-                                {isService ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                ) : (
-                                  <select
-                                    value={row.warehouse_location_id || ""}
-                                    onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
-                                    disabled={!row.warehouse_id}
-                                    className={`${inputCls} pr-7 truncate disabled:opacity-50`}
-                                  >
-                                    <option value="">Select Location</option>
-                                    {availableLocations.map((loc: any) => (
-                                      <option key={loc.id} value={loc.id}>
-                                        {getLocationLabel(loc)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                              </td>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                              Product <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={row.product_id}
+                              onChange={(e) => selectProduct(index, e.target.value)}
+                              className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                            >
+                              <option value="">Select a product...</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                </option>
+                              ))}
+                            </select>
+                            {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                          </div>
+
+                          {!isService && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  Warehouse
+                                </label>
+                                <select
+                                  value={row.warehouse_id || ""}
+                                  onChange={(e) => {
+                                    updateProductRow(index, "warehouse_id", e.target.value);
+                                    updateProductRow(index, "warehouse_location_id", "");
+                                  }}
+                                  className={`${inputCls} pr-7 truncate text-xs`}
+                                >
+                                  <option value="">Select Warehouse</option>
+                                  {availableWarehouses.map((w) => (
+                                    <option key={w.id} value={w.id}>
+                                      {getWarehouseLabel(w)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  Location
+                                </label>
+                                <select
+                                  value={row.warehouse_location_id || ""}
+                                  onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                  disabled={!row.warehouse_id}
+                                  className={`${inputCls} pr-7 truncate text-xs disabled:opacity-50`}
+                                >
+                                  <option value="">Select Location</option>
+                                  {availableLocations.map((loc: any) => (
+                                    <option key={loc.id} value={loc.id}>
+                                      {getLocationLabel(loc)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {!isService ? (
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  Quantity
+                                </label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={row.quantity}
+                                  onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                  className={`${inputCls} text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                    qtyErr || isStockShortage
+                                      ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                      : ""
+                                  }`}
+                                />
+                                {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  Quantity
+                                </label>
+                                <div className="text-xs text-gray-500 dark:text-gray-400 py-2">1 (Service)</div>
+                              </div>
                             )}
-                            {hasPhysicalProduct && (
-                              <td className="py-2 px-3 align-top">
-                                {isService ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                ) : (
-                                  <>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      value={row.quantity}
-                                      onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
-                                      className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
-                                        ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
-                                        : ""
-                                        }`}
-                                    />
-                                    {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                                    {isStockShortage && locStock !== null && (
-                                      locStock > 0 ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
-                                          className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
-                                        >
-                                          <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
-                                          <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
-                                        </button>
-                                      ) : (
-                                        <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
-                                          ⚠️ Out of stock (fully allocated in previous row). Please select another location.
-                                        </div>
-                                      )
-                                    )}
-                                  </>
-                                )}
-                              </td>
-                            )}
-                            <td className="py-2 px-3 align-top">
+
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Price (₹)
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
                                 value={row.price}
                                 onChange={(e) => updateProductRow(index, "price", e.target.value)}
                                 disabled
-                                className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                className={`${inputCls} text-xs bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                               />
                               {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
-                            </td>
-                            <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
-                              {fmtCurrency(rowAmount)}
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              {productRows.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeProductRow(index)}
-                                  className="text-gray-400 hover:text-red-500 font-bold"
-                                >
-                                  &times;
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                          </div>
+
+                          {isStockShortage && locStock !== null && (
+                            locStock > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                                className="w-full text-left p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                              >
+                                <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
+                                <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                              </button>
+                            ) : (
+                              <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs font-medium text-red-700 dark:text-red-300">
+                                ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                              </div>
+                            )
+                          )}
+
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
+                            <span className="font-medium text-gray-500 dark:text-gray-400">Line Amount:</span>
+                            <span className="font-bold text-gray-800 dark:text-white text-sm">{fmtCurrency(rowAmount)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               );
             })()}
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
               <button
                 type="button"
                 onClick={addProductRow}
-                className="px-3 py-1.5 border border-[#0088cc] text-[#0088cc] rounded-lg text-xs font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
               >
                 + Add Product
               </button>
-              <div className="text-right">
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total: </span>
-                <span className="text-base font-bold text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
+              <div className="flex items-center gap-2 text-right">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total:</span>
+                <span className="text-base sm:text-lg font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
               </div>
             </div>
           </div>
-
-          {/* TAB 4: Custom Attributes */}
-          <div
-            id="custom-attributes"
-            ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
-            className="flex flex-col gap-4 pt-4 border-t border-gray-100 dark:border-gray-700"
-          >
-            <div>
-              <p className="text-base font-semibold text-gray-800 dark:text-white">Custom Attributes</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Additional customized fields for this lead.</p>
-            </div>
-            <DynamicAttributeFields
-              entityType="leads"
-              values={customAttributes}
-              onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-            />
-          </div>
-        </div>
-      </form>
-    </div>
+        </form>
+      </div>
   );
 };
 

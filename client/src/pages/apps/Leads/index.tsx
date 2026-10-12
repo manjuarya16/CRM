@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore } from "@/store";
@@ -7,6 +7,113 @@ import { getRottenInfo } from "@/utils/rottenHelper";
 import API from "@/config";
 import { usePermission } from "@/hooks/usePermission";
 import { realtimeService } from "@/services/realtimeService";
+
+interface LeadStageDropdownProps {
+  currentStageId: number;
+  stages: ILeadStage[];
+  onSelectStage: (newStageId: number) => Promise<void> | void;
+  stageColors: string[];
+}
+
+const LeadStageDropdown: React.FC<LeadStageDropdownProps> = ({
+  currentStageId,
+  stages,
+  onSelectStage,
+  stageColors,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const currentStage = stages.find((s) => s.id === currentStageId) || stages[0];
+  const stageIdx = stages.findIndex((s) => s.id === currentStageId);
+  const stageColorClass = stageColors[(stageIdx >= 0 ? stageIdx : 0) % stageColors.length];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      setOpenUpward(window.innerHeight - rect.bottom < 220);
+    }
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="relative inline-block" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOpen((prev) => !prev);
+        }}
+        className={`inline-flex items-center gap-1.5 pl-2.5 pr-2 py-0.5 rounded-full font-bold text-[10px] sm:text-[11px] border transition-all active:scale-95 shadow-sm cursor-pointer select-none ${stageColorClass}`}
+        title="Tap to change stage"
+      >
+        <span>{currentStage?.name || "Stage"}</span>
+        <i className={`mgc_down_line text-[10px] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}></i>
+      </button>
+
+      {isOpen && (
+        <div
+          className={`absolute left-0 ${
+            openUpward ? "bottom-full mb-1.5" : "top-full mt-1.5"
+          } w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 p-1 space-y-0.5 animate-in fade-in duration-150`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-0.5">
+            Move to Stage
+          </div>
+          <div className="max-h-48 overflow-y-auto no-scrollbar space-y-0.5">
+            {stages.map((st, idx) => {
+              const isSelected = st.id === currentStageId;
+              const dotColor = stageColors[idx % stageColors.length];
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsOpen(false);
+                    if (st.id !== currentStageId) {
+                      await onSelectStage(st.id);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors text-left cursor-pointer ${
+                    isSelected
+                      ? "bg-[#e0f2fe] text-[#0088cc] dark:bg-sky-950/60 dark:text-sky-300 font-bold"
+                      : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <span className={`w-2 h-2 rounded-full shrink-0 border ${dotColor}`}></span>
+                    <span className="truncate">{st.name}</span>
+                  </span>
+                  {isSelected && <i className="mgc_check_line text-sm text-[#0088cc] shrink-0 font-bold"></i>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,6 +137,8 @@ const LeadsPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedLeadIds, setSelectedLeadIds] = useState<number[]>([]);
+  const [mobileActiveStageId, setMobileActiveStageId] = useState<number | "all">("all");
+  const [mobileKanbanLayout, setMobileKanbanLayout] = useState<"list" | "board">("list");
 
   // Magic AI Configuration state
   const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
@@ -330,21 +439,27 @@ const LeadsPage: React.FC = () => {
     ? leads.filter((l) => getRottenInfo(l, currentPipeline).isRotten)
     : leads;
 
+  const activeFilterCount = Object.values(filterForm).filter((val) => Boolean(val)).length;
+
+  const displayMobileLeads = mobileActiveStageId === "all"
+    ? displayKanbanLeads
+    : displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === mobileActiveStageId);
+
   return (
-    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-1 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="text-xs text-gray-500 mb-0.5">Dashboard / Leads</div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Leads</h1>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end flex-wrap xs:flex-nowrap">
           {/* Upload File button */}
           {isDocGenEnabled && canCreate && (
             <button
               onClick={() => setShowUploadModal(true)}
-              className="px-3.5 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="flex-1 sm:flex-none justify-center px-3.5 py-2 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
               <i className="mgc_upload_line text-base"></i>
               <span>Upload File</span>
@@ -354,7 +469,7 @@ const LeadsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/leads/create"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              className="flex-1 sm:flex-none justify-center inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
             >
               + Create Lead
             </Link>
@@ -363,26 +478,65 @@ const LeadsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar & Pipeline Selector & View Switcher */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <form onSubmit={handleFilter} className="flex items-center gap-2 w-full md:w-auto flex-1 min-w-0 max-w-lg">
-          <input
-            type="text"
-            placeholder="Search leads or persons..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-w-0 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
-          />
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <form onSubmit={handleFilter} className="flex items-center gap-2 w-full lg:w-auto flex-1 min-w-0 max-w-xl">
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              placeholder="Search leads or persons..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-3 pr-8 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  if (viewMode === "kanban") {
+                    fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, "", filterForm);
+                  } else {
+                    setPage(1);
+                    fetchLeads(1, perPage, "", filterForm);
+                  }
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setShowFilterDrawer(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold text-xs sm:text-sm rounded-lg border border-gray-300 dark:border-gray-600 whitespace-nowrap transition-colors shrink-0"
+            className={`flex items-center gap-1.5 px-3 py-2 font-semibold text-xs sm:text-sm rounded-lg border whitespace-nowrap transition-colors shrink-0 ${
+              activeFilterCount > 0
+                ? "bg-[#e0f2fe] text-[#0088cc] border-[#0088cc] dark:bg-sky-950/40 dark:text-sky-300"
+                : "bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+            }`}
           >
             <i className="mgc_filter_line text-base"></i>
             <span>Filter</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-[#0088cc] text-white text-[10px] font-extrabold rounded-full">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
+          {(activeFilterCount > 0 || search) && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-xs text-red-500 hover:text-red-700 font-semibold underline px-1 shrink-0 whitespace-nowrap"
+              title="Reset all filters"
+            >
+              Reset
+            </button>
+          )}
         </form>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-between md:justify-end">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
           {/* Rotten Leads Quick Filter Toggle */}
           <button
             type="button"
@@ -394,8 +548,7 @@ const LeadsPage: React.FC = () => {
             title={`Show only rotten/stale leads exceeding pipeline limit (${currentPipeline?.rotten_days || 30} days)`}
           >
             <span>🍅</span>
-            <span className="hidden xs:inline">Rotten</span>
-            <span className="xs:hidden">Stale</span>
+            <span>Rotten</span>
             {(viewMode === "kanban" ? totalRottenInKanban : totalRottenInTable) > 0 && (
               <span className={`ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${onlyRotten ? "bg-white text-rose-700" : "bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200"
                 }`}>
@@ -408,7 +561,7 @@ const LeadsPage: React.FC = () => {
           <select
             value={selectedPipelineId}
             onChange={(e) => setSelectedPipelineId(Number(e.target.value))}
-            className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] text-gray-700 dark:text-gray-200 flex-1 sm:flex-none max-w-[170px] truncate"
+            className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] text-gray-700 dark:text-gray-200 flex-1 sm:flex-none min-w-[130px] max-w-full sm:max-w-[190px] truncate"
           >
             {pipelines.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -446,106 +599,217 @@ const LeadsPage: React.FC = () => {
       {/* KANBAN / CARDS VIEW */}
       {viewMode === "kanban" && (
         <>
-          {/* SLEEK MOBILE CARDS LIST VIEW (Shown on mobile < md) */}
+          {/* MOBILE RESPONSIVE VIEW (Shown on < md) */}
           <div className="block md:hidden space-y-3">
-            {displayKanbanLeads.length === 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 text-center space-y-2">
-                <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                  {onlyRotten ? "No Rotten Leads Found" : "No Leads Found"}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {onlyRotten ? "No leads have exceeded rotten limit." : "Try adjusting your filters or create a new lead."}
-                </p>
+            {/* View Switcher on mobile: Stage Tabs List vs Full Horizontal Board */}
+            <div className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-900/60 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
+              <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 pl-2">
+                Mobile View:
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileKanbanLayout("list")}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
+                    mobileKanbanLayout === "list"
+                      ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                  }`}
+                >
+                  <i className="mgc_list_check_line text-sm"></i>
+                  <span>Compact List</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileKanbanLayout("board")}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
+                    mobileKanbanLayout === "board"
+                      ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                  }`}
+                >
+                  <i className="mgc_layout_grid_line text-sm"></i>
+                  <span>Columns Board</span>
+                </button>
               </div>
-            ) : (
-              displayKanbanLeads.map((lead) => {
-                const stageObj = stages.find((s) => s.id === lead.lead_pipeline_stage_id);
-                const stageIdx = stages.findIndex((s) => s.id === lead.lead_pipeline_stage_id);
-                const stageColorClass = stageColors[(stageIdx >= 0 ? stageIdx : 0) % stageColors.length];
-                const avatarColor = avatarColors[(lead.id || 0) % avatarColors.length];
+            </div>
 
-                return (
-                  <div
-                    key={lead.id}
-                    className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3"
+            {mobileKanbanLayout === "list" && (
+              <>
+                {/* Scrollable Stage Pills on Mobile */}
+                <div
+                  className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 no-scrollbar scroll-smooth"
+                  onWheel={(e) => {
+                    if (e.deltaY !== 0) {
+                      e.currentTarget.scrollLeft += e.deltaY;
+                    }
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setMobileActiveStageId("all")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1.5 ${
+                      mobileActiveStageId === "all"
+                        ? "bg-[#0088cc] text-white shadow-sm ring-2 ring-[#0088cc]/30"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 active:scale-95"
+                    }`}
                   >
-                    {/* Header: Stage Badge & Actions */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${stageColorClass}`}>
-                        {stageObj?.name || lead.stage_name || "New Stage"}
-                      </span>
-
-                      <div className="flex items-center gap-2">
-                        {canEdit && (
-                          <Link to={`/leads/edit/${lead.id}`} className="p-1 text-gray-400 hover:text-[#0088cc]">
-                            <i className="mgc_edit_line text-base"></i>
-                          </Link>
-                        )}
-                        {canDelete && (
-                          <button onClick={() => handleDelete(lead)} className="p-1 text-gray-400 hover:text-red-500">
-                            <i className="mgc_delete_line text-base"></i>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Person / Contact info & Avatar */}
-                    <div className="flex items-center gap-3">
-                      <span className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${avatarColor}`}>
-                        {getInitials(lead.person_name || lead.title)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                          {lead.person_name || "No Person"}
-                        </p>
-                        <p className="text-xs text-[#0088cc] dark:text-[#4ab8f5] truncate font-medium">
-                          {(lead as any).organization_name || (lead as any).company_name || "No Company"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Lead Title */}
-                    <Link
-                      to={`/leads/view/${lead.id}`}
-                      className="block text-sm font-bold text-gray-800 dark:text-gray-100 hover:text-[#0088cc] leading-snug"
-                    >
-                      {lead.title}
-                    </Link>
-
-                    {/* Meta info pills: Sales Rep & Value */}
-                    <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 font-medium">
-                        <i className="mgc_user_3_line text-gray-400"></i>
-                        {lead.user_name || "Unassigned"}
-                      </span>
-                      <span className="text-sm font-extrabold text-gray-900 dark:text-white">
-                        ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-
-                    {/* Footer: Date & Status */}
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700/60 text-[11px] text-gray-500">
-                      {lead.expected_close_date ? (
-                        <span className="flex items-center gap-1">
-                          <i className="mgc_calendar_line"></i>
-                          {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    <span>All</span>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${mobileActiveStageId === "all" ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
+                      {displayKanbanLeads.length}
+                    </span>
+                  </button>
+                  {stages.map((stage) => {
+                    const count = displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === stage.id).length;
+                    const isActive = mobileActiveStageId === stage.id;
+                    return (
+                      <button
+                        key={stage.id}
+                        type="button"
+                        onClick={() => setMobileActiveStageId(stage.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1.5 ${
+                          isActive
+                            ? "bg-[#0088cc] text-white shadow-sm ring-2 ring-[#0088cc]/30"
+                            : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 active:scale-95"
+                        }`}
+                      >
+                        <span>{stage.name}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${isActive ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
+                          {count}
                         </span>
-                      ) : (
-                        <span>No close date</span>
-                      )}
+                      </button>
+                    );
+                  })}
+                </div>
 
-                      <span className={`px-2 py-0.5 rounded-full font-semibold ${lead.status !== false ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400"}`}>
-                        {lead.status !== false ? "Open" : "Lost"}
-                      </span>
+                {/* Summary header */}
+                <div className="flex items-center justify-between px-1 text-xs text-gray-500 dark:text-gray-400">
+                  <span>
+                    Showing <strong className="text-gray-800 dark:text-gray-200">{displayMobileLeads.length}</strong> {displayMobileLeads.length === 1 ? "lead" : "leads"}
+                  </span>
+                  {mobileActiveStageId !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setMobileActiveStageId("all")}
+                      className="text-xs text-[#0088cc] hover:underline font-semibold"
+                    >
+                      Show All Stages
+                    </button>
+                  )}
+                </div>
+
+                {/* Mobile High-Density Compact Cards List */}
+                <div className="space-y-2">
+                  {displayMobileLeads.length === 0 ? (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 text-center space-y-2">
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                        {onlyRotten ? "No Rotten Leads Found" : "No Leads in this Stage"}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {onlyRotten ? "No leads have exceeded rotten limit." : "Try switching stage or create a new lead."}
+                      </p>
                     </div>
-                  </div>
-                );
-              })
+                  ) : (
+                    displayMobileLeads.map((lead) => {
+                      const stageIdx = stages.findIndex((s) => s.id === lead.lead_pipeline_stage_id);
+                      const stageColorClass = stageColors[(stageIdx >= 0 ? stageIdx : 0) % stageColors.length];
+                      const avatarColor = avatarColors[(lead.id || 0) % avatarColors.length];
+                      const rottenInfo = getRottenInfo(lead, currentPipeline);
+
+                      return (
+                        <div
+                          key={lead.id}
+                          className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow transition-all active:scale-[0.99] flex flex-col gap-2"
+                        >
+                          {/* Top Row: Initial Avatar + Title + Company + Value */}
+                          <div className="flex items-start justify-between gap-2.5">
+                            <Link to={`/leads/view/${lead.id}`} className="flex items-start gap-2.5 min-w-0 flex-1 group">
+                              <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${avatarColor}`}>
+                                {getInitials(lead.title || lead.person_name)}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] truncate leading-tight">
+                                    {lead.title}
+                                  </p>
+                                  {rottenInfo.isRotten && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 font-bold shrink-0">
+                                      🍅 {rottenInfo.daysIdle}d
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                  {lead.person_name ? (
+                                    <>
+                                      <span className="text-gray-700 dark:text-gray-300 font-medium">{lead.person_name}</span>
+                                      {((lead as any).organization_name || (lead as any).company_name) && (
+                                        <span> • {(lead as any).organization_name || (lead as any).company_name}</span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    (lead as any).organization_name || (lead as any).company_name || "No Contact"
+                                  )}
+                                </p>
+                              </div>
+                            </Link>
+
+                            {/* Right: Deal Value */}
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-extrabold text-[#0088cc] dark:text-[#38bdf8] whitespace-nowrap">
+                                ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Stage Dropdown Badge + Owner + Quick Actions */}
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-700/60 text-xs">
+                            {/* Stage Selector Pill */}
+                            <LeadStageDropdown
+                              currentStageId={lead.lead_pipeline_stage_id || stages[0]?.id}
+                              stages={stages}
+                              stageColors={stageColors}
+                              onSelectStage={async (newStageId) => {
+                                await updateLeadStage(lead.id, newStageId, true);
+                                fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
+                              }}
+                            />
+
+                            {/* Owner & Quick Links */}
+                            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-[11px]">
+                              {lead.user_name && (
+                                <span className="truncate max-w-[100px] flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                                  <i className="mgc_user_3_line text-xs"></i>
+                                  <span className="truncate">{lead.user_name}</span>
+                                </span>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <Link to={`/leads/view/${lead.id}`} className="p-1 hover:text-[#0088cc] text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="View Lead">
+                                  <i className="mgc_eye_line text-sm"></i>
+                                </Link>
+                                {canEdit && (
+                                  <Link to={`/leads/edit/${lead.id}`} className="p-1 hover:text-[#0088cc] text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Edit Lead">
+                                    <i className="mgc_edit_line text-sm"></i>
+                                  </Link>
+                                )}
+                                {canDelete && (
+                                  <button onClick={() => handleDelete(lead)} className="p-1 hover:text-red-500 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Delete Lead">
+                                    <i className="mgc_delete_line text-sm"></i>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
             )}
           </div>
 
-          {/* DESKTOP KANBAN BOARD VIEW (Shown on >= md) */}
-          <div className="hidden md:block overflow-x-auto pb-4">
+          {/* KANBAN BOARD VIEW (Shown on >= md, or on mobile when board layout chosen) */}
+          <div className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} overflow-x-auto pb-4 scroll-smooth`}>
             <div className="flex gap-4 min-w-max items-start">
               {(() => {
                 const validStageIds = new Set(stages.map((s) => s.id));
@@ -569,9 +833,9 @@ const LeadsPage: React.FC = () => {
                       if (!leadIdStr) return;
                       const leadId = Number(leadIdStr);
                       await updateLeadStage(leadId, stage.id, true);
-                      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
+                      fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
                     }}
-                    className="w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
+                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -580,7 +844,7 @@ const LeadsPage: React.FC = () => {
                           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">({stageLeads.length})</span>
                         </h3>
                         <p className="text-xs font-bold text-gray-600 dark:text-gray-300 mt-0.5">
-                          ${stageValueTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          ₹{stageValueTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </p>
                       </div>
 
@@ -771,15 +1035,15 @@ const LeadsPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           {/* Bulk Selection Header Action Banner */}
           {selectedLeadIds.length > 0 && (
-            <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-900/60 px-4 py-2.5 flex items-center justify-between animate-fadeIn">
-              <div className="flex items-center gap-2">
+            <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-900/60 px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-fadeIn">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-red-700 dark:text-red-300">
                   {selectedLeadIds.length} lead(s) selected
                 </span>
                 <button
                   type="button"
                   onClick={() => setSelectedLeadIds([])}
-                  className="text-[11px] text-red-600 underline hover:text-red-800 ml-2"
+                  className="text-[11px] text-red-600 underline hover:text-red-800"
                 >
                   Clear Selection
                 </button>
@@ -788,7 +1052,7 @@ const LeadsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleBulkDelete}
-                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 self-end sm:self-auto"
                 >
                   <i className="mgc_delete_line text-sm"></i>
                   Delete Selected Leads ({selectedLeadIds.length})
@@ -797,11 +1061,20 @@ const LeadsPage: React.FC = () => {
             </div>
           )}
 
+          {/* Mobile Horizontal Swipe Cue */}
+          <div className="md:hidden px-4 py-2 bg-gray-50/80 dark:bg-gray-900/60 border-b border-gray-100 dark:border-gray-700 text-[11px] text-gray-500 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-medium">
+              <i className="mgc_swap_line text-sm text-[#0088cc]"></i>
+              Swipe horizontally to view full table
+            </span>
+            <span className="font-semibold text-gray-700 dark:text-gray-300">Total: {total}</span>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-gray-600 dark:text-gray-300">
               <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-700 dark:text-gray-300 uppercase font-semibold border-b border-gray-100 dark:border-gray-700">
                 <tr>
-                  <th className="py-3 px-4 w-10">
+                  <th className="py-3 px-4 w-10 whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={displayLeads.length > 0 && selectedLeadIds.length === displayLeads.length}
@@ -809,14 +1082,14 @@ const LeadsPage: React.FC = () => {
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                   </th>
-                  <th className="py-3 px-4">Title</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Value</th>
-                  <th className="py-3 px-4">Contact Person</th>
-                  <th className="py-3 px-4">Source</th>
-                  <th className="py-3 px-4">Stage</th>
-                  <th className="py-3 px-4">Created At</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Title</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Value</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Contact Person</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Source</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Stage</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Created At</th>
+                  <th className="py-3 px-4 whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -838,7 +1111,7 @@ const LeadsPage: React.FC = () => {
                     const isSelected = selectedLeadIds.includes(lead.id);
                     return (
                       <tr key={lead.id} className={`border-b border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/60 ${isSelected ? "bg-blue-50/50 dark:bg-blue-950/30" : rottenInfo.isRotten ? "bg-rose-50/20 dark:bg-rose-950/10" : ""}`}>
-                        <td className="py-3 px-4 w-10">
+                        <td className="py-3 px-4 w-10 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -846,34 +1119,34 @@ const LeadsPage: React.FC = () => {
                             className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                         </td>
-                        <td className="py-3 px-4 font-medium text-[#0088cc]">
+                        <td className="py-3 px-4 font-medium text-[#0088cc] max-w-[240px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <Link to={`/leads/view/${lead.id}`} className="hover:underline font-bold">
+                            <Link to={`/leads/view/${lead.id}`} className="hover:underline font-bold truncate">
                               {lead.title}
                             </Link>
                             {rottenInfo.isRotten && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 shrink-0">
                                 🍅 Rotten ({rottenInfo.daysIdle}d)
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`px-2 py-0.5 text-xs rounded font-medium ${lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                             }`}>
                             {lead.status ? "Open" : "Lost / Closed"}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-200">
-                          ₹{Number(lead.lead_value || 0).toFixed(2)}
+                        <td className="py-3 px-4 whitespace-nowrap font-semibold text-gray-800 dark:text-gray-200">
+                          ₹{Number(lead.lead_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.person_name || "-"}</td>
-                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.source_name || "-"}</td>
-                        <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{lead.stage_name || "-"}</td>
-                        <td className="py-3 px-4 text-gray-500">
+                        <td className="py-3 px-4 whitespace-nowrap text-gray-600 dark:text-gray-300">{lead.person_name || "-"}</td>
+                        <td className="py-3 px-4 whitespace-nowrap text-gray-600 dark:text-gray-300">{lead.source_name || "-"}</td>
+                        <td className="py-3 px-4 whitespace-nowrap text-gray-600 dark:text-gray-300">{lead.stage_name || "-"}</td>
+                        <td className="py-3 px-4 whitespace-nowrap text-gray-500">
                           {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "-"}
                         </td>
-                        <td className="py-3 px-4 text-right space-x-2">
+                        <td className="py-3 px-4 whitespace-nowrap text-right space-x-1.5">
                           {canView && (
                             <Link to={`/leads/view/${lead.id}`} className="text-gray-500 hover:text-[#0088cc] p-1 inline-block" title="View Lead Process">
                               <i className="mgc_eye_line text-base"></i>
@@ -900,13 +1173,13 @@ const LeadsPage: React.FC = () => {
 
           {/* Pagination */}
           {total > perPage && (
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
               <span>{`${(page - 1) * perPage + 1} – ${Math.min(page * perPage, total)} of ${total}`}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 transition-colors"
                 >
                   ← Prev
                 </button>
@@ -914,7 +1187,7 @@ const LeadsPage: React.FC = () => {
                 <button
                   onClick={() => setPage((p) => Math.min(Math.ceil(total / perPage), p + 1))}
                   disabled={page >= Math.ceil(total / perPage)}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 transition-colors"
                 >
                   Next →
                 </button>
@@ -926,11 +1199,11 @@ const LeadsPage: React.FC = () => {
 
       {/* UPLOAD FILE MODAL (MAGIC AI / DOCUMENT LEAD CREATION) */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-3 sm:p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Create Lead Using AI File Upload</h3>
-              <button onClick={() => setShowUploadModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-100">Create Lead Using AI File Upload</h3>
+              <button onClick={() => setShowUploadModal(false)} className="text-gray-400 hover:text-gray-600 p-1">✕</button>
             </div>
 
             <form onSubmit={handleUploadSubmit} className="space-y-4">
@@ -970,183 +1243,196 @@ const LeadsPage: React.FC = () => {
       {/* LEAD FILTERS DRAWER / MODAL (MATCHING KRAYIN CRM DOC) */}
       {showFilterDrawer && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 h-full w-full max-w-md shadow-2xl border-l border-gray-200 dark:border-gray-700 p-6 flex flex-col justify-between space-y-6 overflow-y-auto">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b pb-4">
-                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                  <i className="mgc_filter_line text-[#0088cc]"></i>
-                  Filters in Leads
-                </h3>
-                <button onClick={() => setShowFilterDrawer(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+          <div className="bg-white dark:bg-gray-800 h-full w-full max-w-full sm:max-w-md shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col justify-between overflow-hidden">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-4 sm:p-5 shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <i className="mgc_filter_line text-[#0088cc]"></i>
+                Filters in Leads
+                {activeFilterCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-[#e0f2fe] text-[#0088cc] font-bold">
+                    {activeFilterCount} Active
+                  </span>
+                )}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFilterDrawer(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Drawer Scrollable Body */}
+            <form id="leads-filter-form" onSubmit={handleApplyAdvancedFilters} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {/* 1. ID */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">ID</label>
+                <input
+                  type="number"
+                  placeholder="Search by Lead ID"
+                  value={filterForm.id}
+                  onChange={(e) => setFilterForm({ ...filterForm, id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
               </div>
 
-              <form onSubmit={handleApplyAdvancedFilters} className="space-y-4">
-                {/* 1. ID */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">ID</label>
-                  <input
-                    type="number"
-                    placeholder="Search by Lead ID"
-                    value={filterForm.id}
-                    onChange={(e) => setFilterForm({ ...filterForm, id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                </div>
+              {/* 2. Lead Value */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Value</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Min / Exact Lead Value"
+                  value={filterForm.lead_value}
+                  onChange={(e) => setFilterForm({ ...filterForm, lead_value: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+              </div>
 
-                {/* 2. Lead Value */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Value</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Min / Exact Lead Value"
-                    value={filterForm.lead_value}
-                    onChange={(e) => setFilterForm({ ...filterForm, lead_value: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                </div>
+              {/* 3. Sales Person */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Sales Person</label>
+                <select
+                  value={filterForm.user_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, user_id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select Sales Person</option>
+                  {usersList.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 3. Sales Person */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Sales Person</label>
-                  <select
-                    value={filterForm.user_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, user_id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">Select Sales Person</option>
-                    {usersList.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 4. Contact Person */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Person</label>
+                <select
+                  value={filterForm.person_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, person_id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select Contact Person</option>
+                  {personsList.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 4. Contact Person */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Contact Person</label>
-                  <select
-                    value={filterForm.person_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, person_id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">Select Contact Person</option>
-                    {personsList.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 5. Pipeline */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Pipeline</label>
+                <select
+                  value={filterForm.lead_pipeline_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_id: e.target.value, lead_pipeline_stage_id: "" })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select Pipeline</option>
+                  {pipelines.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 5. Pipeline */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Pipeline</label>
-                  <select
-                    value={filterForm.lead_pipeline_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_id: e.target.value, lead_pipeline_stage_id: "" })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">Select Pipeline</option>
-                    {pipelines.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 6. Stage */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Stage</label>
+                <select
+                  value={filterForm.lead_pipeline_stage_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_stage_id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  disabled={!filterForm.lead_pipeline_id && filterStages.length === 0}
+                >
+                  <option value="">Select Stage</option>
+                  {filterStages.map((st) => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 6. Stage */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Stage</label>
-                  <select
-                    value={filterForm.lead_pipeline_stage_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, lead_pipeline_stage_id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                    disabled={!filterForm.lead_pipeline_id && filterStages.length === 0}
-                  >
-                    <option value="">Select Stage</option>
-                    {filterStages.map((st) => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 7. Lead Type */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Type</label>
+                <select
+                  value={filterForm.lead_type_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, lead_type_id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select Lead Type</option>
+                  {typesList.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 7. Lead Type */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Lead Type</label>
-                  <select
-                    value={filterForm.lead_type_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, lead_type_id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">Select Lead Type</option>
-                    {typesList.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 8. Source */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Source</label>
+                <select
+                  value={filterForm.lead_source_id}
+                  onChange={(e) => setFilterForm({ ...filterForm, lead_source_id: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="">Select Source</option>
+                  {sourcesList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* 6. Source */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Source</label>
-                  <select
-                    value={filterForm.lead_source_id}
-                    onChange={(e) => setFilterForm({ ...filterForm, lead_source_id: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  >
-                    <option value="">Select Source</option>
-                    {sourcesList.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* 9. Tags */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</label>
+                <input
+                  type="text"
+                  placeholder="Filter by tag..."
+                  value={filterForm.tag}
+                  onChange={(e) => setFilterForm({ ...filterForm, tag: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+              </div>
 
-                {/* 7. Tags */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</label>
-                  <input
-                    type="text"
-                    placeholder="Filter by tag..."
-                    value={filterForm.tag}
-                    onChange={(e) => setFilterForm({ ...filterForm, tag: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                </div>
+              {/* 10. Expected Close Date */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Expected Close Date</label>
+                <input
+                  type="date"
+                  value={filterForm.expected_close_date}
+                  onChange={(e) => setFilterForm({ ...filterForm, expected_close_date: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+              </div>
 
-                {/* 8. Expected Close Date */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Expected Close Date</label>
-                  <input
-                    type="date"
-                    value={filterForm.expected_close_date}
-                    onChange={(e) => setFilterForm({ ...filterForm, expected_close_date: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                </div>
+              {/* 11. Created At */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Created At</label>
+                <input
+                  type="date"
+                  value={filterForm.created_at}
+                  onChange={(e) => setFilterForm({ ...filterForm, created_at: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+              </div>
+            </form>
 
-                {/* 9. Created At */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Created At</label>
-                  <input
-                    type="date"
-                    value={filterForm.created_at}
-                    onChange={(e) => setFilterForm({ ...filterForm, created_at: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3 pt-4 border-t">
-                  <button
-                    type="button"
-                    onClick={handleResetFilters}
-                    className="flex-1 py-2 px-3 border border-gray-300 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 text-center"
-                  >
-                    Clear All
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-2 px-3 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold text-center"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </form>
+            {/* Sticky Drawer Footer */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex-1 py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors"
+              >
+                Clear All
+              </button>
+              <button
+                type="submit"
+                form="leads-filter-form"
+                className="flex-1 py-2 px-3 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold text-center shadow-sm transition-colors"
+              >
+                Apply Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ""}
+              </button>
             </div>
           </div>
         </div>

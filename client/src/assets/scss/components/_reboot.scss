@@ -8,7 +8,7 @@ html {
 }
 
 body {
-    overflow-x: hidden;
+    overflow-x: clip;
     color: $body-color;
     background-color: $body-bg;
     font-family: $body-font-family;
@@ -42,4 +42,29 @@ button,
 select,
 a {
     -webkit-tap-highlight-color: transparent;
+}
+
+/* Modern slim scrollbar across the application */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.4);
+    border-radius: 9999px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.7);
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
 }
