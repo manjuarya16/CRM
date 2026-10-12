@@ -166,7 +166,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
         <Link
           to="/"
           className="logo-box flex items-center justify-center px-4 h-[65px] sm:h-[65px] border-b border-[#03075e]"
-          style={{ background: "#040975" }}
+          style={{ background: "#040975", height: "65px" }}
         >
           {logoUrl ? (
             <img
@@ -177,6 +177,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
                   ? "h-9 w-9 max-w-[42px] object-contain drop-shadow-sm"
                   : "h-full max-h-[65px] max-w-[240px] w-auto object-contain transition-all drop-shadow-sm py-1"
               }
+              style={{ maxHeight: "65px" }}
             />
           ) : (
             <div className="flex items-center gap-2">
