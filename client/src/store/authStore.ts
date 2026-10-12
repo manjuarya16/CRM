@@ -10,6 +10,7 @@ import {
 } from "../helpers/api/auth";
 
 import { UserData, AuthState } from "@/interface/authInterface";
+import { useConfigStore } from "./configStore";
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -55,6 +56,13 @@ export const useAuthStore = create<AuthState>()(
               loading: false,
               error: null,
             });
+
+            // Re-fetch application configuration & logo on every login
+            try {
+              useConfigStore.getState().fetchConfigs();
+            } catch {
+              // Non-critical
+            }
           } else {
             throw new Error(data.message || "Login failed");
           }
@@ -274,8 +282,13 @@ export const useAuthStore = create<AuthState>()(
               userLoggedIn: true,
               error: null,
             });
+
+            try {
+              useConfigStore.getState().fetchConfigs();
+            } catch {
+              // Non-critical
+            }
           } catch (error) {
-            alert("here");
             console.error("Error parsing stored auth session:", error);
           }
         }

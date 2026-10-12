@@ -1,22 +1,59 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import API, { SERVER_URL } from "@/config";
 import { ConfigState } from "@/interface";
 
 const resolveImageUrl = (url: string | null): string => {
   if (!url) return "";
   if (url.startsWith("data:") || url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${SERVER_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  let base = SERVER_URL || "";
+  if (typeof window !== "undefined" && window.location) {
+    if (base.includes("localhost") && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      base = `${window.location.protocol}//${window.location.hostname}:3040`;
+    }
+  }
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 };
 
-const applyConfigEffects = (configs: Record<string, any>) => {
+import { getHoverColor, getActiveColor, getContrastTextColor } from "@/utils/colorHelper";
+
+export const applyConfigEffects = (configs: Record<string, any>) => {
   if (!configs || typeof window === "undefined") return;
 
-  // 1. Brand / Menu Color
-  const brandColor = configs["general.settings.menu_color.brand_color"];
-  if (brandColor && typeof brandColor === "string") {
-    document.documentElement.style.setProperty("--brand-color", brandColor);
-    document.documentElement.style.setProperty("--primary-color", brandColor);
-    document.documentElement.style.setProperty("--tw-menu-item-active-bg", brandColor);
+  // 1. Dynamic Brand Color (Active menu item highlight & all primary action buttons)
+  const brandColor = configs["general.settings.menu_color.brand_color"] || "#040975";
+
+  if (brandColor && typeof brandColor === "string" && brandColor.trim()) {
+    const cleanBrand = brandColor.trim();
+    const hoverColor = getHoverColor(cleanBrand);
+    const activeColor = getActiveColor(cleanBrand);
+    const contrastText = getContrastTextColor(cleanBrand);
+
+    document.documentElement.style.setProperty("--brand-color", cleanBrand);
+    document.documentElement.style.setProperty("--brand-color-hover", hoverColor);
+    document.documentElement.style.setProperty("--brand-color-active", activeColor);
+    document.documentElement.style.setProperty("--brand-color-text", contrastText);
+    document.documentElement.style.setProperty("--brand-color-light", `${cleanBrand}18`);
+    document.documentElement.style.setProperty("--brand-color-ring", `${cleanBrand}40`);
+    document.documentElement.style.setProperty("--primary-color", cleanBrand);
+    document.documentElement.style.setProperty("--tw-menu-item-active-bg", cleanBrand);
+    document.documentElement.style.setProperty("--tw-menu-item-active-color", "#ffffff");
+
+    // Keep sidebar container clean as earlier: remove any forced container background or text overrides
+    document.documentElement.style.removeProperty("--tw-menu-bg");
+    document.documentElement.style.removeProperty("--tw-menu-item-color");
+    document.documentElement.style.removeProperty("--tw-menu-item-hover-color");
+    document.documentElement.style.removeProperty("--tw-menu-item-hover-bg");
+    document.documentElement.removeAttribute("data-menu-dark");
+
+    // Ensure data-menu-color is restored to light mode if not in dark mode
+    const currentMode = document.documentElement.getAttribute("data-mode");
+    if (currentMode !== "dark") {
+      const currentMenuColor = document.documentElement.getAttribute("data-menu-color");
+      if (currentMenuColor === "dark") {
+        document.documentElement.setAttribute("data-menu-color", "light");
+      }
+    }
   }
 
   // 2. Favicon Image
@@ -37,9 +74,11 @@ const applyConfigEffects = (configs: Record<string, any>) => {
   }
 };
 
-export const useConfigStore = create<ConfigState>((set) => ({
-  configs: {},
-  loading: false,
+export const useConfigStore = create<ConfigState>()(
+  persist(
+    (set) => ({
+      configs: {},
+      loading: false,
 
   fetchConfigs: async () => {
     set({ loading: true });
@@ -89,8 +128,18 @@ export const useConfigStore = create<ConfigState>((set) => ({
     return response.data;
   },
 
-  setConfigs: (configs) => {
-    applyConfigEffects(configs);
-    set({ configs });
-  },
-}));
+    setConfigs: (configs) => {
+      applyConfigEffects(configs);
+      set({ configs });
+    },
+  }),
+  {
+    name: "crm-app-config",
+    partialize: (state) => ({ configs: state.configs }),
+    onRehydrateStorage: () => (state) => {
+      if (state?.configs) {
+        applyConfigEffects(state.configs);
+      }
+    },
+  }
+));

@@ -386,7 +386,7 @@ export const DashboardPage: React.FC = () => {
           {/* Export PDF Button */}
           <button
             onClick={handleExportPDF}
-            className="h-10 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+            className="h-10 px-4 text-xs font-bold text-white bg-[#0088cc] hover:bg-[#0077b5] active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <i className="mgc_file_download_line text-sm"></i>
             <span>Export PDF</span>

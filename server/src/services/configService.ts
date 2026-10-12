@@ -1,6 +1,9 @@
 import { pool } from '@/config/db';
 import { CoreConfigRow, CoreConfigMap } from '@/interfaces/config.interface';
 
+import path from 'path';
+import fs from 'fs';
+
 export class ConfigService {
   /**
    * Get all configuration settings as a key-value object map
@@ -9,7 +12,31 @@ export class ConfigService {
     const result = await pool.query<CoreConfigRow>('SELECT * FROM public.fn_get_core_config()');
     const configs: CoreConfigMap = {};
     for (const row of result.rows) {
-      configs[row.code] = row.value;
+      let val = row.value;
+      if (
+        (row.code === 'general.general.admin_logo.logo_image' ||
+          row.code === 'general.general.admin_logo.favicon_image') &&
+        val &&
+        val.startsWith('/uploads/config/')
+      ) {
+        const localPath = path.join(process.cwd(), val.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) {
+          try {
+            const buf = fs.readFileSync(localPath);
+            const ext = path.extname(localPath).toLowerCase().replace('.', '');
+            const mime =
+              ext === 'ico'
+                ? 'image/x-icon'
+                : ext === 'jpg' || ext === 'jpeg'
+                ? 'image/jpeg'
+                : 'image/png';
+            val = `data:${mime};base64,${buf.toString('base64')}`;
+          } catch {
+            // Keep original val
+          }
+        }
+      }
+      configs[row.code] = val;
     }
     return configs;
   }

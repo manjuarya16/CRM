@@ -625,7 +625,7 @@ const LeadsPage: React.FC = () => {
                           {!onlyRotten && canCreate && (
                             <Link
                               to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                              className="px-3 py-1.5 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                              className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
                             >
                               Create Lead
                             </Link>

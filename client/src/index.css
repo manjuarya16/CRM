@@ -8,8 +8,211 @@
   --tw-sidenav-width: 290px;
   --tw-sidenav-width-sm: 80px;
   --tw-topbar-height: 70px;
+
+  /* Dynamic Branding Engine Variables */
+  --brand-color: #040975;
+  --brand-color-hover: #232894;
+  --brand-color-active: #373ca8;
+  --brand-color-text: #ffffff;
+  --brand-color-light: rgba(4, 9, 117, 0.12);
+  --brand-color-ring: rgba(4, 9, 117, 0.35);
+  --tw-menu-item-active-bg: var(--brand-color);
+  --tw-menu-item-active-color: #ffffff;
 }
 
 body {
   @apply bg-light font-base text-slate-600;
+}
+
+/* ========================================================
+   DYNAMIC BRANDING ENGINE
+   ======================================================== */
+
+/* 1. Left Sidebar Active Menu Item Highlight
+   (Sidebar container background stays clean/original theme as earlier) */
+.app-menu .menu .menu-item.active > .menu-link,
+.app-menu .menu .menu-link.active {
+  background-color: var(--tw-menu-item-active-bg, var(--brand-color)) !important;
+  color: var(--tw-menu-item-active-color, #ffffff) !important;
+  font-weight: 500;
+}
+
+.app-menu .menu .menu-item.active > .menu-link *,
+.app-menu .menu .menu-link.active * {
+  color: var(--tw-menu-item-active-color, #ffffff) !important;
+}
+
+/* 2. All Primary Action Buttons Across the CRM (Excludes secondary like Cancel, Exit, Close, Back) */
+.bg-\[\#0088cc\],
+.bg-\[\#0E90D9\],
+.bg-\[\#0e90d9\],
+.bg-\[\#0284c7\],
+.bg-\[\#0c7ab8\],
+.bg-\[\#040975\],
+.bg-\[\#4f46e5\],
+.bg-primary,
+.bg-blue-600,
+.btn-primary,
+button.btn-primary,
+a.btn-primary,
+button.bg-blue-600,
+a.bg-blue-600,
+.swal2-styled.swal2-confirm,
+button[type="submit"]:not(.btn-secondary):not(.btn-light):not([data-variant="secondary"]):not([class*="border-gray"]):not([class*="bg-gray"]):not([class*="bg-red"]):not([class*="bg-white"]):not([class*="text-gray"]) {
+  --tw-bg-opacity: 1 !important;
+  background-color: var(--brand-color, #040975) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-color, #040975) !important;
+}
+
+/* Primary Button Descendant Content (Ensures all text, icons, spans are bright white) */
+.bg-\[\#0088cc\] *,
+.bg-\[\#0E90D9\] *,
+.bg-\[\#0e90d9\] *,
+.bg-\[\#0284c7\] *,
+.bg-\[\#0c7ab8\] *,
+.bg-\[\#040975\] *,
+.bg-\[\#4f46e5\] *,
+.bg-primary *,
+.bg-blue-600 *,
+.btn-primary *,
+button.btn-primary *,
+a.btn-primary *,
+button.bg-blue-600 *,
+a.bg-blue-600 *,
+.swal2-styled.swal2-confirm *,
+button[type="submit"]:not(.btn-secondary):not(.btn-light):not([data-variant="secondary"]):not([class*="border-gray"]):not([class*="bg-gray"]):not([class*="bg-red"]):not([class*="bg-white"]):not([class*="text-gray"]) * {
+  color: #ffffff !important;
+  fill: currentColor !important;
+}
+
+/* Primary Button Hover */
+.hover\:bg-\[\#0088cc\]:hover,
+.hover\:bg-\[\#0E90D9\]:hover,
+.hover\:bg-\[\#0e90d9\]:hover,
+.hover\:bg-\[\#0077b5\]:hover,
+.hover\:bg-\[\#0077bb\]:hover,
+.hover\:bg-\[\#0077b3\]:hover,
+.hover\:bg-\[\#0c7bb9\]:hover,
+.hover\:bg-\[\#0c7ab8\]:hover,
+.hover\:bg-\[\#0284c7\]:hover,
+.hover\:bg-blue-700:hover,
+.hover\:bg-primary\/90:hover,
+.hover\:bg-primary\/80:hover,
+.hover\:bg-primary:hover,
+.btn-primary:hover,
+button.btn-primary:hover,
+a.btn-primary:hover,
+button.bg-blue-600:hover,
+a.bg-blue-600:hover,
+.swal2-styled.swal2-confirm:hover,
+button[type="submit"]:not(.btn-secondary):not(.btn-light):not([data-variant="secondary"]):not([class*="border-gray"]):not([class*="bg-gray"]):not([class*="bg-red"]):not([class*="bg-white"]):not([class*="text-gray"]):hover {
+  background-color: var(--brand-color-hover, #232894) !important;
+  border-color: var(--brand-color-hover, #232894) !important;
+  color: #ffffff !important;
+}
+
+.hover\:bg-\[\#0088cc\]:hover *,
+.hover\:bg-\[\#0077b5\]:hover *,
+.hover\:bg-blue-700:hover *,
+.hover\:bg-primary:hover *,
+.btn-primary:hover *,
+button.btn-primary:hover *,
+a.btn-primary:hover * {
+  color: #ffffff !important;
+}
+
+/* Outline Button Hover Text Support */
+.hover\:text-white:hover,
+.hover\:text-white:hover * {
+  color: #ffffff !important;
+}
+
+/* Primary Button Active */
+.active\:bg-\[\#006699\]:active,
+.btn-primary:active,
+button.btn-primary:active,
+a.btn-primary:active {
+  background-color: var(--brand-color-active, #373ca8) !important;
+  color: #ffffff !important;
+}
+
+/* Primary Text Accents */
+.text-\[\#0088cc\],
+.text-\[\#0E90D9\],
+.text-\[\#0e90d9\],
+.text-\[\#0284c7\],
+.text-primary {
+  color: var(--brand-color, #040975);
+}
+
+.hover\:text-\[\#0088cc\]:hover,
+.hover\:text-\[\#0E90D9\]:hover,
+.hover\:text-primary:hover {
+  color: var(--brand-color-hover, #232894);
+}
+
+/* Primary Border Accents */
+.border-\[\#0088cc\],
+.border-\[\#0E90D9\],
+.border-\[\#0e90d9\],
+.border-primary {
+  border-color: var(--brand-color, #040975);
+}
+
+/* Focus Rings */
+.focus\:ring-\[\#0088cc\]:focus,
+.focus\:ring-\[\#0088cc\]\/20:focus,
+.focus\:ring-\[\#0088cc\]\/30:focus,
+.focus\:ring-primary:focus {
+  --tw-ring-color: var(--brand-color-ring) !important;
+  border-color: var(--brand-color, #040975) !important;
+}
+
+.focus\:border-\[\#0088cc\]:focus,
+.focus\:border-primary:focus {
+  border-color: var(--brand-color, #040975) !important;
+}
+
+/* Tinted Badges / Selection Pills */
+.bg-\[\#e0f2fe\],
+.bg-primary\/10,
+.bg-\[\#0088cc\]\/10 {
+  background-color: var(--brand-color-light) !important;
+}
+
+.hover\:bg-\[\#bae6fd\]:hover {
+  background-color: var(--brand-color-light) !important;
+  filter: brightness(0.95);
+}
+
+.border-\[\#bae6fd\] {
+  border-color: var(--brand-color-ring) !important;
+}
+
+/* Primary Checkboxes & Radio */
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background-color: var(--brand-color, #040975) !important;
+  border-color: var(--brand-color, #040975) !important;
+  accent-color: var(--brand-color, #040975) !important;
+}
+
+/* File Upload Button Accents */
+input[type="file"].file\:bg-\[\#0088cc\]\/10::file-selector-button {
+  background-color: var(--brand-color-light) !important;
+}
+input[type="file"].file\:text-\[\#0088cc\]::file-selector-button {
+  color: var(--brand-color, #040975) !important;
+}
+
+/* 3. Explicit Protection for Secondary / Neutral Action Buttons
+   (Cancel, Exit, Close, Back, Discard remain neutral gray) */
+.btn-secondary,
+.btn-light,
+button.btn-secondary,
+a.btn-secondary,
+button[data-variant="secondary"],
+a[data-variant="secondary"] {
+  /* Secondary styles preserved */
 }
