@@ -22,20 +22,25 @@ const AuthLayout = ({
   const { logoLight, orgName } = useAppLogo();
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 dark:bg-slate-950 p-4 sm:p-6 md:p-8 relative select-none font-sans">
+    <div
+      className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 md:p-8 relative select-none font-sans overflow-hidden"
+      style={{
+        background: "radial-gradient(circle at 50% 20%, #1E3A8A 0%, #0B0F1A 70%)",
+      }}
+    >
       {/* Centered Single Form Card Container */}
       <div className="w-full max-w-md relative z-10 space-y-6">
-        {/* Top Logo (without CRM text) */}
+        {/* Top Logo */}
         <div className="text-center pb-2">
           <Link to="/" className="inline-flex items-center justify-center w-full">
             {logoLight ? (
               <img
                 src={logoLight}
                 alt={orgName || "Logo"}
-                className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all"
+                className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all drop-shadow-sm"
               />
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gray-900 text-white flex items-center justify-center font-bold text-3xl shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-white/10 text-white flex items-center justify-center font-bold text-3xl shadow-sm">
                 C
               </div>
             )}
@@ -43,7 +48,7 @@ const AuthLayout = ({
         </div>
 
         {/* Clean Single Form Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl p-7 sm:p-9 space-y-6">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100/10 dark:border-slate-800 shadow-2xl p-7 sm:p-9 space-y-6">
           <div className="text-center space-y-1.5">
             {authTitle && (
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
@@ -63,9 +68,11 @@ const AuthLayout = ({
         </div>
 
         {/* Security Footer Note */}
-        <div className="text-center text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center justify-center gap-1.5">
-          <i className="mgc_lock_line text-sm"></i>
-          <span>Secure 256-bit Encrypted Portal</span>
+        <div className="text-center pt-1">
+          <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-700/50 text-xs text-slate-400 font-medium shadow-sm backdrop-blur-sm">
+            <i className="mgc_lock_line text-sm text-slate-400"></i>
+            <span>Secure 256-bit Encrypted Portal</span>
+          </div>
         </div>
       </div>
     </div>

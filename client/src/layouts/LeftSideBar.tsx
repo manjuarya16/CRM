@@ -147,7 +147,7 @@ const HoverMenuToggler = () => {
   return (
     <button
       id="button-hover-toggle"
-      className="absolute top-5 end-2 rounded-full p-1.5"
+      className="absolute top-5 end-2 rounded-full p-1.5 text-white/70 hover:text-white transition-colors z-20"
       onClick={toggleHoverMenu}
     >
       <span className="sr-only">Menu Toggle Button</span>
@@ -163,15 +163,19 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
   return (
     <React.Fragment>
       <div className="app-menu">
-        <Link to="/" className="logo-box flex items-center justify-center px-3 h-16 sm:h-[70px]">
+        <Link
+          to="/"
+          className="logo-box flex items-center justify-center px-4 h-[65px] sm:h-[65px] border-b border-[#03075e]"
+          style={{ background: "#040975" }}
+        >
           {logoUrl ? (
             <img
               src={logoUrl}
               alt="Logo"
               className={
                 isCondensed
-                  ? "h-9 w-9 max-w-[42px] object-contain"
-                  : "h-12 sm:h-14 max-h-[58px] max-w-[250px] w-auto object-contain transition-all"
+                  ? "h-9 w-9 max-w-[42px] object-contain drop-shadow-sm"
+                  : "h-full max-h-[65px] max-w-[240px] w-auto object-contain transition-all drop-shadow-sm py-1"
               }
             />
           ) : (
@@ -181,7 +185,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
                 <path d="M18 6L25 13L18 20L11 13L18 6Z" fill="#0088cc" />
                 <path d="M12.5 17.5L19.5 24.5L12.5 31.5L5.5 24.5L12.5 17.5Z" fill="#38bdf8" />
               </svg>
-              <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">CRM</span>
+              <span className="text-xl font-bold tracking-tight text-white">CRM</span>
             </div>
           )}
         </Link>
