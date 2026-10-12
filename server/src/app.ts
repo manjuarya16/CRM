@@ -9,6 +9,7 @@ import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 
 import path from 'path';
+import fs from 'fs';
 
 export function createApp(): express.Express {
   const app = express();
@@ -69,8 +70,26 @@ export function createApp(): express.Express {
   );
   app.use(passport.initialize());
 
-  // Static uploads directory
+  // Static uploads directory with auto-fallback to production storage
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  app.use('/uploads', async (req, res, next) => {
+    try {
+      const remoteUrl = `https://crmsrv.imorse.digital/uploads${req.url}`;
+      const response = await fetch(remoteUrl);
+      if (response.ok) {
+        const localFile = path.join(process.cwd(), 'uploads', req.path.replace(/^\//, ''));
+        const buf = Buffer.from(await response.arrayBuffer());
+        fs.mkdirSync(path.dirname(localFile), { recursive: true });
+        fs.writeFileSync(localFile, buf);
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        return res.send(buf);
+      }
+    } catch {
+      // Fall through to not found handler
+    }
+    next();
+  });
 
   app.use('/api', routes);
 

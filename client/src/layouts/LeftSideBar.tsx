@@ -163,7 +163,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
   return (
     <React.Fragment>
       <div className="app-menu">
-        <Link to="/" className="logo-box flex items-center gap-2.5 px-4 h-16">
+        <Link to="/" className="logo-box flex items-center justify-center px-3 h-16 sm:h-[70px]">
           {logoUrl ? (
             <img
               src={logoUrl}
@@ -171,7 +171,7 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
               className={
                 isCondensed
                   ? "h-9 w-9 max-w-[42px] object-contain"
-                  : "h-11 max-h-12 max-w-[185px] w-auto object-contain transition-all"
+                  : "h-12 sm:h-14 max-h-[58px] max-w-[250px] w-auto object-contain transition-all"
               }
             />
           ) : (

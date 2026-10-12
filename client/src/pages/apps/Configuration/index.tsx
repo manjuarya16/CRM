@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useConfigStore } from "@/store";
 import { ConfigNavItem } from "@/interface";
-import { extractFileUrl } from "@/utils/fileHelper";
+import { extractFileUrl, fileToBase64 } from "@/utils/fileHelper";
 import { usePermission } from "@/hooks/usePermission";
+import { extractDominantColor } from "@/utils/colorHelper";
+import { applyConfigEffects } from "@/store/configStore";
 import API from "@/config";
 
 const resolveImageUrl = (url: string | null): string => {
@@ -146,6 +148,7 @@ const ConfigurationPage: React.FC = () => {
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
   const [uploadingFavicon, setUploadingFavicon] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [extractingColor, setExtractingColor] = useState<boolean>(false);
 
   const [formValues, setFormValues] = useState<Record<string, any>>({
     // General — Admin Logo
@@ -154,8 +157,8 @@ const ConfigurationPage: React.FC = () => {
     // Settings — Footer
     "general.settings.footer.show": "1",
     "general.settings.footer.label": '© CRM System. All rights reserved.',
-    // Settings — Brand Color
-    "general.settings.menu_color.brand_color": "#0E90D9",
+    // Settings — Brand & Menu Color
+    "general.settings.menu_color.brand_color": "#040975",
     // Settings — Dashboard
     "general.settings.dashboard.date_range": "1_month",
     "general.settings.dashboard.custom_days": "30",
@@ -340,7 +343,42 @@ const ConfigurationPage: React.FC = () => {
   };
 
   const handleInputChange = (field: string, value: any) => {
-    setFormValues((prev) => ({ ...prev, [field]: value }));
+    setFormValues((prev) => {
+      const updated = { ...prev, [field]: value };
+      if (field.startsWith("general.settings.menu_color")) {
+        applyConfigEffects(updated);
+      }
+      return updated;
+    });
+  };
+
+  const handleExtractFromLogo = async () => {
+    const logoUrl = formValues["general.general.admin_logo.logo_image"];
+    if (!logoUrl) {
+      setStatusMessage({ type: "error", text: "No logo found. Please upload a logo in General → Admin Logo first." });
+      return;
+    }
+    setExtractingColor(true);
+    try {
+      const fullLogoUrl = resolveImageUrl(logoUrl);
+      const extractedHex = await extractDominantColor(fullLogoUrl);
+      if (extractedHex) {
+        setFormValues((prev) => {
+          const updated = {
+            ...prev,
+            "general.settings.menu_color.brand_color": extractedHex,
+          };
+          applyConfigEffects(updated);
+          return updated;
+        });
+        setStatusMessage({ type: "success", text: `Brand color matched to logo: ${extractedHex}! Remember to save.` });
+      }
+    } catch (err) {
+      console.error(err);
+      setStatusMessage({ type: "error", text: "Failed to extract color from logo." });
+    } finally {
+      setExtractingColor(false);
+    }
   };
 
   const handleToggle = (field: string, checked: boolean) => {
@@ -360,13 +398,17 @@ const ConfigurationPage: React.FC = () => {
     }
 
     try {
-      const res = await uploadConfigImage(file);
-      if (res.success && res.data?.url) {
-        handleInputChange(fieldKey, res.data.url);
-        setStatusMessage({ type: "success", text: "Image uploaded successfully! Remember to save settings." });
-      } else {
-        setStatusMessage({ type: "error", text: res.message || "Failed to upload image." });
+      // 1. Immediately convert to base64 Data URL for universal display across all machines & networks
+      const base64Url = await fileToBase64(file);
+      handleInputChange(fieldKey, base64Url);
+
+      // 2. Also send to upload API for server storage backup
+      try {
+        await uploadConfigImage(file);
+      } catch (uploadErr) {
+        console.warn("Upload backup error:", uploadErr);
       }
+      setStatusMessage({ type: "success", text: "Image loaded! Click 'Save Configuration' to apply changes." });
     } catch (err: any) {
       setStatusMessage({ type: "error", text: err.response?.data?.message || "Error uploading image." });
     } finally {
@@ -471,32 +513,32 @@ const ConfigurationPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleNavClick(item)}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          className={`config-nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                             isActive
-                              ? "bg-blue-50 text-[#0088cc] dark:bg-blue-950/40 dark:text-blue-400"
+                              ? "active bg-[var(--brand-color,#040975)] text-white shadow-sm"
                               : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                           }`}
                         >
                           <div className="flex items-center space-x-2.5">
-                            <i className={`${item.icon} text-lg`}></i>
+                            <i className={`${item.icon} text-lg ${isActive ? "text-white" : ""}`}></i>
                             <span>{item.title}</span>
                           </div>
                           {item.subItems && (
-                            <i className={`mgc_chevron_${isActive ? "down" : "right"}_line text-xs text-gray-400`}></i>
+                            <i className={`mgc_chevron_${isActive ? "down" : "right"}_line text-xs ${isActive ? "text-white/80" : "text-gray-400"}`}></i>
                           )}
                         </button>
 
                         {isActive && item.subItems && (
-                          <div className="ml-7 pl-2 border-l border-gray-200 dark:border-gray-700 space-y-1">
+                          <div className="ml-7 pl-2 border-l-2 border-[var(--brand-color,#040975)] dark:border-blue-500 space-y-1">
                             {item.subItems.map((sub) => (
                               <button
                                 key={sub.id}
                                 type="button"
                                 onClick={() => setActiveSubTab(sub.id)}
-                                className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                                className={`w-full text-left px-2.5 py-1.5 text-xs rounded transition-colors ${
                                   activeSubTab === sub.id
-                                    ? "font-bold text-[#0088cc] dark:text-blue-400"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                                    ? "active font-bold text-[var(--brand-color,#040975)] bg-[var(--brand-color-light,rgba(4,9,117,0.1))] dark:text-blue-300 dark:bg-blue-950/40"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100/50"
                                 }`}
                               >
                                 {sub.title}
@@ -663,27 +705,186 @@ const ConfigurationPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Brand Color */}
+                  {/* Brand & Menu Color - Full Dynamic Branding Engine */}
                   {activeSubTab === "menu_color" && (
-                    <div className={sectionHeaderCls}>
+                    <div className="space-y-6">
                       <div>
                         <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">Brand & Menu Color</h2>
-                        <p className="text-xs text-gray-500 mt-0.5">Customize global accent brand theme color.</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Customize global brand accent color. Dynamically applies to the active sidebar menu item highlight and all primary action buttons across the CRM (while preserving secondary buttons like Cancel and Exit).
+                        </p>
                       </div>
-                      <div className="flex items-center space-x-3 max-w-sm">
-                        <input
-                          type="color"
-                          value={formValues["general.settings.menu_color.brand_color"] || "#0E90D9"}
-                          onChange={(e) => handleInputChange("general.settings.menu_color.brand_color", e.target.value)}
-                          className="h-9 w-12 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={formValues["general.settings.menu_color.brand_color"] || "#0E90D9"}
-                          onChange={(e) => handleInputChange("general.settings.menu_color.brand_color", e.target.value)}
-                          className="flex-1 px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                          placeholder="#0E90D9"
-                        />
+
+                      {/* 1. Logo Auto-Match Feature */}
+                      {formValues["general.general.admin_logo.logo_image"] && (
+                        <div className="p-4 bg-gradient-to-r from-sky-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900 border border-sky-100 dark:border-slate-700 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={resolveImageUrl(formValues["general.general.admin_logo.logo_image"])}
+                              alt="Current Logo"
+                              className="h-10 max-w-[120px] object-contain rounded bg-white/80 dark:bg-gray-800 p-1 border border-gray-200 dark:border-gray-700 shadow-xs"
+                            />
+                            <div>
+                              <p className="text-xs font-bold text-gray-800 dark:text-gray-100">Smart Logo Branding</p>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400">Extract and synchronize branding directly from your uploaded logo.</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleExtractFromLogo}
+                            disabled={extractingColor}
+                            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <i className={`mgc_magic_2_line text-sm text-amber-500 ${extractingColor ? "animate-spin" : ""}`}></i>
+                            {extractingColor ? "Extracting Color..." : "Auto-Match from Logo"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* 2. Primary Brand Color Picker & Presets */}
+                      <div className="space-y-3 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+                        <label className={labelCls}>Primary Brand & Button Accent Color</label>
+                        <p className="text-[11px] text-gray-500">
+                          Applies dynamically to all primary buttons (Create, Save, Submit), badges, active menu items, and accents across all pages.
+                        </p>
+                        
+                        <div className="flex flex-wrap items-center gap-3 max-w-md pt-1">
+                          <input
+                            type="color"
+                            value={formValues["general.settings.menu_color.brand_color"] || "#040975"}
+                            onChange={(e) => handleInputChange("general.settings.menu_color.brand_color", e.target.value)}
+                            className="h-10 w-14 rounded-lg border border-gray-300 dark:border-gray-600 cursor-pointer shadow-xs p-0.5"
+                          />
+                          <input
+                            type="text"
+                            value={formValues["general.settings.menu_color.brand_color"] || "#040975"}
+                            onChange={(e) => handleInputChange("general.settings.menu_color.brand_color", e.target.value)}
+                            className="flex-1 px-3 py-2 text-xs font-mono rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                            placeholder="#040975"
+                          />
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="pt-2">
+                          <span className="text-[11px] font-medium text-gray-500 block mb-2">Popular Curated Presets:</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {[
+                              { name: "Brand Navy", hex: "#040975" },
+                              { name: "Deep Navy", hex: "#063f60" },
+                              { name: "Sky Blue", hex: "#0E90D9" },
+                              { name: "Royal Blue", hex: "#2563EB" },
+                              { name: "Emerald Green", hex: "#059669" },
+                              { name: "Indigo", hex: "#4338CA" },
+                              { name: "Royal Purple", hex: "#7C3AED" },
+                              { name: "Crimson Red", hex: "#DC2626" },
+                              { name: "Amber Orange", hex: "#EA580C" },
+                              { name: "Dark Slate", hex: "#1E293B" },
+                            ].map((preset) => (
+                              <button
+                                key={preset.hex}
+                                type="button"
+                                title={preset.name}
+                                onClick={() => handleInputChange("general.settings.menu_color.brand_color", preset.hex)}
+                                className={`h-7 px-2.5 rounded-full text-[11px] font-medium flex items-center gap-1.5 border transition-all ${
+                                  (formValues["general.settings.menu_color.brand_color"] || "#040975").toLowerCase() === preset.hex.toLowerCase()
+                                    ? "ring-2 ring-offset-1 ring-gray-400 dark:ring-gray-300 border-white shadow-xs font-bold"
+                                    : "border-transparent opacity-85 hover:opacity-100"
+                                }`}
+                                style={{ backgroundColor: preset.hex, color: "#ffffff" }}
+                              >
+                                <span>{preset.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. Live Visual Preview */}
+                      <div className="p-4 bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Real-Time Branding Preview
+                          </span>
+                          <span className="text-[11px] text-gray-400">Live preview of buttons & navigation</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Left: Buttons Preview */}
+                          <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 block">
+                              Buttons Across Application
+                            </span>
+                            <div className="flex flex-wrap items-center gap-3">
+                              {/* Primary Action Button */}
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-gray-400 block font-medium">Primary Action Button</span>
+                                <button
+                                  type="button"
+                                  style={{
+                                    backgroundColor: formValues["general.settings.menu_color.brand_color"] || "#040975",
+                                    color: "#ffffff",
+                                  }}
+                                  className="px-4 py-2 text-xs font-semibold rounded-lg shadow-sm cursor-default flex items-center gap-1.5"
+                                >
+                                  <i className="mgc_check_line"></i>
+                                  <span>Save / Create Lead</span>
+                                </button>
+                              </div>
+
+                              {/* Secondary Button */}
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-gray-400 block font-medium">Secondary (Neutral Preserved)</span>
+                                <button
+                                  type="button"
+                                  className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 cursor-default"
+                                >
+                                  Cancel / Exit
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Left Sidebar Active Item Preview */}
+                          <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                                Left Sidebar (Clean Background Preserved)
+                              </span>
+                              <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                                <i className="mgc_check_circle_line"></i> Clean white theme
+                              </span>
+                            </div>
+
+                            <div className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 space-y-1 max-w-xs">
+                              {/* Inactive Item */}
+                              <div className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                                <i className="mgc_home_3_line"></i>
+                                <span>Dashboard</span>
+                              </div>
+
+                              {/* Active Item Highlighted with Brand Color */}
+                              <div
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between shadow-xs transition-colors"
+                                style={{
+                                  backgroundColor: formValues["general.settings.menu_color.brand_color"] || "#040975",
+                                  color: "#ffffff",
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <i className="mgc_calendar_line"></i>
+                                  <span className="font-semibold">Activities (Active)</span>
+                                </div>
+                                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white">Active</span>
+                              </div>
+
+                              {/* Inactive Item */}
+                              <div className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                                <i className="mgc_group_line"></i>
+                                <span>Contacts</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

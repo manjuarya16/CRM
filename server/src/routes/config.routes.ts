@@ -78,9 +78,21 @@ router.post('/upload-image', upload.single('file'), (req: Request, res: Response
       return;
     }
     const relativeUrl = `/uploads/config/${req.file.filename}`;
+    let dataUrl = relativeUrl;
+    try {
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const mime = req.file.mimetype || 'image/png';
+      dataUrl = `data:${mime};base64,${fileBuffer.toString('base64')}`;
+    } catch {
+      // Fallback to relativeUrl
+    }
+
     res.json({
       success: true,
-      data: { url: relativeUrl },
+      data: {
+        url: dataUrl,
+        relativeUrl: relativeUrl,
+      },
       message: 'Image uploaded successfully',
     });
   } catch (error) {

@@ -399,7 +399,7 @@ const EditPipelinePage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleAddStage}
-                className="px-5 py-2 border-2 border-[#0088cc] text-[#0088cc] hover:bg-[#0088cc] hover:text-white font-semibold text-xs rounded-lg transition-colors"
+                className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
               >
                 Add Stage
               </button>

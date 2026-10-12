@@ -149,20 +149,20 @@ export class OrganizationService {
 
   public static async getPublicBranding(): Promise<{ name: string; logo: string | null }> {
     try {
+      const configRes = await pool.query(
+        "SELECT value FROM core_config WHERE code = 'general.general.admin_logo.logo_image' LIMIT 1"
+      );
+      const adminLogo = configRes.rows[0]?.value || null;
+
       const { rows } = await pool.query(
         'SELECT public.get_all_organizations(null, 1, 0) as result'
       );
       const firstOrg = rows[0]?.result?.rows?.[0];
-      if (firstOrg) {
-        const addr = firstOrg.address || {};
-        return {
-          name: firstOrg.name,
-          logo: addr.logo || null,
-        };
-      }
+      const addr = firstOrg?.address || {};
+
       return {
-        name: 'CRM System',
-        logo: null,
+        name: firstOrg?.name || 'CRM System',
+        logo: adminLogo || addr.logo || null,
       };
     } catch (error: any) {
       logger.error({ error }, 'OrganizationService.getPublicBranding failed');
