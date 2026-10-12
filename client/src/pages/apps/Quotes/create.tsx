@@ -2,14 +2,13 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useQuoteStore, useLeadStore, usePersonStore, useUserStore, useProductStore } from "@/store";
-import API from "@/config";
 import { ITempQuoteItem, IQuoteAddress } from "@/interface";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { SearchableLeadSelect } from "@/components/SearchableLeadSelect";
 import { quoteSchema } from "@/schemas";
 
 const fmtCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+  `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const CreateQuotePage: React.FC = () => {
   const navigate = useNavigate();
@@ -75,7 +74,6 @@ const CreateQuotePage: React.FC = () => {
       // 1. Fetch Lead details
       const leadData = await useLeadStore.getState().fetchLeadById(Number(leadIdStr));
       if (leadData) {
-        // Ensure lead is in leads list so dropdown displays proper label
         setLeads((prev) => {
           if (!prev.some((l) => String(l.id) === String(leadData.id))) {
             return [leadData, ...prev];
@@ -100,7 +98,9 @@ const CreateQuotePage: React.FC = () => {
             if (p) {
               let addr: any = p.address || p.billing_address || {};
               if (typeof addr === "string") {
-                try { addr = JSON.parse(addr); } catch {}
+                try {
+                  addr = JSON.parse(addr);
+                } catch {}
               }
               if (typeof addr === "object" && addr) {
                 const street = addr.street_address || addr.address || "";
@@ -158,24 +158,40 @@ const CreateQuotePage: React.FC = () => {
   };
 
   useEffect(() => {
-    usePersonStore.getState().fetchPersons({ per_page: 500, limit: 500 }).then(() => {
-      const pList = usePersonStore.getState().persons;
-      if (pList) setPersons(pList);
-    }).catch(() => {});
+    usePersonStore
+      .getState()
+      .fetchPersons({ per_page: 500, limit: 500 })
+      .then(() => {
+        const pList = usePersonStore.getState().persons;
+        if (pList) setPersons(pList);
+      })
+      .catch(() => {});
 
-    useUserStore.getState().fetchUsers(1, 100).then((res: any) => {
-      if (res?.rows || res) setUsers(res?.rows || res || []);
-    }).catch(() => {});
+    useUserStore
+      .getState()
+      .fetchUsers(1, 100)
+      .then((res: any) => {
+        if (res?.rows || res) setUsers(res?.rows || res || []);
+      })
+      .catch(() => {});
 
-    useLeadStore.getState().fetchLeads(1, 100).then(() => {
-      const lList = useLeadStore.getState().leads;
-      if (lList) setLeads(lList);
-    }).catch(() => {});
+    useLeadStore
+      .getState()
+      .fetchLeads(1, 100)
+      .then(() => {
+        const lList = useLeadStore.getState().leads;
+        if (lList) setLeads(lList);
+      })
+      .catch(() => {});
 
-    useProductStore.getState().fetchProducts(1, 200).then(() => {
-      const prodList = useProductStore.getState().products;
-      if (prodList) setProducts(prodList);
-    }).catch(() => {});
+    useProductStore
+      .getState()
+      .fetchProducts(1, 200)
+      .then(() => {
+        const prodList = useProductStore.getState().products;
+        if (prodList) setProducts(prodList);
+      })
+      .catch(() => {});
 
     if (urlLeadId) {
       handleLeadChange(urlLeadId);
@@ -215,7 +231,7 @@ const CreateQuotePage: React.FC = () => {
     const sub = qty * price;
     const discAmt = sub * (disc / 100);
     const taxAmt = (sub - discAmt) * (tax / 100);
-    const tot = (sub - discAmt) + taxAmt;
+    const tot = sub - discAmt + taxAmt;
 
     const added: ITempQuoteItem = {
       product_id: Number(newItem.product_id),
@@ -237,10 +253,10 @@ const CreateQuotePage: React.FC = () => {
   };
 
   // Calculations
-  const rawSubTotal = items.reduce((acc, i) => acc + (i.quantity * i.price), 0);
+  const rawSubTotal = items.reduce((acc, i) => acc + i.quantity * i.price, 0);
   const totalItemDiscounts = items.reduce((acc, i) => {
     const sub = i.quantity * i.price;
-    return acc + (sub * (i.discount_percent / 100));
+    return acc + sub * (i.discount_percent / 100);
   }, 0);
 
   const globalDiscountPercent = Number(formData.discount_percent) || 0;
@@ -249,7 +265,7 @@ const CreateQuotePage: React.FC = () => {
 
   const taxAmount = Number(formData.tax_amount) || 0;
   const adjustmentAmount = Number(formData.adjustment_amount) || 0;
-  const grandTotal = Math.max(0, (rawSubTotal - totalDiscount) + taxAmount + adjustmentAmount);
+  const grandTotal = Math.max(0, rawSubTotal - totalDiscount + taxAmount + adjustmentAmount);
 
   const handleBillingChange = (field: keyof IQuoteAddress, val: string) => {
     const updated = { ...billingAddress, [field]: val };
@@ -325,9 +341,9 @@ const CreateQuotePage: React.FC = () => {
           quantity: i.quantity,
           price: i.price,
           discount_percent: i.discount_percent,
-          discount_amount: (i.quantity * i.price) * (i.discount_percent / 100),
+          discount_amount: i.quantity * i.price * (i.discount_percent / 100),
           tax_percent: i.tax_percent,
-          tax_amount: (i.quantity * i.price) * (i.tax_percent / 100),
+          tax_amount: i.quantity * i.price * (i.tax_percent / 100),
           total: i.total,
         })),
         custom_attributes: customAttributes,
@@ -342,54 +358,108 @@ const CreateQuotePage: React.FC = () => {
   };
 
   const inputCls =
-    "w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc] dark:text-gray-200";
-  const labelCls = "block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1";
+    "w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-[#0088cc] dark:focus:border-[#0088cc] rounded-xl text-xs sm:text-sm font-medium transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-100 placeholder-gray-400";
+  const labelCls = "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Breadcrumbs */}
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
       <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline">Dashboard</Link>
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
         <span>/</span>
-        <Link to="/quotes" className="text-[#0e90d9] hover:underline">Quotes</Link>
+        <Link to="/quotes" className="text-[#0e90d9] hover:underline">
+          Quotes
+        </Link>
         <span>/</span>
         <span className="text-gray-700 dark:text-gray-300 font-medium">Create Quote</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-          Create Quote
-        </h1>
-        <div className="flex items-center gap-3">
+      {/* 🏷️ Page Header with Actions & Live Total */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/quotes"
+            className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 hover:text-[#0e90d9] flex items-center justify-center transition shadow-2xs shrink-0"
+            title="Back to Quotes"
+          >
+            <i className="mgc_arrow_left_line text-lg"></i>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                Create Quote
+              </h1>
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0088cc] dark:text-blue-400 font-mono text-xs font-bold border border-blue-100 dark:border-blue-800/60 shrink-0">
+                New
+              </span>
+            </div>
+            {formData.subject ? (
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5 font-medium">
+                {formData.subject}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 truncate mt-0.5">
+                Fill in customer details, line items, and terms
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 justify-end shrink-0">
+          <div className="hidden md:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Grand Total</span>
+            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+              {fmtCurrency(grandTotal)}
+            </span>
+          </div>
+
           <Link
             to="/quotes"
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
           >
             Cancel
           </Link>
+
           <button
             type="button"
             onClick={handleSubmit}
             disabled={saving}
-            className="px-6 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
           >
-            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-            Save Quote
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <i className="mgc_check_line text-base"></i>
+            )}
+            <span>Save Quote</span>
           </button>
         </div>
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="space-y-6">
-        {/* Card 1: General Info & Ownership */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-5">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
-            Quote Information
-          </h2>
+        {/* 📋 CARD 1: GENERAL INFORMATION */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#0088cc] flex items-center justify-center font-bold">
+              <i className="mgc_document_line text-lg"></i>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Quote Information
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Basic details, customer relation, and validity</p>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="md:col-span-3">
-              <label className={labelCls}>Subject <span className="text-red-500">*</span></label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {/* Subject */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className={labelCls}>
+                Subject <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={formData.subject}
@@ -398,20 +468,23 @@ const CreateQuotePage: React.FC = () => {
                   if (errors.subject) setErrors((prev) => ({ ...prev, subject: "" }));
                 }}
                 placeholder="e.g. Enterprise Software License Quotation"
-                className={`${inputCls} ${errors.subject ? "border-red-500" : ""}`}
+                className={`${inputCls} ${errors.subject ? "border-red-500 ring-1 ring-red-500/20" : ""}`}
               />
-              {errors.subject && <p className="mt-1 text-xs text-red-500 font-medium">{errors.subject}</p>}
+              {errors.subject && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.subject}</p>}
             </div>
 
+            {/* Contact Person */}
             <div>
-              <label className={labelCls}>Contact Person <span className="text-red-500">*</span></label>
+              <label className={labelCls}>
+                Contact Person <span className="text-red-500">*</span>
+              </label>
               <select
                 value={formData.person_id}
                 onChange={(e) => {
                   setFormData({ ...formData, person_id: e.target.value });
                   if (errors.person_id) setErrors((prev) => ({ ...prev, person_id: "" }));
                 }}
-                className={`${inputCls} ${errors.person_id ? "border-red-500" : ""}`}
+                className={`${inputCls} ${errors.person_id ? "border-red-500 ring-1 ring-red-500/20" : ""}`}
               >
                 <option value="">-- Select Contact Person --</option>
                 {persons
@@ -421,14 +494,16 @@ const CreateQuotePage: React.FC = () => {
                     const email = Array.isArray(p.emails) && p.emails[0]?.value ? p.emails[0].value : "";
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.name}{email ? ` (${email})` : ""}
+                        {p.name}
+                        {email ? ` (${email})` : ""}
                       </option>
                     );
                   })}
               </select>
-              {errors.person_id && <p className="mt-1 text-xs text-red-500 font-medium">{errors.person_id}</p>}
+              {errors.person_id && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.person_id}</p>}
             </div>
 
+            {/* Sales Owner */}
             <div>
               <label className={labelCls}>Sales Owner</label>
               <select
@@ -445,18 +520,20 @@ const CreateQuotePage: React.FC = () => {
               </select>
             </div>
 
+            {/* Link to Lead */}
             <div>
               <SearchableLeadSelect
                 value={formData.lead_id}
                 onChange={(val) => handleLeadChange(val)}
                 leads={leads}
-                label="Link to lead"
-                placeholder="Click to add"
+                label="Link to Lead"
+                placeholder="Search or select lead..."
               />
             </div>
 
+            {/* Expiration Date */}
             <div>
-              <label className={labelCls}>Expired At</label>
+              <label className={labelCls}>Expiry Date</label>
               <input
                 type="date"
                 value={formData.expired_at}
@@ -465,31 +542,42 @@ const CreateQuotePage: React.FC = () => {
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className={labelCls}>Description</label>
+            {/* Description */}
+            <div className="sm:col-span-2">
+              <label className={labelCls}>Description / Notes</label>
               <input
                 type="text"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Brief notes or quote terms..."
+                placeholder="Brief notes, terms, or delivery conditions..."
                 className={inputCls}
               />
             </div>
           </div>
         </div>
 
-        {/* Card 2: Address Information (Billing & Shipping) */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
-            Address Information
-          </h2>
+        {/* 📍 CARD 2: ADDRESS INFORMATION */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center font-bold">
+              <i className="mgc_location_line text-lg"></i>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Address Information
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Billing and dispatch locations</p>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Billing Address */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-[#0088cc] uppercase tracking-wider">
-                Billing Address
-              </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+            {/* Billing Address Card */}
+            <div className="p-4 sm:p-5 rounded-xl bg-gray-50/70 dark:bg-gray-900/40 border border-gray-200/60 dark:border-gray-700/60 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200/60 dark:border-gray-700/60">
+                <span className="text-xs font-bold text-[#0088cc] uppercase tracking-wider flex items-center gap-1.5">
+                  <i className="mgc_building_line text-sm"></i> Billing Address
+                </span>
+              </div>
               <div>
                 <label className={labelCls}>Street Address</label>
                 <textarea
@@ -502,12 +590,12 @@ const CreateQuotePage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>Country</label>
+                  <label className={labelCls}>City</label>
                   <input
                     type="text"
-                    value={billingAddress.country}
-                    onChange={(e) => handleBillingChange("country", e.target.value)}
-                    placeholder="e.g. USA"
+                    value={billingAddress.city}
+                    onChange={(e) => handleBillingChange("city", e.target.value)}
+                    placeholder="e.g. Mumbai"
                     className={inputCls}
                   />
                 </div>
@@ -517,47 +605,47 @@ const CreateQuotePage: React.FC = () => {
                     type="text"
                     value={billingAddress.state}
                     onChange={(e) => handleBillingChange("state", e.target.value)}
-                    placeholder="e.g. California"
+                    placeholder="e.g. Maharashtra"
                     className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className={labelCls}>City</label>
-                  <input
-                    type="text"
-                    value={billingAddress.city}
-                    onChange={(e) => handleBillingChange("city", e.target.value)}
-                    placeholder="e.g. San Francisco"
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>Postcode / Zip</label>
+                  <label className={labelCls}>Postcode / ZIP</label>
                   <input
                     type="text"
                     value={billingAddress.postcode}
                     onChange={(e) => handleBillingChange("postcode", e.target.value)}
-                    placeholder="e.g. 94105"
+                    placeholder="e.g. 400001"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Country</label>
+                  <input
+                    type="text"
+                    value={billingAddress.country}
+                    onChange={(e) => handleBillingChange("country", e.target.value)}
+                    placeholder="e.g. India"
                     className={inputCls}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Shipping Address */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#0088cc] uppercase tracking-wider">
-                  Shipping Address
-                </h3>
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300 font-medium">
+            {/* Shipping Address Card */}
+            <div className="p-4 sm:p-5 rounded-xl bg-gray-50/70 dark:bg-gray-900/40 border border-gray-200/60 dark:border-gray-700/60 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200/60 dark:border-gray-700/60">
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <i className="mgc_truck_line text-sm"></i> Shipping Address
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300 select-none">
                   <input
                     type="checkbox"
                     checked={sameAsBilling}
                     onChange={(e) => handleToggleSameAsBilling(e.target.checked)}
-                    className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
+                    className="w-4 h-4 rounded text-[#0088cc] focus:ring-[#0088cc] border-gray-300 dark:border-gray-600 dark:bg-gray-800"
                   />
-                  Same as billing address
+                  <span>Same as billing</span>
                 </label>
               </div>
 
@@ -569,17 +657,18 @@ const CreateQuotePage: React.FC = () => {
                       rows={2}
                       value={shippingAddress.street_address}
                       onChange={(e) => setShippingAddress({ ...shippingAddress, street_address: e.target.value })}
-                      placeholder="Shipping street..."
+                      placeholder="Shipping street address..."
                       className={inputCls}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>Country</label>
+                      <label className={labelCls}>City</label>
                       <input
                         type="text"
-                        value={shippingAddress.country}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, country: e.target.value })}
+                        value={shippingAddress.city}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
+                        placeholder="e.g. Mumbai"
                         className={inputCls}
                       />
                     </div>
@@ -589,55 +678,75 @@ const CreateQuotePage: React.FC = () => {
                         type="text"
                         value={shippingAddress.state}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })}
+                        placeholder="e.g. Maharashtra"
                         className={inputCls}
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>City</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.city}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Postcode / Zip</label>
+                      <label className={labelCls}>Postcode / ZIP</label>
                       <input
                         type="text"
                         value={shippingAddress.postcode}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, postcode: e.target.value })}
+                        placeholder="e.g. 400001"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Country</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.country}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, country: e.target.value })}
+                        placeholder="e.g. India"
                         className={inputCls}
                       />
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-500 space-y-1">
-                  <p className="font-semibold text-gray-700 dark:text-gray-300">
-                    Shipping to same address as billing:
+                <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 border border-dashed border-blue-200 dark:border-blue-800/50 text-xs text-gray-600 dark:text-gray-300 space-y-1.5 flex flex-col justify-center min-h-[170px]">
+                  <div className="flex items-center gap-1.5 font-bold text-[#0088cc] dark:text-blue-400">
+                    <i className="mgc_check_circle_line text-sm"></i>
+                    <span>Synchronized with Billing Address</span>
+                  </div>
+                  <p className="font-semibold text-gray-800 dark:text-gray-200">
+                    {billingAddress.street_address || "No street address specified"}
                   </p>
-                  <p>{billingAddress.street_address || "No street address"}</p>
-                  <p>{[billingAddress.city, billingAddress.state, billingAddress.postcode, billingAddress.country].filter(Boolean).join(", ") || "No city/state"}</p>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    {[billingAddress.city, billingAddress.state, billingAddress.postcode, billingAddress.country]
+                      .filter(Boolean)
+                      .join(", ") || "No city/state set"}
+                  </p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Card 3: Quote Items & Calculations */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pb-3 border-b border-gray-100 dark:border-gray-700">
-            Quote Items
-          </h2>
+        {/* 📦 CARD 3: LINE ITEMS */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center font-bold">
+                <i className="mgc_box_line text-lg"></i>
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Line Items ({items.length})
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Products and custom services included</p>
+              </div>
+            </div>
+          </div>
 
-          {/* Add item row */}
-          <div className="bg-gray-50/70 dark:bg-gray-900/40 p-4 border border-gray-200 dark:border-gray-700 rounded-xl space-y-3">
-            <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Add Line Item
+          {/* ADD PRODUCT ROW */}
+          <div className="bg-gray-50/80 dark:bg-gray-900/50 p-4 sm:p-5 border border-gray-200/70 dark:border-gray-700/70 rounded-xl space-y-3">
+            <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i className="mgc_add_line text-sm text-[#0088cc]"></i> Add Product to Quote
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
-              <div className="sm:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-2 lg:col-span-4">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Product *</label>
                 <select
                   value={newItem.product_id}
@@ -653,8 +762,8 @@ const CreateQuotePage: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Qty</label>
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Quantity</label>
                 <input
                   type="number"
                   min="1"
@@ -664,19 +773,21 @@ const CreateQuotePage: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Price (₹)</label>
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                  Price (₹) <span className="text-[10px] text-gray-400 font-normal">(Auto)</span>
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   value={newItem.price}
                   onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
                   disabled
-                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400`}
+                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/80 cursor-not-allowed opacity-80`}
                 />
               </div>
 
-              <div>
+              <div className="lg:col-span-2">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Disc (%)</label>
                 <input
                   type="number"
@@ -688,134 +799,271 @@ const CreateQuotePage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Tax (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newItem.tax_percent}
-                    onChange={(e) => setNewItem({ ...newItem, tax_percent: e.target.value })}
-                    className={inputCls}
-                  />
-                </div>
+              <div className="lg:col-span-1">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Tax (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={newItem.tax_percent}
+                  onChange={(e) => setNewItem({ ...newItem, tax_percent: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="lg:col-span-1">
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold shadow-sm transition h-[38px] mt-auto whitespace-nowrap"
+                  className="w-full py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center gap-1 active:scale-95"
                 >
-                  + Add
+                  <i className="mgc_add_line text-sm"></i>
+                  <span>Add</span>
                 </button>
               </div>
             </div>
             {errors.item_product && <p className="text-xs text-red-500 font-medium">{errors.item_product}</p>}
           </div>
 
-          {/* Table of added items */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                  <th className="py-2.5 px-3">Product Name</th>
-                  <th className="py-2.5 px-3">SKU</th>
-                  <th className="py-2.5 px-3 text-right">Qty</th>
-                  <th className="py-2.5 px-3 text-right">Price</th>
-                  <th className="py-2.5 px-3 text-right">Disc (%)</th>
-                  <th className="py-2.5 px-3 text-right">Tax (%)</th>
-                  <th className="py-2.5 px-3 text-right">Total</th>
-                  <th className="py-2.5 px-3 text-center w-12"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-8 text-gray-400 text-xs">
-                      No items added yet. Select a product above and click "+ Add".
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item, index) => (
-                    <tr key={index} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50/50">
-                      <td className="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">{item.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-xs text-gray-500">{item.sku || "-"}</td>
-                      <td className="py-2.5 px-3 text-right font-medium">{item.quantity}</td>
-                      <td className="py-2.5 px-3 text-right">{fmtCurrency(item.price)}</td>
-                      <td className="py-2.5 px-3 text-right">{item.discount_percent}%</td>
-                      <td className="py-2.5 px-3 text-right">{item.tax_percent}%</td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-[#0088cc]">{fmtCurrency(item.total)}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          className="text-gray-400 hover:text-red-500 font-bold"
-                        >
-                          &times;
-                        </button>
-                      </td>
+          {/* TABLE FOR DESKTOP / CARD LIST FOR MOBILE */}
+          {items.length === 0 ? (
+            <div className="text-center py-10 px-4 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-gray-400 text-xs flex flex-col items-center justify-center gap-2">
+              <i className="mgc_box_line text-3xl text-gray-300 dark:text-gray-600"></i>
+              <span className="font-semibold text-gray-600 dark:text-gray-300">No products added yet</span>
+              <span className="text-[11px] text-gray-400">Select a product above and click Add to start building your quote.</span>
+            </div>
+          ) : (
+            <>
+              {/* DESKTOP TABLE (Hidden on Mobile) */}
+              <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/90 dark:bg-gray-900/60 text-gray-600 dark:text-gray-300 font-bold uppercase tracking-wider text-[11px] border-b border-gray-200 dark:border-gray-700">
+                      <th className="py-3 px-4">Item & SKU</th>
+                      <th className="py-3 px-4 text-right">Qty</th>
+                      <th className="py-3 px-4 text-right">Price</th>
+                      <th className="py-3 px-4 text-right">Disc (%)</th>
+                      <th className="py-3 px-4 text-right">Tax (%)</th>
+                      <th className="py-3 px-4 text-right">Total</th>
+                      <th className="py-3 px-3 text-center w-12"></th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          {errors.items && <p className="text-xs text-red-500 font-medium">{errors.items}</p>}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                    {items.map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors">
+                        <td className="py-3 px-4">
+                          <p className="font-semibold text-gray-800 dark:text-gray-200">{item.name}</p>
+                          <span className="font-mono text-[11px] text-gray-400">{item.sku || "No SKU"}</span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold">{item.quantity}</td>
+                        <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">{fmtCurrency(item.price)}</td>
+                        <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">
+                          {item.discount_percent > 0 ? `${item.discount_percent}%` : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">
+                          {item.tax_percent > 0 ? `${item.tax_percent}%` : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-gray-900 dark:text-white">
+                          {fmtCurrency(item.total)}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(index)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition mx-auto"
+                            title="Remove item"
+                          >
+                            <i className="mgc_delete_line text-base"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* Totals Summary */}
-          <div className="flex flex-col md:flex-row justify-between gap-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <div className="w-full md:w-1/2 space-y-3">
-              <label className={labelCls}>Global Quote Discount (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={formData.discount_percent}
-                onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
-                className="w-48 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
+              {/* MOBILE CARDS (Hidden on Desktop) */}
+              <div className="md:hidden space-y-3">
+                {items.map((item, index) => (
+                  <div
+                    key={index}
+                    className="p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/40 space-y-2.5 relative"
+                  >
+                    <div className="flex items-start justify-between pr-8">
+                      <div>
+                        <h4 className="font-bold text-xs text-gray-900 dark:text-white">{item.name}</h4>
+                        <span className="font-mono text-[10px] text-gray-400">{item.sku || "No SKU"}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                      >
+                        <i className="mgc_delete_line text-sm"></i>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-gray-200/60 dark:border-gray-700/60">
+                      <div>
+                        <span className="text-gray-400">Qty × Price:</span>{" "}
+                        <span className="font-semibold text-gray-700 dark:text-gray-300">
+                          {item.quantity} × {fmtCurrency(item.price)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-gray-400">Total:</span>{" "}
+                        <span className="font-black text-emerald-600 dark:text-emerald-400">
+                          {fmtCurrency(item.total)}
+                        </span>
+                      </div>
+                      {item.discount_percent > 0 && (
+                        <div>
+                          <span className="text-gray-400">Discount:</span>{" "}
+                          <span className="text-amber-600 font-semibold">{item.discount_percent}%</span>
+                        </div>
+                      )}
+                      {item.tax_percent > 0 && (
+                        <div className={item.discount_percent > 0 ? "text-right" : ""}>
+                          <span className="text-gray-400">Tax:</span>{" "}
+                          <span className="text-blue-600 font-semibold">{item.tax_percent}%</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {errors.items && <p className="text-xs text-red-500 font-medium">{errors.items}</p>}
+        </div>
+
+        {/* 💳 CARD 4: FINANCIAL SUMMARY & BREAKDOWN */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center font-bold">
+              <i className="mgc_wallet_line text-lg"></i>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Financial Summary
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Adjustments, taxes, discounts, and net total</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Overall Discount & Notes */}
+            <div className="lg:col-span-6 space-y-4">
+              <div className="p-4 rounded-xl bg-gray-50/70 dark:bg-gray-900/40 border border-gray-200/60 dark:border-gray-700/60 space-y-3">
+                <label className={labelCls}>Global Quote Discount (%)</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative w-40">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={formData.discount_percent}
+                      onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
+                      className={`${inputCls} pr-8`}
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-bold">%</span>
+                  </div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Applies on post-item discounted amount
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="w-full md:w-80 space-y-2 text-sm">
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Sub Total:</span>
-                <span className="font-semibold text-gray-800 dark:text-gray-200">{fmtCurrency(rawSubTotal)}</span>
+            {/* Right Column: Invoice Calculation Card */}
+            <div className="lg:col-span-6 p-5 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100/60 dark:from-gray-900/60 dark:to-gray-900/30 border border-gray-200 dark:border-gray-700 space-y-3">
+              <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                <span>Gross Subtotal</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{fmtCurrency(rawSubTotal)}</span>
               </div>
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Total Discount:</span>
-                <span className="text-red-500">-{fmtCurrency(totalDiscount)}</span>
+
+              {totalDiscount > 0 && (
+                <div className="flex items-center justify-between text-xs sm:text-sm text-red-500">
+                  <span>Total Discounts (Items + Global)</span>
+                  <span className="font-semibold">-{fmtCurrency(totalDiscount)}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-200/60 dark:border-gray-700/60">
+                <span className="flex items-center gap-1.5">
+                  Tax Amount <span className="text-[10px] text-gray-400">(₹)</span>
+                </span>
+                <div className="w-32">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.tax_amount}
+                    onChange={(e) => setFormData({ ...formData, tax_amount: e.target.value })}
+                    className="w-full text-right px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-semibold focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                  />
+                </div>
               </div>
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Tax Amount (₹):</span>
-                <input
-                  type="number"
-                  value={formData.tax_amount}
-                  onChange={(e) => setFormData({ ...formData, tax_amount: e.target.value })}
-                  className="w-28 text-right px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-xs"
-                />
+
+              <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                <span className="flex items-center gap-1.5">
+                  Adjustment <span className="text-[10px] text-gray-400">(₹ +/-)</span>
+                </span>
+                <div className="w-32">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.adjustment_amount}
+                    onChange={(e) => setFormData({ ...formData, adjustment_amount: e.target.value })}
+                    className="w-full text-right px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-semibold focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                  />
+                </div>
               </div>
-              <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Adjustment (₹):</span>
-                <input
-                  type="number"
-                  value={formData.adjustment_amount}
-                  onChange={(e) => setFormData({ ...formData, adjustment_amount: e.target.value })}
-                  className="w-28 text-right px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-xs"
-                />
-              </div>
-              <div className="flex justify-between text-base font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span>Grand Total:</span>
-                <span className="text-[#0088cc]">{fmtCurrency(grandTotal)}</span>
+
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex items-baseline justify-between">
+                <div>
+                  <span className="text-xs font-black text-gray-800 dark:text-gray-200 uppercase tracking-wider block">
+                    Grand Total
+                  </span>
+                  <span className="text-[10px] text-gray-400">Net Payable Amount</span>
+                </div>
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                  {fmtCurrency(grandTotal)}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Custom Attributes */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+        {/* ⚙️ CARD 5: CUSTOM ATTRIBUTES */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6">
           <DynamicAttributeFields
             entityType="quotes"
             values={customAttributes}
             onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
           />
+        </div>
+
+        {/* BOTTOM ACTION BUTTONS */}
+        <div className="flex items-center justify-end gap-3 pt-4">
+          <Link
+            to="/quotes"
+            className="px-5 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs sm:text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+          >
+            Cancel
+          </Link>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-6 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
+          >
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <i className="mgc_check_line text-base"></i>
+            )}
+            <span>Save Quote</span>
+          </button>
         </div>
       </form>
     </div>

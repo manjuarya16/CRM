@@ -68,6 +68,18 @@
     }
 }
 
+// Hide scrollbar utility for clean swipe chips and horizontal pill lists
+.no-scrollbar {
+    -ms-overflow-style: none !important; /* IE and Edge */
+    scrollbar-width: none !important; /* Firefox */
+
+    &::-webkit-scrollbar {
+        display: none !important; /* Chrome, Safari and Opera */
+        width: 0 !important;
+        height: 0 !important;
+    }
+}
+
 
 // Gallery Page
 .filter-options li a {

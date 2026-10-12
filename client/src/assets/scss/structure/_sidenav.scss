@@ -32,7 +32,7 @@
     flex-direction: column;
     width: 100%;
     min-width: 0;
-    overflow: hidden;
+    overflow-x: clip;
     min-block-size: 100vh;
 }
 
@@ -528,6 +528,11 @@ html[data-sidenav-view="md"] {
 
 // Mobile View Sidenav (Mobile Sidebar || Open Sidenav with Backdrop)
 html[data-sidenav-view="mobile"] {
+    .app-menu + .page-content,
+    .page-content {
+        margin-inline-start: 0 !important;
+    }
+
     .app-menu {
         margin-inline-start: calc($sidenav-width * -1);
         @apply fixed opacity-0;
@@ -538,13 +543,31 @@ html[data-sidenav-view="mobile"] {
             margin-inline-start: 0;
             @apply opacity-100 z-50;
         }
+
+        .app-menu + .page-content,
+        .page-content {
+            margin-inline-start: 0 !important;
+        }
     }
 }
 
 // Hidden Sidenav View ( Fullscreen page content view)
 html[data-sidenav-view="hidden"] {
+    .app-menu + .page-content,
+    .page-content {
+        margin-inline-start: 0 !important;
+    }
+
     .app-menu {
         margin-inline-start: calc($sidenav-width * -1);
+    }
+}
+
+// Responsive fallback for viewports <= 1140px
+@media (max-width: 1140px) {
+    .app-menu + .page-content,
+    .page-content {
+        margin-inline-start: 0 !important;
     }
 }
 

@@ -540,7 +540,7 @@ const CreateLeadPage: React.FC = () => {
   return (
     <div className="p-6 space-y-4">
       {/* Header + Tabs unified sticky card */}
-      <div className="sticky top-[60px] z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+      <div className="sticky top-[64px] z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <div className="flex items-center justify-between px-4 pt-3 pb-0">
           <div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">

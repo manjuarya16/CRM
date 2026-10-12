@@ -177,7 +177,13 @@ export class ImapLeadSyncService {
       'x.com',
       'swiggy.in',
       'zomato.com',
-      'uber.com',
+      'mail.adobe.com',
+      'adobe.com',
+      'lightroom.adobe.com',
+      'news@',
+      'offers@',
+      'info@mail.',
+      'mailer@',
     ];
 
     if (ignoredSenders.some((ign) => lowerFrom.includes(ign))) {
@@ -207,6 +213,60 @@ export class ImapLeadSyncService {
   }
 
   /**
+   * Cleans HTML markup into plain readable text
+   */
+  private static extractCleanTextFromHtml(html: string): string {
+    if (!html) return '';
+    return html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+      .replace(/<br\s*[\/]?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n\s*\n\s*\n+/g, '\n\n')
+      .trim();
+  }
+
+  /**
+   * Strips out fallback notices, tracking links, and boilerplate noise from email bodies
+   */
+  private static sanitizeEmailBody(rawText: string, rawHtml?: string): string {
+    let body = (rawText || '').trim();
+
+    // Check if body is empty or contains standard fallback disclaimer for HTML-only emails
+    const isFallbackNotice =
+      /unfortunately,\s*your\s*email\s*client\s*cannot\s*display\s*html/i.test(body) ||
+      /view\s*this\s*email\s*in\s*your\s*browser/i.test(body) ||
+      body.length === 0;
+
+    if (isFallbackNotice && rawHtml) {
+      const extractedHtmlText = this.extractCleanTextFromHtml(rawHtml);
+      if (extractedHtmlText && extractedHtmlText.length > 20) {
+        body = extractedHtmlText;
+      }
+    }
+
+    // Strip out common fallback disclaimer blocks and tracking link boilerplate
+    body = body
+      .replace(/unfortunately,\s*your\s*email\s*client\s*cannot\s*display\s*html[^\n\r]*(\r?\n[^\n\r]*)*/gi, '')
+      .replace(/view\s*web\s*version:\s*https?:\/\/\S+/gi, '')
+      .replace(/to\s*view\s*this\s*email[^.\n]*into\s*your\s*browser\.?/gi, '')
+      .replace(/(\*{4,}|\-{4,}|_{4,})/g, '')
+      .replace(/\n\s*\n\s*\n+/g, '\n\n')
+      .trim();
+
+    return body || rawText || '';
+  }
+
+  /**
    * Evaluates if a new incoming email should create a Lead in CRM.
    * Creates a lead automatically for any new email with a visiting card, image, PDF,
    * document, or text inquiry, without restrictive dependencies.
@@ -219,8 +279,13 @@ export class ImapLeadSyncService {
     ocrExtractedTexts: string[];
     extractedLeadData: ExtractedLeadData;
   }): { shouldCreateLead: boolean; reason: string } {
-    const { subject, textBody, savedAttachmentRecords } = params;
+    const { fromAddress, subject, textBody, savedAttachmentRecords } = params;
     const lowerSub = (subject || '').toLowerCase();
+
+    // 0. Exclude automated system emails, newsletters, marketing campaigns if no document attachments
+    if (this.isAutomatedOrSystemEmail(fromAddress, subject) && savedAttachmentRecords.length === 0) {
+      return { shouldCreateLead: false, reason: 'Automated newsletter, marketing blast, or system notification' };
+    }
 
     // 1. Exclude automated receipts / invoices / shipment notifications
     const operationalKeywords = [
@@ -596,7 +661,7 @@ export class ImapLeadSyncService {
     const fromAddress = parsed.from?.value?.[0]?.address || '';
     const fromName = parsed.from?.value?.[0]?.name || fromAddress.split('@')[0] || 'Email Contact';
     const subject = parsed.subject || '(No Subject)';
-    const textBody = parsed.text || '';
+    const textBody = this.sanitizeEmailBody(parsed.text || '', parsed.html || parsed.textAsHtml || '');
     const htmlBody = parsed.html || parsed.textAsHtml || textBody;
     const messageId = parsed.messageId || `<email-${Date.now()}@crm.local>`;
 

@@ -124,7 +124,7 @@ const VerticalLayout = ({ children }: VerticalLayoutProps) => {
               <Topbar />
             </Suspense>
 
-            <main className="flex-grow p-6 min-w-0 min-h-0 overflow-y-auto">
+            <main className="flex-grow p-3 sm:p-4 md:p-6 min-w-0 min-h-0 overflow-y-auto">
               <Suspense fallback={<Preloader />}>
                 {children}
               </Suspense>
