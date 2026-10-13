@@ -19,6 +19,68 @@ const MENU_ITEMS: MenuItemTypes[] = [
     url: "/dashboard",
   },
   {
+    key: "reports",
+    label: "Reports",
+    isTitle: false,
+    icon: "mgc_chart_bar_line",
+    children: [
+      {
+        key: "reports-overview",
+        label: "Overview",
+        url: "/reports/overview",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-leads",
+        label: "Lead Summary",
+        url: "/reports/leads",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-sources",
+        label: "Lead Sources",
+        url: "/reports/sources",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-product-value",
+        label: "Product Value",
+        url: "/reports/product-value",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-product-lines",
+        label: "Product Lines on Leads",
+        url: "/reports/product-lines",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-pipeline",
+        label: "Sales Pipeline",
+        url: "/reports/pipeline",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-activities",
+        label: "Activities",
+        url: "/reports/activities",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-quotes",
+        label: "Quotes",
+        url: "/reports/quotes",
+        parentKey: "reports",
+      },
+      {
+        key: "reports-setup",
+        label: "Data Setup",
+        url: "/reports/setup",
+        parentKey: "reports",
+      },
+    ],
+  },
+  {
     key: "leads",
     label: "Leads",
     isTitle: false,

@@ -9,3 +9,4 @@ export type { IQuoteItem, IQuoteCreateInput, IQuoteUpdateInput } from './quoteIn
 export * from './notificationInterface';
 export * from './whatsapp.interface';
 export * from './tenant.interface';
+export * from './reportInterface';

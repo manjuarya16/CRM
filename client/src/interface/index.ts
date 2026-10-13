@@ -25,4 +25,5 @@ export * from "./tagInterface";
 export * from "./notificationInterface";
 export * from "./dashboardInterface";
 export * from "./realtimeInterface";
+export * from "./reportInterface";
 
