@@ -292,27 +292,32 @@ const QuotesPage: React.FC = () => {
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Quotes</span>
+          </div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Quotes & Proposals</h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Quotes</h1>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/60 text-[#0088cc] border border-sky-200 dark:border-sky-800">
               {total} Total
             </span>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Manage customer quotations, track deal validity, and expand separate product entries
-          </p>
         </div>
 
         {canCreate && (
-          <Link
-            to="/quotes/create"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-all hover:shadow active:scale-98 w-full sm:w-auto shrink-0"
-          >
-            <i className="mgc_add_line text-base"></i>
-            <span>Create New Quote</span>
-          </Link>
+          <div className="flex items-center gap-x-2.5">
+            <Link
+              to="/quotes/create"
+              className="inline-flex items-center justify-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors w-full sm:w-auto shrink-0"
+            >
+              Create Quote
+            </Link>
+          </div>
         )}
       </div>
 

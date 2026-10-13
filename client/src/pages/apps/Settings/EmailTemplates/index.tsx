@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { IEmailTemplate } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { useEmailTemplateStore } from "@/store";
+import { stripHtmlToText } from "@/utils/formatters";
 
 const EmailTemplatesPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -215,7 +216,7 @@ const EmailTemplatesPage: React.FC = () => {
         {/* Middle Body: Snippet & Creation Date */}
         <div className="space-y-2 py-2 border-y border-gray-100 dark:border-gray-700/60 text-xs">
           <div className="text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed bg-gray-50/70 dark:bg-gray-900/50 p-2 rounded-xl font-mono text-[11px]">
-            {item.content ? item.content.slice(0, 160) : <span className="text-gray-400 italic">Empty body template</span>}
+            {item.content ? stripHtmlToText(item.content).slice(0, 160) : <span className="text-gray-400 italic">Empty body template</span>}
           </div>
 
           <div className="flex items-center justify-between text-gray-400 text-[11px] pt-0.5">
@@ -629,7 +630,7 @@ const EmailTemplatesPage: React.FC = () => {
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Body Content</p>
               <pre className="text-xs font-mono text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/60 p-3.5 rounded-xl border border-gray-100 dark:border-gray-700 whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
-                {previewTemplate.content}
+                {stripHtmlToText(previewTemplate.content)}
               </pre>
             </div>
 

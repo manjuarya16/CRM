@@ -158,26 +158,39 @@ const HoverMenuToggler = () => {
 
 const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
   const { logoLight, logoDark, logoSm } = useAppLogo();
+  const { layoutTheme } = useLayoutStore();
+  const isDarkMode = layoutTheme === "dark";
   const logoUrl = logoLight || logoDark;
+  const activeLogoUrl = isCondensed ? logoSm || logoUrl : logoUrl;
 
   return (
     <React.Fragment>
       <div className="app-menu">
         <Link
           to="/"
-          className="logo-box flex items-center justify-center px-4 h-[65px] sm:h-[65px] border-b border-[#03075e]"
-          style={{ background: "#040975", height: "65px" }}
+          className={`logo-box flex items-center ${
+            isCondensed ? "justify-center px-2" : "justify-start pl-[3rem] pr-4"
+          } h-[70px] sm:h-[70px] border-b ${
+            isDarkMode ? "border-gray-700" : "border-[#03075e]"
+          }`}
+          style={{
+            background: isDarkMode ? "#1f2937" : "#040975",
+            height: "70px",
+            justifyContent: isCondensed ? "center" : "flex-start",
+            paddingLeft: isCondensed ? "0.5rem" : "3rem",
+            paddingRight: isCondensed ? "0.5rem" : undefined,
+          }}
         >
-          {logoUrl ? (
+          {activeLogoUrl ? (
             <img
-              src={logoUrl}
+              src={activeLogoUrl}
               alt="Logo"
               className={
                 isCondensed
-                  ? "h-9 w-9 max-w-[42px] object-contain drop-shadow-sm"
-                  : "h-full max-h-[65px] max-w-[240px] w-auto object-contain transition-all drop-shadow-sm py-1"
+                  ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
+                  : "h-full max-h-[70px] max-w-[240px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
               }
-              style={{ maxHeight: "65px" }}
+              style={{ maxHeight: isCondensed ? "42px" : "70px" }}
             />
           ) : (
             <div className="flex items-center gap-2">

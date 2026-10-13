@@ -11,6 +11,19 @@ const toNumberParam = (v: any): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+const cleanEmailVal = (raw: string): string => {
+  const s = raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&lt;/gi, ' ')
+    .replace(/&gt;/gi, ' ')
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/\bmailto:\s*/gi, '')
+    .trim();
+  const m = s.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  return m ? m[1].toLowerCase().trim() : s.replace(/^[<>"'\s]+|[<>"'\s]+$/g, '').trim();
+};
+
 const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: string; value: string }> => {
   if (!val) return [];
   const parseStr = (str: string, lbl = defaultLabel): Array<{ label: string; value: string }> => {
@@ -22,6 +35,7 @@ const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: strin
         return parsePersonField(p, lbl);
       } catch {}
     }
+    clean = clean.replace(/<[^>]+>/g, ' ').replace(/\bmailto:\s*/gi, '').trim();
     if (clean.includes(':') || clean.includes(',')) {
       const parts = clean.split(',');
       const res: Array<{ label: string; value: string }> = [];
@@ -32,14 +46,19 @@ const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: strin
           const idx = t.indexOf(':');
           const l = t.substring(0, idx).trim();
           const v = t.substring(idx + 1).trim();
-          if (v) res.push({ label: l || lbl, value: v });
+          const isValidLabel = /^[a-zA-Z0-9_-]{1,20}$/.test(l) && !/^mailto$/i.test(l) && !/^https?$/i.test(l);
+          if (isValidLabel && v) {
+            res.push({ label: l || lbl, value: v.includes('@') ? cleanEmailVal(v) : v });
+          } else if (v) {
+            res.push({ label: lbl, value: t.includes('@') ? cleanEmailVal(t) : v });
+          }
         } else {
-          res.push({ label: lbl, value: t });
+          res.push({ label: lbl, value: t.includes('@') ? cleanEmailVal(t) : t });
         }
       }
       if (res.length > 0) return res;
     }
-    return [{ label: lbl, value: clean }];
+    return [{ label: lbl, value: clean.includes('@') ? cleanEmailVal(clean) : clean }];
   };
 
   if (Array.isArray(val)) {
@@ -47,11 +66,13 @@ const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: strin
     for (const item of val) {
       if (typeof item === 'object' && item !== null) {
         const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
-        const itemLabel = item.label || defaultLabel;
-        if (typeof itemVal === 'string' && (itemVal.startsWith('[') || itemVal.startsWith('{') || itemVal.includes(':') || itemVal.includes(','))) {
+        const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? String(item.label).trim() : defaultLabel;
+        const itemLabel = rawLabel.replace(/<[^>]+>/g, '').trim() || defaultLabel;
+        if (typeof itemVal === 'string' && (itemVal.startsWith('[') || itemVal.startsWith('{') || itemVal.includes(':') || itemVal.includes(',') || itemVal.includes('<'))) {
           res.push(...parseStr(itemVal, itemLabel));
         } else if (itemVal) {
-          res.push({ label: itemLabel, value: String(itemVal).trim() });
+          const vStr = String(itemVal).trim();
+          res.push({ label: itemLabel, value: vStr.includes('@') ? cleanEmailVal(vStr) : vStr.replace(/<[^>]+>/g, '').trim() });
         }
       } else if (typeof item === 'string') {
         res.push(...parseStr(item, defaultLabel));

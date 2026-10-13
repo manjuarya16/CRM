@@ -6,13 +6,14 @@ import API, { SERVER_URL } from "@/config";
 import { extractFileUrl } from "@/utils/fileHelper";
 import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
 import { getRottenInfo } from "@/utils/rottenHelper";
+import { stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
 const getActivityBadge = (type: string) => {
   switch (type?.toLowerCase()) {
     case "email":
     case "mail":
       return {
-        badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+        badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-200 dark:border-blue-800",
         icon: "mgc_mail_line",
         label: "Email",
       };
@@ -55,13 +56,14 @@ const getActivityBadge = (type: string) => {
   }
 };
 
-const ActivityCommentContent: React.FC<{ comment: string; type: string }> = ({ comment, type }) => {
+const ActivityCommentContent: React.FC<{ comment: string; type: string }> = ({ comment }) => {
   const [expanded, setExpanded] = useState(false);
 
   if (!comment) return null;
 
-  // 1. Clean boilerplate text if present
-  let cleaned = comment
+  // 1. Strip any HTML tags & clean boilerplate text if present
+  const plainComment = stripHtmlToText(comment);
+  let cleaned = plainComment
     .replace(/unfortunately,\s*your\s*email\s*client\s*cannot\s*display\s*html[^\n\r]*(\r?\n[^\n\r]*)*/gi, '')
     .replace(/to\s*view\s*this\s*email[^.\n]*into\s*your\s*browser\.?/gi, '')
     .replace(/(\*{4,}|\-{4,}|_{4,})/g, '')
@@ -90,7 +92,7 @@ const ActivityCommentContent: React.FC<{ comment: string; type: string }> = ({ c
 
   // Fallback if cleaned is empty but webVersionUrl exists
   if (!cleaned && !senderHeader && !webVersionUrl) {
-    cleaned = comment;
+    cleaned = plainComment;
   }
 
   const isLong = cleaned.length > 280;
@@ -422,17 +424,9 @@ const LeadViewPage: React.FC = () => {
 
 const getPersonEmail = (person: any): string => {
   if (!person) return "";
-  if (person.email) return person.email;
+  if (person.email) return cleanEmailAddress(person.email);
   if (!person.emails) return "";
-  try {
-    const emails = typeof person.emails === "string" ? JSON.parse(person.emails) : person.emails;
-    if (Array.isArray(emails) && emails.length > 0) {
-      const first = emails[0];
-      return typeof first === "object" ? (first.value || first.email || "") : String(first);
-    }
-    if (typeof emails === "string") return emails;
-  } catch (e) { }
-  return "";
+  return cleanEmailAddress(person.emails);
 };
 
   const mailInitialData = useMemo(() => {
@@ -691,7 +685,7 @@ const getPersonEmail = (person: any): string => {
                             <span className="px-1.5 py-0.5 text-[9px] font-bold bg-[#0088cc] text-white rounded">Primary</span>
                           </div>
                           {person.job_title && <p className="text-gray-600 dark:text-gray-300 font-medium text-[11px]">{person.job_title}</p>}
-                          {person.emails?.[0] && <p className="text-gray-500">{person.emails[0].value || person.emails[0]} (work)</p>}
+                          {person.emails?.[0] && <p className="text-gray-500">{cleanEmailAddress(person.emails[0])} (work)</p>}
                           {person.contact_numbers?.[0] && <p className="text-gray-500">{person.contact_numbers[0].value || person.contact_numbers[0]}</p>}
                         </div>
                       </div>
@@ -699,7 +693,7 @@ const getPersonEmail = (person: any): string => {
 
                     {/* Secondary Organization Contacts */}
                     {otherOrgPersons.map((op) => {
-                      const emailVal = Array.isArray(op.emails) ? (op.emails[0]?.value || op.emails[0]) : op.email;
+                      const emailVal = cleanEmailAddress(Array.isArray(op.emails) ? op.emails[0] : op.email);
                       const phoneVal = Array.isArray(op.contact_numbers) ? (op.contact_numbers[0]?.value || op.contact_numbers[0]) : op.phone;
                       return (
                         <div key={op.id} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
@@ -1155,8 +1149,8 @@ const getPersonEmail = (person: any): string => {
 
               {/* DESCRIPTION TAB */}
               {activeTab === "description" && (
-                <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-xl border text-xs text-gray-700 dark:text-gray-200">
-                  {selectedLead.description || "No description provided for this lead."}
+                <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-xl border text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                  {stripHtmlToText(selectedLead.description) || "No description provided for this lead."}
                 </div>
               )}
 

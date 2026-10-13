@@ -336,32 +336,26 @@ const ProductsPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* 🧭 Top Breadcrumb Navigation */}
-      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
-          <i className="mgc_home_3_line text-xs"></i>
-          <span>Dashboard</span>
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Products</span>
-      </div>
-
-      {/* 🏷️ Header with Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+      {/* 🏷️ Header Card with Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Products</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
             Products
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Manage your product catalog, pricing, and multi-warehouse inventory
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition"
+              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition"
             >
               <i className="mgc_delete_line text-base mr-1.5"></i>
               Delete ({selectedIds.length})
@@ -370,7 +364,7 @@ const ProductsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 transition shadow-2xs"
+            className="inline-flex items-center px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 transition shadow-2xs"
           >
             <i className="mgc_download_line text-base mr-1.5 text-gray-500"></i>
             Export
@@ -378,9 +372,8 @@ const ProductsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/products/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
-              <i className="mgc_add_line text-base"></i>
               Create Product
             </Link>
           )}

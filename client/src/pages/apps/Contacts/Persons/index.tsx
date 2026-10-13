@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { usePersonStore } from "@/store";
 import { IPerson, PersonEmailItem, ContactItem } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
 const PersonsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -67,6 +68,8 @@ const PersonsPage: React.FC = () => {
           return parseItems(parsed, label);
         } catch {}
       }
+      // Strip any HTML tags and mailto: prefix before splitting on ':'
+      clean = stripHtmlToText(clean).replace(/\bmailto:\s*/gi, "").trim();
       if (clean.includes(":") || clean.includes(",")) {
         const parts = clean.split(",");
         const res: Array<{ label: string; value: string }> = [];
@@ -77,14 +80,19 @@ const PersonsPage: React.FC = () => {
             const idx = t.indexOf(":");
             const l = t.substring(0, idx).trim();
             const v = t.substring(idx + 1).trim();
-            if (v) res.push({ label: l || label, value: v });
+            const isValidLabel = /^[a-zA-Z0-9_-]{1,20}$/.test(l) && !/^mailto$/i.test(l) && !/^https?$/i.test(l);
+            if (isValidLabel && v) {
+              res.push({ label: l || label, value: v.includes("@") ? cleanEmailAddress(v) : v });
+            } else if (v) {
+              res.push({ label, value: t.includes("@") ? cleanEmailAddress(t) : v });
+            }
           } else {
-            res.push({ label, value: t });
+            res.push({ label, value: t.includes("@") ? cleanEmailAddress(t) : t });
           }
         }
         if (res.length > 0) return res;
       }
-      return [{ label, value: clean }];
+      return [{ label, value: clean.includes("@") ? cleanEmailAddress(clean) : clean }];
     };
 
     if (Array.isArray(raw)) {
@@ -92,11 +100,13 @@ const PersonsPage: React.FC = () => {
       for (const item of raw) {
         if (typeof item === "object" && item !== null) {
           const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
-          const itemLabel = item.label || defaultLabel;
-          if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(","))) {
+          const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? item.label : defaultLabel;
+          const itemLabel = stripHtmlToText(rawLabel) || defaultLabel;
+          if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(",") || itemVal.includes("<"))) {
             result.push(...processString(itemVal, itemLabel));
           } else if (itemVal) {
-            result.push({ label: itemLabel, value: String(itemVal).trim() });
+            const valStr = String(itemVal).trim();
+            result.push({ label: itemLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
           }
         } else if (typeof item === "string") {
           result.push(...processString(item, defaultLabel));
@@ -119,7 +129,7 @@ const PersonsPage: React.FC = () => {
       <div className="flex flex-col gap-0.5">
         {list.map((item, index) => (
           <div key={index} className="text-xs">
-            <span className="font-medium text-gray-800 dark:text-gray-200">{item.value}</span>
+            <span className="font-medium text-gray-800 dark:text-gray-200">{cleanEmailAddress(item.value) || item.value}</span>
             {item.label && <span className="text-gray-400 dark:text-gray-500 ms-1.5 font-normal">({item.label})</span>}
           </div>
         ))}
@@ -460,66 +470,59 @@ const PersonsPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* 🧭 Top Breadcrumb Navigation */}
-      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
-          <i className="mgc_home_3_line text-xs"></i>
-          <span>Dashboard</span>
-        </Link>
-        <span>/</span>
-        <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
-          Contacts
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Persons</span>
-      </div>
-
-      {/* 🏷️ Header with Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+      {/* 🏷️ Header Card with Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
+              Contacts
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Persons</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
             Persons
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Manage your individual client contacts and relationships
-          </p>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition"
             >
-              <i className="mgc_delete_line text-sm"></i>
-              <span>Delete ({selectedIds.length})</span>
+              <i className="mgc_delete_line text-base mr-1.5"></i>
+              Delete ({selectedIds.length})
             </button>
           )}
           <button
             type="button"
             onClick={handleExport}
-            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            className="inline-flex items-center px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 transition shadow-2xs"
           >
-            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
-            <span>Export</span>
+            <i className="mgc_download_line text-base mr-1.5 text-gray-500"></i>
+            Export
           </button>
           {total > 0 && canDelete && (
             <button
               type="button"
               onClick={handleClearAll}
-              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-800 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+              className="inline-flex items-center px-3.5 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs sm:text-sm font-medium rounded-md border border-red-200 dark:border-red-800 transition shadow-2xs"
             >
-              <i className="mgc_delete_line text-sm"></i>
-              <span>Clear All</span>
+              <i className="mgc_delete_line text-base mr-1.5"></i>
+              Clear All
             </button>
           )}
           {canCreate && (
             <Link
               to="/contacts/persons/create"
-              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
-              <i className="mgc_add_line text-sm"></i>
-              <span>Create Person</span>
+              Create Person
             </Link>
           )}
         </div>

@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useMailStore } from "@/store";
 import { ComposeMailModal } from "./ComposeMailModal";
 import { EmailItem } from "@/interface";
+import { stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
 const FOLDERS = [
   { id: "inbox", label: "Inbox", icon: "mgc_inbox_line" },
@@ -144,7 +145,7 @@ const MailPage: React.FC = () => {
 
   const stripHtml = (html: string) => {
     if (!html) return "";
-    return html.replace(/<[^>]*>?/gm, "").substring(0, 140);
+    return stripHtmlToText(html).replace(/\s+/g, " ").trim().substring(0, 140);
   };
 
   const allSelected = emails.length > 0 && selectedEmailIds.length === emails.length;
@@ -152,18 +153,8 @@ const MailPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-5">
-      {/* 🧭 Top Breadcrumb Navigation */}
-      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
-          <i className="mgc_home_3_line text-xs"></i>
-          <span>Dashboard</span>
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Mail</span>
-      </div>
-
-      {/* 🏷️ Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+      {/* 🏷️ Header Card with Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMobileSidebarOpen(true)}
@@ -172,9 +163,15 @@ const MailPage: React.FC = () => {
           >
             <i className="mgc_menu_line text-xl"></i>
           </button>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2">
-              <i className="mgc_mail_line text-[#0e90d9]"></i>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 text-xs">
+              <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+                Dashboard
+              </Link>
+              <span className="text-gray-400">/</span>
+              <span className="text-gray-600 dark:text-gray-300 font-medium">Mail</span>
+            </div>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight flex items-center gap-2">
               <span>Mail</span>
               {counts.inbox_unread > 0 && activeFolder === "inbox" && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-[#0088cc] dark:bg-blue-900/50 dark:text-blue-300">
@@ -182,9 +179,6 @@ const MailPage: React.FC = () => {
                 </span>
               )}
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Manage your communications, messages, and threads
-            </p>
           </div>
         </div>
 
@@ -194,10 +188,9 @@ const MailPage: React.FC = () => {
               setEditingDraft(null);
               setIsComposeOpen(true);
             }}
-            className="w-full sm:w-auto h-8 inline-flex items-center justify-center gap-1 px-3 sm:px-3.5 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs font-semibold rounded-lg shadow-2xs transition active:scale-98 whitespace-nowrap"
+            className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
           >
-            <i className="mgc_add_line text-sm"></i>
-            <span>Compose Mail</span>
+            Compose Mail
           </button>
         </div>
       </div>
@@ -463,12 +456,13 @@ const MailPage: React.FC = () => {
               emails.map((email, idx) => {
                 const isSelected = selectedEmailIds.includes(email.id);
                 const isUnread = !email.is_read;
-                const senderName =
+                const senderName = stripHtmlToText(
                   email.name ||
                   email.sender?.name ||
                   email.from_email?.name ||
-                  email.sender?.email ||
-                  "Unknown";
+                  cleanEmailAddress(email.sender?.email || email.from_email?.email) ||
+                  "Unknown"
+                );
                 const avatarColor = AVATAR_COLORS[(email.id || idx) % AVATAR_COLORS.length];
 
                 return (
