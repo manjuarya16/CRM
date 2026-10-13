@@ -12,9 +12,9 @@ export class AuthService {
   /**
    * Signs a JWT token for the authenticated user
    */
-  public static signToken(userId: number | string): string {
+  public static signToken(userId: number | string, tenantId?: number | null): string {
     return jwt.sign(
-      { sub: String(userId) },
+      { sub: String(userId), tenant_id: tenantId },
       env.JWT_SECRET,
       { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions,
     );
@@ -39,7 +39,7 @@ export class AuthService {
         status: true,
       });
 
-      const token = this.signToken(user.id);
+      const token = this.signToken(user.id, user.tenant_id);
       return { user: toPublicUser(user), token };
     } catch (error: any) {
       logger.error({ error, email: input.email }, 'AuthService.register failed');
@@ -50,13 +50,13 @@ export class AuthService {
   /**
    * Business logic for user login
    */
-  public static async login(input: LoginInput): Promise<{ user: PublicUser; token: string }> {
+  public static async login(input: LoginInput, tenantId?: number): Promise<{ user: PublicUser; token: string }> {
     try {
       const identifier = (input.email || input.username) as string;
 
-      const user = await UserService.findByEmail(identifier);
+      const user = await UserService.findByEmail(identifier, tenantId);
       if (!user) {
-        logger.warn({ identifier }, 'AuthService.login failed: user not found');
+        logger.warn({ identifier, tenantId }, 'AuthService.login failed: user not found');
         throw new ApiError(401, 'Invalid email or password');
       }
 
@@ -79,7 +79,7 @@ export class AuthService {
         throw new ApiError(401, 'Invalid email or password');
       }
 
-      const token = this.signToken(user.id);
+      const token = this.signToken(user.id, user.tenant_id);
       return { user: toPublicUser(user), token };
     } catch (error: any) {
       if (!(error instanceof ApiError)) {

@@ -15,6 +15,11 @@ import { authProtectedFlattenRoutes, publicProtectedFlattenRoutes } from ".";
 import { getToken, isTokenExpired } from "../lib/auth-utils";
 import useModuleAccess from "../hooks/useModuleAccess";
 import { useAuthStore } from "../store";
+import { getSubdomain } from "../utils/subdomain";
+import { useSuperAdminStore } from "../store/superAdminStore";
+import SuperAdminLogin from "../pages/SuperAdmin/Login";
+import SuperAdminDashboard from "../pages/SuperAdmin/Dashboard";
+import WorkspaceFinder from "../pages/other/Auth/WorkspaceFinder";
 
 // Wrapper component to check module access
 const ModuleAccessWrapper = ({ element, moduleKey, ...props }: any) => {
@@ -30,6 +35,38 @@ const ModuleAccessWrapper = ({ element, moduleKey, ...props }: any) => {
 };
 
 const AllRoutes = (props: RouteProps) => {
+  const subdomain = getSubdomain();
+  const isSuperAdminAuthenticated = useSuperAdminStore((s) => s.isAuthenticated);
+
+  // 1. Super Admin Subdomain (e.g. admin.localhost:5173 or admin.yourcrm.com)
+  if (subdomain.type === "admin") {
+    return isSuperAdminAuthenticated ? <SuperAdminDashboard /> : <SuperAdminLogin />;
+  }
+
+  // 2. Root domain without tenant subdomain (e.g. localhost:5173 or yourcrm.com)
+  if (subdomain.type === "root") {
+    const currentPath = window.location.pathname.toLowerCase();
+    const isAuthRoute =
+      currentPath === "/login" ||
+      currentPath === "/auth/login" ||
+      currentPath.startsWith("/forms/") ||
+      currentPath === "/recover-password" ||
+      currentPath === "/auth/recover-password";
+
+    if (!isAuthRoute) {
+      return (
+        <Routes>
+          <Route
+            path="/super-admin"
+            element={isSuperAdminAuthenticated ? <SuperAdminDashboard /> : <SuperAdminLogin />}
+          />
+          <Route path="*" element={<WorkspaceFinder />} />
+        </Routes>
+      );
+    }
+  }
+
+  // 3. Tenant Workspace (e.g. acme.localhost:5173 or acme.yourcrm.com)
   const isAuthenticated = (() => {
     const token = getToken();
     if (!token || isTokenExpired(token)) return false;

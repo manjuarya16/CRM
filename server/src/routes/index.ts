@@ -30,12 +30,24 @@ import notificationRoutes from '@/routes/notification.routes';
 import whatsappRoutes from '@/routes/whatsapp.routes';
 import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
+import superAdminRoutes from '@/routes/superAdmin.routes';
+import tenantPublicRoutes from '@/routes/tenantPublic.routes';
+import { resolveTenant } from '@/middleware/tenant.middleware';
 
 const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// SaaS Super Admin Management (global platform scope)
+router.use('/super-admin', superAdminRoutes);
+
+// Public Tenant Metadata (for subdomain verification and login branding)
+router.use('/public', tenantPublicRoutes);
+
+// Tenant context resolution for all standard CRM operations
+router.use(resolveTenant);
 
 // Unified Mega Search
 router.use('/search', searchRoutes);

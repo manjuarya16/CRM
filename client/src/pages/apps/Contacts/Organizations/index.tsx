@@ -413,15 +413,15 @@ const OrganizationsPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Per Page:</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -429,12 +429,12 @@ const OrganizationsPage: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-base"></i>
@@ -443,7 +443,7 @@ const OrganizationsPage: React.FC = () => {
                 type="button"
                 disabled={filteredOrganizations.length < perPage || page * perPage >= totalCount}
                 onClick={() => setPage((p) => p + 1)}
-                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-base"></i>
