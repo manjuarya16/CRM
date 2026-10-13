@@ -40,7 +40,7 @@
 .logo-box {
     height: $topbar-height;
     color: $menu-item-color;
-    @apply sticky top-0 flex items-center justify-center transition-all duration-300;
+    @apply sticky top-0 flex items-center justify-start transition-all duration-300;
 
     .logo-lg {
         height: 50px;

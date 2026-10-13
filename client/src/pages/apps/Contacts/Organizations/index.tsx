@@ -316,36 +316,30 @@ const OrganizationsPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* 🧭 Top Breadcrumb Navigation */}
-      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
-          <i className="mgc_home_3_line text-xs"></i>
-          <span>Dashboard</span>
-        </Link>
-        <span>/</span>
-        <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
-          Contacts
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Organizations</span>
-      </div>
-
-      {/* 🏷️ Header with Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+      {/* 🏷️ Header Card with Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <Link to="/contacts/persons" className="text-[#0e90d9] hover:underline">
+              Contacts
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Organizations</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
             Organizations
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Manage your corporate clients, partners, and accounts
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition"
+              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition"
             >
               <i className="mgc_delete_line text-base mr-1.5"></i>
               Delete ({selectedIds.length})
@@ -354,9 +348,8 @@ const OrganizationsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/contacts/organizations/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
-              <i className="mgc_add_line text-base"></i>
               Create Organization
             </Link>
           )}

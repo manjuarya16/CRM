@@ -82,15 +82,28 @@ const ProductsPage: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Products</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Products</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
+            Products
+          </h1>
+        </div>
         {canCreate && (
-          <Link
-            to="/products/create"
-            className="inline-flex items-center px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            + Create Product
-          </Link>
+          <div className="flex items-center gap-x-2.5">
+            <Link
+              to="/products/create"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
+            >
+              Create Product
+            </Link>
+          </div>
         )}
       </div>
 

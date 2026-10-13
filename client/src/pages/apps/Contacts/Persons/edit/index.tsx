@@ -8,6 +8,7 @@ import { personSchema } from "@/schemas";
 
 import { PersonEmailItem, ContactItem, PersonFormData } from "@/interface";
 import { TagPicker } from "@/components/TagPicker";
+import { cleanEmailAddress, stripHtmlToText } from "@/utils/formatters";
 
 const EditPersonPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -69,6 +70,7 @@ const EditPersonPage: React.FC = () => {
                 return unpackItems(p, label);
               } catch {}
             }
+            clean = stripHtmlToText(clean).replace(/\bmailto:\s*/gi, "").trim();
             if (clean.includes(":") || clean.includes(",")) {
               const parts = clean.split(",");
               const res: Array<{ label: string; value: string }> = [];
@@ -79,14 +81,19 @@ const EditPersonPage: React.FC = () => {
                   const idx = t.indexOf(":");
                   const l = t.substring(0, idx).trim();
                   const v = t.substring(idx + 1).trim();
-                  if (v) res.push({ label: l || label, value: v });
+                  const isValidLabel = /^[a-zA-Z0-9_-]{1,20}$/.test(l) && !/^mailto$/i.test(l) && !/^https?$/i.test(l);
+                  if (isValidLabel && v) {
+                    res.push({ label: l || label, value: v.includes("@") ? cleanEmailAddress(v) : v });
+                  } else if (v) {
+                    res.push({ label, value: t.includes("@") ? cleanEmailAddress(t) : v });
+                  }
                 } else {
-                  res.push({ label, value: t });
+                  res.push({ label, value: t.includes("@") ? cleanEmailAddress(t) : t });
                 }
               }
               if (res.length > 0) return res;
             }
-            return [{ label, value: clean }];
+            return [{ label, value: clean.includes("@") ? cleanEmailAddress(clean) : clean }];
           };
 
           if (Array.isArray(raw)) {
@@ -94,11 +101,13 @@ const EditPersonPage: React.FC = () => {
             for (const item of raw) {
               if (typeof item === "object" && item !== null) {
                 const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
-                const itemLabel = item.label || defaultLabel;
-                if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(","))) {
+                const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? item.label : defaultLabel;
+                const itemLabel = stripHtmlToText(rawLabel) || defaultLabel;
+                if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(",") || itemVal.includes("<"))) {
                   res.push(...parseStr(itemVal, itemLabel));
                 } else if (itemVal) {
-                  res.push({ label: itemLabel, value: String(itemVal).trim() });
+                  const valStr = String(itemVal).trim();
+                  res.push({ label: itemLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
                 }
               } else if (typeof item === "string") {
                 res.push(...parseStr(item, defaultLabel));

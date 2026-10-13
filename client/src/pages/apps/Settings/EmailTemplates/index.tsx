@@ -5,6 +5,7 @@ import { PageBreadcrumb } from "@/components";
 import { IEmailTemplate } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { useEmailTemplateStore } from "@/store";
+import { stripHtmlToText } from "@/utils/formatters";
 
 const EmailTemplatesPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -224,7 +225,7 @@ const EmailTemplatesPage: React.FC = () => {
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Content</p>
               <pre className="text-xs font-mono text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg whitespace-pre-wrap max-h-60 overflow-y-auto">
-                {previewTemplate.content}
+                {stripHtmlToText(previewTemplate.content)}
               </pre>
             </div>
             <div className="flex justify-end pt-2">

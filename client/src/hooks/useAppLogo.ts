@@ -52,10 +52,14 @@ const useAppLogo = () => {
   const rawLogo = adminLogo || (userLoggedIn ? organization?.logo : publicBranding.logo);
   const orgLogo = resolveLogoUrl(rawLogo ?? null);
 
+  // Favicon configured in Configuration -> General settings for condensed/small sidebar
+  const adminFavicon = configs["general.general.admin_logo.favicon_image"];
+  const faviconUrl = resolveLogoUrl(adminFavicon ?? null);
+
   return {
     logoLight: orgLogo,
     logoDark: orgLogo,
-    logoSm: orgLogo,
+    logoSm: faviconUrl || orgLogo,
     orgName:
       (userLoggedIn ? organization?.name : publicBranding.name) ?? "CRM",
   };

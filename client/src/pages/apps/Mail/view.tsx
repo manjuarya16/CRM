@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useMailStore, useLeadStore } from "@/store";
 import { EmailItem } from "@/interface";
 import API, { API_URL } from "@/config";
-import { formatFileSize } from "@/utils/formatters";
+import { formatFileSize, stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
 const MailViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -79,7 +79,7 @@ const MailViewPage: React.FC = () => {
     setComposerError(null);
     setAttachments([]);
 
-    const fromAddr = email.from_email?.email || email.sender?.email || "";
+    const fromAddr = cleanEmailAddress(email.from_email?.email || email.sender?.email || "");
 
     if (mode === "reply") {
       setReplyTo(fromAddr ? [fromAddr] : []);
@@ -90,10 +90,10 @@ const MailViewPage: React.FC = () => {
       setReplyBody("");
     } else if (mode === "reply-all") {
       const allRecipients = Array.from(
-        new Set([...(fromAddr ? [fromAddr] : []), ...(email.reply_to || [])])
+        new Set([...(fromAddr ? [fromAddr] : []), ...(email.reply_to || []).map(cleanEmailAddress).filter(Boolean)])
       );
       setReplyTo(allRecipients);
-      setCcList(email.cc || []);
+      setCcList((email.cc || []).map(cleanEmailAddress).filter(Boolean));
       setBccList([]);
       if (email.cc && email.cc.length > 0) setShowCc(true);
       setShowBcc(false);
@@ -107,9 +107,9 @@ const MailViewPage: React.FC = () => {
       setReplyBody(
         `\n\n---------- Forwarded message ---------\nFrom: ${
           email.sender?.name || email.from_email?.name || "Sender"
-        } <${fromAddr}>\nDate: ${new Date(email.created_at).toLocaleString()}\nSubject: ${
+        }${fromAddr ? ` (${fromAddr})` : ""}\nDate: ${new Date(email.created_at).toLocaleString()}\nSubject: ${
           email.subject
-        }\nTo: ${(email.reply_to || []).join(", ")}\n\n${email.reply || ""}`
+        }\nTo: ${(email.reply_to || []).map(cleanEmailAddress).filter(Boolean).join(", ")}\n\n${stripHtmlToText(email.reply || "")}`
       );
     }
   };
@@ -269,13 +269,14 @@ const MailViewPage: React.FC = () => {
     );
   }
 
-  const senderName =
+  const senderName = stripHtmlToText(
     email.name ||
     email.sender?.name ||
     email.from_email?.name ||
-    email.sender?.email ||
-    "Sender";
-  const senderEmail = email.sender?.email || email.from_email?.email || "";
+    cleanEmailAddress(email.sender?.email || email.from_email?.email) ||
+    "Sender"
+  );
+  const senderEmail = cleanEmailAddress(email.sender?.email || email.from_email?.email || "");
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -359,21 +360,23 @@ const MailViewPage: React.FC = () => {
                     <span className="font-bold text-gray-900 dark:text-white text-sm">
                       {senderName}
                     </span>
-                    {senderEmail && (
+                    {senderEmail && senderEmail.toLowerCase() !== senderName.toLowerCase() && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        &lt;{senderEmail}&gt;
+                        ({senderEmail})
                       </span>
                     )}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 space-x-1">
                     <span>To:</span>
                     <span className="font-medium text-gray-700 dark:text-gray-300">
-                      {Array.isArray(email.reply_to) ? email.reply_to.join(", ") : "Me"}
+                      {Array.isArray(email.reply_to)
+                        ? email.reply_to.map(cleanEmailAddress).filter(Boolean).join(", ") || "Me"
+                        : "Me"}
                     </span>
                     {email.cc && email.cc.length > 0 && (
                       <>
                         <span className="text-gray-400">| Cc:</span>
-                        <span>{email.cc.join(", ")}</span>
+                        <span>{email.cc.map(cleanEmailAddress).filter(Boolean).join(", ")}</span>
                       </>
                     )}
                   </div>
@@ -392,7 +395,7 @@ const MailViewPage: React.FC = () => {
 
             {/* Email Message Content Body */}
             <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap min-h-[100px]">
-              {email.reply}
+              {stripHtmlToText(email.reply)}
             </div>
 
             {/* Email Attachments */}
@@ -467,13 +470,16 @@ const MailViewPage: React.FC = () => {
               </div>
 
               {email.emails.map((replyItem, idx) => {
-                const repSenderName =
+                const repSenderName = stripHtmlToText(
                   replyItem.name ||
                   replyItem.sender?.name ||
                   replyItem.from_email?.name ||
-                  "Sender";
-                const repSenderEmail =
-                  replyItem.sender?.email || replyItem.from_email?.email || "";
+                  cleanEmailAddress(replyItem.sender?.email || replyItem.from_email?.email) ||
+                  "Sender"
+                );
+                const repSenderEmail = cleanEmailAddress(
+                  replyItem.sender?.email || replyItem.from_email?.email || ""
+                );
 
                 return (
                   <div
@@ -490,16 +496,16 @@ const MailViewPage: React.FC = () => {
                             <span className="font-bold text-xs text-gray-900 dark:text-white">
                               {repSenderName}
                             </span>
-                            {repSenderEmail && (
+                            {repSenderEmail && repSenderEmail.toLowerCase() !== repSenderName.toLowerCase() && (
                               <span className="text-[11px] text-gray-400">
-                                &lt;{repSenderEmail}&gt;
+                                ({repSenderEmail})
                               </span>
                             )}
                           </div>
                           <div className="text-[11px] text-gray-400">
                             To:{" "}
                             {Array.isArray(replyItem.reply_to)
-                              ? replyItem.reply_to.join(", ")
+                              ? replyItem.reply_to.map(cleanEmailAddress).filter(Boolean).join(", ")
                               : "Recipient"}
                           </div>
                         </div>
@@ -514,7 +520,7 @@ const MailViewPage: React.FC = () => {
                     </div>
 
                     <div className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-                      {replyItem.reply}
+                      {stripHtmlToText(replyItem.reply)}
                     </div>
 
                     {/* Reply Attachments */}

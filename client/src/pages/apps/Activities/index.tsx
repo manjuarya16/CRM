@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useActivityStore } from "@/store";
 import { IActivity } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { stripHtmlToText } from "@/utils/formatters";
 
 const fmtDateTime = (dt?: string) => {
   if (!dt) return "-";
@@ -196,9 +197,9 @@ const ActivitiesPage: React.FC = () => {
         <div className="space-y-2.5 py-2.5 border-y border-gray-100 dark:border-gray-700/60 text-xs">
           {/* Full Comment */}
           {act.comment ? (
-            <div className="text-xs text-gray-700 dark:text-gray-300 bg-gray-50/80 dark:bg-gray-900/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 leading-relaxed">
+            <div className="text-xs text-gray-700 dark:text-gray-300 bg-gray-50/80 dark:bg-gray-900/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 leading-relaxed whitespace-pre-wrap">
               <span className="font-semibold text-gray-500 dark:text-gray-400 block mb-0.5 text-[10px] uppercase tracking-wider">Comment:</span>
-              {act.comment}
+              {stripHtmlToText(act.comment)}
             </div>
           ) : (
             <p className="text-gray-400 italic text-xs">No comments provided</p>
@@ -300,38 +301,31 @@ const ActivitiesPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* 🧭 Top Breadcrumb Navigation */}
-      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
-          <i className="mgc_home_3_line text-xs"></i>
-          <span>Dashboard</span>
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Activities</span>
-      </div>
-
-      {/* 🏷️ Header with Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+      {/* 🏷️ Header Card with Breadcrumb & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Activities</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
             Activities
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Track follow-ups, calls, meetings, and client engagements
-          </p>
         </div>
 
-        <div>
-          {canCreate && (
+        {canCreate && (
+          <div className="flex items-center gap-x-2.5">
             <Link
               to="/activities/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
-              <i className="mgc_add_line text-base"></i>
               Create Activity
             </Link>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -539,7 +533,7 @@ const ActivitiesPage: React.FC = () => {
                         <div className="space-y-1">
                           {act.comment && (
                             <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-2 leading-snug">
-                              {act.comment}
+                              {stripHtmlToText(act.comment)}
                             </p>
                           )}
                           {act.lead_id && (

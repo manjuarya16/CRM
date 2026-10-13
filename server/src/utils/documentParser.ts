@@ -329,10 +329,15 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   // 1. Email extraction (support multiple emails & labeled emails)
   const allEmails: string[] = [];
   const labeledEmails: string[] = [];
+  const cleanEmailText = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&lt;/gi, ' ')
+    .replace(/&gt;/gi, ' ')
+    .replace(/\bmailto:\s*/gi, '');
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   let eMatch;
-  while ((eMatch = emailRegex.exec(text)) !== null) {
-    const em = eMatch[1].toLowerCase().trim();
+  while ((eMatch = emailRegex.exec(cleanEmailText)) !== null) {
+    const em = eMatch[1].replace(/^mailto:/i, '').toLowerCase().trim();
     if (!allEmails.includes(em)) {
       allEmails.push(em);
     }
@@ -340,8 +345,8 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
   const labeledEmailRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   let leMatch;
-  while ((leMatch = labeledEmailRegex.exec(text)) !== null) {
-    const em = leMatch[1].toLowerCase().trim();
+  while ((leMatch = labeledEmailRegex.exec(cleanEmailText)) !== null) {
+    const em = leMatch[1].replace(/^mailto:/i, '').toLowerCase().trim();
     if (!labeledEmails.includes(em)) {
       labeledEmails.push(em);
     }
@@ -350,12 +355,12 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   // Also extract labeled emails with OCR noise, spaces, or colon typos (e.g. "amitabhsengupta@suninesolarco:t")
   const labeledOcrRegex = /(?:email|e-mail|mail)\s*[:=-]\s*([^\r\n]+)/gi;
   let loMatch;
-  while ((loMatch = labeledOcrRegex.exec(text)) !== null) {
+  while ((loMatch = labeledOcrRegex.exec(cleanEmailText)) !== null) {
     const rawLine = loMatch[1].split(/(?:\s+(?:Website|Web|Phone|Mobile|Tel|Address):|\r|\n)/i)[0].trim();
     if (rawLine.includes('@')) {
-      const emailCandidate = rawLine.split(/\s+/).find((tok) => tok.includes('@')) || rawLine;
+      const emailCandidate = (rawLine.split(/\s+/).find((tok) => tok.includes('@')) || rawLine).replace(/^mailto:/i, '');
       const [uPart, hPart] = emailCandidate.split('@');
-      const cleanU = uPart.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
+      const cleanU = uPart.replace(/^mailto/i, '').replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase();
       let cleanH = hPart.replace(/[:;]/g, '.').replace(/[^a-zA-Z0-9.-]/g, '').toLowerCase();
 
       // Fix OCR domain suffix typos: e.g. "suninesolarco.t" or "sunlinesolarco:t" -> "sunlinesolar.co.in"
