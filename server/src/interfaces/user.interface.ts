@@ -14,6 +14,7 @@ export interface IUser {
   created_by?: number | null;
   remember_token?: string | null;
   image?: string | null;
+  tenant_id?: number | null;
   created_at?: string;
   updated_at?: string;
 }

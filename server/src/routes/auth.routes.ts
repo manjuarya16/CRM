@@ -18,7 +18,7 @@ router.post('/register', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const validatedInput = loginSchema.parse(req.body);
-    const result = await AuthService.login(validatedInput);
+    const result = await AuthService.login(validatedInput, req.tenant?.id);
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);

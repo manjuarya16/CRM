@@ -127,16 +127,24 @@ export class UserService {
   }
 
   // Compatibility helpers for Auth & Passport
-  public static async findByEmail(email: string): Promise<IUser | null> {
+  public static async findByEmail(email: string, tenantId?: number): Promise<IUser | null> {
     try {
-      const query = `
+      let query = `
         SELECT u.*, r.name as role_name, r.permission_type, r.permissions 
         FROM users u 
         LEFT JOIN roles r ON u.role_id = r.id 
         WHERE LOWER(u.email) = LOWER($1)
-        LIMIT 1
       `;
-      const { rows } = await pool.query<IUser>(query, [email.trim().toLowerCase()]);
+      const params: any[] = [email.trim().toLowerCase()];
+
+      if (tenantId !== undefined && tenantId !== null) {
+        query += ` AND u.tenant_id = $2`;
+        params.push(tenantId);
+      }
+
+      query += ` LIMIT 1`;
+
+      const { rows } = await pool.query<IUser>(query, params);
       if (!rows[0]) return null;
 
       const user = rows[0];
@@ -145,7 +153,7 @@ export class UserService {
       }
       return user;
     } catch (error: any) {
-      logger.error({ error, email }, 'UserService.findByEmail failed');
+      logger.error({ error, email, tenantId }, 'UserService.findByEmail failed');
       throw error;
     }
   }

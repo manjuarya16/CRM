@@ -385,15 +385,15 @@ const EmailTemplatesPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Per Page:</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -402,11 +402,12 @@ const EmailTemplatesPage: React.FC = () => {
             </div>
 
             {/* Quick pagination arrows in toolbar */}
-            <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="h-8 flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-2xs shrink-0">
               <button
+                type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-xs"></i>
@@ -415,9 +416,10 @@ const EmailTemplatesPage: React.FC = () => {
                 {page}/{totalPages}
               </span>
               <button
+                type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-xs"></i>
