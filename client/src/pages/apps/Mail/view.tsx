@@ -349,23 +349,23 @@ const MailViewPage: React.FC = () => {
           {/* 1. Root Email Card */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5">
             {/* Header / Sender details */}
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-full bg-[#0088cc]/10 text-[#0088cc] dark:bg-[#0088cc]/20 dark:text-blue-300 flex items-center justify-center font-bold text-sm">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4 border-b border-gray-100 dark:border-gray-700 pb-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-[#0088cc]/10 text-[#0088cc] dark:bg-[#0088cc]/20 dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0">
                   {senderName.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-gray-900 dark:text-white text-sm">
                       {senderName}
                     </span>
                     {senderEmail && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
                         &lt;{senderEmail}&gt;
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 space-x-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 space-x-1 truncate">
                     <span>To:</span>
                     <span className="font-medium text-gray-700 dark:text-gray-300">
                       {Array.isArray(email.reply_to) ? email.reply_to.join(", ") : "Me"}
@@ -380,7 +380,7 @@ const MailViewPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="text-right">
+              <div className="text-left sm:text-right shrink-0">
                 <span className="text-xs text-gray-400 dark:text-gray-500">
                   {new Date(email.created_at).toLocaleString([], {
                     dateStyle: "medium",
@@ -434,7 +434,7 @@ const MailViewPage: React.FC = () => {
             )}
 
             {/* Action Bar */}
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-3 flex items-center gap-3">
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-3 flex flex-wrap items-center gap-2 sm:gap-3">
               <button
                 onClick={() => handleOpenComposer("reply")}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-[#0088cc] hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -460,7 +460,7 @@ const MailViewPage: React.FC = () => {
 
           {/* 2. Conversation Child Replies List */}
           {email.emails && email.emails.length > 0 && (
-            <div className="space-y-4 pl-4 border-l-2 border-[#0088cc]/30">
+            <div className="space-y-4 pl-3 sm:pl-4 border-l-2 border-[#0088cc]/30">
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
                 Conversation Thread ({email.emails.length}{" "}
                 {email.emails.length === 1 ? "reply" : "replies"})
@@ -478,25 +478,25 @@ const MailViewPage: React.FC = () => {
                 return (
                   <div
                     key={replyItem.id || idx}
-                    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs p-5 space-y-4"
+                    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xs p-4 sm:p-5 space-y-4"
                   >
-                    <div className="flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 text-[#0088cc] flex items-center justify-center font-bold text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1.5 sm:gap-4 border-b border-gray-100 dark:border-gray-700 pb-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-[#0088cc] flex items-center justify-center font-bold text-xs shrink-0">
                           {repSenderName.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-xs text-gray-900 dark:text-white">
                               {repSenderName}
                             </span>
                             {repSenderEmail && (
-                              <span className="text-[11px] text-gray-400">
+                              <span className="text-[11px] text-gray-400 truncate">
                                 &lt;{repSenderEmail}&gt;
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-gray-400">
+                          <div className="text-[11px] text-gray-400 truncate">
                             To:{" "}
                             {Array.isArray(replyItem.reply_to)
                               ? replyItem.reply_to.join(", ")
@@ -505,7 +505,7 @@ const MailViewPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <span className="text-[11px] text-gray-400">
+                      <span className="text-[11px] text-gray-400 shrink-0">
                         {new Date(replyItem.created_at).toLocaleString([], {
                           dateStyle: "short",
                           timeStyle: "short",
@@ -759,14 +759,16 @@ const MailViewPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
-              <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500">
-                <i className="mgc_edit_line"></i>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 shrink-0">
+                  <i className="mgc_edit_line"></i>
+                </div>
+                <p className="text-xs text-gray-500 truncate">
+                  Click to reply or forward this conversation...
+                </p>
               </div>
-              <p className="text-xs text-gray-500 flex-1">
-                Click to reply or forward this conversation...
-              </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                 <button
                   onClick={() => handleOpenComposer("reply")}
                   className="px-3 py-1.5 text-xs font-semibold text-[#0088cc] bg-blue-50 dark:bg-blue-900/30 rounded-lg hover:bg-blue-100 transition-colors"

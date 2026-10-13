@@ -7,18 +7,38 @@ import { typeSchema } from "@/schemas";
 import { ZodError } from "zod";
 import { usePermission } from "@/hooks/usePermission";
 
+const AVATAR_COLORS = [
+  "bg-blue-600 text-white",
+  "bg-purple-600 text-white",
+  "bg-emerald-600 text-white",
+  "bg-amber-600 text-white",
+  "bg-teal-600 text-white",
+  "bg-rose-500 text-white",
+  "bg-indigo-600 text-white",
+  "bg-cyan-600 text-white",
+];
+
+const getInitials = (name?: string, fallback = "TY") => {
+  if (!name) return fallback;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 const TypesPage: React.FC = () => {
   const { hasPermission } = usePermission();
   const canCreate = hasPermission("settings.types.create");
   const canEdit = hasPermission("settings.types.edit");
   const canDelete = hasPermission("settings.types.delete");
   const canView = hasPermission("settings.types.view");
+
   const [types, setTypes] = useState<IType[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
 
   // Modal State for Create / Edit Type
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -61,7 +81,6 @@ const TypesPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // Single unified function for both Add and Edit
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -70,7 +89,6 @@ const TypesPage: React.FC = () => {
       const validated = typeSchema.parse(formData);
       setSaving(true);
       if (editingType?.id) {
-        // Edit / Update
         await useTypeStore.getState().saveType(validated, editingType.id);
         Swal.fire({
           icon: "success",
@@ -80,7 +98,6 @@ const TypesPage: React.FC = () => {
           showConfirmButton: false,
         });
       } else {
-        // Add / Create
         await useTypeStore.getState().saveType(validated);
         Swal.fire({
           icon: "success",
@@ -127,6 +144,7 @@ const TypesPage: React.FC = () => {
       if (result.isConfirmed) {
         try {
           await useTypeStore.getState().deleteType(id);
+          setSelectedIds((prev) => prev.filter((item) => item !== id));
           Swal.fire("Deleted!", "Type has been deleted.", "success");
           fetchTypes();
         } catch (err: any) {
@@ -140,6 +158,53 @@ const TypesPage: React.FC = () => {
     });
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: `Delete ${selectedIds.length} selected type(s)?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete selected!",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await Promise.all(selectedIds.map((id) => useTypeStore.getState().deleteType(id)));
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          text: `${selectedIds.length} type(s) deleted successfully.`,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+        setSelectedIds([]);
+        fetchTypes();
+      } catch (err: any) {
+        Swal.fire("Error", err?.response?.data?.message || "Failed to delete types", "error");
+      }
+    }
+  };
+
+  const handleExport = () => {
+    if (filteredTypes.length === 0) {
+      Swal.fire("Info", "No records to export", "info");
+      return;
+    }
+    const headers = ["ID", "Name"];
+    const rows = filteredTypes.map((t) => [t.id, `"${(t.name || "").replace(/"/g, '""')}"`]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `types_export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Filter and pagination
   const filteredTypes = useMemo(() => {
     if (!search.trim()) return types;
@@ -151,11 +216,14 @@ const TypesPage: React.FC = () => {
     );
   }, [types, search]);
 
-  const totalPages = Math.ceil(filteredTypes.length / perPage) || 1;
+  const total = filteredTypes.length;
+  const totalPages = Math.ceil(total / perPage) || 1;
   const paginatedTypes = useMemo(() => {
     const start = (page - 1) * perPage;
     return filteredTypes.slice(start, start + perPage);
   }, [filteredTypes, page, perPage]);
+
+  const isAllSelected = paginatedTypes.length > 0 && paginatedTypes.every((t) => selectedIds.includes(t.id));
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -171,246 +239,455 @@ const TypesPage: React.FC = () => {
     );
   };
 
-  return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <nav className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-            <Link to="/settings" className="text-[#0088cc] hover:underline">
-              Settings
-            </Link>{" "}
-            / <span className="text-gray-700 dark:text-gray-300">Types</span>
-          </nav>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-            Types
-          </h1>
+  const startIndex = total > 0 ? (page - 1) * perPage + 1 : 0;
+  const endIndex = total > 0 ? Math.min(page * perPage, total) : 0;
+
+  // Responsive Full-Detail Type Card (Person-like card design)
+  const renderTypeCard = (type: IType, idx: number) => {
+    const isSelected = selectedIds.includes(type.id);
+    const avatarColor = AVATAR_COLORS[(type.id || idx) % AVATAR_COLORS.length];
+
+    return (
+      <div
+        key={type.id}
+        className={`bg-white dark:bg-gray-800 rounded-2xl p-4 border transition-all flex flex-col justify-between gap-3 ${
+          isSelected
+            ? "border-[#0088cc] shadow-sm bg-blue-50/20 dark:bg-blue-900/10"
+            : "border-gray-200 dark:border-gray-700/80 shadow-2xs hover:shadow-xs"
+        }`}
+      >
+        {/* Top Row: Checkbox + Avatar + Name + Badge */}
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => handleSelectOne(type.id)}
+              className="rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc] mt-1 shrink-0"
+            />
+            <div
+              onClick={() => canEdit && openEditModal(type)}
+              className="flex items-start gap-2.5 min-w-0 flex-1 cursor-pointer group"
+            >
+              <span className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-2xs ${avatarColor}`}>
+                {getInitials(type.name, "TY")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] dark:group-hover:text-[#38bdf8] truncate leading-tight">
+                  {type.name}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Classification Type
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-right shrink-0">
+            <span className="font-mono text-xs font-bold text-[#0088cc] dark:text-[#38bdf8] bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-100 dark:border-sky-900/50">
+              #TYP-{type.id}
+            </span>
+          </div>
         </div>
-        {canCreate && (
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-lg"></i>
-            Create Type
-          </button>
-        )}
+
+        {/* Middle Body: Details */}
+        <div className="py-2 border-y border-gray-100 dark:border-gray-700/60 text-xs flex items-center justify-between text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1.5 font-medium text-gray-700 dark:text-gray-300">
+            <i className="mgc_tag_line text-xs text-gray-400"></i>
+            <span>Lead & Account Type</span>
+          </span>
+          <span className="text-[11px] font-mono text-gray-400">
+            ID: {type.id}
+          </span>
+        </div>
+
+        {/* Bottom Row: Pill + Actions */}
+        <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800">
+            <i className="mgc_check_circle_line text-xs shrink-0"></i>
+            <span>Standard Type</span>
+          </span>
+
+          <div className="flex items-center gap-1 shrink-0 text-gray-400">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openEditModal(type)}
+                className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Edit Type"
+              >
+                <i className="mgc_edit_line text-sm"></i>
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => handleDelete(type.id)}
+                className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Delete Type"
+              >
+                <i className="mgc_delete_line text-sm"></i>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/settings" className="text-[#0e90d9] hover:underline">
+          Settings
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Types</span>
       </div>
 
-      {/* Main Table Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {/* Filters and Controls Bar */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="relative w-full md:w-80">
-            <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+      {/* 🏷️ Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            Types
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            Configure segment types to classify leads, opportunities, and customers
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+          {selectedIds.length > 0 && canDelete && (
+            <button
+              onClick={handleBulkDelete}
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            >
+              <i className="mgc_delete_line text-sm"></i>
+              <span>Delete ({selectedIds.length})</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExport}
+            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+          >
+            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
+            <span>Export</span>
+          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
+            >
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create Type</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Container Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
+        {/* Toolbar Header (Search, View Mode, Per Page, Pagination) */}
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <i className="mgc_search_line text-base"></i>
+            </span>
             <input
               type="text"
-              placeholder="Search by ID or Name..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+              placeholder="Search types..."
+              className="pl-9 pr-3.5 py-2 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 w-48 sm:w-64 dark:text-gray-200 placeholder-gray-400 transition"
             />
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Per Page:
-            </span>
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(1);
-              }}
-              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#0088cc]"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Data Grid */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 text-xs font-semibold uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                <th className="p-4 w-12 text-center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      paginatedTypes.length > 0 &&
-                      paginatedTypes.every((t) => selectedIds.includes(t.id))
-                    }
-                    onChange={handleSelectAll}
-                    className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
-                  />
-                </th>
-                <th className="p-4 w-20">ID</th>
-                <th className="p-4">Type Name</th>
-                <th className="p-4">Created At</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-[#0088cc]"></div>
-                    <p className="mt-2 text-xs">Loading types...</p>
-                  </td>
-                </tr>
-              ) : paginatedTypes.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
-                    <i className="mgc_layout_grid_line text-4xl text-gray-300 dark:text-gray-600"></i>
-                    <p className="mt-2 text-sm">No types found.</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedTypes.map((type) => (
-                  <tr
-                    key={type.id}
-                    className="hover:bg-gray-50/80 dark:hover:bg-gray-700/30 transition-colors"
-                  >
-                    <td className="p-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(type.id)}
-                        onChange={() => handleSelectOne(type.id)}
-                        className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
-                      />
-                    </td>
-                    <td className="p-4 font-semibold text-gray-800 dark:text-gray-200">
-                      {type.id}
-                    </td>
-                    <td className="p-4 font-medium text-gray-900 dark:text-gray-100">
-                      {type.name}
-                    </td>
-                    <td className="p-4 text-gray-500 dark:text-gray-400 text-xs">
-                      {type.created_at
-                        ? new Date(type.created_at).toLocaleDateString()
-                        : "-"}
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {canEdit && (
-                          <button
-                            onClick={() => openEditModal(type)}
-                            className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                            title="Edit Type"
-                          >
-                            <i className="mgc_edit_line text-base"></i>
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDelete(type.id)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
-                            title="Delete Type"
-                          >
-                            <i className="mgc_delete_2_line text-base"></i>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-          <div>
-            Showing {filteredTypes.length === 0 ? 0 : (page - 1) * perPage + 1} to{" "}
-            {Math.min(page * perPage, filteredTypes.length)} of{" "}
-            {filteredTypes.length} entries
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {page} of {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-lg overflow-hidden">
-            <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {editingType ? "Edit Type" : "Create Type"}
-              </h3>
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
               >
-                <i className="mgc_close_line text-xl"></i>
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
               </button>
             </div>
 
-            <form noValidate onSubmit={handleSave} className="p-5 space-y-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Per Page:</span>
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
+                title="Previous Page"
+              >
+                <i className="mgc_left_line text-base"></i>
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
+                title="Next Page"
+              >
+                <i className="mgc_right_line text-base"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 📊 Summary Sub-Header */}
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-50/70 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700/80 text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            Showing <strong className="text-gray-800 dark:text-gray-200">{paginatedTypes.length}</strong> {paginatedTypes.length === 1 ? "type" : "types"}
+          </span>
+          <span>
+            {startIndex} - {endIndex} of <strong className="text-gray-800 dark:text-gray-200">{total}</strong>
+          </span>
+        </div>
+
+        {/* LOADING & EMPTY STATES */}
+        {loading ? (
+          <div className="text-center py-16 text-gray-400">
+            <div className="inline-block animate-spin rounded-full h-7 w-7 border-2 border-[#0088cc] border-t-transparent"></div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Loading types...</p>
+          </div>
+        ) : paginatedTypes.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 dark:text-gray-500 text-sm font-medium">
+            No Records Available.
+          </div>
+        ) : viewMode === "cards" ? (
+          /* 📱 CARDS VIEW */
+          <div className="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {paginatedTypes.map((type, idx) => renderTypeCard(type, idx))}
+          </div>
+        ) : (
+          /* 📋 TABLE VIEW (With Mobile Cards Fallback) */
+          <>
+            <div className="block md:hidden p-3 space-y-3">
+              {paginatedTypes.map((type, idx) => renderTypeCard(type, idx))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
+                    <th className="py-3 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc]"
+                      />
+                    </th>
+                    <th className="py-3 px-4 font-semibold w-16">ID</th>
+                    <th className="py-3 px-4 font-semibold">Type Name</th>
+                    <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                  {paginatedTypes.map((type, idx) => {
+                    const isSelected = selectedIds.includes(type.id);
+                    const avatarColor = AVATAR_COLORS[(type.id || idx) % AVATAR_COLORS.length];
+
+                    return (
+                      <tr
+                        key={type.id}
+                        className={`hover:bg-gray-50/70 dark:hover:bg-gray-700/40 transition-colors ${
+                          isSelected ? "bg-blue-50/30 dark:bg-blue-900/10" : ""
+                        }`}
+                      >
+                        <td className="py-3 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectOne(type.id)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc]"
+                          />
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs text-[#0088cc] dark:text-[#38bdf8] font-bold">
+                          #{type.id}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${avatarColor}`}>
+                              {getInitials(type.name, "TY")}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => canEdit && openEditModal(type)}
+                              className="font-semibold text-gray-900 dark:text-gray-100 hover:text-[#0088cc] dark:hover:text-[#38bdf8] hover:underline text-left"
+                            >
+                              {type.name}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-2 whitespace-nowrap">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(type)}
+                              className="text-gray-500 hover:text-[#0088cc] p-1 inline-block transition-colors"
+                              title="Edit Type"
+                            >
+                              <i className="mgc_edit_line text-base"></i>
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(type.id)}
+                              className="text-gray-500 hover:text-red-600 p-1 inline-block transition-colors"
+                              title="Delete Type"
+                            >
+                              <i className="mgc_delete_line text-base"></i>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* 📄 Pagination Footer */}
+        {total > perPage && (
+          <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+            <span>
+              {startIndex} – {endIndex} of {total}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                ← Prev
+              </button>
+              <span className="px-2 font-semibold text-gray-800 dark:text-gray-200">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ✏️ ADD / EDIT TYPE MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-[#0088cc]/10 text-[#0088cc]">
+                  <i className="mgc_tag_line text-xl"></i>
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  {editingType ? "Edit Type" : "Create New Type"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg transition"
+              >
+                <i className="mgc_close_line text-2xl"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
                   Type Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Existing Business, New Business"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                    errors.name
-                      ? "border-red-500 focus:border-red-500"
-                      : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                  }`}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                  }}
+                  placeholder="e.g. Existing Customer, New Lead"
+                  className={`w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 border ${
+                    errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 dark:text-gray-200 transition`}
                 />
-                {errors.name && (
-                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>
-                )}
+                {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
               </div>
 
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-xs sm:text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow transition-colors disabled:opacity-50"
+                  className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
                 >
-                  {saving
-                    ? "Saving..."
-                    : editingType
-                    ? "Save Type"
-                    : "Save Type"}
+                  {saving && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+                  <span>{editingType ? "Save Changes" : "Create Type"}</span>
                 </button>
               </div>
             </form>

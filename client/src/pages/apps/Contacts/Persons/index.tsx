@@ -386,25 +386,34 @@ const PersonsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Organization Info */}
-          {person.organization_name && (
-            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-              <i className="mgc_building_2_line text-sm text-gray-400 shrink-0"></i>
-              <span className="font-medium truncate">{person.organization_name}</span>
-            </div>
-          )}
+          {/* Sales Owner Info */}
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+            <i className="mgc_user_3_line text-sm text-gray-400 shrink-0"></i>
+            <span className="truncate">
+              <span className="text-gray-400 dark:text-gray-500">Owner:</span>{" "}
+              <span className="font-medium text-gray-700 dark:text-gray-200" title={person.sales_owner_name || "Unassigned"}>
+                {person.sales_owner_name || "Unassigned"}
+              </span>
+            </span>
+          </div>
         </div>
 
-        {/* Bottom Row: Organization / Job Pill + Sales Owner + Quick Actions */}
+        {/* Bottom Row: Organization / Status Pill + Quick Actions */}
         <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             {person.organization_name ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800 truncate max-w-[130px] sm:max-w-[160px]" title={person.organization_name}>
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800 truncate max-w-full"
+                title={person.organization_name}
+              >
                 <i className="mgc_building_2_line text-xs shrink-0"></i>
                 <span className="truncate">{person.organization_name}</span>
               </span>
             ) : person.job_title ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 truncate max-w-[130px] sm:max-w-[160px]">
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 truncate max-w-full"
+                title={person.job_title}
+              >
                 <span className="truncate">{person.job_title}</span>
               </span>
             ) : (
@@ -414,41 +423,35 @@ const PersonsPage: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs">
-            <span className="truncate max-w-[85px] sm:max-w-[110px] flex items-center gap-1" title={person.sales_owner_name || "Unassigned"}>
-              <i className="mgc_user_3_line text-xs shrink-0"></i>
-              <span className="truncate">{person.sales_owner_name || "Unassigned"}</span>
-            </span>
-
-            <div className="flex items-center gap-0.5 shrink-0 text-gray-400">
-              {canView && (
-                <Link
-                  to={`/contacts/persons/view/${person.id}`}
-                  className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
-                  title="View Person"
-                >
-                  <i className="mgc_eye_line text-sm"></i>
-                </Link>
-              )}
-              {canEdit && (
-                <Link
-                  to={`/contacts/persons/edit/${person.id}`}
-                  className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
-                  title="Edit Person"
-                >
-                  <i className="mgc_edit_line text-sm"></i>
-                </Link>
-              )}
-              {canDelete && (
-                <button
-                  onClick={() => handleDelete(person)}
-                  className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
-                  title="Delete Person"
-                >
-                  <i className="mgc_delete_line text-sm"></i>
-                </button>
-              )}
-            </div>
+          <div className="flex items-center gap-1 shrink-0 text-gray-400">
+            {canView && (
+              <Link
+                to={`/contacts/persons/view/${person.id}`}
+                className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="View Person"
+              >
+                <i className="mgc_eye_line text-sm"></i>
+              </Link>
+            )}
+            {canEdit && (
+              <Link
+                to={`/contacts/persons/edit/${person.id}`}
+                className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Edit Person"
+              >
+                <i className="mgc_edit_line text-sm"></i>
+              </Link>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => handleDelete(person)}
+                className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Delete Person"
+              >
+                <i className="mgc_delete_line text-sm"></i>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -482,41 +485,41 @@ const PersonsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="inline-flex items-center px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition"
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_delete_line text-base mr-1.5"></i>
-              Delete ({selectedIds.length})
+              <i className="mgc_delete_line text-sm"></i>
+              <span>Delete ({selectedIds.length})</span>
             </button>
           )}
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 transition shadow-2xs"
+            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
           >
-            <i className="mgc_download_line text-base mr-1.5 text-gray-500"></i>
-            Export
+            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
+            <span>Export</span>
           </button>
           {total > 0 && canDelete && (
             <button
               type="button"
               onClick={handleClearAll}
-              className="inline-flex items-center px-3.5 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs sm:text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 transition shadow-2xs"
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-800 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_delete_line text-base mr-1.5"></i>
-              Clear All
+              <i className="mgc_delete_line text-sm"></i>
+              <span>Clear All</span>
             </button>
           )}
           {canCreate && (
             <Link
               to="/contacts/persons/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition active:scale-98"
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_add_line text-base"></i>
-              Create Person
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create Person</span>
             </Link>
           )}
         </div>

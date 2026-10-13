@@ -33,6 +33,25 @@ const UsersPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
+  const AVATAR_COLORS = [
+    "bg-blue-600 text-white",
+    "bg-purple-600 text-white",
+    "bg-emerald-600 text-white",
+    "bg-amber-600 text-white",
+    "bg-teal-600 text-white",
+    "bg-rose-500 text-white",
+    "bg-indigo-600 text-white",
+    "bg-cyan-600 text-white",
+  ];
+
+  const getInitials = (name?: string, fallback = "US") => {
+    if (!name) return fallback;
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   // Modal State for Create / Edit User
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -253,6 +272,66 @@ const UsersPage: React.FC = () => {
         }
       }
     });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: `Do you really want to delete ${selectedIds.length} selected user(s)? This action cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete them!",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await Promise.all(selectedIds.map((id) => useUserStore.getState().deleteUser(Number(id))));
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          text: "Selected users deleted successfully.",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+        setSelectedIds([]);
+        fetchUsers();
+      } catch (err: any) {
+        Swal.fire("Error", err?.response?.data?.message || "Failed to delete users", "error");
+      }
+    }
+  };
+
+  const handleExport = () => {
+    if (filteredUsers.length === 0) {
+      Swal.fire("Export", "No users to export", "info");
+      return;
+    }
+
+    const headers = ["ID", "Name", "Email", "Status", "Role", "Groups", "View Permission", "Created At"];
+    const rows = filteredUsers.map((u) => [
+      u.id,
+      `"${(u.name || "").replace(/"/g, '""')}"`,
+      `"${(u.email || "").replace(/"/g, '""')}"`,
+      u.status ? "Active" : "Inactive",
+      `"${(u.role_name || "").replace(/"/g, '""')}"`,
+      `"${(u.groups || []).map((g: any) => g.name || g).join("; ").replace(/"/g, '""')}"`,
+      u.view_permission || "global",
+      u.created_at ? new Date(u.created_at).toLocaleDateString() : "",
+    ]);
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `users_export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const matchedUser = useMemo(() => {
@@ -535,11 +614,16 @@ const UsersPage: React.FC = () => {
     });
   }, [allowedUsers, search, selectedRole, selectedStatus, selectedGroup, flattenedRoles]);
 
-  const totalPages = Math.ceil(filteredUsers.length / perPage) || 1;
+  const total = filteredUsers.length;
+  const totalPages = Math.ceil(total / perPage) || 1;
   const paginatedUsers = useMemo(() => {
     const start = (page - 1) * perPage;
     return filteredUsers.slice(start, start + perPage);
   }, [filteredUsers, page, perPage]);
+
+  const startIndex = total > 0 ? (page - 1) * perPage + 1 : 0;
+  const endIndex = total > 0 ? Math.min(page * perPage, total) : 0;
+  const isAllSelected = paginatedUsers.length > 0 && paginatedUsers.every((u) => selectedIds.includes(u.id));
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -568,40 +652,227 @@ const UsersPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <nav className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-            <Link to="/settings" className="text-[#0088cc] hover:underline">
-              Settings
-            </Link>{" "}
-            / <span className="text-gray-700 dark:text-gray-300">Users</span>
-          </nav>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
-            Users
-          </h1>
+  // Responsive Full-Detail User Card (Person-like card design)
+  const renderUserCard = (user: IUserData, idx: number) => {
+    const isSelected = selectedIds.includes(user.id);
+    const avatarColor = AVATAR_COLORS[(user.id || idx) % AVATAR_COLORS.length];
+    const permInfo = getViewPermissionLabel(user.view_permission || "");
+    const userGroups = user.groups || [];
+
+    return (
+      <div
+        key={user.id}
+        className={`bg-white dark:bg-gray-800 rounded-2xl p-4 border transition-all flex flex-col justify-between gap-3 ${
+          isSelected
+            ? "border-[#0088cc] shadow-sm bg-blue-50/20 dark:bg-blue-900/10"
+            : "border-gray-200 dark:border-gray-700/80 shadow-2xs hover:shadow-xs"
+        }`}
+      >
+        {/* Top Row: Checkbox + Avatar with status indicator + Name + Badge */}
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => handleSelectOne(user.id)}
+              className="rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc] mt-1 shrink-0"
+            />
+            <div
+              onClick={() => canView && navigate(`/settings/users/view/${user.id}`)}
+              className="flex items-start gap-2.5 min-w-0 flex-1 cursor-pointer group"
+            >
+              <div className="relative shrink-0 mt-0.5">
+                <span className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shadow-2xs ${avatarColor}`}>
+                  {getInitials(user.name, "US")}
+                </span>
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${
+                    user.status ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
+                  title={user.status ? "Active" : "Inactive"}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] dark:group-hover:text-[#38bdf8] truncate leading-tight">
+                  {user.name}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                  {user.email || "No email"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-right shrink-0">
+            <span className="font-mono text-xs font-bold text-[#0088cc] dark:text-[#38bdf8] bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-100 dark:border-sky-900/50">
+              #USR-{user.id}
+            </span>
+          </div>
         </div>
-        {canCreate && (
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-lg"></i>
-            Create User
-          </button>
-        )}
+
+        {/* Middle Body: Role, Groups, Scope & Details */}
+        <div className="space-y-2 py-2 border-y border-gray-100 dark:border-gray-700/60 text-xs">
+          <div className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+            <span className="flex items-center gap-1.5 font-medium">
+              <i className="mgc_shield_line text-sm text-[#0088cc]"></i>
+              <span className="font-semibold text-gray-800 dark:text-gray-200">{user.role_name || "User"}</span>
+            </span>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${permInfo.color}`}
+            >
+              {permInfo.label} Scope
+            </span>
+          </div>
+
+          {/* Groups list */}
+          <div className="flex items-start gap-1.5 pt-0.5">
+            <i className="mgc_group_line text-sm text-gray-400 mt-0.5 shrink-0"></i>
+            <div className="flex flex-wrap items-center gap-1 min-w-0 flex-1">
+              {userGroups.length > 0 ? (
+                userGroups.map((g: any) => (
+                  <span
+                    key={g.id || g}
+                    className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800 font-medium"
+                  >
+                    {g.name || g}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-400 text-xs italic">No groups assigned</span>
+              )}
+            </div>
+          </div>
+
+          {/* Creation date */}
+          <div className="flex items-center justify-between text-gray-400 text-[11px] pt-1 border-t border-gray-50 dark:border-gray-800">
+            <span className="flex items-center gap-1">
+              <i className="mgc_calendar_line text-xs"></i>
+              <span>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "-"}</span>
+            </span>
+            <span className="font-mono">
+              ID: {user.id}
+            </span>
+          </div>
+        </div>
+
+        {/* Bottom Row: Status Pill + Actions */}
+        <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+          {user.status ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Active Account</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+              <span>Inactive Account</span>
+            </span>
+          )}
+
+          <div className="flex items-center gap-1 shrink-0 text-gray-400">
+            {canView && (
+              <Link
+                to={`/settings/users/view/${user.id}`}
+                className="p-1 hover:text-sky-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition inline-flex items-center"
+                title="View User Details"
+              >
+                <i className="mgc_eye_line text-sm"></i>
+              </Link>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openEditModal(user)}
+                className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Edit User"
+              >
+                <i className="mgc_edit_line text-sm"></i>
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => handleDelete(user)}
+                className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+                title="Delete User"
+              >
+                <i className="mgc_delete_line text-sm"></i>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/settings" className="text-[#0e90d9] hover:underline">
+          Settings
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">Users</span>
       </div>
 
-      {/* Main Table Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      {/* 🏷️ Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            Users
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            Manage user accounts, roles, team memberships, and access scopes
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+          {selectedIds.length > 0 && canDelete && (
+            <button
+              onClick={handleBulkDelete}
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            >
+              <i className="mgc_delete_line text-sm"></i>
+              <span>Delete ({selectedIds.length})</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExport}
+            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+          >
+            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
+            <span>Export</span>
+          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
+            >
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create User</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Container Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
         {/* Filters and Controls Bar */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row justify-between items-center gap-4">
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[260px]">
             {/* Search Input */}
-            <div className="relative w-full sm:w-72">
-              <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <i className="mgc_search_line text-base"></i>
+              </span>
               <input
                 type="text"
                 placeholder="Search by ID, Name or Email..."
@@ -610,7 +881,7 @@ const UsersPage: React.FC = () => {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-10 pr-4 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:border-[#0088cc]"
+                className="pl-9 pr-3.5 py-2 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 w-48 sm:w-60 dark:text-gray-200 placeholder-gray-400 transition"
               />
             </div>
 
@@ -621,7 +892,7 @@ const UsersPage: React.FC = () => {
                 setSelectedRole(e.target.value);
                 setPage(1);
               }}
-              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0088cc]"
+              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
             >
               <option value="all">All Roles</option>
               {flattenedRoles.map((r) => (
@@ -638,7 +909,7 @@ const UsersPage: React.FC = () => {
                 setSelectedGroup(e.target.value);
                 setPage(1);
               }}
-              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0088cc]"
+              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
             >
               <option value="all">All Groups</option>
               {groups.map((g) => (
@@ -655,7 +926,7 @@ const UsersPage: React.FC = () => {
                 setSelectedStatus(e.target.value);
                 setPage(1);
               }}
-              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0088cc]"
+              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -663,147 +934,223 @@ const UsersPage: React.FC = () => {
             </select>
           </div>
 
-          <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Per Page:
-            </span>
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(1);
-              }}
-              className="text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#0088cc]"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Per Page:</span>
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+
+            {/* Quick pagination arrows in toolbar */}
+            <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Previous Page"
+              >
+                <i className="mgc_left_line text-xs"></i>
+              </button>
+              <span className="px-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                {page}/{totalPages}
+              </span>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Next Page"
+              >
+                <i className="mgc_right_line text-xs"></i>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Data Grid */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 text-xs font-semibold uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                <th className="p-4 w-12 text-center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      paginatedUsers.length > 0 &&
-                      paginatedUsers.every((u) => selectedIds.includes(u.id))
-                    }
-                    onChange={handleSelectAll}
-                    className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
-                  />
-                </th>
-                <th className="p-4 w-16">ID</th>
-                <th className="p-4">Name</th>
-                <th className="p-4">Email</th>
-                <th className="p-4 text-center">Status</th>
-                <th className="p-4">Role</th>
-                <th className="p-4">Groups</th>
-                <th className="p-4 text-center">View Permission</th>
-                <th className="p-4">Created At</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-              {loading ? (
-                <tr>
-                  <td colSpan={10} className="p-8 text-center text-gray-500">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-[#0088cc]"></div>
-                    <p className="mt-2 text-xs">Loading users...</p>
-                  </td>
-                </tr>
-              ) : paginatedUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="p-8 text-center text-gray-500">
-                    <i className="mgc_user_star_line text-4xl text-gray-300 dark:text-gray-600"></i>
-                    <p className="mt-2 text-sm">No users found.</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedUsers.map((user) => {
-                  const permInfo = getViewPermissionLabel(user.view_permission || "");
-                  return (
-                    <tr
-                      key={user.id}
-                      className="hover:bg-gray-50/80 dark:hover:bg-gray-700/30 transition-colors"
-                    >
-                      <td className="p-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(user.id)}
-                          onChange={() => handleSelectOne(user.id)}
-                          className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc]"
-                        />
-                      </td>
-                      <td className="p-4 font-semibold text-gray-800 dark:text-gray-200">
-                        {user.id}
-                      </td>
-                      <td className="p-4 font-bold text-[#0088cc]">
-                        <Link
-                          to={`/settings/users/view/${user.id}`}
-                          className="hover:underline text-left cursor-pointer font-bold"
-                        >
-                          {user.name}
-                        </Link>
-                      </td>
-                      <td className="p-4 text-gray-600 dark:text-gray-300">
-                        {user.email}
-                      </td>
-                      <td className="p-4 text-center">
-                        {user.status ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300">
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                          {user.role_name || "User"}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap items-center gap-1 max-w-xs">
-                          {user.groups && user.groups.length > 0 ? (
-                            user.groups.map((g) => (
-                              <span
-                                key={g.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                              >
-                                {g.name}
-                              </span>
-                            ))
+        {/* 📊 Summary Sub-Header */}
+        <div className="px-4 py-2.5 bg-gray-50/50 dark:bg-gray-900/30 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between text-xs text-gray-500 dark:text-gray-400 gap-2">
+          <div>
+            Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{paginatedUsers.length}</span> of{" "}
+            <span className="font-semibold text-gray-700 dark:text-gray-200">{total}</span> users
+            {total > 0 && ` (${startIndex} - ${endIndex} of ${total})`}
+          </div>
+          {selectedIds.length > 0 && (
+            <div className="text-[#0088cc] font-medium">
+              {selectedIds.length} user(s) selected
+            </div>
+          )}
+        </div>
+
+        {/* 📦 View Modes Content */}
+        {loading ? (
+          <div className="text-center py-20 text-gray-400">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-[#0088cc] border-t-transparent"></div>
+            <p className="mt-2 text-xs text-gray-500">Loading users...</p>
+          </div>
+        ) : paginatedUsers.length === 0 ? (
+          <div className="text-center py-20 text-gray-400 dark:text-gray-500">
+            <i className="mgc_user_star_line text-4xl mb-2 block opacity-40"></i>
+            <p className="text-sm font-medium">No users found.</p>
+            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or search keywords</p>
+          </div>
+        ) : viewMode === "cards" ? (
+          /* Cards View Grid */
+          <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {paginatedUsers.map((user, idx) => renderUserCard(user, idx))}
+          </div>
+        ) : (
+          /* Table View with Mobile Card Fallback */
+          <div>
+            {/* Mobile Fallback: Cards */}
+            <div className="block md:hidden p-4 space-y-3">
+              {paginatedUsers.map((user, idx) => renderUserCard(user, idx))}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-xs">
+                    <th className="py-3.5 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
+                      />
+                    </th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300 w-16">ID</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Name</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Email</th>
+                    <th className="py-3.5 px-4 font-semibold text-center text-gray-600 dark:text-gray-300">Status</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Role</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Groups</th>
+                    <th className="py-3.5 px-4 font-semibold text-center text-gray-600 dark:text-gray-300">View Permission</th>
+                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Created At</th>
+                    <th className="py-3.5 px-4 font-semibold text-right text-gray-600 dark:text-gray-300">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                  {paginatedUsers.map((user) => {
+                    const permInfo = getViewPermissionLabel(user.view_permission || "");
+                    const isSelected = selectedIds.includes(user.id);
+                    return (
+                      <tr
+                        key={user.id}
+                        className={`hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors ${
+                          isSelected ? "bg-blue-50/30 dark:bg-blue-900/10" : ""
+                        }`}
+                      >
+                        <td className="py-3.5 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectOne(user.id)}
+                            className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3.5 px-4 font-medium text-gray-600 dark:text-gray-400">
+                          {user.id}
+                        </td>
+                        <td className="py-3.5 px-4 font-medium text-gray-900 dark:text-gray-100">
+                          <Link
+                            to={`/settings/users/view/${user.id}`}
+                            className="text-[#0088cc] hover:underline font-semibold"
+                          >
+                            {user.name}
+                          </Link>
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300">
+                          {user.email}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {user.status ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              Active
+                            </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">-</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                              Inactive
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${permInfo.color}`}
-                        >
-                          {permInfo.label}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-500 dark:text-gray-400 text-xs">
-                        {user.created_at
-                          ? new Date(user.created_at).toLocaleDateString()
-                          : "-"}
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            {user.role_name || "User"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex flex-wrap items-center gap-1 max-w-xs">
+                            {user.groups && user.groups.length > 0 ? (
+                              user.groups.map((g) => (
+                                <span
+                                  key={g.id}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                >
+                                  {g.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${permInfo.color}`}
+                          >
+                            {permInfo.label}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-500 dark:text-gray-400 text-xs">
+                          {user.created_at
+                            ? new Date(user.created_at).toLocaleDateString()
+                            : "-"}
+                        </td>
+                        <td className="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
                           {canView && (
                             <Link
                               to={`/settings/users/view/${user.id}`}
-                              className="p-1.5 rounded-lg text-[#0088cc] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                              className="inline-flex items-center text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 p-1.5 rounded-lg transition-colors"
                               title="View User Details"
                             >
                               <i className="mgc_eye_line text-base"></i>
@@ -812,7 +1159,7 @@ const UsersPage: React.FC = () => {
                           {canEdit && (
                             <button
                               onClick={() => openEditModal(user)}
-                              className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                              className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
                               title="Edit User"
                             >
                               <i className="mgc_edit_line text-base"></i>
@@ -821,49 +1168,49 @@ const UsersPage: React.FC = () => {
                           {canDelete && (
                             <button
                               onClick={() => handleDelete(user)}
-                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                              className="inline-flex items-center text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 p-1.5 rounded-lg transition-colors"
                               title="Delete User"
                             >
                               <i className="mgc_delete_2_line text-base"></i>
                             </button>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Pagination Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-          <div>
-            Showing {filteredUsers.length === 0 ? 0 : (page - 1) * perPage + 1} to{" "}
-            {Math.min(page * perPage, filteredUsers.length)} of{" "}
-            {filteredUsers.length} entries
+        {total > perPage && (
+          <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <div>
+              Showing {startIndex} to {endIndex} of {total} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {page} of {totalPages}
+              </span>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {page} of {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Create / Edit Modal */}

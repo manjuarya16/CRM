@@ -87,14 +87,15 @@ const DataTransferPage: React.FC = () => {
           </h1>
         </div>
 
-        <div>
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
           {canImport && (
             <button
               type="button"
               onClick={() => navigate("/settings/data-transfer/create")}
-              className="inline-flex items-center justify-center px-5 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors"
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
             >
-              Create Import
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create Import</span>
             </button>
           )}
         </div>
@@ -118,7 +119,7 @@ const DataTransferPage: React.FC = () => {
             </div>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold rounded-lg text-sm transition-colors"
+              className="h-8 px-3 inline-flex items-center justify-center bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0284c7] font-semibold rounded-lg text-xs transition-colors"
             >
               Filter
             </button>

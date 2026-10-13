@@ -504,10 +504,10 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-3xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <i className="mgc_mail_send_line text-xl text-[#0088cc]"></i>
             <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">
@@ -524,14 +524,14 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
 
         {/* Error Banner */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+          <div className="mx-4 sm:mx-6 mt-3 sm:mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
             <i className="mgc_alert_line text-base flex-shrink-0"></i>
             <span>{errorMsg}</span>
           </div>
         )}
 
         {/* Body Content */}
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {/* TO Recipients */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -1067,7 +1067,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

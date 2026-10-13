@@ -95,23 +95,24 @@ const WebFormsPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Web Forms</h1>
           <p className="text-sm text-gray-500 mt-0.5">Embeddable lead capture forms for websites and landing pages</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
           {canView && (
             <button
+              type="button"
               onClick={() => openSubmissionsModal()}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition-colors"
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_list_check_3_line text-lg"></i>
-              All Form Entries
+              <i className="mgc_list_check_3_line text-sm text-gray-500 dark:text-gray-400"></i>
+              <span>All Form Entries</span>
             </button>
           )}
           {canCreate && (
             <Link
               to="/settings/web-forms/create"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_add_line text-lg"></i>
-              Create Web Form
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create Web Form</span>
             </Link>
           )}
         </div>
