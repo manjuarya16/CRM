@@ -218,10 +218,13 @@ export class ImapLeadSyncService {
   private static extractCleanTextFromHtml(html: string): string {
     if (!html) return '';
     return html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
-      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+      .replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, '$1')
+      .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer|table)>/gi, '\n')
       .replace(/<br\s*[\/]?>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/gi, ' ')
@@ -229,14 +232,14 @@ export class ImapLeadSyncService {
       .replace(/&lt;/gi, '<')
       .replace(/&gt;/gi, '>')
       .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
+      .replace(/&#39;|&apos;|&#x27;/gi, "'")
       .replace(/[ \t]+/g, ' ')
       .replace(/\n\s*\n\s*\n+/g, '\n\n')
       .trim();
   }
 
   /**
-   * Strips out fallback notices, tracking links, and boilerplate noise from email bodies
+   * Strips out fallback notices, tracking links, HTML tags, and boilerplate noise from email bodies
    */
   private static sanitizeEmailBody(rawText: string, rawHtml?: string): string {
     let body = (rawText || '').trim();
@@ -249,9 +252,12 @@ export class ImapLeadSyncService {
 
     if (isFallbackNotice && rawHtml) {
       const extractedHtmlText = this.extractCleanTextFromHtml(rawHtml);
-      if (extractedHtmlText && extractedHtmlText.length > 20) {
+      if (extractedHtmlText && extractedHtmlText.length > 0) {
         body = extractedHtmlText;
       }
+    } else if (/<\/?[a-zA-Z][^>]*>/.test(body)) {
+      // If plain text body itself contains HTML markup, strip it
+      body = this.extractCleanTextFromHtml(body);
     }
 
     // Strip out common fallback disclaimer blocks and tracking link boilerplate
@@ -263,7 +269,7 @@ export class ImapLeadSyncService {
       .replace(/\n\s*\n\s*\n+/g, '\n\n')
       .trim();
 
-    return body || rawText || '';
+    return body || this.extractCleanTextFromHtml(rawText || rawHtml || '');
   }
 
   /**
@@ -840,7 +846,7 @@ export class ImapLeadSyncService {
           'imap',
           'admin',
           fromName,
-          htmlBody || textBody,
+          textBody || this.extractCleanTextFromHtml(htmlBody),
           false,
           JSON.stringify(['inbox']),
           JSON.stringify({ name: fromName, email: fromAddress }),

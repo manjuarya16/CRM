@@ -11,12 +11,63 @@ import {
   ProfileDropDown,
 } from "../components";
 import { useAuthStore } from "../store";
-import { useEffect, useState } from "react";
-import { QuickCreateModal } from "../components/QuickCreateModal";
+import { useEffect, useState, useRef } from "react";
+import { MegaSearch } from "../components/MegaSearch";
 import {
   NotificationItem,
   ProfileMenuItem,
 } from "../interface/leftSideInterface";
+
+const QUICK_CREATE_ITEMS = [
+  {
+    label: "New Lead",
+    shortLabel: "Lead",
+    url: "/leads/create",
+    icon: "mgc_target_line",
+    iconBg: "bg-blue-50 dark:bg-blue-950/60",
+    iconColor: "text-blue-600 dark:text-blue-400",
+  },
+  {
+    label: "New Contact",
+    shortLabel: "Contact",
+    url: "/contacts/persons/create",
+    icon: "mgc_user_add_line",
+    iconBg: "bg-emerald-50 dark:bg-emerald-950/60",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    label: "New Organization",
+    shortLabel: "Organization",
+    url: "/contacts/organizations/create",
+    icon: "mgc_building_2_line",
+    iconBg: "bg-purple-50 dark:bg-purple-950/60",
+    iconColor: "text-purple-600 dark:text-purple-400",
+  },
+  {
+    label: "New Quote",
+    shortLabel: "Quote",
+    url: "/quotes/create",
+    icon: "mgc_file_check_line",
+    iconBg: "bg-amber-50 dark:bg-amber-950/60",
+    iconColor: "text-amber-600 dark:text-amber-400",
+  },
+  {
+    label: "New Product",
+    shortLabel: "Product",
+    url: "/products/create",
+    icon: "mgc_box_3_line",
+    iconBg: "bg-indigo-50 dark:bg-indigo-950/60",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
+  },
+  {
+    label: "New Activity",
+    shortLabel: "Activity",
+    url: "/activities/create",
+    icon: "mgc_calendar_line",
+    iconBg: "bg-rose-50 dark:bg-rose-950/60",
+    iconColor: "text-rose-600 dark:text-rose-400",
+  },
+];
 
 const subtractHours = (date: Date, minutes: number) => {
   return new Date(date.getTime() - minutes * 60000);
@@ -93,6 +144,7 @@ const Topbar = () => {
   const { width } = useViewPort();
   const { user } = useAuthStore();
   const [profilePic, setProfilePic] = useState<string>("");
+  const quickCreateRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -195,9 +247,33 @@ const Topbar = () => {
 
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
+  // Close Quick Create dropdown on outside click or Escape key
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        quickCreateRef.current &&
+        !quickCreateRef.current.contains(e.target as Node)
+      ) {
+        setQuickCreateOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setQuickCreateOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, []);
+
   return (
     <>
-      <header className="app-header sticky top-0 z-35 flex items-center px-2.5 sm:px-4 gap-1.5 sm:gap-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16">
+      <header
+        className="app-header sticky top-0 z-35 flex items-center px-2.5 sm:px-4 gap-1.5 sm:gap-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-[70px]"
+        style={{ height: "70px" }}
+      >
         <button
           id="button-toggle-menu"
           className="nav-link p-1.5 sm:p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 shrink-0"
@@ -211,21 +287,55 @@ const Topbar = () => {
 
         {/* Center: Mega Search and Quick Action */}
         <div className="flex-1 max-w-2xl mx-auto flex items-center gap-1.5 sm:gap-3 px-1 sm:px-4 min-w-0">
-          <div className="relative flex-1 min-w-0">
-            <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base sm:text-lg"></i>
-            <input
-              type="text"
-              placeholder="Mega Search"
-              className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-full text-xs sm:text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/30 focus:border-[#0088cc] shadow-sm transition-all"
-            />
+          <MegaSearch />
+
+          {/* Quick-Create (+) Dropdown Menu */}
+          <div ref={quickCreateRef} className="relative flex-shrink-0">
+            <button
+              type="button"
+              title="Quick Create (New Lead, Contact, Organization, Quote, Product, Activity)"
+              onClick={() => setQuickCreateOpen((prev) => !prev)}
+              className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105 cursor-pointer"
+            >
+              <i
+                className={`mgc_add_line text-xl font-bold transition-transform duration-200 ${
+                  quickCreateOpen ? "rotate-45" : ""
+                }`}
+              ></i>
+            </button>
+
+            {quickCreateOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-3 z-50">
+                <div className="px-1.5 pb-2 mb-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                    Quick Create
+                  </span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    Select record type
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {QUICK_CREATE_ITEMS.map((item) => (
+                    <Link
+                      key={item.url}
+                      to={item.url}
+                      onClick={() => setQuickCreateOpen(false)}
+                      className="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all text-center group"
+                    >
+                      <div
+                        className={`h-10 w-10 rounded-xl flex items-center justify-center ${item.iconBg} ${item.iconColor} group-hover:scale-105 transition-transform`}
+                      >
+                        <i className={`${item.icon} text-xl`}></i>
+                      </div>
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                        {item.shortLabel}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <button
-            title="Quick Create (Lead, Person, Organization, Product)"
-            onClick={() => setQuickCreateOpen(true)}
-            className="h-8 w-8 flex-shrink-0 rounded-full bg-[#0088cc] hover:bg-[#0077b5] active:bg-[#006699] text-white flex items-center justify-center shadow transition-transform hover:scale-105 cursor-pointer"
-          >
-            <i className="mgc_add_line text-xl font-bold"></i>
-          </button>
         </div>
 
         {/* Right side controls */}
@@ -251,11 +361,6 @@ const Topbar = () => {
           />
         </div>
       </header>
-
-      <QuickCreateModal
-        isOpen={quickCreateOpen}
-        onClose={() => setQuickCreateOpen(false)}
-      />
     </>
   );
 };

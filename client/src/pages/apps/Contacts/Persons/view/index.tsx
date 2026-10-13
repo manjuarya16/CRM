@@ -5,6 +5,7 @@ import API from "@/config";
 import { usePersonStore, useActivityStore, useLeadStore, useMailStore } from "@/store";
 import { IPerson } from "@/interface";
 import { extractFileUrl } from "@/utils/fileHelper";
+import { stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
 const ViewPersonPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,7 +55,7 @@ const ViewPersonPage: React.FC = () => {
           setSelectedPerson(person);
           let firstEmail = "";
           if (Array.isArray(person.emails) && person.emails[0]) {
-            firstEmail = typeof person.emails[0] === "string" ? person.emails[0] : (person.emails[0] as any).value;
+            firstEmail = cleanEmailAddress(person.emails[0]);
           }
           setModalForm((prev) => ({
             ...prev,
@@ -152,7 +153,7 @@ const ViewPersonPage: React.FC = () => {
         comment: "",
         description: "",
         type: "Call",
-        email_to: (typeof emailsList[0] === "string" ? emailsList[0] : (emailsList[0] as any)?.value) || "",
+        email_to: cleanEmailAddress(emailsList[0]) || "",
         email_cc: "",
         email_bcc: "",
         email_subject: "",
@@ -285,8 +286,8 @@ const ViewPersonPage: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Emails</span>
                   <span className="font-medium text-gray-800 dark:text-gray-200">
-                    {emailsList.length > 0
-                      ? (typeof emailsList[0] === "string" ? emailsList[0] : (emailsList[0] as any).value) + "(work)"
+                    {emailsList.length > 0 && cleanEmailAddress(emailsList[0])
+                      ? `${cleanEmailAddress(emailsList[0])} (work)`
                       : "--"}
                   </span>
                 </div>
@@ -520,7 +521,7 @@ const ViewPersonPage: React.FC = () => {
                                   </div>
                                   <h4 className="font-bold text-sm text-gray-800 dark:text-gray-100">{act.title}</h4>
                                   {act.comment && t !== "file" && (
-                                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{act.comment}</p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{stripHtmlToText(act.comment)}</p>
                                   )}
                                   {(act.schedule_from || act.schedule_to || act.location) && (
                                     <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex-wrap">

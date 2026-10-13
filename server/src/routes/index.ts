@@ -29,12 +29,16 @@ import dashboardRoutes from '@/routes/dashboard.routes';
 import notificationRoutes from '@/routes/notification.routes';
 import whatsappRoutes from '@/routes/whatsapp.routes';
 import realtimeRoutes from '@/routes/realtime.routes';
+import searchRoutes from '@/routes/search.routes';
 
 const router = Router();
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Unified Mega Search
+router.use('/search', searchRoutes);
 
 // Real-time Event Stream (SSE)
 router.use('/realtime', realtimeRoutes);

@@ -379,11 +379,11 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
   const previewCols = parsedRows.length > 0 ? Object.keys(parsedRows[0]) : [];
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="p-3.5 sm:p-6 max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
       {/* Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <nav className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+          <nav className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5 flex-wrap">
             <Link to="/dashboard" className="text-[#0088cc] hover:underline">
               Dashboard
             </Link>
@@ -398,16 +398,16 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
             <span>/</span>
             <span className="text-gray-700 dark:text-gray-300 font-normal">Create Import</span>
           </nav>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
             Create Import
           </h1>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full lg:w-auto">
           <button
             type="button"
             onClick={() => navigate("/settings/data-transfer")}
-            className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg shadow-xs transition-colors"
+            className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg shadow-xs transition-colors text-center"
           >
             Cancel
           </button>
@@ -415,7 +415,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
             type="button"
             onClick={handleValidateData}
             disabled={validating || parsedRows.length === 0}
-            className="inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50 text-center"
           >
             {validating ? (
               <>
@@ -430,7 +430,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
             type="button"
             onClick={handleSaveImport}
             disabled={saving || parsedRows.length === 0}
-            className="inline-flex items-center justify-center px-5 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-2 bg-[#0088cc] hover:bg-[#0077b3] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50 text-center"
           >
             {saving ? (
               <>
@@ -445,9 +445,9 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
       </div>
 
       {/* 2-Column Grid Layout */}
-      <form onSubmit={handleSaveImport} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <form onSubmit={handleSaveImport} className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Left Column: General Section (Col Span 2) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 p-6 space-y-5">
             <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100">General Information</h2>
 
@@ -493,7 +493,7 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
                       <b>{sampleMeta.customAttributes.length} custom attributes</b> with sample data rows.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => handleDownloadSample("xlsx")}

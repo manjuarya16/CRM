@@ -5,6 +5,31 @@ import { logger } from '@/utils/logger';
 import { fetchTemplateContext, parsePlaceholders } from '@/utils/templateParser';
 import crypto from 'crypto';
 
+const stripHtmlToText = (input: string | null | undefined): string => {
+  if (!input) return '';
+  return String(input)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, '$1')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer|table)>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;|&#x27;/gi, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 export class MailService {
   /**
    * Get paginated email list filtered by folder & search
@@ -21,7 +46,10 @@ export class MailService {
       [folder, search, limit, offset]
     );
 
-    const rows = result.rows;
+    const rows = result.rows.map((r: any) => ({
+      ...r,
+      reply: stripHtmlToText(r.reply),
+    }));
     const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
     const totalPages = Math.ceil(total / limit);
 
@@ -69,6 +97,7 @@ export class MailService {
     }
 
     const email = emailQueryResult.rows[0];
+    email.reply = stripHtmlToText(email.reply);
 
     // Mark email as read automatically via procedural function
     if (!email.is_read) {
@@ -92,6 +121,7 @@ export class MailService {
 
     const replies = repliesQueryResult.rows;
     for (const reply of replies) {
+      reply.reply = stripHtmlToText(reply.reply);
       const replyAttachmentsQueryResult = await pool.query(
         'SELECT * FROM public.fn_get_email_attachments($1)',
         [reply.id]
@@ -128,6 +158,7 @@ export class MailService {
     });
     const parsedSubject = parsePlaceholders(data.subject || '(No Subject)', templateContext);
     const parsedReply = parsePlaceholders(data.reply || '', templateContext);
+    const cleanReplyText = stripHtmlToText(parsedReply);
 
     const client = await pool.connect();
     try {
@@ -144,7 +175,7 @@ export class MailService {
           'mail',
           'admin',
           fromEmail.name,
-          parsedReply,
+          cleanReplyText || parsedReply,
           true,
           JSON.stringify(folders),
           JSON.stringify(fromEmail),
@@ -181,7 +212,7 @@ export class MailService {
           [
             `Email: ${parsedSubject}`,
             'email',
-            parsedReply,
+            cleanReplyText,
             null,
             null,
             true,
@@ -205,7 +236,7 @@ export class MailService {
           cc: data.cc,
           bcc: data.bcc,
           subject: parsedSubject,
-          text: parsedReply,
+          text: cleanReplyText,
           html: parsedReply,
           attachments: attachedFiles,
         }).catch((err) => logger.error(`[MailService] sendRealMail error: ${err}`));
@@ -229,7 +260,7 @@ export class MailService {
     try {
       await client.query('BEGIN');
 
-      const existingResult = await client.query('SELECT * FROM public.fn_get_email_details($1)', [emailId]);
+      const existingResult = await pool.query('SELECT * FROM public.fn_get_email_details($1)', [emailId]);
       if (existingResult.rows.length === 0) {
         throw new Error('Email not found');
       }
@@ -259,6 +290,7 @@ export class MailService {
 
       const parsedSubject = rawSubject ? parsePlaceholders(rawSubject, templateContext) : rawSubject;
       const parsedReply = rawReply ? parsePlaceholders(rawReply, templateContext) : rawReply;
+      const cleanReplyText = stripHtmlToText(parsedReply);
 
       await client.query(
         `SELECT * FROM public.fn_save_email(
@@ -271,7 +303,7 @@ export class MailService {
           existingEmail.source || 'mail',
           existingEmail.user_type || 'admin',
           existingEmail.name,
-          parsedReply,
+          cleanReplyText || parsedReply,
           existingEmail.is_read,
           JSON.stringify(folders),
           JSON.stringify(existingEmail.from_email || {}),
@@ -307,7 +339,7 @@ export class MailService {
           [
             `Email: ${parsedSubject || 'No Subject'}`,
             'email',
-            parsedReply,
+            cleanReplyText,
             null,
             null,
             true,
@@ -331,7 +363,7 @@ export class MailService {
           cc: data.cc || existingEmail.cc,
           bcc: data.bcc || existingEmail.bcc,
           subject: parsedSubject || '(No Subject)',
-          text: parsedReply || '',
+          text: cleanReplyText || '',
           html: parsedReply || '',
           attachments: attachedFiles,
         }).catch((err) => logger.error(`[MailService] sendRealMail error: ${err}`));

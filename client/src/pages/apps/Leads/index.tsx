@@ -448,18 +448,26 @@ const LeadsPage: React.FC = () => {
   return (
     <div className="p-1 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
-        <div>
-          <div className="text-xs text-gray-500 mb-0.5">Dashboard / Leads</div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">Leads</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Link to="/dashboard" className="text-[#0e90d9] hover:underline">
+              Dashboard
+            </Link>
+            <span className="text-gray-400">/</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Leads</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
+            Leads
+          </h1>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-start sm:justify-end flex-wrap xs:flex-nowrap">
+        <div className="flex items-center gap-x-2.5">
           {/* Upload File button */}
           {isDocGenEnabled && canCreate && (
             <button
               onClick={() => setShowUploadModal(true)}
-              className="h-8 px-2.5 sm:px-3 border border-[#0088cc] text-[#0088cc] hover:bg-[#e0f2fe] dark:hover:bg-gray-800 text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
             >
               <i className="mgc_upload_line text-sm"></i>
               <span>Upload File</span>
@@ -469,10 +477,9 @@ const LeadsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/leads/create"
-              className="h-8 px-3 sm:px-3.5 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
+              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
-              <i className="mgc_add_line text-sm"></i>
-              <span>Create Lead</span>
+              Create Lead
             </Link>
           )}
         </div>
