@@ -33,6 +33,7 @@ import searchRoutes from '@/routes/search.routes';
 import superAdminRoutes from '@/routes/superAdmin.routes';
 import tenantPublicRoutes from '@/routes/tenantPublic.routes';
 import { resolveTenant } from '@/middleware/tenant.middleware';
+import reportRoutes from '@/routes/report.routes';
 
 const router = Router();
 
@@ -77,6 +78,8 @@ router.use('/mail', mailRoutes);
 router.use('/emails', mailRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/notification', notificationRoutes);
+router.use('/reports', reportRoutes);
+router.use('/report', reportRoutes);
 
 // Configuration & Settings
 router.use('/configuration', configRoutes);
