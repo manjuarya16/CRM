@@ -72,15 +72,17 @@ const WorkflowsPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Automation Workflows</h1>
           <p className="text-sm text-gray-500 mt-0.5">Automate events, conditional logic, and custom actions</p>
         </div>
-        {canCreate && (
-          <Link
-            to="/settings/workflows/create"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
-          >
-            <i className="mgc_add_line text-lg"></i>
-            Create Workflow
-          </Link>
-        )}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+          {canCreate && (
+            <Link
+              to="/settings/workflows/create"
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
+            >
+              <i className="mgc_add_line text-sm"></i>
+              <span>Create Workflow</span>
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">

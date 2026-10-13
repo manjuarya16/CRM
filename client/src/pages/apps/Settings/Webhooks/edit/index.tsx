@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { PageBreadcrumb } from "@/components";
 import { IWebhook } from "@/interface";
 import { WebhookForm } from "../WebhookForm";
 import { useWebhookStore } from "@/store";
@@ -12,26 +11,29 @@ const EditWebhookPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      useWebhookStore.getState().fetchWebhookById(id)
+      useWebhookStore
+        .getState()
+        .fetchWebhookById(id)
         .then((data) => setWebhook(data))
         .catch(() => setWebhook(null))
         .finally(() => setLoading(false));
     }
   }, [id]);
 
-  return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      <PageBreadcrumb title="Edit Webhook" breadCrumbItems={["Settings", "Webhooks", "Edit"]} />
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Edit Webhook</h1>
-        <p className="text-sm text-gray-500 mt-1">Update webhook target URL, headers, and params.</p>
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-gray-400">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-[#0088cc] border-t-transparent"></div>
+        <p className="mt-2 text-xs text-gray-500">Loading webhook details...</p>
       </div>
-      {loading ? (
-        <div className="p-8 text-center text-gray-500">Loading webhook details...</div>
-      ) : (
-        <WebhookForm initialData={webhook} isEdit={true} />
-      )}
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+      <WebhookForm initialData={webhook} isEdit={true} />
     </div>
   );
 };
+
 export default EditWebhookPage;

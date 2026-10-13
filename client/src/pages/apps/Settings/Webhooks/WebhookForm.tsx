@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
 import Swal from "sweetalert2";
@@ -47,6 +47,7 @@ const ENTITY_CONFIG: Record<
 export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>([]);
   const [queryParams, setQueryParams] = useState<Array<{ key: string; value: string }>>([]);
 
@@ -93,9 +94,10 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
       setValue("payload_type", initialData.payload_type || "default");
       setValue("raw_payload_type", initialData.raw_payload_type || "json");
 
-      const payloadStr = typeof initialData.payload === "object"
-        ? JSON.stringify(initialData.payload, null, 2)
-        : (initialData.payload || currentEntityConfig.defaultRawTemplate);
+      const payloadStr =
+        typeof initialData.payload === "object"
+          ? JSON.stringify(initialData.payload, null, 2)
+          : initialData.payload || currentEntityConfig.defaultRawTemplate;
       setValue("payload", payloadStr);
 
       const h = Array.isArray(initialData.headers) ? initialData.headers : [];
@@ -164,372 +166,538 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, isEdit })
 
       if (isEdit && initialData) {
         await useWebhookStore.getState().saveWebhook(data, initialData.id);
-        Swal.fire({ icon: "success", title: "Saved!", text: "Webhook updated successfully", timer: 1500, showConfirmButton: false });
+        Swal.fire({
+          icon: "success",
+          title: "Saved!",
+          text: "Webhook updated successfully",
+          timer: 1500,
+          showConfirmButton: false,
+        });
       } else {
         await useWebhookStore.getState().saveWebhook(data);
-        Swal.fire({ icon: "success", title: "Created!", text: "Webhook created successfully", timer: 1500, showConfirmButton: false });
+        Swal.fire({
+          icon: "success",
+          title: "Created!",
+          text: "Webhook created successfully",
+          timer: 1500,
+          showConfirmButton: false,
+        });
       }
       navigate("/settings/webhooks");
     } catch (err: any) {
-      Swal.fire({ icon: "error", title: "Error", text: err.response?.data?.message || err.message || "Failed to save webhook" });
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: err.response?.data?.message || err.message || "Failed to save webhook",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <form noValidate onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6 max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Webhook Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            {...register("name")}
-            placeholder="e.g. Zapier Lead Sync Webhook"
-            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
-              errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
-            }`}
-          />
-          {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
-        </div>
+  const handleTestDirect = async () => {
+    const endpoint = watch("end_point");
+    if (!endpoint || !endpoint.startsWith("http")) {
+      Swal.fire({
+        icon: "warning",
+        title: "Endpoint Required",
+        text: "Please enter a valid Target Endpoint URL (starting with http:// or https://) to test.",
+      });
+      return;
+    }
+    try {
+      setTesting(true);
+      Swal.fire({
+        title: "Testing Webhook Endpoint...",
+        text: `Sending sample request to ${endpoint}`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Entity Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            {...register("entity_type")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-          >
-            <option value="leads">Leads</option>
-            <option value="persons">Persons / Contacts</option>
-            <option value="organizations">Organizations</option>
-            <option value="quotes">Quotes</option>
-            <option value="activities">Activities</option>
-          </select>
-        </div>
+      let payloadVal = watch("payload");
+      if (typeof payloadVal === "string" && payloadVal.trim()) {
+        try {
+          payloadVal = JSON.parse(payloadVal);
+        } catch {
+          // Keep as string template
+        }
+      }
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            HTTP Method <span className="text-red-500">*</span>
-          </label>
-          <select
-            {...register("method")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-          >
-            <option value="POST">POST</option>
-            <option value="GET">GET</option>
-            <option value="PUT">PUT</option>
-            <option value="DELETE">DELETE</option>
-          </select>
-        </div>
+      const res = await API.post("/webhooks/test-direct", {
+        name: watch("name") || "Test Webhook",
+        entity_type: watch("entity_type") || "leads",
+        method: watch("method") || "POST",
+        end_point: endpoint,
+        payload_type: watch("payload_type") || "default",
+        raw_payload_type: watch("raw_payload_type") || "json",
+        headers,
+        query_params: queryParams,
+        payload: payloadVal,
+      });
 
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Target Endpoint URL <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            {...register("end_point")}
-            placeholder="https://hooks.zapier.com/hooks/catch/..."
-            className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
-              errors.end_point ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
-            }`}
-          />
-          {errors.end_point && <p className="text-xs text-red-500 mt-1">{errors.end_point.message}</p>}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Payload Format
-          </label>
-          <select
-            {...register("payload_type")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-          >
-            <option value="default">Default JSON</option>
-            <option value="x-www-form-urlencoded">x-www-form-urlencoded</option>
-            <option value="raw">Raw</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Raw Content Type
-          </label>
-          <select
-            {...register("raw_payload_type")}
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-          >
-            <option value="json">application/json</option>
-            <option value="text">text/plain</option>
-          </select>
-        </div>
-
-        {payloadType === "default" && (
-          <div className="md:col-span-2 bg-blue-50 dark:bg-gray-900/50 p-3 rounded-lg border border-blue-100 dark:border-gray-700 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-blue-800 dark:text-blue-300">
-                Default Payload Structure ({entityType.toUpperCase()})
-              </span>
-              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-mono">
-                All {entityType} entity attributes automatically included in POST body
-              </span>
-            </div>
-            <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 p-2.5 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto">
-              {currentEntityConfig.defaultJsonPreview}
-            </pre>
+      const resData = res.data;
+      Swal.fire({
+        icon: "success",
+        title: "Test Webhook Dispatched!",
+        html: `
+          <div style="text-align: left; font-size: 13px;">
+            <p><strong>Status:</strong> <span style="color: green; font-weight: bold;">${resData?.result?.status_code || 200} OK</span></p>
+            <p><strong>Endpoint:</strong> <code style="word-break: break-all; font-size: 11px;">${endpoint}</code></p>
+            <p style="margin-top: 10px;"><strong>Sent Custom Payload:</strong></p>
+            <pre style="background: #f4f4f4; padding: 10px; border-radius: 6px; max-height: 180px; overflow-y: auto; font-size: 11px; color: #111;">${JSON.stringify(resData?.sent_payload, null, 2)}</pre>
           </div>
-        )}
+        `,
+        confirmButtonColor: "#0e90d9",
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Test Failed",
+        text: err.response?.data?.message || err.message || "Endpoint test failed",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
 
-        {payloadType === "raw" && (
-          <div className="md:col-span-2 space-y-2">
-            <div className="flex items-center justify-between flex-wrap gap-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Custom Payload / Template (JSON or Text)
+  const pageTitle = isEdit ? "Edit Webhook" : "Create Webhook";
+  const saveButtonLabel = isEdit ? "Save Webhook" : "Create Webhook";
+
+  return (
+    <form noValidate onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+      {/* 🧭 Top Breadcrumb Navigation */}
+      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
+        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+          <i className="mgc_home_3_line text-xs"></i>
+          <span>Dashboard</span>
+        </Link>
+        <span>/</span>
+        <Link to="/settings" className="text-[#0e90d9] hover:underline">
+          Settings
+        </Link>
+        <span>/</span>
+        <Link to="/settings/webhooks" className="text-[#0e90d9] hover:underline">
+          Webhooks
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">
+          {pageTitle}
+        </span>
+      </div>
+
+      {/* 🏷️ Top Header with Actions (Matching Edit Attribute style) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200/80 dark:border-gray-700">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+              {pageTitle}
+            </h1>
+            {isEdit && initialData?.id && (
+              <span className="font-mono text-xs font-bold text-[#0e90d9] dark:text-[#38bdf8] bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-lg border border-sky-100 dark:border-sky-900/50">
+                #WHK-{initialData.id}
+              </span>
+            )}
+          </div>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            Configure automated outbound HTTP webhooks on CRM events
+          </p>
+        </div>
+
+        {/* Top Header Actions (Cancel + Save Button) */}
+        <div className="flex items-center gap-3 shrink-0">
+          <Link
+            to="/settings/webhooks"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors shadow-2xs"
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-sm font-semibold shadow-sm transition-all active:scale-98 disabled:opacity-50 whitespace-nowrap"
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Saving...</span>
+              </>
+            ) : (
+              <span>{saveButtonLabel}</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Card Content */}
+      <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 lg:p-7 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Webhook Name */}
+          <div className="md:col-span-2">
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Webhook Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              {...register("name")}
+              placeholder="e.g. Zapier Lead Sync Webhook"
+              className={`w-full px-3.5 py-2 text-xs sm:text-sm border rounded-xl focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+                errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-[#0088cc]/20"
+              }`}
+            />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+          </div>
+
+          {/* Entity Type */}
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Entity Type <span className="text-red-500">*</span>
+            </label>
+            <select
+              {...register("entity_type")}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="leads">Leads</option>
+              <option value="persons">Persons / Contacts</option>
+              <option value="organizations">Organizations</option>
+              <option value="quotes">Quotes</option>
+              <option value="activities">Activities</option>
+            </select>
+          </div>
+
+          {/* HTTP Method */}
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              HTTP Method <span className="text-red-500">*</span>
+            </label>
+            <select
+              {...register("method")}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="POST">POST</option>
+              <option value="GET">GET</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+
+          {/* Target Endpoint URL with direct Test Button right beside it */}
+          <div className="md:col-span-2 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Target Endpoint URL <span className="text-red-500">*</span>
               </label>
-              <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTestDirect}
+                disabled={testing}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-[#0e90d9] dark:text-[#38bdf8] bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-950/60 rounded-lg border border-sky-200 dark:border-sky-800 transition active:scale-95 disabled:opacity-50"
+                title="Test fire live payload to this endpoint"
+              >
+                <i className="mgc_send_line text-sm"></i>
+                <span>{testing ? "Testing..." : "Test Endpoint"}</span>
+              </button>
+            </div>
+            <input
+              type="text"
+              {...register("end_point")}
+              placeholder="https://hooks.zapier.com/hooks/catch/..."
+              className={`w-full px-3.5 py-2 text-xs sm:text-sm font-mono border rounded-xl focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
+                errors.end_point ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-[#0088cc]/20"
+              }`}
+            />
+            {errors.end_point && <p className="text-xs text-red-500 mt-1">{errors.end_point.message}</p>}
+          </div>
+
+          {/* Payload Format */}
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Payload Format
+            </label>
+            <select
+              {...register("payload_type")}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="default">Default JSON</option>
+              <option value="x-www-form-urlencoded">x-www-form-urlencoded</option>
+              <option value="raw">Raw</option>
+            </select>
+          </div>
+
+          {/* Raw Content Type */}
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Raw Content Type
+            </label>
+            <select
+              {...register("raw_payload_type")}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="json">application/json</option>
+              <option value="text">text/plain</option>
+            </select>
+          </div>
+
+          {/* Default Payload Preview */}
+          {payloadType === "default" && (
+            <div className="md:col-span-2 bg-blue-50/70 dark:bg-gray-900/50 p-3 sm:p-4 rounded-xl border border-blue-100 dark:border-gray-700 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                  <i className="mgc_code_line text-sm"></i>
+                  Default Payload Structure ({entityType.toUpperCase()})
+                </span>
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-mono">
+                  All {entityType} attributes auto-included in body
+                </span>
+              </div>
+              <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
+                {currentEntityConfig.defaultJsonPreview}
+              </pre>
+            </div>
+          )}
+
+          {/* Raw Payload Editor */}
+          {payloadType === "raw" && (
+            <div className="md:col-span-2 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Custom Payload / Template (JSON or Text)
+                </label>
                 <button
                   type="button"
                   onClick={() => setValue("payload", currentEntityConfig.defaultRawTemplate)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                  className="text-xs text-[#0e90d9] hover:underline font-semibold"
                 >
                   Reset to {entityType} template
                 </button>
               </div>
+
+              {/* Interactive Placeholder Picker Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 p-2.5 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-700">
+                <span className="text-[11px] text-gray-500 font-semibold mr-1">Insert Placeholders:</span>
+                {currentEntityConfig.placeholders.map((ph) => (
+                  <button
+                    key={ph}
+                    type="button"
+                    onClick={() => {
+                      const cur = watch("payload") || "";
+                      setValue("payload", cur ? `${cur}\n  "field": "${ph}"` : ph);
+                    }}
+                    className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg border border-blue-200 dark:border-gray-600 transition-colors shadow-2xs flex items-center gap-1"
+                    title={`Click to insert ${ph}`}
+                  >
+                    <i className="mgc_add_line text-[10px]"></i>
+                    {ph}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                rows={6}
+                {...register("payload")}
+                placeholder={currentEntityConfig.defaultRawTemplate}
+                className="w-full px-3.5 py-2 text-xs font-mono border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 bg-gray-50 dark:bg-gray-900"
+              ></textarea>
+              <p className="text-[11px] text-gray-400">
+                Enter custom JSON template or text. Dynamic placeholders starting with <code>{"{{"}</code> and ending with <code>{"}}"}</code> will automatically be replaced with entity attributes upon webhook execution.
+              </p>
+            </div>
+          )}
+
+          {/* Description */}
+          <div className="md:col-span-2">
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Description
+            </label>
+            <textarea
+              rows={2}
+              {...register("description")}
+              placeholder="Optional description of what this webhook triggers..."
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0088cc]/20 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            ></textarea>
+          </div>
+        </div>
+
+        {/* 🔐 Custom HTTP Headers Section */}
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-5 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                <i className="mgc_lock_line text-base text-[#0e90d9]"></i>
+                Custom HTTP Headers
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Include Authorization tokens, API keys, or custom headers with each request
+              </p>
             </div>
 
-            {/* Interactive Placeholder Picker Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gray-50 dark:bg-gray-900/60 rounded-lg border border-gray-200 dark:border-gray-700">
-              <span className="text-[11px] text-gray-500 font-semibold mr-1">Insert Placeholders:</span>
-              {currentEntityConfig.placeholders.map((ph) => (
-                <button
-                  key={ph}
-                  type="button"
-                  onClick={() => {
-                    const cur = watch("payload") || "";
-                    setValue("payload", cur ? `${cur}\n  "field": "${ph}"` : ph);
-                  }}
-                  className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-700 rounded border border-blue-200 dark:border-gray-600 transition-colors shadow-xs flex items-center gap-1"
-                  title={`Click to insert ${ph}`}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const token =
+                    getToken() ||
+                    localStorage.getItem("token") ||
+                    localStorage.getItem("jwt_token") ||
+                    "";
+                  if (!token) {
+                    Swal.fire({
+                      icon: "info",
+                      title: "No Session Token Found",
+                      text: "Please log in to auto-populate your active JWT token, or type your Bearer token manually into the header value field.",
+                    });
+                  }
+                  const tokenVal = token ? `Bearer ${token}` : "Bearer <YOUR_JWT_TOKEN>";
+                  const existingIndex = headers.findIndex(
+                    (h) => h.key.toLowerCase() === "authorization"
+                  );
+                  let updated = [...headers];
+                  if (existingIndex >= 0) {
+                    updated[existingIndex] = { key: "Authorization", value: tokenVal };
+                  } else {
+                    updated.push({ key: "Authorization", value: tokenVal });
+                  }
+                  setHeaders(updated);
+                  setValue("headers", updated);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 transition shadow-2xs whitespace-nowrap active:scale-95"
+              >
+                <i className="mgc_key_2_line text-sm"></i>
+                <span>+ Add Bearer Token Header</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={addHeader}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#0e90d9] hover:bg-sky-50 dark:hover:bg-sky-950/40 border border-sky-200 dark:border-sky-800 transition whitespace-nowrap active:scale-95"
+              >
+                <i className="mgc_add_line text-sm"></i>
+                <span>Add Header</span>
+              </button>
+            </div>
+          </div>
+
+          {headers.length === 0 ? (
+            <div className="p-3.5 bg-gray-50/70 dark:bg-gray-900/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+              <p className="text-xs text-gray-400 italic">No custom headers configured.</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {headers.map((h, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-gray-50/60 dark:bg-gray-900/40 p-2.5 sm:p-2 rounded-xl border border-gray-200/80 dark:border-gray-700"
                 >
-                  <i className="mgc_add_line text-[10px]"></i>
-                  {ph}
-                </button>
+                  <input
+                    type="text"
+                    placeholder="Header Name (e.g. Authorization)"
+                    value={h.key}
+                    onChange={(e) => updateHeader(idx, e.target.value, h.value)}
+                    className="w-full sm:w-1/2 px-3 py-1.5 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Header Value (e.g. Bearer token_xyz)"
+                    value={h.value}
+                    onChange={(e) => updateHeader(idx, h.key, e.target.value)}
+                    className="w-full sm:w-1/2 px-3 py-1.5 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeHeader(idx)}
+                    className="self-end sm:self-center p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    title="Remove Header"
+                  >
+                    <i className="mgc_delete_line text-base"></i>
+                  </button>
+                </div>
               ))}
             </div>
-
-            <textarea
-              rows={6}
-              {...register("payload")}
-              placeholder={currentEntityConfig.defaultRawTemplate}
-              className="w-full px-3 py-2 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 bg-gray-50 dark:bg-gray-900"
-            ></textarea>
-            <p className="text-[11px] text-gray-400">
-              Enter custom JSON template or text. Dynamic placeholders starting with <code>{"{{"}</code> and ending with <code>{"}}"}</code> will automatically be replaced with entity attributes upon webhook execution.
-            </p>
-          </div>
-        )}
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Description
-          </label>
-          <textarea
-            rows={2}
-            {...register("description")}
-            placeholder="Optional description of what this webhook triggers..."
-            className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-          ></textarea>
+          )}
         </div>
-      </div>
 
-      {/* Headers Section */}
-      <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Custom HTTP Headers</h3>
-          <div className="flex items-center gap-2">
+        {/* 🔗 URL Query Parameters Section */}
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-5 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                <i className="mgc_link_line text-base text-[#0e90d9]"></i>
+                URL Query Parameters
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Automatically appended to endpoint URL as query string (e.g. ?api_key=123)
+              </p>
+            </div>
+
             <button
               type="button"
-              onClick={() => {
-                const token = getToken() || localStorage.getItem("token") || localStorage.getItem("jwt_token") || "";
-                if (!token) {
-                  Swal.fire({
-                    icon: "info",
-                    title: "No Session Token Found",
-                    text: "Please log in to auto-populate your active JWT token, or type your Bearer token manually into the header value field.",
-                  });
-                }
-                const tokenVal = token ? `Bearer ${token}` : "Bearer <YOUR_JWT_TOKEN>";
-                const existingIndex = headers.findIndex(h => h.key.toLowerCase() === "authorization");
-                let updated = [...headers];
-                if (existingIndex >= 0) {
-                  updated[existingIndex] = { key: "Authorization", value: tokenVal };
-                } else {
-                  updated.push({ key: "Authorization", value: tokenVal });
-                }
-                setHeaders(updated);
-                setValue("headers", updated);
-              }}
-              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800"
+              onClick={addQueryParam}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#0e90d9] hover:bg-sky-50 dark:hover:bg-sky-950/40 border border-sky-200 dark:border-sky-800 transition whitespace-nowrap self-start sm:self-auto active:scale-95"
             >
-              <i className="mgc_key_2_line"></i> + Add Bearer Token Header
-            </button>
-            <button
-              type="button"
-              onClick={addHeader}
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
-            >
-              <i className="mgc_add_line"></i> Add Header
+              <i className="mgc_add_line text-sm"></i>
+              <span>Add Parameter</span>
             </button>
           </div>
-        </div>
-        {headers.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">No custom headers configured.</p>
-        ) : (
-          headers.map((h, idx) => (
-            <div key={idx} className="flex gap-2 items-center">
-              <input
-                type="text"
-                placeholder="Header Name (e.g. Authorization)"
-                value={h.key}
-                onChange={(e) => updateHeader(idx, e.target.value, h.value)}
-                className="w-1/2 px-3 py-1.5 text-xs border rounded-lg focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-              />
-              <input
-                type="text"
-                placeholder="Header Value (e.g. Bearer token_xyz)"
-                value={h.value}
-                onChange={(e) => updateHeader(idx, h.key, e.target.value)}
-                className="w-1/2 px-3 py-1.5 text-xs border rounded-lg focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-              />
-              <button
-                type="button"
-                onClick={() => removeHeader(idx)}
-                className="p-1.5 text-gray-400 hover:text-red-500 rounded"
-              >
-                <i className="mgc_delete_line text-sm"></i>
-              </button>
+
+          {queryParams.length === 0 ? (
+            <div className="p-3.5 bg-gray-50/70 dark:bg-gray-900/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+              <p className="text-xs text-gray-400 italic">No query parameters configured.</p>
             </div>
-          ))
-        )}
-      </div>
-
-      {/* Query Params Section */}
-      <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">URL Query Parameters</h3>
-          <button
-            type="button"
-            onClick={addQueryParam}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
-          >
-            <i className="mgc_add_line"></i> Add Parameter
-          </button>
-        </div>
-        {queryParams.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">No query parameters configured.</p>
-        ) : (
-          queryParams.map((q, idx) => (
-            <div key={idx} className="flex gap-2 items-center">
-              <input
-                type="text"
-                placeholder="Param Key (e.g. api_key)"
-                value={q.key}
-                onChange={(e) => updateQueryParam(idx, e.target.value, q.value)}
-                className="w-1/2 px-3 py-1.5 text-xs border rounded-lg focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-              />
-              <input
-                type="text"
-                placeholder="Param Value"
-                value={q.value}
-                onChange={(e) => updateQueryParam(idx, q.key, e.target.value)}
-                className="w-1/2 px-3 py-1.5 text-xs border rounded-lg focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-              />
-              <button
-                type="button"
-                onClick={() => removeQueryParam(idx)}
-                className="p-1.5 text-gray-400 hover:text-red-500 rounded"
-              >
-                <i className="mgc_delete_line text-sm"></i>
-              </button>
+          ) : (
+            <div className="space-y-2.5">
+              {queryParams.map((q, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-gray-50/60 dark:bg-gray-900/40 p-2.5 sm:p-2 rounded-xl border border-gray-200/80 dark:border-gray-700"
+                >
+                  <input
+                    type="text"
+                    placeholder="Param Key (e.g. api_key)"
+                    value={q.key}
+                    onChange={(e) => updateQueryParam(idx, e.target.value, q.value)}
+                    className="w-full sm:w-1/2 px-3 py-1.5 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Param Value"
+                    value={q.value}
+                    onChange={(e) => updateQueryParam(idx, q.key, e.target.value)}
+                    className="w-full sm:w-1/2 px-3 py-1.5 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeQueryParam(idx)}
+                    className="self-end sm:self-center p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    title="Remove Parameter"
+                  >
+                    <i className="mgc_delete_line text-base"></i>
+                  </button>
+                </div>
+              ))}
             </div>
-          ))
-        )}
-      </div>
+          )}
+        </div>
 
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
-        <button
-          type="button"
-          onClick={async () => {
-            const endpoint = watch("end_point");
-            if (!endpoint || !endpoint.startsWith("http")) {
-              Swal.fire({ icon: "warning", title: "Endpoint Required", text: "Please enter a valid Target Endpoint URL to test." });
-              return;
-            }
-            try {
-              Swal.fire({ title: "Testing Webhook Endpoint...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-              
-              let payloadVal = watch("payload");
-              if (typeof payloadVal === "string" && payloadVal.trim()) {
-                try {
-                  payloadVal = JSON.parse(payloadVal);
-                } catch {
-                  // Keep as string template
-                }
-              }
-
-              const res = await API.post("/webhooks/test-direct", {
-                name: watch("name") || "Test Webhook",
-                entity_type: watch("entity_type") || "leads",
-                method: watch("method") || "POST",
-                end_point: endpoint,
-                payload_type: watch("payload_type") || "default",
-                raw_payload_type: watch("raw_payload_type") || "json",
-                headers,
-                query_params: queryParams,
-                payload: payloadVal,
-              });
-
-              const resData = res.data;
-              Swal.fire({
-                icon: "success",
-                title: "Test Webhook Dispatched!",
-                html: `
-                  <div style="text-align: left; font-size: 13px;">
-                    <p><strong>Status:</strong> <span style="color: green; font-weight: bold;">${resData?.result?.status_code || 200} OK</span></p>
-                    <p><strong>Endpoint:</strong> <code style="word-break: break-all; font-size: 11px;">${endpoint}</code></p>
-                    <p style="margin-top: 10px;"><strong>Sent Custom Payload:</strong></p>
-                    <pre style="background: #f4f4f4; padding: 10px; border-radius: 6px; max-height: 180px; overflow-y: auto; font-size: 11px; color: #111;">${JSON.stringify(resData?.sent_payload, null, 2)}</pre>
-                  </div>
-                `,
-                confirmButtonColor: "#0088cc",
-              });
-            } catch (err: any) {
-              Swal.fire({ icon: "error", title: "Test Failed", text: err.response?.data?.message || err.message || "Endpoint test failed" });
-            }
-          }}
-          className="px-3.5 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1.5"
-        >
-          <i className="mgc_send_line text-sm"></i> Test Endpoint
-        </button>
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => navigate("/settings/webhooks")}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        {/* 🚀 Bottom Form Actions (Also available at the bottom for convenience) */}
+        <div className="flex items-center justify-end gap-3 pt-5 border-t border-gray-100 dark:border-gray-700">
+          <Link
+            to="/settings/webhooks"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors shadow-2xs"
           >
             Cancel
-          </button>
+          </Link>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2 text-sm font-medium text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg transition-colors flex items-center gap-2"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-sm font-semibold shadow-sm transition-all active:scale-98 disabled:opacity-50 whitespace-nowrap"
           >
-            {loading ? "Saving..." : isEdit ? "Update Webhook" : "Create Webhook"}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Saving...</span>
+              </>
+            ) : (
+              <span>{saveButtonLabel}</span>
+            )}
           </button>
         </div>
       </div>
