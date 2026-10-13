@@ -30,6 +30,7 @@ import notificationRoutes from '@/routes/notification.routes';
 import whatsappRoutes from '@/routes/whatsapp.routes';
 import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
+import reportRoutes from '@/routes/report.routes';
 
 const router = Router();
 
@@ -65,6 +66,8 @@ router.use('/mail', mailRoutes);
 router.use('/emails', mailRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/notification', notificationRoutes);
+router.use('/reports', reportRoutes);
+router.use('/report', reportRoutes);
 
 // Configuration & Settings
 router.use('/configuration', configRoutes);
