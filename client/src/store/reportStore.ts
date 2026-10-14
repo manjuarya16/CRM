@@ -107,7 +107,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
     const currentFilters = get().filterState;
     let nextFilters = { ...currentFilters, ...updates };
 
-    if (updates.datePreset && updates.datePreset !== currentFilters.datePreset) {
+    if (updates.datePreset) {
       const computedRange = calculatePresetDateRange(updates.datePreset);
       nextFilters = {
         ...nextFilters,

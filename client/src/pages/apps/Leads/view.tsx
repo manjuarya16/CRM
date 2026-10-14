@@ -29,6 +29,12 @@ const getActivityBadge = (type: string) => {
         icon: "mgc_calendar_line",
         label: "Meeting",
       };
+    case "task":
+      return {
+        badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+        icon: "mgc_task_line",
+        label: "Task",
+      };
     case "lunch":
       return {
         badgeClass: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800",
@@ -829,7 +835,7 @@ const getPersonEmail = (person: any): string => {
                   {(() => {
                     const filtered = leadActivities.filter((a) => {
                       if (activeTab === "all") return true;
-                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(a.type) && !a.is_done;
+                      if (activeTab === "planned") return ["call", "meeting", "lunch", "task"].includes(a.type) && !a.is_done;
                       if (activeTab === "notes") return a.type === "note";
                       if (activeTab === "calls") return a.type === "call";
                       if (activeTab === "meetings") return a.type === "meeting";
@@ -918,8 +924,8 @@ const getPersonEmail = (person: any): string => {
                                     </Link>
                                   )}
 
-                                  {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
-                                  {["call", "meeting", "lunch"].includes(act.type) && (
+                                  {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Task, Lunch) */}
+                                  {["call", "meeting", "lunch", "task"].includes(act.type) && (
                                     <button
                                       onClick={async () => {
                                         await updateActivity(act.id, { is_done: !act.is_done });
@@ -1304,6 +1310,7 @@ const getPersonEmail = (person: any): string => {
                               >
                                 <option value="call">Call</option>
                                 <option value="meeting">Meeting</option>
+                                <option value="task">Task</option>
                                 <option value="lunch">Lunch</option>
                               </select>
                             </div>

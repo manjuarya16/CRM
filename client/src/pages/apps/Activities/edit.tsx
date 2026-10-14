@@ -236,6 +236,7 @@ const EditActivityPage: React.FC = () => {
               >
                 <option value="call">Call</option>
                 <option value="meeting">Meeting</option>
+                <option value="task">Task</option>
                 <option value="lunch">Lunch</option>
                 <option value="email">Email</option>
                 <option value="note">Note</option>

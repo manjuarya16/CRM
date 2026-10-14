@@ -21,13 +21,15 @@ const fmtDateTime = (dt?: string) => {
 const TYPE_BADGE: Record<string, string> = {
   call: "text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
   meeting: "text-purple-700 bg-purple-50 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
+  task: "text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
   email: "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
-  lunch: "text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+  lunch: "text-orange-700 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-300 border border-orange-200 dark:border-orange-800",
 };
 
 const TYPE_ICONS: Record<string, string> = {
   call: "mgc_phone_line",
   meeting: "mgc_calendar_line",
+  task: "mgc_task_line",
   email: "mgc_mail_line",
   lunch: "mgc_restaurant_line",
 };
