@@ -18,13 +18,6 @@
         }
     }
 
-    // Safety safeguard: ensure compact select elements preserve chevron clearance
-    select {
-        &[class*="pr-8"] {
-            padding-right: 2rem !important;
-        }
-    }
-
 
     .form-textarea {
         @apply font-normal rounded block w-full border-gray-200 text-sm focus:border-gray-300 

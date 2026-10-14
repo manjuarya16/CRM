@@ -8,5 +8,4 @@ export type { IProductCreateInput, IProductUpdateInput } from './productInterfac
 export type { IQuoteItem, IQuoteCreateInput, IQuoteUpdateInput } from './quoteInterface';
 export * from './notificationInterface';
 export * from './whatsapp.interface';
-export * from './tenant.interface';
 export * from './reportInterface';

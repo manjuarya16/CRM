@@ -32,7 +32,7 @@ const GoogleContactsPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [batchSearch, setBatchSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table");
 
   const fetchAccountsAndBatches = async () => {
     try {

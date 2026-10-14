@@ -49,7 +49,9 @@ export const RoleAccessMatrix: React.FC = () => {
   const [savedPermissions, setSavedPermissions] = useState<string[]>([]);
   const [search, setSearch] = useState<string>("");
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
 
   const currentUserRole = useMemo(() => {
     if (!user) return null;
