@@ -41,6 +41,7 @@ export interface ILostReasonItem {
 
 export interface ILeadReportItem {
   id: number;
+  tenant_id?: number | null;
   title: string;
   description?: string | null;
   lead_value: number;

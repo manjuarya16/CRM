@@ -88,16 +88,27 @@ export const ActivitiesReport: React.FC<ActivitiesReportProps> = ({
     Meeting: '#10b981',
     Task: '#f59e0b',
     Email: '#8b5cf6',
+    Lunch: '#ec4899',
+    'Follow Up': '#06b6d4',
+    call: '#0e90d9',
+    meeting: '#10b981',
+    task: '#f59e0b',
+    email: '#8b5cf6',
+    lunch: '#ec4899',
+    follow_up: '#06b6d4',
   };
 
   const typeDonutItems = useMemo(() => {
     if (!reportData?.type_mix) return [];
-    return reportData.type_mix.map((item) => ({
-      label: item.label,
-      value: item.count,
-      displayText: formatDisplayNumber(item.count),
-      color: typeColors[item.label] || '#0e90d9',
-    }));
+    return reportData.type_mix.map((item) => {
+      const color = typeColors[item.label] || typeColors[item.label.toLowerCase()] || '#0e90d9';
+      return {
+        label: item.label,
+        value: item.count,
+        displayText: formatDisplayNumber(item.count),
+        color,
+      };
+    });
   }, [reportData?.type_mix]);
 
   // User Breakdown Stacked Groups
@@ -154,11 +165,26 @@ export const ActivitiesReport: React.FC<ActivitiesReportProps> = ({
       {
         key: 'type',
         header: 'Type',
-        render: (act) => (
-          <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 font-medium text-gray-700 dark:text-gray-300">
-            {act.type}
-          </span>
-        ),
+        render: (act) => {
+          const t = (act.type || '').toLowerCase();
+          const badgeClass =
+            t === 'call'
+              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+              : t === 'meeting'
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+              : t === 'task'
+              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              : t === 'email'
+              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+              : t === 'lunch'
+              ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800'
+              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600';
+          return (
+            <span className={`px-2 py-0.5 rounded-md border text-xs font-semibold capitalize ${badgeClass}`}>
+              {act.type}
+            </span>
+          );
+        },
       },
       {
         key: 'lead_title',

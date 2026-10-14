@@ -62,6 +62,17 @@ const ReportsPage: React.FC = () => {
     data: null,
   });
 
+  // Active Quick View per tab state to ensure strict single-selection
+  const [activeQuickViewMap, setActiveQuickViewMap] = useState<Record<string, string>>({
+    activities: 'All Activities',
+    leads: 'All Leads (Clubbed)',
+    sources: 'All Sources',
+    'product-value': 'All Products',
+    'product-lines': 'All Lines',
+    pipeline: 'All Pipelines',
+    quotes: 'All Quotes',
+  });
+
   // Load filter dropdown options from real database on mount
   useEffect(() => {
     fetchFilterOptions();
@@ -322,10 +333,11 @@ const ReportsPage: React.FC = () => {
       { label: 'Closing this month', filters: { datePreset: 'month' } },
     ],
     activities: [
-      { label: 'All Activities', filters: { activityStatus: '', activityOverdueOnly: '', activityType: '' } },
-      { label: 'Due today', filters: { datePreset: 'today' }, preset: 'today' },
-      { label: 'Overdue only', filters: { activityOverdueOnly: 'yes' } },
-      { label: 'Meetings only', filters: { activityType: 'Meeting' } },
+      { label: 'All Activities', filters: { activityStatus: '', activityOverdueOnly: '', activityType: '', datePreset: '90' } },
+      { label: 'Due today', filters: { datePreset: 'today', activityOverdueOnly: '', activityType: '', activityStatus: '' } },
+      { label: 'Overdue only', filters: { activityOverdueOnly: 'yes', activityType: '', activityStatus: '', datePreset: '90' } },
+      { label: 'Meetings only', filters: { activityType: 'Meeting', activityOverdueOnly: '', activityStatus: '', datePreset: '90' } },
+      { label: 'Tasks only', filters: { activityType: 'Task', activityOverdueOnly: '', activityStatus: '', datePreset: '90' } },
     ],
     quotes: [
       { label: 'All Quotes', filters: { quoteStatus: '', quoteExpiry: '' } },
@@ -394,6 +406,15 @@ const ReportsPage: React.FC = () => {
     });
   };
 
+  const handleClearFiltersForTab = () => {
+    resetFilters();
+    const defaultLabel = currentQuickViews[0]?.label || '';
+    if (defaultLabel) {
+      setActiveQuickViewMap((prev) => ({ ...prev, [activeTab]: defaultLabel }));
+    }
+    fetchCurrentTabReport();
+  };
+
   return (
     <div className="space-y-4">
       {/* 🏷️ Header Card with Breadcrumb & Actions */}
@@ -458,29 +479,20 @@ const ReportsPage: React.FC = () => {
               </span>
               {currentQuickViews.map((qv, qvIdx) => {
                 const isSelected =
-                  qv.filters.selectedOutcome !== undefined
-                    ? filterState.selectedOutcome === qv.filters.selectedOutcome
-                    : qv.filters.agingFilter !== undefined
-                    ? filterState.agingFilter === qv.filters.agingFilter
-                    : qv.filters.quoteExpiry !== undefined
-                    ? filterState.quoteExpiry === qv.filters.quoteExpiry
-                    : qv.filters.activityOverdueOnly !== undefined
-                    ? filterState.activityOverdueOnly === qv.filters.activityOverdueOnly
-                    : qv.filters.selectedWarehouseId !== undefined
-                    ? filterState.selectedWarehouseId === qv.filters.selectedWarehouseId
-                    : false;
+                  (activeQuickViewMap[activeTab] || currentQuickViews[0]?.label) === qv.label;
 
                 return (
                   <button
                     key={qvIdx}
                     type="button"
                     onClick={() => {
+                      setActiveQuickViewMap((prev) => ({ ...prev, [activeTab]: qv.label }));
                       setFilterState(qv.filters);
                       fetchCurrentTabReport();
                     }}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer select-none ${
                       isSelected
-                        ? 'bg-[#0e90d9] text-white shadow-xs'
+                        ? 'bg-[#0e90d9] text-white shadow-xs font-semibold'
                         : 'bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -1038,6 +1050,7 @@ const ReportsPage: React.FC = () => {
                     <option value="Meeting">Meeting</option>
                     <option value="Task">Task</option>
                     <option value="Email">Email</option>
+                    <option value="Lunch">Lunch</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -1335,10 +1348,7 @@ const ReportsPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => {
-                resetFilters();
-                fetchCurrentTabReport();
-              }}
+              onClick={handleClearFiltersForTab}
               className="text-[#0e90d9] hover:underline text-[11px] font-medium ml-2"
             >
               Clear filters
@@ -1396,10 +1406,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchLeadSummaryReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchLeadSummaryReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onOpenDrawer={handleOpenLeadDrawer}
             />
           )}
@@ -1412,10 +1419,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchLeadSourcesReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchLeadSourcesReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onDrillDownSource={(sourceName) => {
                 setFilterState({ selectedSourceId: sourceName });
                 navigate('/reports/leads');
@@ -1431,10 +1435,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchProductValueReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchProductValueReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onSelectProduct={(productName) => {
                 setFilterState({ selectedProductId: productName });
                 navigate('/reports/product-lines');
@@ -1450,10 +1451,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchProductLinesReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchProductLinesReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
             />
           )}
@@ -1466,10 +1464,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchPipelineReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchPipelineReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
               onDrillDownStage={(stageName) => {
                 setFilterState({ selectedStageId: stageName });
@@ -1486,10 +1481,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchActivitiesReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchActivitiesReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onOpenDrawer={handleOpenActivityDrawer}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
             />
@@ -1503,10 +1495,7 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchQuotesReport(updates);
               }}
-              onClearFilters={() => {
-                resetFilters();
-                fetchQuotesReport();
-              }}
+              onClearFilters={handleClearFiltersForTab}
               onOpenDrawer={handleOpenQuoteDrawer}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
             />

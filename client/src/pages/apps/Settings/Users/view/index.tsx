@@ -440,7 +440,7 @@ const ViewUserPage: React.FC = () => {
                     const filtered = userActivities.filter((a) => {
                       const t = (a.type || "").toLowerCase();
                       if (activeTab === "all") return true;
-                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(t) && !a.is_done;
+                      if (activeTab === "planned") return ["call", "meeting", "lunch", "task"].includes(t) && !a.is_done;
                       if (activeTab === "notes") return t === "note";
                       if (activeTab === "calls") return t === "call";
                       if (activeTab === "meetings") return t === "meeting";
@@ -469,7 +469,7 @@ const ViewUserPage: React.FC = () => {
                         {filtered.map((act) => {
                           const fileUrl = extractFileUrl(act.comment);
                           const t = (act.type || "").toLowerCase();
-                          const isScheduledType = ["call", "meeting", "lunch"].includes(t);
+                          const isScheduledType = ["call", "meeting", "lunch", "task"].includes(t);
 
                           return (
                             <div key={act.id} className="p-4 bg-[#f8fafc] dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800 space-y-2">
@@ -600,6 +600,7 @@ const ViewUserPage: React.FC = () => {
                     >
                       <option value="Call">Call</option>
                       <option value="Meeting">Meeting</option>
+                      <option value="Task">Task</option>
                       <option value="Lunch">Lunch</option>
                     </select>
                   </div>
