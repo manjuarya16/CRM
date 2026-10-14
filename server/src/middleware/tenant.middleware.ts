@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { pool } from '@/config/db';
 import { ITenant } from '@/interfaces';
+import { runWithTenantContext } from '@/context/tenantContext';
 
 declare global {
   namespace Express {
@@ -82,7 +83,9 @@ export async function resolveTenant(req: Request, res: Response, next: NextFunct
     }
 
     req.tenant = tenant;
-    next();
+    runWithTenantContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => {
+      next();
+    });
   } catch (err) {
     next(err);
   }

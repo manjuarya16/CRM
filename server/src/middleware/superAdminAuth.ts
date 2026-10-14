@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '@/config/env';
+import { runWithTenantContext } from '@/context/tenantContext';
 
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -17,7 +18,9 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
       return;
     }
     (req as any).superAdmin = decoded;
-    next();
+    runWithTenantContext({ isSuperAdmin: true }, () => {
+      next();
+    });
   } catch {
     res.status(401).json({ success: false, message: 'Invalid or expired Super Admin token' });
   }

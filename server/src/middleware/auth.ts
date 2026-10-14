@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { passport } from '@/config/passport';
 import type { PublicUser } from '@/interfaces';
+import { runWithTenantContext } from '@/context/tenantContext';
 
 declare global {
   namespace Express {
@@ -15,8 +16,23 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       res.status(401).json({ message: 'Unauthorized' });
       return;
     }
+
+    // Security: Verify user tenant belongs to current resolved tenant workspace
+    if (user.tenant_id && req.tenant && req.tenant.id !== user.tenant_id) {
+      res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access to this organization workspace.',
+      });
+      return;
+    }
+
     req.user = user;
-    next();
+    const activeTenantId = user.tenant_id || req.tenant?.id;
+    const activeSlug = req.tenant?.slug;
+
+    runWithTenantContext({ tenantId: activeTenantId, tenantSlug: activeSlug }, () => {
+      next();
+    });
   })(req, res, next);
 }
 
