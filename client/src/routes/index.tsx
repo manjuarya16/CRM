@@ -195,19 +195,9 @@ export interface RoutesProps {
 // public routes
 const publicRoutes: RoutesProps[] = [
   {
-    path: "/login",
-    name: "Login",
-    element: <Login />,
-  },
-  {
     path: "/auth/login",
     name: "Login",
     element: <Login />,
-  },
-  {
-    path: "/recover-password",
-    name: "Recover Password",
-    element: <RecoverPassword />,
   },
   {
     path: "/auth/recover-password",

@@ -10,27 +10,14 @@ import {
   PageBreadcrumb,
 } from "../../components";
 import { loginData } from "@/interface/authInterface";
-import { getSubdomain } from "@/utils/subdomain";
-import { superAdminApi } from "@/helpers/api/superAdmin";
 
 const Login = () => {
   const { user, userLoggedIn, loading, login, reset } = useAuthStore();
   const [rememberMe, setRememberMe] = useState<boolean>(true);
-  const [tenantInfo, setTenantInfo] = useState<any>(null);
-  const subdomain = getSubdomain();
 
   useEffect(() => {
     reset();
-    if (subdomain.slug) {
-      superAdminApi.getPublicTenant(subdomain.slug)
-        .then((res) => {
-          if (res.data?.success) {
-            setTenantInfo(res.data.data);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [reset, subdomain.slug]);
+  }, [reset]);
 
   const onSubmit = async (formData: loginData) => {
     try {
@@ -45,18 +32,13 @@ const Login = () => {
   const location = useLocation();
   const redirectUrl = location?.search?.slice(6) || "/";
 
-  const displayTitle = tenantInfo?.name ? `Sign in to ${tenantInfo.name}` : "Sign In";
-  const displayHelp = subdomain.slug
-    ? `Workspace: ${subdomain.slug} • Enter your credentials to access your CRM.`
-    : "Enter your credentials to access your workspace.";
-
   return (
     <>
       {(userLoggedIn || user) && <Navigate to={redirectUrl} replace />}
       <PageBreadcrumb title="Login" />
       <AuthLayout
-        authTitle={displayTitle}
-        helpText={displayHelp}
+        authTitle="Sign In"
+        helpText="Enter your credentials to access your workspace."
       >
 
         <VerticalForm<loginData>
