@@ -158,19 +158,26 @@ export class UserService {
     }
   }
 
-  public static async findById(id: number | string): Promise<IUser | null> {
+  public static async findById(id: number | string, tenantId?: number): Promise<IUser | null> {
     try {
       const userId = toNumberParam(id);
       if (!userId) return null;
 
-      const query = `
+      let query = `
         SELECT u.*, r.name as role_name, r.permission_type, r.permissions 
         FROM users u 
         LEFT JOIN roles r ON u.role_id = r.id 
         WHERE u.id = $1
-        LIMIT 1
       `;
-      const { rows } = await pool.query<IUser>(query, [userId]);
+      const params: any[] = [userId];
+
+      if (tenantId !== undefined && tenantId !== null) {
+        query += ` AND u.tenant_id = $2`;
+        params.push(tenantId);
+      }
+
+      query += ` LIMIT 1`;
+      const { rows } = await pool.query<IUser>(query, params);
       if (!rows[0]) return null;
 
       const user = rows[0];
