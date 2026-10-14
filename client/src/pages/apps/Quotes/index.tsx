@@ -87,7 +87,9 @@ const QuotesPage: React.FC = () => {
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expiring" | "expired">("all");
 
   // Expandable row state for separate product entries

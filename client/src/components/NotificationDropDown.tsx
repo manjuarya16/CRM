@@ -64,7 +64,7 @@ const NotificationDropdown = () => {
 
   const PopoverToggler = () => {
     return (
-      <div
+      <span
         onClick={() => fetchNotifications(1, 10)}
         className="relative flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
       >
@@ -75,7 +75,7 @@ const NotificationDropdown = () => {
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
-      </div>
+      </span>
     );
   };
 
@@ -86,14 +86,18 @@ const NotificationDropdown = () => {
         menuClass=""
         toggler={<PopoverToggler />}
         togglerClass="nav-link p-1"
+        shift={16}
+        offset={8}
+        flip={true}
+        portal={true}
       >
-        <div className="w-80 md:w-96 z-50 mt-2 transition-[margin,opacity] duration-300 bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="w-[calc(100vw-2rem)] sm:w-96 max-w-sm sm:max-w-md bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700/80 rounded-2xl overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/80 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/70 dark:bg-gray-800/90 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h6 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Notifications</h6>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 text-[11px] font-semibold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full">
+                <span className="px-2 py-0.5 text-[11px] font-semibold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full">
                   {unreadCount} new
                 </span>
               )}
@@ -105,7 +109,7 @@ const NotificationDropdown = () => {
                   e.preventDefault();
                   markAllAsRead();
                 }}
-                className="text-xs text-[#0088cc] hover:underline font-medium"
+                className="text-xs text-[#0088cc] hover:underline font-semibold"
               >
                 Mark all as read
               </button>
@@ -113,9 +117,9 @@ const NotificationDropdown = () => {
           </div>
 
           {/* List */}
-          <SimpleBar className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/40">
+          <SimpleBar style={{ maxHeight: "360px" }} className="divide-y divide-gray-100 dark:divide-gray-700/40">
             {notifications.length === 0 ? (
-              <div className="py-8 text-center text-gray-400 dark:text-gray-500">
+              <div className="py-10 text-center text-gray-400 dark:text-gray-500">
                 <i className="mgc_notification_line text-3xl mb-2 block opacity-40"></i>
                 <p className="text-xs">No notifications yet</p>
               </div>
@@ -126,12 +130,12 @@ const NotificationDropdown = () => {
                   <div
                     key={item.id}
                     onClick={() => handleNotificationClick(item)}
-                    className={`px-4 py-3 flex items-start gap-3 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                      !item.is_read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""
+                    className={`px-4 py-3 flex items-start gap-3.5 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                      !item.is_read ? "bg-blue-50/50 dark:bg-blue-900/10" : ""
                     }`}
                   >
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${bg}`}>
-                      <i className={`${icon} text-base`}></i>
+                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center shadow-xs ${bg}`}>
+                      <i className={`${icon} text-lg`}></i>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
@@ -156,10 +160,10 @@ const NotificationDropdown = () => {
           </SimpleBar>
 
           {/* Footer */}
-          <div className="p-2 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/80">
+          <div className="p-2 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/70 dark:bg-gray-800/90">
             <Link
               to="/notifications"
-              className="block text-center py-1 text-xs font-semibold text-[#0088cc] hover:underline"
+              className="block text-center py-1.5 text-xs font-semibold text-[#0088cc] hover:underline"
             >
               View All Notifications
             </Link>

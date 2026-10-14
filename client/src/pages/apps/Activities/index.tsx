@@ -63,7 +63,9 @@ const ActivitiesPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
 
   useEffect(() => {
     fetchActivities(page, perPage, search);

@@ -19,7 +19,7 @@ const EmailTemplatesPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table");
   const [previewTemplate, setPreviewTemplate] = useState<IEmailTemplate | null>(null);
 
   const AVATAR_COLORS = [

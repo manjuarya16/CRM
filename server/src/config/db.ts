@@ -25,6 +25,7 @@ const poolConfig: PoolConfig = env.DATABASE_URL
 export const pool = new Pool(poolConfig);
 
 pool.on('connect', (client) => {
+  client.query('SET search_path TO public, pg_catalog').catch(() => {});
   client.on('error', (err) => {
     logger.error({ err }, 'Unexpected PostgreSQL client connection error');
   });

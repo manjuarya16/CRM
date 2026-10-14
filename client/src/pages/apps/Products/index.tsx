@@ -36,7 +36,9 @@ const ProductsPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [stockFilter, setStockFilter] = useState<"all" | "sellable" | "out_of_stock">("all");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
 
   // View Modal State
   const [viewingProduct, setViewingProduct] = useState<any>(null);

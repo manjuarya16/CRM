@@ -130,7 +130,9 @@ const LeadsPage: React.FC = () => {
     deleteLead, deleteBulkLeads, updateLeadStage
   } = useLeadStore();
 
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const [viewMode, setViewMode] = useState<"kanban" | "table">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "kanban" : "table"
+  );
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | "">("");
   const [search, setSearch] = useState<string>("");
   const [onlyRotten, setOnlyRotten] = useState<boolean>(false);

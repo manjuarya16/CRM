@@ -9,14 +9,37 @@ interface PopoverLayoutProps {
   togglerClass?: string;
   placement?: Placement;
   menuClass?: string;
+  offset?: number;
+  shift?: boolean | number | any;
+  flip?: boolean | number | any;
+  portal?: boolean;
+  zIndex?: number | string;
 }
 
-const PopoverLayout = ({ children, toggler, togglerClass, placement, menuClass }: PopoverLayoutProps) => {
+const PopoverLayout = ({
+  children,
+  toggler,
+  togglerClass,
+  placement = 'bottom-end',
+  menuClass,
+  offset = 8,
+  shift = 16,
+  flip = true,
+  portal = true,
+  zIndex = 50,
+}: PopoverLayoutProps) => {
   return (
     <Popover className="relative">
       {({ open }) => (
         <>
-          <Float placement={placement}>
+          <Float
+            placement={placement}
+            offset={offset}
+            shift={shift}
+            flip={flip}
+            portal={portal}
+            zIndex={zIndex}
+          >
             <Popover.Button className={togglerClass ?? ''}>
               {toggler}
             </Popover.Button>
@@ -37,7 +60,7 @@ const PopoverLayout = ({ children, toggler, togglerClass, placement, menuClass }
         </>
       )}
     </Popover>
-  )
-}
+  );
+};
 
 export default PopoverLayout
