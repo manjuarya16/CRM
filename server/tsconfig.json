@@ -7,14 +7,14 @@
     "baseUrl": ".",
     "paths": {
       "@src/*": [
-        "src/*",
-        "dist/*"
+        "src/*"
       ],
       "@/*": [
-        "src/*",
-        "dist/*"
+        "src/*"
       ]
     },
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "types": [
