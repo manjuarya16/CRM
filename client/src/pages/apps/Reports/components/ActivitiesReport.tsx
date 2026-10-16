@@ -88,6 +88,9 @@ export const ActivitiesReport: React.FC<ActivitiesReportProps> = ({
     Meeting: '#10b981',
     Task: '#f59e0b',
     Email: '#8b5cf6',
+    Lunch: '#ec4899',
+    Note: '#6b7280',
+    File: '#06b6d4',
   };
 
   const typeDonutItems = useMemo(() => {

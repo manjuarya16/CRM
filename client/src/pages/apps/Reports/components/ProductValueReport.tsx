@@ -25,7 +25,7 @@ interface ProductValueReportProps {
   filterState: IReportFilterState;
   onFilterChange: (updates: Partial<IReportFilterState>) => void;
   onClearFilters: () => void;
-  onSelectProduct?: (productId: string) => void;
+  onSelectProduct?: (productName: string) => void;
 }
 
 export const ProductValueReport: React.FC<ProductValueReportProps> = ({
@@ -126,7 +126,7 @@ export const ProductValueReport: React.FC<ProductValueReportProps> = ({
         render: (item) => (
           <button
             type="button"
-            onClick={() => onSelectProduct && onSelectProduct(String(item.product_id))}
+            onClick={() => onSelectProduct && onSelectProduct(item.product_name)}
             className="text-[#0e90d9] hover:underline font-semibold text-left max-w-[200px] truncate block"
             title={item.product_name}
           >
@@ -142,6 +142,24 @@ export const ProductValueReport: React.FC<ProductValueReportProps> = ({
             {item.sku || '—'}
           </span>
         ),
+      },
+      {
+        key: 'product_type',
+        header: 'Type',
+        render: (item) => {
+          const isService = item.product_type?.toLowerCase() === 'service';
+          return (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                isService
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300'
+                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+              }`}
+            >
+              <span>{isService ? '⚡ Service' : '📦 Product'}</span>
+            </span>
+          );
+        },
       },
       {
         key: 'open_leads_count',

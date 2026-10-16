@@ -1304,6 +1304,7 @@ const getPersonEmail = (person: any): string => {
                               >
                                 <option value="call">Call</option>
                                 <option value="meeting">Meeting</option>
+                                <option value="task">Task</option>
                                 <option value="lunch">Lunch</option>
                               </select>
                             </div>

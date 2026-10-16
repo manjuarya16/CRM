@@ -600,6 +600,7 @@ const ViewUserPage: React.FC = () => {
                     >
                       <option value="Call">Call</option>
                       <option value="Meeting">Meeting</option>
+                      <option value="Task">Task</option>
                       <option value="Lunch">Lunch</option>
                     </select>
                   </div>

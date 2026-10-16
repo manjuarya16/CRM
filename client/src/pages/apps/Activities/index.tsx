@@ -23,6 +23,9 @@ const TYPE_BADGE: Record<string, string> = {
   meeting: "text-purple-700 bg-purple-50 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
   email: "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
   lunch: "text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+  task: "text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+  note: "text-slate-700 bg-slate-50 dark:bg-slate-950/50 dark:text-slate-300 border border-slate-200 dark:border-slate-800",
+  file: "text-cyan-700 bg-cyan-50 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800",
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -30,6 +33,9 @@ const TYPE_ICONS: Record<string, string> = {
   meeting: "mgc_calendar_line",
   email: "mgc_mail_line",
   lunch: "mgc_restaurant_line",
+  task: "mgc_checkbox_line",
+  note: "mgc_file_text_line",
+  file: "mgc_attachment_line",
 };
 
 const AVATAR_COLORS = [

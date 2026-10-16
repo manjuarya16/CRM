@@ -10,6 +10,14 @@ import {
   getPipelineReport,
   getActivitiesReport,
   getQuotesReport,
+  getSalesRepsReport,
+  getMarketingReport,
+  getAccountsReport,
+  getForecastReport,
+  getInventoryReport,
+  getWinLossReport,
+  getProductServiceMixReport,
+  getStaleLeadsReport,
 } from '@/services/report.service';
 
 const router = Router();
@@ -48,6 +56,38 @@ router.get('/activities', requireAuth, (req: Request, res: Response) => {
 
 router.get('/quotes', requireAuth, (req: Request, res: Response) => {
   getQuotesReport(req, res);
+});
+
+router.get('/sales-reps', requireAuth, (req: Request, res: Response) => {
+  getSalesRepsReport(req, res);
+});
+
+router.get('/marketing', requireAuth, (req: Request, res: Response) => {
+  getMarketingReport(req, res);
+});
+
+router.get('/accounts', requireAuth, (req: Request, res: Response) => {
+  getAccountsReport(req, res);
+});
+
+router.get('/forecast', requireAuth, (req: Request, res: Response) => {
+  getForecastReport(req, res);
+});
+
+router.get('/inventory', requireAuth, (req: Request, res: Response) => {
+  getInventoryReport(req, res);
+});
+
+router.get('/win-loss', requireAuth, (req: Request, res: Response) => {
+  getWinLossReport(req, res);
+});
+
+router.get('/product-service-mix', requireAuth, (req: Request, res: Response) => {
+  getProductServiceMixReport(req, res);
+});
+
+router.get('/stale-leads', requireAuth, (req: Request, res: Response) => {
+  getStaleLeadsReport(req, res);
 });
 
 export default router;
