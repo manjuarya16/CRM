@@ -15,7 +15,8 @@ export class ConfigService {
       let val = row.value;
       if (
         (row.code === 'general.general.admin_logo.logo_image' ||
-          row.code === 'general.general.admin_logo.favicon_image') &&
+          row.code === 'general.general.admin_logo.favicon_image' ||
+          row.code === 'general.general.admin_logo.collapsed_logo_image') &&
         val &&
         val.startsWith('/uploads/config/')
       ) {
@@ -29,6 +30,10 @@ export class ConfigService {
                 ? 'image/x-icon'
                 : ext === 'jpg' || ext === 'jpeg'
                 ? 'image/jpeg'
+                : ext === 'webp'
+                ? 'image/webp'
+                : ext === 'svg'
+                ? 'image/svg+xml'
                 : 'image/png';
             val = `data:${mime};base64,${buf.toString('base64')}`;
           } catch {
