@@ -27,6 +27,15 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
 
+  if ((err as any)?.type === 'entity.too.large' || (err as any)?.status === 413) {
+    res.status(413).json({
+      success: false,
+      message: 'Uploaded content or file is too large. Please upload an image under 20MB.',
+      error: 'Payload too large',
+    });
+    return;
+  }
+
   const pgErr = err as any;
   if (pgErr?.code === '23505') {
     const detail = pgErr.detail || '';

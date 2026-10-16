@@ -19,13 +19,12 @@ const SideBarContent = () => {
   const { user } = useAuthStore();
   const { roles, fetchRoles } = useRoleStore();
   const { userAccess, fetchUserAccess } = useAccessManagementStore();
-  const { configs, fetchConfigs } = useConfigStore();
+  const configs = useConfigStore((s) => s.configs);
+  const fetchConfigs = useConfigStore((s) => s.fetchConfigs);
 
   useEffect(() => {
-    if (Object.keys(configs).length === 0) {
-      fetchConfigs();
-    }
-  }, [configs, fetchConfigs]);
+    fetchConfigs();
+  }, [fetchConfigs]);
 
   useEffect(() => {
     if (user?.role_id && roles.length === 0) {
@@ -98,6 +97,15 @@ const SideBarContent = () => {
           if (!item.children) {
             const itemKeyLower = item.key.toLowerCase().trim();
             const singularKey = itemKeyLower.endsWith("s") ? itemKeyLower.slice(0, -1) : itemKeyLower;
+            if (itemKeyLower === "settings-organization" || itemKeyLower === "organization-profile") {
+              return (
+                allowedKeys?.has("organization") ||
+                allowedKeys?.has("organizations") ||
+                allowedKeys?.has("settings") ||
+                allowedKeys?.has(item.key) ||
+                false
+              );
+            }
             return allowedKeys?.has(item.key) || allowedKeys?.has(itemKeyLower) || allowedKeys?.has(singularKey) || false;
           }
           return true;

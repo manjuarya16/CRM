@@ -50,6 +50,9 @@ const CreateOrganizationPage = React.lazy(
 const EditOrganizationPage = React.lazy(
   () => import("../pages/apps/Contacts/Organizations/edit"),
 );
+const OrganizationProfilePage = React.lazy(
+  () => import("../pages/apps/Organization"),
+);
 const ProductsPage = React.lazy(() => import("../pages/apps/Products"));
 const CreateProductPage = React.lazy(() => import("../pages/apps/Products/create"));
 const EditProductPage = React.lazy(() => import("../pages/apps/Products/edit"));
@@ -61,6 +64,12 @@ const MailPage = React.lazy(() => import("../pages/apps/Mail"));
 const MailViewPage = React.lazy(() => import("../pages/apps/Mail/view"));
 const SettingsHubPage = React.lazy(() => import("../pages/apps/Settings"));
 const UsersPage = React.lazy(() => import("../pages/apps/Settings/Users"));
+const CreateUserPage = React.lazy(
+  () => import("../pages/apps/Settings/Users/create"),
+);
+const EditUserPage = React.lazy(
+  () => import("../pages/apps/Settings/Users/edit"),
+);
 const ViewUserPage = React.lazy(
   () => import("../pages/apps/Settings/Users/view"),
 );
@@ -385,6 +394,16 @@ const authProtectedRoutes: RoutesProps[] = [
     element: <EditOrganizationPage />,
   },
   {
+    path: "/organization",
+    name: "Organization Profile",
+    element: <OrganizationProfilePage />,
+  },
+  {
+    path: "/settings/organization",
+    name: "Organization Settings",
+    element: <OrganizationProfilePage />,
+  },
+  {
     path: "/products",
     name: "Products",
     element: <ProductsPage />,
@@ -424,12 +443,17 @@ const authProtectedRoutes: RoutesProps[] = [
   {
     path: "/settings/users/create",
     name: "Create User",
-    element: <UsersPage />,
+    element: <CreateUserPage />,
   },
   {
     path: "/settings/users/edit/:id",
     name: "Edit User",
-    element: <UsersPage />,
+    element: <EditUserPage />,
+  },
+  {
+    path: "/settings/users/:id/edit",
+    name: "Edit User",
+    element: <EditUserPage />,
   },
   {
     path: "/settings/users/view/:id",

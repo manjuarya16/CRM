@@ -391,6 +391,11 @@ const ConfigurationPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 20 * 1024 * 1024) {
+      setStatusMessage({ type: "error", text: "Selected file is too large. Please select an image under 20MB." });
+      return;
+    }
+
     if (fieldKey === "general.general.admin_logo.logo_image") {
       setUploadingLogo(true);
     } else {

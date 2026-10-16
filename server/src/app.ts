@@ -57,13 +57,13 @@ export function createApp(): express.Express {
       ],
     })
   );
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(
     pinoHttp({
       logger,
-      customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
-      customErrorMessage: (req, res, err) => `${req.method} ${req.url} ${res.statusCode} - ${err?.message || 'Error'}`,
+      customSuccessMessage: (req, res) => `${req.method} ${(req as any).originalUrl || req.url} ${res.statusCode}`,
+      customErrorMessage: (req, res, err) => `${req.method} ${(req as any).originalUrl || req.url} ${res.statusCode} - ${err?.message || 'Error'}`,
       serializers: {
         req: () => undefined,
         res: () => undefined,

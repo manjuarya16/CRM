@@ -74,27 +74,51 @@ export const applyConfigEffects = (configs: Record<string, any>) => {
   }
 };
 
+let inFlightFetchPromise: Promise<Record<string, any>> | null = null;
+let lastFetchedTime = 0;
+const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+
 export const useConfigStore = create<ConfigState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       configs: {},
       loading: false,
+      hasFetched: false,
 
-  fetchConfigs: async () => {
-    set({ loading: true });
-    try {
-      const res = await API.get("/configuration");
-      const data = res.data?.data || res.data || {};
-      if (res.data?.success && data) {
-        applyConfigEffects(data);
-        set({ configs: data, loading: false });
-        return data;
-      }
-    } catch (e) {
-      console.error("Failed to fetch configs", e);
+  fetchConfigs: async (force = false) => {
+    // Return cached configs if already fetched within TTL and force is false
+    if (!force && get().hasFetched && Date.now() - lastFetchedTime < CACHE_TTL_MS) {
+      return get().configs;
     }
-    set({ loading: false });
-    return {};
+
+    // Deduplicate concurrent requests: if a request is actively in-flight, return the shared promise
+    if (inFlightFetchPromise) {
+      return inFlightFetchPromise;
+    }
+
+    set({ loading: true });
+
+    inFlightFetchPromise = (async () => {
+      try {
+        const res = await API.get("/configuration");
+        const data = res.data?.data || res.data || {};
+        if (res.data?.success && data) {
+          applyConfigEffects(data);
+          lastFetchedTime = Date.now();
+          set({ configs: data, loading: false, hasFetched: true });
+          return data;
+        }
+      } catch (e) {
+        console.error("Failed to fetch configs", e);
+      } finally {
+        lastFetchedTime = Date.now();
+        set({ loading: false, hasFetched: true });
+        inFlightFetchPromise = null;
+      }
+      return get().configs || {};
+    })();
+
+    return inFlightFetchPromise;
   },
 
   saveConfigurations: async (settings: Record<string, any>) => {

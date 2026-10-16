@@ -19,6 +19,13 @@ const MENU_ITEMS: MenuItemTypes[] = [
     url: "/dashboard",
   },
   {
+    key: "organization-profile",
+    label: "Organization Profile",
+    isTitle: false,
+    icon: "mgc_building_2_line",
+    url: "/organization",
+  },
+  {
     key: "reports",
     label: "Reports",
     isTitle: false,
@@ -122,7 +129,7 @@ const MENU_ITEMS: MenuItemTypes[] = [
       },
       {
         key: "organizations",
-        label: "Organizations",
+        label: "Customer Organizations",
         url: "/contacts/organizations",
         parentKey: "contacts",
       },

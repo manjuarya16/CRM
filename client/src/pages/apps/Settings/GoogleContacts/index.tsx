@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { PageBreadcrumb } from "@/components";
+import { PageBreadcrumb, ViewModeSwitcher } from "@/components";
 import { IGoogleContactAccount, IContactExportBatch } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { useGoogleContactStore } from "@/store";
 
 const avatarColors = [
@@ -32,7 +33,7 @@ const GoogleContactsPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [batchSearch, setBatchSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
 
   const fetchAccountsAndBatches = async () => {
     try {
@@ -236,12 +237,12 @@ const GoogleContactsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <button
             onClick={fetchAccountsAndBatches}
             disabled={loading}
             title="Refresh data"
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors disabled:opacity-60 shrink-0 whitespace-nowrap"
           >
             <i className={`mgc_refresh_2_line text-base ${loading ? "animate-spin" : ""}`}></i>
             <span>Refresh</span>
@@ -251,7 +252,7 @@ const GoogleContactsPage: React.FC = () => {
             <button
               onClick={handleCreateExportBatch}
               disabled={exporting}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors disabled:opacity-60 shrink-0 whitespace-nowrap"
             >
               <i className={`mgc_upload_line text-base text-gray-500 ${exporting ? "animate-bounce" : ""}`}></i>
               <span>{exporting ? "Queuing Export..." : "Export CRM Contacts"}</span>
@@ -261,9 +262,9 @@ const GoogleContactsPage: React.FC = () => {
           {canCreate && (
             <button
               onClick={() => setIsConnectModalOpen(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-xs transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_google_line text-base sm:text-lg"></i>
+              <i className="mgc_google_line text-base"></i>
               <span>Connect Google Account</span>
             </button>
           )}
@@ -470,35 +471,14 @@ const GoogleContactsPage: React.FC = () => {
               />
             </div>
 
-            {/* View Toggle Buttons like Leads */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                title="Cards View"
-                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                  viewMode === "cards"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                }`}
-              >
-                <i className="mgc_layout_grid_line text-base"></i>
-                <span className="hidden sm:inline text-xs font-bold">Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                title="Table View"
-                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                  viewMode === "table"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                }`}
-              >
-                <i className="mgc_list_check_line text-base"></i>
-                <span className="hidden sm:inline text-xs font-bold">Table</span>
-              </button>
-            </div>
+            {/* View Mode Switcher */}
+            <ViewModeSwitcher
+              viewMode={viewMode}
+              onViewModeChange={(m) => {
+                setHasUserToggled(true);
+                setViewMode(m);
+              }}
+            />
           </div>
         </div>
 

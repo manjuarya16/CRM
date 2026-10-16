@@ -18,16 +18,17 @@ const resolveLogoUrl = (logo: string | null): string | null => {
 const useAppLogo = () => {
   const { organization, getOrganization } = useOrganizationStore();
   const { userLoggedIn } = useAuthStore();
-  const { configs, fetchConfigs } = useConfigStore();
+  const configs = useConfigStore((s) => s.configs);
+  const fetchConfigs = useConfigStore((s) => s.fetchConfigs);
   const [publicBranding, setPublicBranding] = useState<{
     name: string | null;
     logo: string | null;
   }>({ name: null, logo: null });
 
-  // Always sync latest configs from server on mount & when login state changes
+  // Only sync configs from server once on mount or when login state changes
   useEffect(() => {
     fetchConfigs();
-  }, [fetchConfigs, userLoggedIn]);
+  }, [userLoggedIn]);
 
   useEffect(() => {
     if (userLoggedIn) {

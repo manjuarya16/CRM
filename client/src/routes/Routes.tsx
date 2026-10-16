@@ -36,7 +36,11 @@ const ModuleAccessWrapper = ({ element, moduleKey, ...props }: any) => {
 
 const AllRoutes = (props: RouteProps) => {
   const subdomain = getSubdomain();
-  const isSuperAdminAuthenticated = useSuperAdminStore((s) => s.isAuthenticated);
+  const superAdminToken = useSuperAdminStore((s) => s.token);
+  const isSuperAdminAuth = useSuperAdminStore((s) => s.isAuthenticated);
+  const isSuperAdminAuthenticated = Boolean(
+    isSuperAdminAuth && superAdminToken && !isTokenExpired(superAdminToken)
+  );
 
   // 1. Super Admin Subdomain (e.g. admin.localhost:5173 or admin.yourcrm.com)
   if (subdomain.type === "admin") {

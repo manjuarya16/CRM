@@ -34,3 +34,4 @@ export {
 export * from './PaginationControls';
 export * from './TagPicker';
 export * from './QuickCreateModal';
+export * from './ViewModeSwitcher';

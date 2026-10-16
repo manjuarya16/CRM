@@ -1,0 +1,13 @@
+{
+  "name": "crm-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix client start",
+    "dev": "npm --prefix client run dev",
+    "start:client": "npm --prefix client start",
+    "start:server": "npm --prefix server start",
+    "dev:server": "npm --prefix server run dev",
+    "build": "npm --prefix client run build && npm --prefix server run build"
+  }
+}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { SuperAdminService } from '@/services/superAdmin.service';
 import { requireSuperAdmin } from '@/middleware/superAdminAuth';
+import { getTenantProfile } from '@/routes/tenant.routes';
 
 const router = Router();
 
@@ -37,7 +38,29 @@ router.get('/tenants', requireSuperAdmin, async (_req, res, next) => {
 // Protected: Create new Tenant Organization
 router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
   try {
-    const { name, slug, plan, admin_name, admin_email, admin_password } = req.body;
+    const {
+      name,
+      slug,
+      plan,
+      admin_name,
+      admin_email,
+      admin_password,
+      registration_no,
+      email,
+      phone,
+      website,
+      established_date,
+      currency,
+      timezone,
+      logo_url,
+      street,
+      city,
+      state,
+      country,
+      pincode,
+      address,
+    } = req.body;
+
     if (!name || !slug || !admin_name || !admin_email || !admin_password) {
       res.status(400).json({
         success: false,
@@ -53,9 +76,55 @@ router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
       admin_name,
       admin_email,
       admin_password,
+      registration_no,
+      email,
+      phone,
+      website,
+      established_date,
+      currency,
+      timezone,
+      logo_url,
+      street,
+      city,
+      state,
+      country,
+      pincode,
+      address,
     });
 
     res.status(201).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Protected: Get single Tenant Organization full details
+router.get('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const profile = await getTenantProfile(id);
+    if (!profile) {
+      res.status(404).json({ success: false, message: 'Tenant organization not found' });
+      return;
+    }
+    res.json({ success: true, data: profile });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Protected: Update existing Tenant Organization
+router.put('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await SuperAdminService.updateTenant(id, req.body);
+    const updatedProfile = await getTenantProfile(id);
+    res.json({
+      success: true,
+      message: 'Organization updated successfully',
+      tenant: result,
+      data: updatedProfile,
+    });
   } catch (err) {
     next(err);
   }

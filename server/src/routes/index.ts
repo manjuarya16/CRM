@@ -32,6 +32,7 @@ import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
 import superAdminRoutes from '@/routes/superAdmin.routes';
 import tenantPublicRoutes from '@/routes/tenantPublic.routes';
+import tenantRoutes from '@/routes/tenant.routes';
 import { resolveTenant } from '@/middleware/tenant.middleware';
 import reportRoutes from '@/routes/report.routes';
 
@@ -62,6 +63,8 @@ router.use('/realtimes', realtimeRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/dashboards', dashboardRoutes);
 router.use('/auth', authRoutes);
+router.use('/tenant', tenantRoutes);
+router.use('/tenants', tenantRoutes);
 router.use('/organizations', organizationRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/quotes', quoteRoutes);
