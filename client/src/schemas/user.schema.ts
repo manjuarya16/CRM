@@ -12,7 +12,7 @@ export const userFormSchema = z
       .or(z.literal("")),
     confirm_password: z.string().optional().or(z.literal("")),
     status: z.boolean().default(true),
-    view_permission: z.enum(["global", "group", "individual"]).default("global"),
+    view_permission: z.string().optional().default("global"),
     role_id: z.coerce.number().min(1, "Role is required"),
     group_ids: z.array(z.coerce.number()).optional(),
   })

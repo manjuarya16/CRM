@@ -5,6 +5,8 @@ import { useQuoteStore, useMailStore } from "@/store";
 import { IQuote, IQuoteItem } from "@/interface";
 import { API } from "@/config";
 import { usePermission } from "@/hooks/usePermission";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
+import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const formatAmount = (val?: number | string | null) => {
   const num = Number(val || 0);
@@ -87,7 +89,7 @@ const QuotesPage: React.FC = () => {
   const [search, setSearch] = useState<string>("");
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expiring" | "expired">("all");
 
   // Expandable row state for separate product entries
@@ -486,34 +488,13 @@ const QuotesPage: React.FC = () => {
                 <span className="sm:hidden">{allExpanded ? "Collapse" : "Expand"}</span>
               </button>
 
-              <div className="inline-flex p-1 bg-gray-100/80 dark:bg-gray-900/60 rounded-xl border border-gray-200/60 dark:border-gray-700/60">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
-                    viewMode === "table"
-                      ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm"
-                      : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                  }`}
-                  title="Table View"
-                >
-                  <i className="mgc_table_line text-base"></i>
-                  <span className="hidden sm:inline">Table</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("cards")}
-                  className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
-                    viewMode === "cards"
-                      ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm"
-                      : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                  }`}
-                  title="Grid Cards View"
-                >
-                  <i className="mgc_grid_2_line text-base"></i>
-                  <span className="hidden sm:inline">Cards</span>
-                </button>
-              </div>
+              <ViewModeSwitcher
+                viewMode={viewMode}
+                onViewModeChange={(m) => {
+                  setHasUserToggled(true);
+                  setViewMode(m);
+                }}
+              />
             </div>
           </div>
 
@@ -839,227 +820,9 @@ const QuotesPage: React.FC = () => {
             })}
           </div>
         ) : (
-          /* STREAMLINED TABLE VIEW WITH CRYSTAL-CLEAR MOBILE CARDS */
-          <>
-            {/* 📱 MOBILE CARDS (Unmistakable Start & End Boundaries with 16px Gaps) */}
-            <div className="block md:hidden p-3.5 sm:p-4 space-y-5 bg-gray-100/70 dark:bg-gray-900/50">
-              {displayedQuotes.map((quote) => {
-                const statusInfo = getQuoteStatus(quote.expired_at);
-                const avatarCls = getAvatarColor(quote.person_name);
-                const isExpanded = !!expandedQuoteIds[quote.id];
-                const items = getItemsForQuote(quote);
-                const loadingItems = !!loadingItemsMap[quote.id];
-
-                return (
-                  <div
-                    key={quote.id}
-                    className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-200/90 dark:border-gray-700 shadow-md overflow-hidden transition-all"
-                  >
-                    {/* 🟢 CARD START: Distinct Header Banner */}
-                    <div className="bg-slate-50 dark:bg-slate-900/80 px-4 py-3 border-b-2 border-gray-100 dark:border-gray-700/80 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-[#0088cc] text-white shadow-2xs">
-                          #QT-{quote.id}
-                        </span>
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusInfo.badgeClass}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dotClass}`}></span>
-                          <span>{statusInfo.label}</span>
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 inline-block shadow-2xs">
-                          {formatAmount(quote.grand_total)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 📄 CARD BODY */}
-                    <div className="p-4 space-y-3.5">
-                      {/* Subject */}
-                      <div>
-                        <h3 className="font-bold text-base text-gray-900 dark:text-gray-100 break-words line-clamp-2">
-                          <Link to={`/quotes/edit/${quote.id}`} className="hover:text-[#0088cc] transition-colors">
-                            {quote.subject}
-                          </Link>
-                        </h3>
-                        <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
-                          <i className="mgc_calendar_line text-xs"></i>
-                          <span>Created {quote.created_at ? new Date(quote.created_at).toLocaleDateString() : "Recently"}</span>
-                        </p>
-                      </div>
-
-                      {/* Customer & Rep Details */}
-                      <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                        <div className="space-y-0.5 min-w-0">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">Customer</span>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <div
-                              className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] border ${avatarCls} shrink-0`}
-                            >
-                              {getInitials(quote.person_name)}
-                            </div>
-                            <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">
-                              {quote.person_name || "—"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="space-y-0.5 min-w-0">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">Sales Rep</span>
-                          <p className="font-medium text-gray-700 dark:text-gray-300 truncate flex items-center gap-1">
-                            <i className="mgc_user_star_line text-xs text-amber-500 shrink-0"></i>
-                            <span className="truncate">{quote.user_name || "Admin"}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Subtotal & Expiry */}
-                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 px-0.5">
-                        <div className="flex items-center gap-2">
-                          <span>Subtotal: <strong className="text-gray-700 dark:text-gray-300">{formatAmount(quote.sub_total)}</strong></span>
-                          {Number(quote.discount_amount) > 0 && (
-                            <span className="text-rose-500 font-semibold">-{formatAmount(quote.discount_amount)}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 font-medium text-[11px]">
-                          <i className="mgc_time_line text-xs"></i>
-                          <span>{statusInfo.daysText}</span>
-                        </div>
-                      </div>
-
-                      {/* Separate Line Items Accordion */}
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandQuote(quote.id)}
-                          className={`w-full py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition ${
-                            isExpanded
-                              ? "bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800 text-[#0088cc]"
-                              : "bg-gray-50 dark:bg-gray-900/50 border-gray-200/80 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100"
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <i className="mgc_box_line text-sm text-[#0088cc]"></i>
-                            <span>Separate Product Line Entries</span>
-                            {items.length > 0 && (
-                              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-[#0088cc]/10 text-[#0088cc] font-bold">
-                                {items.length}
-                              </span>
-                            )}
-                          </span>
-                          <i
-                            className={`mgc_down_line text-xs transition-transform duration-200 ${
-                              isExpanded ? "rotate-180 text-[#0088cc]" : "text-gray-400"
-                            }`}
-                          ></i>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="mt-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-800 space-y-2 animate-in fade-in">
-                            {loadingItems ? (
-                              <div className="py-2 text-center text-xs text-gray-400 flex items-center justify-center gap-1.5">
-                                <div className="w-3.5 h-3.5 border-2 border-[#0088cc] border-t-transparent rounded-full animate-spin"></div>
-                                <span>Loading items...</span>
-                              </div>
-                            ) : items.length === 0 ? (
-                              <p className="text-xs text-gray-400 italic text-center py-1">
-                                No separate line items registered.
-                              </p>
-                            ) : (
-                              items.map((item, idx) => (
-                                <div
-                                  key={item.id || idx}
-                                  className="p-2.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700 text-xs space-y-1 shadow-2xs"
-                                >
-                                  <div className="flex items-start justify-between gap-1">
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                        {item.name || `Item ${idx + 1}`}
-                                      </p>
-                                      {item.sku && (
-                                        <span className="text-[10px] font-mono text-gray-400">
-                                          SKU: {item.sku}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="font-bold text-gray-900 dark:text-white shrink-0">
-                                      {formatAmount(
-                                        item.total || Number(item.quantity || 1) * Number(item.price || 0)
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-100 dark:border-gray-700/60">
-                                    <span>
-                                      {item.quantity}x @ {formatAmount(item.price)}
-                                    </span>
-                                    {Number(item.discount_amount || 0) > 0 && (
-                                      <span className="text-rose-500">-{formatAmount(item.discount_amount)}</span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 🔴 CARD END: Actions Toolbar (No text truncation) */}
-                    <div className="bg-slate-50/90 dark:bg-slate-900/60 p-3 sm:px-4 sm:py-2.5 border-t-2 border-gray-100 dark:border-gray-700/80">
-                      <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenPrintPreview(quote)}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-red-50/50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-800/50 hover:text-red-600 dark:hover:text-red-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
-                          title="Download / Print PDF"
-                        >
-                          <i className="mgc_pdf_line text-red-500 text-sm shrink-0"></i>
-                          <span>View PDF</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSendEmail(quote)}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800/50 hover:text-emerald-600 dark:hover:text-emerald-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
-                          title="Send Quote to Email"
-                        >
-                          <i className="mgc_send_line text-emerald-600 text-sm shrink-0"></i>
-                          <span>Send Email</span>
-                        </button>
-
-                        {canEdit && (
-                          <Link
-                            to={`/quotes/edit/${quote.id}`}
-                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-sky-50/50 dark:hover:bg-sky-950/20 hover:border-sky-200 dark:hover:border-sky-800/50 hover:text-[#0088cc] dark:hover:text-sky-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
-                            title="Edit Quote"
-                          >
-                            <i className="mgc_edit_line text-[#0088cc] text-sm shrink-0"></i>
-                            <span>Edit Quote</span>
-                          </Link>
-                        )}
-
-                        {canDelete && (
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(quote)}
-                            className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-rose-50/50 dark:hover:bg-rose-950/20 hover:border-rose-200 dark:hover:border-rose-800/50 hover:text-rose-600 dark:hover:text-rose-400 active:scale-95 transition shadow-2xs whitespace-nowrap"
-                            title="Delete Quote"
-                          >
-                            <i className="mgc_delete_line text-rose-500 text-sm shrink-0"></i>
-                            <span>Delete</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 💻 DESKTOP TABLE VIEW (>= md screens) with Expandable Separate Entries */}
-            <div className="hidden md:block overflow-x-auto no-scrollbar scroll-smooth">
-              <table className="w-full text-left border-collapse text-sm">
+          /* TABLE VIEW */
+          <div className="overflow-x-auto no-scrollbar scroll-smooth">
+            <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/60 border-b border-gray-200/80 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-semibold">
                     <th className="py-3 px-3 w-10 text-center">
@@ -1344,7 +1107,6 @@ const QuotesPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </>
         )}
 
         {/* Pagination Toolbar */}

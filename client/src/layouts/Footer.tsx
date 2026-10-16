@@ -2,13 +2,12 @@ import { useEffect } from "react";
 import { useConfigStore } from "../store";
 
 const Footer = () => {
-  const { configs, fetchConfigs } = useConfigStore();
+  const configs = useConfigStore((s) => s.configs);
+  const fetchConfigs = useConfigStore((s) => s.fetchConfigs);
 
   useEffect(() => {
-    if (Object.keys(configs).length === 0) {
-      fetchConfigs();
-    }
-  }, [configs, fetchConfigs]);
+    fetchConfigs();
+  }, [fetchConfigs]);
 
   const showFooter = String(configs["general.settings.footer.show"] ?? "1") === "1";
   const footerLabel = configs["general.settings.footer.label"];

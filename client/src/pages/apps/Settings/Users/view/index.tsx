@@ -237,10 +237,7 @@ const ViewUserPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to="/settings/users"
-            onClick={() => {
-              // Trigger edit modal when returning or navigate
-            }}
+            to={`/settings/users/edit/${selectedUser.id}`}
             className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             Edit User

@@ -446,6 +446,55 @@ function getValueForTag(key: string, context: Record<string, any>): string {
       return typeof quote.shipping_address === 'object'
         ? JSON.stringify(quote.shipping_address)
         : quote.shipping_address || '';
+    case 'quote.products':
+    case 'quotes.products':
+    case 'quote.items':
+    case 'quotes.items':
+    case 'quote.product_details':
+    case 'quotes.product_details':
+    case 'quote.items_table':
+    case 'quotes.items_table': {
+      const items = Array.isArray(quote.items) ? quote.items : [];
+      if (items.length === 0) {
+        return '<p style="color: #64748b; font-size: 13px; font-style: italic; margin: 12px 0;">No products itemized.</p>';
+      }
+      const rows = items
+        .map((it: any) => {
+          const name = it.name || 'Product';
+          const sku = it.sku ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">SKU: ${it.sku}</div>` : '';
+          const qty = it.quantity || 1;
+          const price = it.price != null ? `₹${Number(it.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '';
+          const total = it.total != null ? `₹${Number(it.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : (it.price != null ? `₹${(qty * Number(it.price)).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '');
+          return `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 10px 12px; font-size: 13px; color: #0f172a; font-weight: 500;">
+                ${name}
+                ${sku}
+              </td>
+              <td style="padding: 10px 12px; font-size: 13px; text-align: center; color: #334155;">${qty}</td>
+              <td style="padding: 10px 12px; font-size: 13px; text-align: right; color: #334155;">${price}</td>
+              <td style="padding: 10px 12px; font-size: 13px; text-align: right; font-weight: 600; color: #0f172a;">${total}</td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      return `
+        <table style="width: 100%; border-collapse: collapse; margin: 14px 0; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+          <thead>
+            <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+              <th style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">Product / Item</th>
+              <th style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #475569; text-align: center; text-transform: uppercase;">Qty</th>
+              <th style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #475569; text-align: right; text-transform: uppercase;">Unit Price</th>
+              <th style="padding: 10px 12px; font-size: 12px; font-weight: 700; color: #475569; text-align: right; text-transform: uppercase;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `;
+    }
 
     // ── Product / Products ───────────────────────────────────────────────────
     case 'product.name':

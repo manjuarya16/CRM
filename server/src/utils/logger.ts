@@ -2,7 +2,7 @@ import pino from 'pino';
 import { env } from '../config/env';
 
 export const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: env.NODE_ENV === 'production' ? 'info' : (process.env.LOG_LEVEL || 'info'),
   transport:
     env.NODE_ENV === 'production'
       ? undefined

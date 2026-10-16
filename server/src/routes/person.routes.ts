@@ -3,10 +3,11 @@ import { PersonService } from '@/services/person.service';
 import { personSchema } from '@/schemas/person.schema';
 import { ApiError } from '@/middleware/errorHandler';
 import { processWorkflowsForEvent } from '@/services/workflowEngine';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
 
-router.get('/', async (req, res, next) => {
+router.get('/', requireAuth, async (req, res, next) => {
   try {
     const page = req.query.page ? Number(req.query.page) : 1;
     const limitParam = req.query.per_page || req.query.limit;
@@ -20,7 +21,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/check-duplicate', async (req, res, next) => {
+router.get('/check-duplicate', requireAuth, async (req, res, next) => {
   try {
     const email = req.query.email ? String(req.query.email).trim() : undefined;
     const phone = req.query.phone ? String(req.query.phone).trim() : undefined;
@@ -33,7 +34,7 @@ router.get('/check-duplicate', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const person = await PersonService.getById(String(req.params.id));
     if (!person) {
@@ -45,7 +46,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   try {
     const validated = personSchema.parse(req.body);
     const person = await PersonService.save(validated);
@@ -58,7 +59,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', requireAuth, async (req, res, next) => {
   try {
     const validated = personSchema.parse(req.body);
     const person = await PersonService.save(validated, String(req.params.id));
@@ -71,7 +72,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/all', async (req, res, next) => {
+router.delete('/all', requireAuth, async (req, res, next) => {
   try {
     const count = await PersonService.deleteAll();
     res.json({ success: true, message: `${count} persons deleted successfully` });
@@ -80,7 +81,7 @@ router.delete('/all', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
     const deleted = await PersonService.delete(String(req.params.id));
     if (!deleted) {

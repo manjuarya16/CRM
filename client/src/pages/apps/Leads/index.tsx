@@ -6,6 +6,7 @@ import { ILead, ILeadStage } from "@/interface";
 import { getRottenInfo } from "@/utils/rottenHelper";
 import API from "@/config";
 import { usePermission } from "@/hooks/usePermission";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { realtimeService } from "@/services/realtimeService";
 
 interface LeadStageDropdownProps {
@@ -130,7 +131,7 @@ const LeadsPage: React.FC = () => {
     deleteLead, deleteBulkLeads, updateLeadStage
   } = useLeadStore();
 
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode<"kanban" | "table">(768, "kanban", "kanban");
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | "">("");
   const [search, setSearch] = useState<string>("");
   const [onlyRotten, setOnlyRotten] = useState<boolean>(false);
@@ -579,26 +580,32 @@ const LeadsPage: React.FC = () => {
           {/* View Toggle Buttons */}
           <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
             <button
-              onClick={() => setViewMode("kanban")}
-              title="Kanban Board View"
+              onClick={() => {
+                setHasUserToggled(true);
+                setViewMode("kanban");
+              }}
+              title="Cards View"
               className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "kanban"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
                 }`}
             >
-              <i className="mgc_layout_grid_line text-base"></i>
-              <span className="hidden sm:inline text-xs">Kanban</span>
+              <i className="mgc_grid_2_line text-base"></i>
+              <span className="hidden sm:inline text-xs font-bold">Cards</span>
             </button>
             <button
-              onClick={() => setViewMode("table")}
-              title="Table Grid View"
+              onClick={() => {
+                setHasUserToggled(true);
+                setViewMode("table");
+              }}
+              title="Table View"
               className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "table"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
                 }`}
             >
-              <i className="mgc_list_check_line text-base"></i>
-              <span className="hidden sm:inline text-xs">Table</span>
+              <i className="mgc_table_line text-base"></i>
+              <span className="hidden sm:inline text-xs font-bold">Table</span>
             </button>
           </div>
         </div>

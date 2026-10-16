@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
@@ -463,16 +463,90 @@ const EditLeadPage: React.FC = () => {
     return runningTotal + itemQuantity * itemPrice;
   }, 0);
 
-  const filteredPersons = persons.filter((person) => {
-    if (!personSearch) return true;
-    if (personId && personSearch === (persons.find((item) => String(item.id) === String(personId))?.name || "")) return true;
-    const query = personSearch.toLowerCase().trim();
-    const name = (person.name || "").toLowerCase();
-    const email = getPersonEmail(person).toLowerCase();
-    const phone = getPersonPhone(person).toLowerCase();
-    const organizationName = getPersonOrg(person, organizations).toLowerCase();
-    return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
-  });
+  const uniqueSources = useMemo(() => {
+    const seen = new Set<string>();
+    return (sources || []).filter((s) => {
+      const nameKey = (s.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(s.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(s.id));
+      return true;
+    });
+  }, [sources]);
+
+  const uniqueTypes = useMemo(() => {
+    const seen = new Set<string>();
+    return (types || []).filter((t) => {
+      const nameKey = (t.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(t.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(t.id));
+      return true;
+    });
+  }, [types]);
+
+  const uniquePipelines = useMemo(() => {
+    const seen = new Set<string>();
+    return (pipelines || []).filter((p) => {
+      const nameKey = (p.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(p.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(p.id));
+      return true;
+    });
+  }, [pipelines]);
+
+  const uniqueStages = useMemo(() => {
+    const seen = new Set<string>();
+    return (stages || []).filter((st) => {
+      const nameKey = (st.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(st.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(st.id));
+      return true;
+    });
+  }, [stages]);
+
+  const uniqueUsers = useMemo(() => {
+    const seen = new Set<string>();
+    return (users || []).filter((u) => {
+      const key = `${u.id}-${(u.email || u.name || "").trim().toLowerCase()}`;
+      if (seen.has(key) || seen.has(String(u.id))) return false;
+      seen.add(key);
+      seen.add(String(u.id));
+      return true;
+    });
+  }, [users]);
+
+  const uniqueOrganizations = useMemo(() => {
+    const seen = new Set<string>();
+    return (organizations || []).filter((o) => {
+      const nameKey = (o.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(o.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(o.id));
+      return true;
+    });
+  }, [organizations]);
+
+  const filteredPersons = useMemo(() => {
+    const seen = new Set<string>();
+    return (persons || []).filter((person) => {
+      if (!person) return false;
+      const key = String(person.id || person.name || "");
+      if (seen.has(key)) return false;
+      seen.add(key);
+
+      if (!personSearch) return true;
+      if (personId && personSearch === (persons.find((item) => String(item.id) === String(personId))?.name || "")) return true;
+      const query = personSearch.toLowerCase().trim();
+      const name = (person.name || "").toLowerCase();
+      const email = getPersonEmail(person).toLowerCase();
+      const phone = getPersonPhone(person).toLowerCase();
+      const organizationName = getPersonOrg(person, organizations).toLowerCase();
+      return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
+    });
+  }, [persons, personSearch, personId, organizations]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -727,7 +801,7 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">-- Select Sales Owner --</option>
-                {users.map((u) => (
+                {uniqueUsers.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.email})
                   </option>
@@ -772,7 +846,7 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">Select Source</option>
-                {sources.map((s) => (
+                {uniqueSources.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
@@ -787,7 +861,7 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">Select Type</option>
-                {types.map((t) => (
+                {uniqueTypes.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
@@ -802,7 +876,7 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">Select Pipeline</option>
-                {pipelines.map((p) => (
+                {uniquePipelines.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
@@ -818,7 +892,7 @@ const EditLeadPage: React.FC = () => {
                 disabled={!details.lead_pipeline_id}
               >
                 <option value="">Select Stage</option>
-                {stages.map((st) => (
+                {uniqueStages.map((st) => (
                   <option key={st.id} value={st.id}>{st.name}</option>
                 ))}
               </select>
@@ -949,7 +1023,7 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">Click to add</option>
-                {organizations.map((o) => (
+                {uniqueOrganizations.map((o) => (
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
               </select>
@@ -1051,21 +1125,6 @@ const EditLeadPage: React.FC = () => {
               >
                 + Add More
               </button>
-            </div>
-
-            {/* Organization */}
-            <div>
-              <label className={labelCls}>Organization</label>
-              <select
-                value={organizationId}
-                onChange={(e) => setOrganizationId(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">Click to add</option>
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
             </div>
 
             {/* Organization Contacts List */}

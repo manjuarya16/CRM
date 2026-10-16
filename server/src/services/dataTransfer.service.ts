@@ -325,16 +325,20 @@ export const saveEntityAttributeValues = async (
   client: any,
   entityType: string,
   entityId: number,
-  customAttrs: Record<string, any>
+  customAttrs: Record<string, any>,
+  cachedAttrs?: any[]
 ): Promise<void> => {
   if (!customAttrs || typeof customAttrs !== 'object' || Object.keys(customAttrs).length === 0) return;
 
   try {
-    const { rows: attrResult } = await client.query(
-      'SELECT get_all_attributes(null, $1) AS data',
-      [entityType]
-    );
-    const dbAttrs: any[] = attrResult[0]?.data || [];
+    let dbAttrs: any[] = Array.isArray(cachedAttrs) && cachedAttrs.length > 0 ? cachedAttrs : [];
+    if (dbAttrs.length === 0) {
+      const { rows: attrResult } = await client.query(
+        'SELECT get_all_attributes($1, $2, $3, $4) AS data',
+        [null, entityType, null, null]
+      );
+      dbAttrs = attrResult[0]?.data || [];
+    }
 
     for (const [code, rawVal] of Object.entries(customAttrs)) {
       if (rawVal === undefined || rawVal === null || rawVal === '') continue;
@@ -407,6 +411,7 @@ export const saveEntityAttributeValues = async (
     }
   } catch (attrErr) {
     logger.warn({ attrErr, entityType, entityId }, 'Failed to save entity attribute_values');
+    throw attrErr;
   }
 };
 
@@ -859,9 +864,7 @@ export class DataTransferService {
         const row = rows[i];
         const savepointName = `sp_${i}`;
 
-        if (validationStrategy === 'skip_error_entries') {
-          await client.query(`SAVEPOINT ${savepointName}`);
-        }
+        await client.query(`SAVEPOINT ${savepointName}`);
 
         try {
           const rowCustomAttrs = extractCustomAttributes(row);
@@ -919,9 +922,7 @@ export class DataTransferService {
               }
               const leadId = existingLead.rows[0].id;
               await client.query('SELECT public.fn_delete_lead($1)', [leadId]);
-              if (validationStrategy === 'skip_error_entries') {
-                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
-              }
+              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
               processed++;
               continue;
             }
@@ -953,7 +954,7 @@ export class DataTransferService {
                   JSON.stringify(mergedAttrs),
                 ]
               );
-              await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs);
+              await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs, attrRows);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb) AS id',
@@ -976,7 +977,7 @@ export class DataTransferService {
               );
               const newLeadId = ins.rows[0]?.id;
               if (newLeadId) {
-                await saveEntityAttributeValues(client, 'leads', newLeadId, rowCustomAttrs);
+                await saveEntityAttributeValues(client, 'leads', newLeadId, rowCustomAttrs, attrRows);
               }
             }
           } else if (type === 'persons') {
@@ -1020,9 +1021,7 @@ export class DataTransferService {
               }
               const personId = existing.rows[0].id;
               await client.query('SELECT delete_person($1)', [personId]);
-              if (validationStrategy === 'skip_error_entries') {
-                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
-              }
+              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
               processed++;
               continue;
             }
@@ -1069,7 +1068,7 @@ export class DataTransferService {
                   JSON.stringify(mergedAttrs),
                 ]
               );
-              await saveEntityAttributeValues(client, 'persons', existingPerson.id, mergedAttrs);
+              await saveEntityAttributeValues(client, 'persons', existingPerson.id, mergedAttrs, attrRows);
             } else {
               const uniqueEmailsMap = new Map<string, string>();
               for (const e of newEmails) {
@@ -1102,7 +1101,7 @@ export class DataTransferService {
               );
               const newPersonId = ins.rows[0]?.id;
               if (newPersonId) {
-                await saveEntityAttributeValues(client, 'persons', newPersonId, rowCustomAttrs);
+                await saveEntityAttributeValues(client, 'persons', newPersonId, rowCustomAttrs, attrRows);
               }
             }
           } else if (type === 'organizations') {
@@ -1137,9 +1136,7 @@ export class DataTransferService {
               }
               const orgId = existingOrg.rows[0].id;
               await client.query('SELECT delete_organization($1)', [orgId]);
-              if (validationStrategy === 'skip_error_entries') {
-                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
-              }
+              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
               processed++;
               continue;
             }
@@ -1159,7 +1156,7 @@ export class DataTransferService {
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb)',
                 [existingOrg.rows[0].id, nameStr, JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs)]
               );
-              await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs);
+              await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs, attrRows);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb) AS id',
@@ -1167,7 +1164,7 @@ export class DataTransferService {
               );
               const newOrgId = ins.rows[0]?.id;
               if (newOrgId) {
-                await saveEntityAttributeValues(client, 'organizations', newOrgId, rowCustomAttrs);
+                await saveEntityAttributeValues(client, 'organizations', newOrgId, rowCustomAttrs, attrRows);
               }
             }
           } else if (type === 'products') {
@@ -1192,9 +1189,7 @@ export class DataTransferService {
               }
               const prodId = existingProd.rows[0].id;
               await client.query('SELECT public.fn_delete_product($1)', [prodId]);
-              if (validationStrategy === 'skip_error_entries') {
-                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
-              }
+              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
               processed++;
               continue;
             }
@@ -1211,7 +1206,7 @@ export class DataTransferService {
                 'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb)',
                 [existingProd.rows[0].id, skuStr, prodName, description, quantity, price, JSON.stringify(mergedAttrs)]
               );
-              await saveEntityAttributeValues(client, 'products', existingProd.rows[0].id, mergedAttrs);
+              await saveEntityAttributeValues(client, 'products', existingProd.rows[0].id, mergedAttrs, attrRows);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb) AS id',
@@ -1219,34 +1214,37 @@ export class DataTransferService {
               );
               const newProdId = ins.rows[0]?.id;
               if (newProdId) {
-                await saveEntityAttributeValues(client, 'products', newProdId, rowCustomAttrs);
+                await saveEntityAttributeValues(client, 'products', newProdId, rowCustomAttrs, attrRows);
               }
             }
           }
 
-          if (validationStrategy === 'skip_error_entries') {
-            await client.query(`RELEASE SAVEPOINT ${savepointName}`);
-          }
+          await client.query(`RELEASE SAVEPOINT ${savepointName}`);
           processed++;
         } catch (err: any) {
-          if (validationStrategy === 'skip_error_entries') {
+          try {
             await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+          } catch (rbErr) {
+            logger.warn({ rbErr, savepointName }, 'Failed to rollback to savepoint');
           }
           errorCount++;
           errorDetails.push({ row: i + 1, error: err.message, data: row });
 
-          if (validationStrategy === 'stop_on_errors' && errorCount > allowedErrors) {
-            aborted = true;
-            break;
-          }
-          if (validationStrategy === 'skip_error_entries' && allowedErrors > 0 && errorCount > allowedErrors) {
-            aborted = true;
-            break;
+          if (validationStrategy === 'stop_on_errors') {
+            if (allowedErrors === 0 || errorCount > allowedErrors) {
+              aborted = true;
+              break;
+            }
+          } else if (validationStrategy === 'skip_error_entries') {
+            if (allowedErrors > 0 && errorCount > allowedErrors) {
+              aborted = true;
+              break;
+            }
           }
         }
       }
 
-      if (aborted && validationStrategy === 'stop_on_errors') {
+      if (aborted) {
         // Rollback all changes so no partial corrupted data is committed
         await client.query('ROLLBACK');
         processed = 0;

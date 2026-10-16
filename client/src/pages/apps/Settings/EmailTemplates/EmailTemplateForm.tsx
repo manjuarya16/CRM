@@ -13,6 +13,10 @@ const PLACEHOLDERS = [
   { label: "Lead Value", tag: "{%lead.lead_value%}" },
   { label: "Contact Name", tag: "{%person.name%}" },
   { label: "Contact Email", tag: "{%person.email%}" },
+  { label: "Quote Subject", tag: "{%quote.subject%}" },
+  { label: "Quote Grand Total", tag: "{%quote.grand_total%}" },
+  { label: "Quote Products Table", tag: "{%quote.products%}" },
+  { label: "Organization Name", tag: "{%organization.name%}" },
   { label: "User Name", tag: "{%user.name%}" },
   { label: "User Email", tag: "{%user.email%}" },
 ];

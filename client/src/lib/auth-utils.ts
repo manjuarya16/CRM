@@ -49,6 +49,31 @@ export const getToken = (): string | null => {
   );
 };
 
+export const getSuperAdminToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  // 1. Try sessionStorage first
+  const sessionToken = sessionStorage.getItem("super_admin_token");
+  if (sessionToken && !isTokenExpired(sessionToken)) {
+    return sessionToken;
+  }
+
+  // 2. Try saas_super_admin_session from localStorage
+  try {
+    const raw = localStorage.getItem("saas_super_admin_session");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const token = parsed?.state?.token ?? parsed?.token ?? null;
+    if (token && !isTokenExpired(token)) {
+      return token;
+    }
+  } catch (error) {
+    console.warn("Failed to read saas_super_admin_session token", error);
+  }
+
+  return null;
+};
+
+
 // Decode JWT payload (browser-only). Returns null on failure.
 export const parseJwt = (token: string): any | null => {
   try {

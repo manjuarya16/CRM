@@ -5,6 +5,8 @@ import { useActivityStore } from "@/store";
 import { IActivity } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { stripHtmlToText } from "@/utils/formatters";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
+import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const fmtDateTime = (dt?: string) => {
   if (!dt) return "-";
@@ -65,7 +67,7 @@ const ActivitiesPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
 
   useEffect(() => {
     fetchActivities(page, perPage, search);
@@ -355,34 +357,13 @@ const ActivitiesPage: React.FC = () => {
           {/* Right side: View Mode, Per Page & Pagination controls */}
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  viewMode === "cards"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-                title="Cards View"
-              >
-                <i className="mgc_grid_2_line text-sm"></i>
-                <span className="hidden sm:inline">Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  viewMode === "table"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-                title="Table View"
-              >
-                <i className="mgc_table_line text-sm"></i>
-                <span className="hidden sm:inline">Table</span>
-              </button>
-            </div>
+            <ViewModeSwitcher
+              viewMode={viewMode}
+              onViewModeChange={(m) => {
+                setHasUserToggled(true);
+                setViewMode(m);
+              }}
+            />
 
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
@@ -450,16 +431,9 @@ const ActivitiesPage: React.FC = () => {
             {activities.map((act: IActivity, idx: number) => renderActivityCard(act, idx))}
           </div>
         ) : (
-          /* 📋 TABLE VIEW (With Full-Detail Mobile Cards Fallback) */
-          <>
-            {/* Mobile Fallback Cards for Table View */}
-            <div className="block md:hidden p-3 space-y-3">
-              {activities.map((act: IActivity, idx: number) => renderActivityCard(act, idx))}
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
+          /* 📋 TABLE VIEW */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">
                     <th className="py-3 px-4">
@@ -589,7 +563,6 @@ const ActivitiesPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </>
         )}
 
         {/* Bottom Pagination */}

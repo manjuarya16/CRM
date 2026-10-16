@@ -11,6 +11,8 @@ import { CRM_PERMISSION_GROUPS, ALL_CRM_PERMISSION_KEYS } from "@/constants/perm
 import { usePermission } from "@/hooks/usePermission";
 import { useAuthStore } from "@/store";
 import { buildHierarchicalRoleList } from "@/utils/roleHierarchy";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
+import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const RolesPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -26,7 +28,7 @@ const RolesPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [perPage, setPerPage] = useState<number>(10);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
 
   const AVATAR_COLORS = [
     "bg-blue-600 text-white",
@@ -648,30 +650,30 @@ const RolesPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_delete_line text-sm"></i>
+              <i className="mgc_delete_line text-base"></i>
               <span>Delete ({selectedIds.length})</span>
             </button>
           )}
           <button
             type="button"
             onClick={handleExport}
-            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
           >
-            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
+            <i className="mgc_download_line text-base text-gray-500 dark:text-gray-400"></i>
             <span>Export</span>
           </button>
           {canCreate && (
             <Link
               to="/settings/roles/create"
-              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_add_line text-sm"></i>
+              <i className="mgc_add_line text-base"></i>
               <span>Create Role</span>
             </Link>
           )}
@@ -700,34 +702,13 @@ const RolesPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  viewMode === "cards"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-                title="Cards View"
-              >
-                <i className="mgc_grid_2_line text-sm"></i>
-                <span className="hidden sm:inline">Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  viewMode === "table"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-                title="Table View"
-              >
-                <i className="mgc_table_line text-sm"></i>
-                <span className="hidden sm:inline">Table</span>
-              </button>
-            </div>
+            <ViewModeSwitcher
+              viewMode={viewMode}
+              onViewModeChange={(m) => {
+                setHasUserToggled(true);
+                setViewMode(m);
+              }}
+            />
 
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
@@ -1179,15 +1160,8 @@ const RolesPage: React.FC = () => {
                     placeholder="Brief description of this role's duties"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none ${
-                      errors.description
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 focus:border-[#0088cc] rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none"
                   />
-                  {errors.description && (
-                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.description}</p>
-                  )}
                 </div>
               </div>
 

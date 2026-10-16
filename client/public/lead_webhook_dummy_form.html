@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>External Lead Webhook Tester</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: #f1f5f9; margin: 0; padding: 32px 16px; display: flex; justify-content: center; }
+    .card { background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); width: 100%; max-width: 650px; padding: 32px; }
+    h2 { margin-top: 0; color: #0f172a; font-size: 24px; font-weight: 700; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+    p.subtitle { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 10px 14px; font-size: 14px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #f8fafc; transition: all 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; background-color: #ffffff; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+    .row { display: flex; gap: 16px; }
+    .col { flex: 1; }
+    button { width: 100%; padding: 12px 20px; font-size: 15px; font-weight: 600; color: #ffffff; background-color: #2563eb; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+    button:hover { background-color: #1d4ed8; }
+    button:disabled { background-color: #94a3b8; cursor: not-allowed; }
+    .btn-token { width: auto; padding: 6px 12px; font-size: 12px; background: #059669; border-radius: 4px; }
+    .btn-token:hover { background: #047857; }
+    .response-box { margin-top: 24px; border-radius: 8px; background: #0f172a; color: #f8fafc; padding: 16px; font-family: monospace; font-size: 13px; display: none; overflow-x: auto; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+    .badge-success { background: #16a34a; color: white; }
+    .badge-error { background: #dc2626; color: white; }
+    .auth-card { background: #ecfdf5; border: 1px dashed #10b981; padding: 14px 16px; border-radius: 8px; margin-bottom: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🚀 External Lead Submission Form</h2>
+    <p class="subtitle">Simulate sending a lead via Webhook / WebForm into CRM with Full Bearer Token Header</p>
+    
+    <form id="webhookForm">
+      <div class="form-group">
+        <label for="endpoint">Webhook Endpoint URL</label>
+        <input type="text" id="endpoint" value="http://localhost:3040/api/web-forms/submit/default" required />
+        <small style="color: #64748b; font-size: 11px; margin-top: 4px; display: block;">
+          Local Server Endpoint: <code>http://localhost:3040/api/web-forms/submit/default</code> or <code>http://localhost:3040/api/leads</code>
+        </small>
+      </div>
+
+      <div class="form-group auth-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label for="authToken" style="color: #047857; margin: 0;">🔑 Authorization Header (Bearer Token)</label>
+          <button type="button" id="genTokenBtn" class="btn-token">⚡ Auto-Fetch Full Token</button>
+        </div>
+        <input type="text" id="authToken" placeholder="Bearer eyJhbGciOiJIUzI1Ni..." value="" style="font-family: monospace; font-size: 12px;" />
+        <small style="color: #059669; font-size: 11px; margin-top: 4px; display: block;">
+          Click "Auto-Fetch Full Token" or manually paste your full <code>Bearer &lt;JWT_TOKEN&gt;</code> string.
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="title">Lead / Deal Title *</label>
+        <input type="text" id="title" value="Enterprise Software Inquiry" required />
+      </div>
+
+      <div class="row">
+        <div class="col form-group">
+          <label for="name">Contact Name *</label>
+          <input type="text" id="name" value="Sarah Connor" required />
+        </div>
+        <div class="col form-group">
+          <label for="email">Email Address *</label>
+          <input type="email" id="email" value="sarah.connor@example.com" required />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col form-group">
+          <label for="phone">Phone Number</label>
+          <input type="text" id="phone" value="+1 (555) 234-5678" />
+        </div>
+        <div class="col form-group">
+          <label for="value">Estimated Value ($)</label>
+          <input type="number" id="value" value="25000" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="message">Message / Requirements</label>
+        <textarea id="message" rows="3">Looking for full CRM deployment with webhooks integration.</textarea>
+      </div>
+
+      <button type="submit" id="submitBtn">Submit Lead via Webhook</button>
+    </form>
+
+    <div id="responseBox" class="response-box">
+      <div id="statusBadge" class="badge"></div>
+      <pre id="jsonOutput" style="margin: 0;"></pre>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('genTokenBtn').addEventListener('click', async () => {
+      const tokenInput = document.getElementById('authToken');
+      const btn = document.getElementById('genTokenBtn');
+      btn.innerText = 'Fetching...';
+      try {
+        const res = await fetch('http://localhost:3040/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'admin@example.com', password: 'password123' })
+        });
+        const data = await res.json();
+        if (data.token) {
+          tokenInput.value = `Bearer ${data.token}`;
+          btn.innerText = '✅ Full Token Loaded';
+        } else {
+          alert('Could not auto-login. Please paste token manually.');
+          btn.innerText = '⚡ Auto-Fetch Full Token';
+        }
+      } catch (e) {
+        alert('Failed to fetch token: ' + e.message);
+        btn.innerText = '⚡ Auto-Fetch Full Token';
+      }
+    });
+
+    document.getElementById('webhookForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const responseBox = document.getElementById('responseBox');
+      const statusBadge = document.getElementById('statusBadge');
+      const jsonOutput = document.getElementById('jsonOutput');
+
+      btn.disabled = true;
+      btn.innerText = 'Submitting...';
+      responseBox.style.display = 'block';
+      statusBadge.className = 'badge';
+      statusBadge.innerText = 'Sending Request...';
+      jsonOutput.innerText = 'Connecting to server...';
+
+      const endpoint = document.getElementById('endpoint').value.trim();
+      const authToken = document.getElementById('authToken').value.trim();
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+
+      if (authToken) {
+        headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
+      }
+
+      const payload = {
+        title: document.getElementById('title').value,
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        lead_value: Number(document.getElementById('value').value) || 0,
+        message: document.getElementById('message').value,
+        source: 'External Dummy Webhook Form',
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        const startTime = performance.now();
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload)
+        });
+        const duration = Math.round(performance.now() - startTime);
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          data = { text: await res.text() };
+        }
+
+        if (res.ok) {
+          statusBadge.className = 'badge badge-success';
+          statusBadge.innerText = `HTTP ${res.status} OK (${duration}ms)`;
+        } else {
+          statusBadge.className = 'badge badge-error';
+          statusBadge.innerText = `HTTP ${res.status} ${res.statusText} (${duration}ms)`;
+        }
+
+        jsonOutput.innerText = JSON.stringify({
+          status: res.status,
+          headers_sent: headers,
+          response: data,
+          payload_sent: payload
+        }, null, 2);
+      } catch (err) {
+        statusBadge.className = 'badge badge-error';
+        statusBadge.innerText = 'Network / CORS Error';
+        jsonOutput.innerText = JSON.stringify({
+          error: err.message,
+          tip: 'Ensure endpoint server is running and allows CORS POST requests'
+        }, null, 2);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Submit Lead via Webhook';
+      }
+    });
+  </script>
+</body>
+</html>

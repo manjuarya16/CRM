@@ -1,4 +1,5 @@
 import { API } from "@/config";
+import { getSuperAdminToken } from "@/lib/auth-utils";
 
 export interface CreateTenantPayload {
   name: string;
@@ -7,34 +8,83 @@ export interface CreateTenantPayload {
   admin_name: string;
   admin_email: string;
   admin_password: string;
+
+  // Company Details
+  registration_no?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  established_date?: string;
+  currency?: string;
+  timezone?: string;
+  logo_url?: string;
+
+  // Address & Location
+  street?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
+  };
 }
+
+export interface UpdateTenantPayload extends Partial<CreateTenantPayload> {
+  status?: "active" | "suspended";
+}
+
+const authHeader = (explicitToken?: string) => {
+  const token = explicitToken || getSuperAdminToken();
+  return token
+    ? {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Authorization": `Bearer ${token}`,
+        },
+      }
+    : {};
+};
 
 export const superAdminApi = {
   login: (credentials: { email: string; password: string }) => {
     return API.post("/super-admin/login", credentials);
   },
 
-  getProfile: () => {
-    return API.get("/super-admin/me");
+  getProfile: (token?: string) => {
+    return API.get("/super-admin/me", authHeader(token));
   },
 
-  getMetrics: () => {
-    return API.get("/super-admin/metrics");
+  getMetrics: (token?: string) => {
+    return API.get("/super-admin/metrics", authHeader(token));
   },
 
-  getTenants: () => {
-    return API.get("/super-admin/tenants");
+  getTenants: (token?: string) => {
+    return API.get("/super-admin/tenants", authHeader(token));
   },
 
-  createTenant: (data: CreateTenantPayload) => {
-    return API.post("/super-admin/tenants", data);
+  getTenant: (id: number, token?: string) => {
+    return API.get(`/super-admin/tenants/${id}`, authHeader(token));
   },
 
-  updateTenantStatus: (id: number, status: "active" | "suspended") => {
-    return API.patch(`/super-admin/tenants/${id}/status`, { status });
+  createTenant: (data: CreateTenantPayload, token?: string) => {
+    return API.post("/super-admin/tenants", data, authHeader(token));
+  },
+
+  updateTenant: (id: number, data: UpdateTenantPayload, token?: string) => {
+    return API.put(`/super-admin/tenants/${id}`, data, authHeader(token));
+  },
+
+  updateTenantStatus: (id: number, status: "active" | "suspended", token?: string) => {
+    return API.patch(`/super-admin/tenants/${id}/status`, { status }, authHeader(token));
   },
 
   getPublicTenant: (slug: string) => {
     return API.get(`/public/tenant/${slug}`);
   },
 };
+

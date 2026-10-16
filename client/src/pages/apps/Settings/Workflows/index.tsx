@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { PageBreadcrumb } from "@/components";
+import { PageBreadcrumb, ViewModeSwitcher } from "@/components";
 import { IWorkflow } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { useWorkflowStore } from "@/store";
 
 const avatarColors = [
@@ -28,7 +29,7 @@ const WorkflowsPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [entityFilter, setEntityFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
 
   const fetchWorkflows = async () => {
     try {
@@ -158,13 +159,13 @@ const WorkflowsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <button
             type="button"
             onClick={fetchWorkflows}
             disabled={loading}
             title="Refresh workflows"
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg shadow-xs transition-colors disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors disabled:opacity-60 shrink-0 whitespace-nowrap"
           >
             <i className={`mgc_refresh_2_line text-base ${loading ? "animate-spin" : ""}`}></i>
             <span>Refresh</span>
@@ -173,7 +174,7 @@ const WorkflowsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/settings/workflows/create"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-xs sm:text-sm font-semibold rounded-lg shadow-xs transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
             >
               <i className="mgc_add_line text-base"></i>
               <span>Create Workflow</span>
@@ -256,35 +257,14 @@ const WorkflowsPage: React.FC = () => {
               />
             </div>
 
-            {/* View Toggle Buttons matching Leads */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                title="Cards View"
-                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                  viewMode === "cards"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                }`}
-              >
-                <i className="mgc_layout_grid_line text-base"></i>
-                <span className="hidden sm:inline text-xs font-bold">Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                title="Table View"
-                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
-                  viewMode === "table"
-                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                }`}
-              >
-                <i className="mgc_list_check_line text-base"></i>
-                <span className="hidden sm:inline text-xs font-bold">Table</span>
-              </button>
-            </div>
+            {/* View Mode Switcher */}
+            <ViewModeSwitcher
+              viewMode={viewMode}
+              onViewModeChange={(m) => {
+                setHasUserToggled(true);
+                setViewMode(m);
+              }}
+            />
           </div>
         </div>
 
@@ -425,9 +405,18 @@ const WorkflowsPage: React.FC = () => {
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] truncate leading-tight transition-colors">
-                                {item.name}
-                              </p>
+                              {canEdit ? (
+                                <Link
+                                  to={`/settings/workflows/${item.id}/edit`}
+                                  className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:text-[#0088cc] truncate leading-tight transition-colors"
+                                >
+                                  {item.name}
+                                </Link>
+                              ) : (
+                                <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate leading-tight">
+                                  {item.name}
+                                </p>
+                              )}
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1">
                               <i className="mgc_lightning_line text-xs text-amber-500 shrink-0"></i>
@@ -534,7 +523,18 @@ const WorkflowsPage: React.FC = () => {
                     paginated.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-750 transition-colors">
                         <td className="py-3 px-4 text-gray-500 font-mono text-xs">#{item.id}</td>
-                        <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-100">{item.name}</td>
+                        <td className="py-3 px-4 font-semibold text-gray-800 dark:text-gray-100">
+                          {canEdit ? (
+                            <Link
+                              to={`/settings/workflows/${item.id}/edit`}
+                              className="hover:text-[#0088cc] transition-colors"
+                            >
+                              {item.name}
+                            </Link>
+                          ) : (
+                            item.name
+                          )}
+                        </td>
                         <td className="py-3 px-4 capitalize">
                           <span className="px-2 py-0.5 rounded text-xs bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 font-medium">
                             {item.entity_type}

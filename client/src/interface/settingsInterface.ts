@@ -27,7 +27,8 @@ export interface ConfigNavItem {
 export interface ConfigState {
   configs: Record<string, any>;
   loading: boolean;
-  fetchConfigs: () => Promise<Record<string, any>>;
+  hasFetched?: boolean;
+  fetchConfigs: (force?: boolean) => Promise<Record<string, any>>;
   saveConfigurations: (settings: Record<string, any>) => Promise<any>;
   uploadConfigImage: (file: File) => Promise<any>;
   testSmtpConnection: (testConfig?: Record<string, any>) => Promise<any>;

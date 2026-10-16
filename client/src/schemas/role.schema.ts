@@ -3,7 +3,7 @@ import { zodResolver } from "@/utils/zodResolver";
 
 export const roleSchema = z.object({
   name: z.string().trim().min(1, "Role name is required").max(191, "Role name is too long"),
-  description: z.string().trim().max(500, "Description must not exceed 500 characters").optional().or(z.literal("")),
+  description: z.any().optional().nullable(),
   permission_type: z.enum(["all", "custom"]).default("all"),
   permissions: z.any().optional(),
   parent_role_id: z.coerce.number().optional().nullable(),
