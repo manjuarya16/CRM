@@ -146,6 +146,7 @@ const ConfigurationPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
+  const [uploadingCollapsedLogo, setUploadingCollapsedLogo] = useState<boolean>(false);
   const [uploadingFavicon, setUploadingFavicon] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [extractingColor, setExtractingColor] = useState<boolean>(false);
@@ -153,6 +154,7 @@ const ConfigurationPage: React.FC = () => {
   const [formValues, setFormValues] = useState<Record<string, any>>({
     // General — Admin Logo
     "general.general.admin_logo.logo_image": "",
+    "general.general.admin_logo.collapsed_logo_image": "",
     "general.general.admin_logo.favicon_image": "",
     // Settings — Footer
     "general.settings.footer.show": "1",
@@ -393,6 +395,8 @@ const ConfigurationPage: React.FC = () => {
 
     if (fieldKey === "general.general.admin_logo.logo_image") {
       setUploadingLogo(true);
+    } else if (fieldKey === "general.general.admin_logo.collapsed_logo_image") {
+      setUploadingCollapsedLogo(true);
     } else {
       setUploadingFavicon(true);
     }
@@ -416,6 +420,7 @@ const ConfigurationPage: React.FC = () => {
       setStatusMessage({ type: "error", text: err.response?.data?.message || "Error uploading image." });
     } finally {
       setUploadingLogo(false);
+      setUploadingCollapsedLogo(false);
       setUploadingFavicon(false);
     }
   };
@@ -618,9 +623,64 @@ const ConfigurationPage: React.FC = () => {
                           </div>
                         </div>
 
+                        {/* Collapsed / Mini Sidebar Logo (Displayed when clicking the 3 lines hamburger icon) */}
+                        <div className="space-y-2 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              Collapsed / Mini Sidebar Logo
+                            </label>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Displayed at the top of the sidebar when the menu is collapsed (after clicking the three lines icon).
+                            </p>
+                          </div>
+                          
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="file"
+                                accept="image/png, image/jpeg, image/jpg, image/webp, image/svg+xml"
+                                onChange={(e) => handleLogoUpload(e, "general.general.admin_logo.collapsed_logo_image")}
+                                className="block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 dark:file:border-gray-600 file:text-xs file:font-semibold file:bg-white dark:file:bg-gray-700 file:text-gray-700 dark:file:text-gray-200 hover:file:bg-gray-100 dark:hover:file:bg-gray-600 cursor-pointer"
+                              />
+                              {uploadingCollapsedLogo && <i className="mgc_loading_2_line animate-spin text-base text-[#0088cc]"></i>}
+                            </div>
+
+                            <p className="text-xs text-gray-500 italic">*Recommended: Square image (e.g. 48x48 or 64x64 px), PNG, JPG, WebP, or SVG.</p>
+
+                            {/* Current Collapsed Logo Preview */}
+                            {formValues["general.general.admin_logo.collapsed_logo_image"] && (
+                              <div className="mt-2 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className="h-10 w-10 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-1">
+                                    <img
+                                      src={resolveImageUrl(formValues["general.general.admin_logo.collapsed_logo_image"])}
+                                      alt="Collapsed Sidebar Logo Preview"
+                                      className="max-h-full max-w-full object-contain rounded"
+                                      onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-gray-600 dark:text-gray-300 truncate max-w-[220px]">
+                                    {formValues["general.general.admin_logo.collapsed_logo_image"]}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleInputChange("general.general.admin_logo.collapsed_logo_image", "")}
+                                  className="text-xs text-red-600 hover:text-red-700 font-medium whitespace-nowrap"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Favicon Image */}
                         <div className="space-y-2 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                          <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">Favicon Image</label>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200">Favicon Image</label>
+                            <p className="text-xs text-gray-500 mt-0.5">Displayed on the browser tab and bookmarks.</p>
+                          </div>
                           
                           <div className="flex flex-col gap-3">
                             <div className="flex items-center gap-3">

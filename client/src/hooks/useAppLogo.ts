@@ -52,14 +52,14 @@ const useAppLogo = () => {
   const rawLogo = adminLogo || (userLoggedIn ? organization?.logo : publicBranding.logo);
   const orgLogo = resolveLogoUrl(rawLogo ?? null);
 
-  // Favicon configured in Configuration -> General settings for condensed/small sidebar
-  const adminFavicon = configs["general.general.admin_logo.favicon_image"];
-  const faviconUrl = resolveLogoUrl(adminFavicon ?? null);
+  // Collapsed / Mini Sidebar Logo (displayed when clicking the 3 lines hamburger menu)
+  const adminCollapsedLogo = configs["general.general.admin_logo.collapsed_logo_image"];
+  const collapsedLogoUrl = resolveLogoUrl(adminCollapsedLogo ?? null);
 
   return {
     logoLight: orgLogo,
     logoDark: orgLogo,
-    logoSm: faviconUrl || orgLogo,
+    logoSm: collapsedLogoUrl || orgLogo,
     orgName:
       (userLoggedIn ? organization?.name : publicBranding.name) ?? "CRM",
   };
