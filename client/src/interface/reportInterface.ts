@@ -41,6 +41,7 @@ export interface ILostReasonItem {
 
 export interface ILeadReportItem {
   id: number;
+  tenant_id?: number | null;
   title: string;
   description?: string | null;
   lead_value: number;
@@ -113,6 +114,7 @@ export interface IProductValueItem {
   product_id: number;
   product_name: string;
   sku: string;
+  product_type?: string;
   total_leads_count: number;
   open_leads_count: number;
   won_leads_count: number;
@@ -147,6 +149,7 @@ export interface IProductLineItem {
   product_id: number;
   product_name: string;
   sku: string;
+  product_type?: string;
   quantity: number;
   unit_price: number;
   amount: number;
@@ -332,6 +335,10 @@ export interface IReportFilterState {
   quoteSoonDays: string;
   quoteExpiresFrom: string;
   quoteExpiresTo: string;
+  selectedProductType?: string;
+  selectedDealType?: string;
+  selectedStaleDays?: number | string;
+  selectedIssueFlag?: string;
 }
 
 export type ReportTabType =
@@ -343,7 +350,351 @@ export type ReportTabType =
   | 'pipeline'
   | 'activities'
   | 'quotes'
-  | 'setup';
+  | 'sales-reps'
+  | 'marketing'
+  | 'accounts'
+  | 'forecast'
+  | 'inventory'
+  | 'win-loss'
+  | 'product-service-mix'
+  | 'stale-leads';
+
+export interface ISalesRepItem {
+  user_id: number;
+  rep_name: string;
+  email: string;
+  total_leads: number;
+  won_leads: number;
+  lost_leads: number;
+  open_leads: number;
+  won_value: number;
+  open_value: number;
+  win_rate: number;
+  avg_cycle_days: number;
+  total_activities: number;
+  completed_activities: number;
+  overdue_activities: number;
+  total_quotes: number;
+  total_quote_value: number;
+  accepted_quote_value: number;
+}
+
+export interface ISalesRepsKpis {
+  total_active_reps: number;
+  team_won_revenue: number;
+  team_open_pipeline: number;
+  team_win_rate: number;
+  total_team_activities: number;
+  top_performer_name: string;
+}
+
+export interface ISalesRepsReportData {
+  kpis: ISalesRepsKpis;
+  reps: ISalesRepItem[];
+  revenue_by_rep: IReportChartDataItem[];
+  win_rate_by_rep: IReportChartDataItem[];
+}
+
+export interface IMarketingFormItem {
+  form_id: number;
+  form_title: string;
+  slug: string;
+  pipeline_name: string;
+  submission_count: number;
+  create_lead: boolean;
+  last_submission_at: string | null;
+}
+
+export interface IMarketingCampaignItem {
+  id: number;
+  name: string;
+  subject: string;
+  type: string;
+  status: boolean;
+  event_name?: string | null;
+  created_at: string;
+}
+
+export interface IMarketingKpis {
+  active_forms_count: number;
+  total_submissions: number;
+  top_form_name: string;
+  total_campaigns_count: number;
+  total_events_count: number;
+}
+
+export interface IMarketingReportData {
+  kpis: IMarketingKpis;
+  forms: IMarketingFormItem[];
+  campaigns: IMarketingCampaignItem[];
+  submissions_trend: IReportChartDataItem[];
+  submissions_by_form: IReportChartDataItem[];
+}
+
+export interface IAccountReportItem {
+  organization_id: number;
+  organization_name: string;
+  location?: string | null;
+  contacts_count: number;
+  total_deals: number;
+  won_deals: number;
+  open_deals: number;
+  won_value: number;
+  open_value: number;
+  total_activities: number;
+  last_activity_at: string | null;
+  engagement_status: string;
+}
+
+export interface IAccountsKpis {
+  total_accounts: number;
+  active_accounts_count: number;
+  stale_accounts_count: number;
+  total_won_revenue: number;
+  total_open_value: number;
+  top_account_name: string;
+}
+
+export interface IAccountsReportData {
+  kpis: IAccountsKpis;
+  accounts: IAccountReportItem[];
+  engagement_mix: IOutcomeMixItem[];
+  revenue_by_org: IReportChartDataItem[];
+}
+
+export interface IForecastDealItem {
+  lead_id: number;
+  lead_title: string;
+  lead_value: number;
+  weighted_value: number;
+  probability: number;
+  expected_close_date: string | null;
+  confidence_category: string;
+  stage_name: string;
+  pipeline_name: string;
+  owner_name: string;
+  organization_name?: string | null;
+  age_days: number;
+  created_at: string;
+}
+
+export interface IForecastMonthlyItem {
+  label: string;
+  value: number;
+  unweighted: number;
+  count: number;
+}
+
+export interface IForecastKpis {
+  total_open_deals: number;
+  unweighted_pipeline: number;
+  weighted_forecast: number;
+  avg_probability: number;
+  commit_deals_value: number;
+  closing_this_month_count: number;
+  closing_this_month_value: number;
+}
+
+export interface IForecastReportData {
+  kpis: IForecastKpis;
+  deals: IForecastDealItem[];
+  confidence_mix: IOutcomeMixItem[];
+  monthly_forecast: IForecastMonthlyItem[];
+}
+
+export interface IInventoryStockItem {
+  product_id: number;
+  product_name: string;
+  sku: string;
+  unit_price: number;
+  warehouse_id: number;
+  warehouse_name: string;
+  in_stock: number;
+  allocated: number;
+  available_stock: number;
+  stock_status: string;
+  asset_valuation: number;
+}
+
+export interface IInventoryKpis {
+  total_skus: number;
+  total_stock_units: number;
+  total_inventory_valuation: number;
+  low_stock_skus: number;
+  out_of_stock_skus: number;
+  total_warehouses: number;
+}
+
+export interface IInventoryReportData {
+  kpis: IInventoryKpis;
+  items: IInventoryStockItem[];
+  stock_status_mix: IOutcomeMixItem[];
+  valuation_by_warehouse: IReportChartDataItem[];
+}
+
+// Win / Loss Report Interfaces
+export interface IWinLossKpis {
+  total_closed: number;
+  won_count: number;
+  won_value: number;
+  lost_count: number;
+  lost_value: number;
+  win_rate_deals: number;
+  win_rate_value: number;
+  avg_won_deal: number;
+  avg_sales_cycle_days: number;
+}
+
+export interface IWinLossDealTypeItem {
+  deal_type: string;
+  total_deals: number;
+  won_deals: number;
+  lost_deals: number;
+  win_rate: number;
+  won_value: number;
+  avg_won_value: number;
+  avg_cycle_days: number;
+}
+
+export interface IWinLossLostReasonItem {
+  label: string;
+  count: number;
+  value: number;
+}
+
+export interface IWinLossChartItem {
+  label: string;
+  count: number;
+  won_count: number;
+  value: number;
+}
+
+export interface IWinLossDealItem {
+  lead_id: number;
+  lead_title: string;
+  organization_name: string;
+  owner_name: string;
+  source_name: string;
+  pipeline_name: string;
+  stage_name: string;
+  outcome: 'won' | 'lost';
+  lead_value: number;
+  lost_reason: string;
+  created_at: string;
+  closed_at: string;
+  cycle_days: number;
+  deal_type: string;
+}
+
+export interface IWinLossReportData {
+  kpis: IWinLossKpis;
+  deal_types: IWinLossDealTypeItem[];
+  lost_reasons: IWinLossLostReasonItem[];
+  win_rate_by_source: IWinLossChartItem[];
+  win_rate_by_deal_size: IWinLossChartItem[];
+  insights: string[];
+  deals: IWinLossDealItem[];
+}
+
+// Product vs Service Mix Report Interfaces
+export interface IProductServiceMixKpis {
+  total_value: number;
+  product_value: number;
+  service_value: number;
+  product_share_pct: number;
+  service_share_pct: number;
+  total_leads_with_items: number;
+  leads_with_both: number;
+  attach_rate_pct: number;
+}
+
+export interface IOfferingOutcomeItem {
+  label: string;
+  won_value: number;
+  open_value: number;
+  lost_value: number;
+  total_value: number;
+}
+
+export interface IProductServiceMixDealTypeItem {
+  deal_kind: string;
+  leads_count: number;
+  open_value: number;
+  won_value: number;
+  win_rate: number;
+  avg_value: number;
+  total_value: number;
+}
+
+export interface IProductServiceMixItem {
+  product_id: number;
+  item_name: string;
+  item_type: string;
+  sku: string;
+  leads_count: number;
+  total_quantity: number;
+  avg_unit_price: number;
+  open_value: number;
+  won_value: number;
+  lost_value: number;
+  total_value: number;
+}
+
+export interface IProductServiceMixReportData {
+  kpis: IProductServiceMixKpis;
+  offering_outcome: IOfferingOutcomeItem[];
+  share_donut: IReportChartDataItem[];
+  top_services: IReportChartDataItem[];
+  deal_types: IProductServiceMixDealTypeItem[];
+  items: IProductServiceMixItem[];
+  insights: string[];
+}
+
+// Stale Leads & Follow-up Gaps Report Interfaces
+export interface IStaleLeadsKpis {
+  total_open_leads: number;
+  total_open_value: number;
+  leads_with_issues_count: number;
+  leads_with_issues_value: number;
+  no_next_step_count: number;
+  no_recent_activity_count: number;
+  past_close_date_count: number;
+  missing_details_count: number;
+  stale_threshold_days: number;
+}
+
+export interface IStaleLeadsOwnerItem {
+  label: string;
+  no_next_step: number;
+  no_recent_activity: number;
+  past_close_date: number;
+  missing_details: number;
+  total_issues: number;
+}
+
+export interface IStaleLeadItem {
+  lead_id: number;
+  lead_title: string;
+  organization_name: string;
+  person_name: string;
+  owner_name: string;
+  pipeline_name: string;
+  stage_name: string;
+  lead_value: number;
+  expected_close_date: string | null;
+  last_activity_at: string | null;
+  next_scheduled_activity: string | null;
+  days_idle: number;
+  items_count: number;
+  issue_flags: string[];
+}
+
+export interface IStaleLeadsReportData {
+  kpis: IStaleLeadsKpis;
+  issues_by_type: IOutcomeMixItem[];
+  issues_by_owner: IStaleLeadsOwnerItem[];
+  leads: IStaleLeadItem[];
+}
 
 export interface IReportFilterOptionItem {
   id: number | string;
@@ -372,6 +723,14 @@ export interface IReportStore {
   pipelineData: IPipelineReportData | null;
   activitiesData: IActivitiesReportData | null;
   quotesData: IQuotesReportData | null;
+  salesRepsData: ISalesRepsReportData | null;
+  marketingData: IMarketingReportData | null;
+  accountsData: IAccountsReportData | null;
+  forecastData: IForecastReportData | null;
+  inventoryData: IInventoryReportData | null;
+  winLossData: IWinLossReportData | null;
+  productServiceMixData: IProductServiceMixReportData | null;
+  staleLeadsData: IStaleLeadsReportData | null;
   filterOptions: IReportFilterOptions | null;
   loading: boolean;
   error: string | null;
@@ -389,6 +748,14 @@ export interface IReportStore {
   fetchPipelineReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
   fetchActivitiesReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
   fetchQuotesReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchSalesRepsReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchMarketingReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchAccountsReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchForecastReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchInventoryReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchWinLossReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchProductServiceMixReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchStaleLeadsReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
 }
 
 export interface IReportColumnDefinition<T = any> {

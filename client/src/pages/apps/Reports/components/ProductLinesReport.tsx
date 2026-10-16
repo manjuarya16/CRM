@@ -117,6 +117,24 @@ export const ProductLinesReport: React.FC<ProductLinesReportProps> = ({
         ),
       },
       {
+        key: 'product_type',
+        header: 'Type',
+        render: (line) => {
+          const isService = line.product_type?.toLowerCase() === 'service';
+          return (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                isService
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300'
+                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+              }`}
+            >
+              <span>{isService ? '⚡ Service' : '📦 Product'}</span>
+            </span>
+          );
+        },
+      },
+      {
         key: 'quantity',
         header: 'Qty',
         isNumeric: true,

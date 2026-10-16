@@ -404,7 +404,10 @@ const ConfigurationPage: React.FC = () => {
 
       // 2. Also send to upload API for server storage backup
       try {
-        await uploadConfigImage(file);
+        const uploadRes = await uploadConfigImage(file);
+        if (uploadRes?.data?.relativeUrl) {
+          handleInputChange(fieldKey, uploadRes.data.relativeUrl);
+        }
       } catch (uploadErr) {
         console.warn("Upload backup error:", uploadErr);
       }

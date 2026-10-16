@@ -70,9 +70,9 @@ export const PipelineReport: React.FC<PipelineReportProps> = ({
         subtitle: `${formatCompactInr(kpis.overdue_leads_value)} at risk`,
       },
       {
-        label: 'Over Stage-Aging Limit',
-        value: formatDisplayNumber(kpis.rotten_stuck_count),
-        subtitle: 'Stuck beyond rotten threshold',
+        label: 'Overdue Pipeline Value',
+        value: formatCompactInr(kpis.overdue_leads_value),
+        subtitle: 'At-risk revenue past target date',
       },
     ];
   }, [kpis]);

@@ -45,6 +45,19 @@ const calculatePresetDateRange = (preset: string): { from: string; to: string } 
     futureDate.setDate(currentDate.getDate() + 14);
     return { from: toDateString, to: formatIsoDate(futureDate) };
   }
+  if (preset === 'next30') {
+    const futureDate = new Date(currentDate);
+    futureDate.setDate(currentDate.getDate() + 30);
+    return { from: toDateString, to: formatIsoDate(futureDate) };
+  }
+  if (preset === 'next90') {
+    const futureDate = new Date(currentDate);
+    futureDate.setDate(currentDate.getDate() + 90);
+    return { from: toDateString, to: formatIsoDate(futureDate) };
+  }
+  if (preset === 'all') {
+    return { from: '', to: '' };
+  }
 
   // Default to 90 days
   const defaultPastDate = new Date(currentDate);
@@ -82,6 +95,10 @@ const initialFilterState: IReportFilterState = {
   quoteSoonDays: '7',
   quoteExpiresFrom: '',
   quoteExpiresTo: '',
+  selectedProductType: '',
+  selectedDealType: '',
+  selectedStaleDays: 14,
+  selectedIssueFlag: '',
 };
 
 export const useReportStore = create<IReportStore>((set, get) => ({
@@ -93,6 +110,14 @@ export const useReportStore = create<IReportStore>((set, get) => ({
   pipelineData: null,
   activitiesData: null,
   quotesData: null,
+  salesRepsData: null,
+  marketingData: null,
+  accountsData: null,
+  forecastData: null,
+  inventoryData: null,
+  winLossData: null,
+  productServiceMixData: null,
+  staleLeadsData: null,
   filterOptions: null,
   loading: false,
   error: null,
@@ -236,6 +261,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       if (activeFilters.selectedOrg) queryParams.append('org', activeFilters.selectedOrg);
       if (activeFilters.selectedOutcome) queryParams.append('outcome', activeFilters.selectedOutcome);
       if (activeFilters.selectedWarehouseId) queryParams.append('warehouse', activeFilters.selectedWarehouseId);
+      if (activeFilters.selectedProductType) queryParams.append('type', activeFilters.selectedProductType);
 
       const response = await API.get(`/reports/product-value?${queryParams.toString()}`);
       if (response.data?.success) {
@@ -264,6 +290,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
       if (activeFilters.selectedStageId) queryParams.append('stage', activeFilters.selectedStageId);
       if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+      if (activeFilters.selectedProductType) queryParams.append('type', activeFilters.selectedProductType);
 
       const response = await API.get(`/reports/product-lines?${queryParams.toString()}`);
       if (response.data?.success) {
@@ -359,6 +386,200 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       }
     } catch (error: any) {
       set({ error: error?.response?.data?.message || error.message || 'Error fetching quotes report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchSalesRepsReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      const userParam = activeFilters.selectedOwnerId || activeFilters.searchQuery;
+      if (userParam) queryParams.append('user', userParam);
+
+      const response = await API.get(`/reports/sales-reps?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ salesRepsData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch sales reps report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching sales reps report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchMarketingReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+
+      const response = await API.get(`/reports/marketing?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ marketingData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch marketing report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching marketing report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchAccountsReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/accounts?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ accountsData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch accounts report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching accounts report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchForecastReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
+
+      const response = await API.get(`/reports/forecast?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ forecastData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch forecast report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching forecast report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchInventoryReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.selectedWarehouseId) queryParams.append('warehouse', activeFilters.selectedWarehouseId);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/inventory?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ inventoryData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch inventory report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching inventory report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchWinLossReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.selectedOwnerId) queryParams.append('owner', activeFilters.selectedOwnerId);
+      if (activeFilters.selectedSourceId) queryParams.append('source', activeFilters.selectedSourceId);
+      if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
+      if (activeFilters.selectedDealType) queryParams.append('deal_type', activeFilters.selectedDealType);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/win-loss?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ winLossData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch win/loss report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching win/loss report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchProductServiceMixReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.selectedOwnerId) queryParams.append('owner', activeFilters.selectedOwnerId);
+      if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
+      if (activeFilters.selectedOutcome) queryParams.append('outcome', activeFilters.selectedOutcome);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/product-service-mix?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ productServiceMixData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch product vs service mix report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching product vs service mix report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchStaleLeadsReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.selectedOwnerId) queryParams.append('owner', activeFilters.selectedOwnerId);
+      if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
+      if (activeFilters.selectedStaleDays) queryParams.append('stale', String(activeFilters.selectedStaleDays));
+      if (activeFilters.selectedIssueFlag) queryParams.append('flag', activeFilters.selectedIssueFlag);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/stale-leads?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ staleLeadsData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch stale leads report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching stale leads report' });
     } finally {
       set({ loading: false });
     }

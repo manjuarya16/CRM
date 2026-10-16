@@ -37,6 +37,7 @@ export function ReportDataTable<T = any>({
   const [pageSize, setPageSize] = useState<number>(defaultPageSize);
   const [hiddenColumnKeys, setHiddenColumnKeys] = useState<Set<string>>(new Set());
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState<boolean>(false);
+  const [localSearch, setLocalSearch] = useState<string>('');
   const columnMenuRef = useRef<HTMLDivElement>(null);
 
   // Close column dropdown on outside click
@@ -81,6 +82,19 @@ export function ReportDataTable<T = any>({
     });
   };
 
+  // Filtered rows by local search query
+  const filteredRows = useMemo(() => {
+    if (!localSearch.trim()) return rows;
+    const query = localSearch.toLowerCase().trim();
+    return rows.filter((row: any) => {
+      return columns.some((col) => {
+        const val = col.accessor ? col.accessor(row) : row[col.key];
+        if (val === null || val === undefined) return false;
+        return String(val).toLowerCase().includes(query);
+      });
+    });
+  }, [rows, localSearch, columns]);
+
   // Visible columns
   const visibleColumns = useMemo(
     () => columns.filter((col) => !hiddenColumnKeys.has(col.key)),
@@ -89,11 +103,11 @@ export function ReportDataTable<T = any>({
 
   // Sorted rows
   const sortedRows = useMemo(() => {
-    if (!sortKey) return rows;
+    if (!sortKey) return filteredRows;
     const activeColumn = columns.find((c) => c.key === sortKey);
-    if (!activeColumn) return rows;
+    if (!activeColumn) return filteredRows;
 
-    const sortedList = [...rows];
+    const sortedList = [...filteredRows];
     sortedList.sort((rowA, rowB) => {
       const valueA = activeColumn.accessor ? activeColumn.accessor(rowA) : (rowA as any)[sortKey];
       const valueB = activeColumn.accessor ? activeColumn.accessor(rowB) : (rowB as any)[sortKey];
@@ -112,7 +126,7 @@ export function ReportDataTable<T = any>({
     });
 
     return sortedList;
-  }, [rows, sortKey, sortDirection, columns]);
+  }, [filteredRows, sortKey, sortDirection, columns]);
 
   // Paginated rows
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
@@ -139,11 +153,36 @@ export function ReportDataTable<T = any>({
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-white">{title}</h3>
           <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">
-            ({rows.length.toLocaleString('en-IN')} {unit})
+            ({filteredRows.length.toLocaleString('en-IN')}{localSearch ? ` of ${rows.length}` : ''} {unit})
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        {/* Search & Actions Bar */}
+        <div className="flex items-center gap-2 text-xs flex-wrap">
+          {/* Instant Table Search Bar */}
+          <div className="relative min-w-[170px] sm:min-w-[210px]">
+            <i className="mgc_search_line absolute left-2.5 top-2 text-xs text-gray-400" />
+            <input
+              type="text"
+              placeholder={`Search in table…`}
+              value={localSearch}
+              onChange={(e) => {
+                setLocalSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-8 pr-7 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 focus:bg-white dark:focus:bg-gray-800 focus:outline-hidden focus:border-[#0e90d9]"
+            />
+            {localSearch && (
+              <button
+                type="button"
+                onClick={() => setLocalSearch('')}
+                className="absolute right-2 top-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 font-bold"
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
           {/* Export CSV action */}
           <button
             type="button"
