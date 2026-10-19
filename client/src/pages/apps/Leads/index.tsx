@@ -911,50 +911,68 @@ const LeadsPage: React.FC = () => {
                           )}
                         </div>
                       ) : (
-                        stageLeads.map((lead) => (
-                          <div
-                            key={lead.id}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", String(lead.id));
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
-                          >
-                            {/* ROW 1: Avatar + Person + Company + alert icon */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                {/* Solid color avatar */}
-                                <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
-                                  {getInitials(lead.person_name || lead.title)}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
-                                    {lead.person_name || "No Person"}
-                                  </p>
-                                  {/* Company name in teal/blue like the screenshot */}
-                                  <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
-                                    {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
-                                  </p>
+                        stageLeads.map((lead) => {
+                          const rottenInfo = getRottenInfo(lead, currentPipeline);
+                          const isOverdue = Boolean(
+                            lead.status !== false &&
+                            lead.expected_close_date &&
+                            new Date(lead.expected_close_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0)
+                          );
+                          const hasAlert = rottenInfo.isRotten || isOverdue;
+                          const alertTitle = rottenInfo.isRotten && isOverdue
+                            ? `Warning: Rotten (${rottenInfo.daysIdle}d idle) & Overdue close date`
+                            : rottenInfo.isRotten
+                            ? `Rotten: Idle for ${rottenInfo.daysIdle} days without updates (threshold: ${rottenInfo.rottenDaysThreshold}d)`
+                            : isOverdue
+                            ? `Overdue: Expected close date was ${new Date(lead.expected_close_date!).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                            : "";
+
+                          return (
+                            <div
+                              key={lead.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", String(lead.id));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                            >
+                              {/* ROW 1: Avatar + Person + Company + alert icon */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {/* Solid color avatar */}
+                                  <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
+                                    {getInitials(lead.person_name || lead.title)}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
+                                      {lead.person_name || "No Person"}
+                                    </p>
+                                    {/* Company name in teal/blue like the screenshot */}
+                                    <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
+                                      {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {/* Alert triangle (shown only when rotten or overdue) + edit/delete on hover */}
+                                <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
+                                  {hasAlert && (
+                                    <span className="text-red-500 opacity-80 hover:opacity-100 transition-opacity cursor-help" title={alertTitle}>
+                                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
+                                    <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
+                                      <i className="mgc_edit_line text-xs"></i>
+                                    </Link>
+                                    <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
+                                      <i className="mgc_delete_line text-xs"></i>
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                              {/* Alert triangle (always visible) + edit/delete on hover */}
-                              <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
-                                <span className="text-red-400 opacity-70" title="Lead Alert">
-                                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                  </svg>
-                                </span>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
-                                  <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
-                                    <i className="mgc_edit_line text-xs"></i>
-                                  </Link>
-                                  <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
-                                    <i className="mgc_delete_line text-xs"></i>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
 
                             {/* ROW 2: Lead title */}
                             <Link
@@ -1019,7 +1037,10 @@ const LeadsPage: React.FC = () => {
                             {(lead.expected_close_date || lead.status !== undefined) && (
                               <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
                                 {lead.expected_close_date && (
-                                  <span className="flex items-center gap-1 text-gray-400">
+                                  <span
+                                    className={`flex items-center gap-1 ${isOverdue ? "text-red-500 dark:text-red-400 font-medium" : "text-gray-400"}`}
+                                    title={isOverdue ? "Overdue: Expected close date has passed" : undefined}
+                                  >
                                     <i className="mgc_calendar_line text-[11px]"></i>
                                     {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                                   </span>
@@ -1032,7 +1053,8 @@ const LeadsPage: React.FC = () => {
                               </div>
                             )}
                           </div>
-                        ))
+                        );
+                      })
                       )}
                     </div>
                   </div>
