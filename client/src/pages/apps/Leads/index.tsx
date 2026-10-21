@@ -142,6 +142,35 @@ const LeadsPage: React.FC = () => {
   const [mobileActiveStageId, setMobileActiveStageId] = useState<number | "all">("all");
   const [mobileKanbanLayout, setMobileKanbanLayout] = useState<"list" | "board">("list");
 
+  // Dynamic Kanban Board container height to stretch cleanly to the end of the screen
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const [boardHeight, setBoardHeight] = useState<string>("calc(100vh - 200px)");
+
+  // Auto-calculate Kanban Board container height to stretch to the end of the screen
+  useEffect(() => {
+    if (viewMode !== "kanban") return;
+
+    const calculateHeight = () => {
+      if (boardContainerRef.current) {
+        const rect = boardContainerRef.current.getBoundingClientRect();
+        const footerEl = document.querySelector("footer");
+        const footerHeight = footerEl ? footerEl.getBoundingClientRect().height : 0;
+        // Extend completely to the bottom edge of the viewport / screen
+        const available = window.innerHeight - rect.top - footerHeight;
+        setBoardHeight(`${Math.max(380, Math.floor(available))}px`);
+      }
+    };
+
+    calculateHeight();
+    window.addEventListener("resize", calculateHeight);
+    const timer = setTimeout(calculateHeight, 150);
+
+    return () => {
+      window.removeEventListener("resize", calculateHeight);
+      clearTimeout(timer);
+    };
+  }, [viewMode, selectedPipelineId, search, onlyRotten, mobileKanbanLayout, stages.length, kanbanLeads.length]);
+
   // Magic AI Configuration state
   const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
 
@@ -451,7 +480,7 @@ const LeadsPage: React.FC = () => {
     : displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === mobileActiveStageId);
 
   return (
-    <div className="p-1 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+    <div className={`p-1 sm:p-4 lg:p-6 ${viewMode === "kanban" ? "space-y-3 pb-0 -mb-3 sm:-mb-4 md:-mb-6" : "space-y-4 sm:space-y-6"}`}>
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
         <div className="flex flex-col gap-1.5">
@@ -841,8 +870,12 @@ const LeadsPage: React.FC = () => {
           </div>
 
           {/* KANBAN BOARD VIEW (Shown on >= md, or on mobile when board layout chosen) */}
-          <div className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} overflow-x-auto pb-4 scroll-smooth`}>
-            <div className="flex gap-4 min-w-max items-start">
+          <div
+            ref={boardContainerRef}
+            style={{ height: boardHeight }}
+            className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} kanban-board-scroll overflow-x-auto pb-0 scroll-smooth sticky bottom-0`}
+          >
+            <div className="flex gap-4 min-w-max h-full items-stretch">
               {(() => {
                 const validStageIds = new Set(stages.map((s) => s.id));
                 return stages.map((stage, idx) => {
@@ -867,9 +900,9 @@ const LeadsPage: React.FC = () => {
                       await updateLeadStage(leadId, stage.id, true);
                       fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
                     }}
-                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
+                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 flex flex-col h-full min-h-0 transition-colors hover:border-[#0088cc]/50"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between shrink-0 mb-2">
                       <div>
                         <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
                           {stage.name}
@@ -891,26 +924,26 @@ const LeadsPage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shrink-0 mb-3">
                       <div
                         className="h-full bg-[#0088cc] rounded-full transition-all duration-300"
                         style={{ width: `${Math.min(100, (stageLeads.length / Math.max(1, kanbanLeads.length)) * 100 * 2)}%` }}
                       ></div>
                     </div>
 
-                    <div className="space-y-3 min-h-[120px]">
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 kanban-column-scroll">
                       {loading ? (
                         <div className="text-center py-8">
                           <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent"></div>
                         </div>
                       ) : stageLeads.length === 0 ? (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
-                          <div className="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
-                            <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-2.5 h-full min-h-[180px]">
+                          <div className="w-12 h-12 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
+                            <svg className="w-6 h-6 stroke-current" fill="none" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                             </svg>
                           </div>
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">
                               {onlyRotten ? "No Rotten Leads" : "Your Leads List is Empty"}
                             </h4>
@@ -921,7 +954,7 @@ const LeadsPage: React.FC = () => {
                           {!onlyRotten && canCreate && (
                             <Link
                               to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                              className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                              className="px-3.5 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
                             >
                               Create Lead
                             </Link>
