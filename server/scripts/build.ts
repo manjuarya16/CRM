@@ -44,7 +44,6 @@ const logger = {
     logger.info("---------------------------------------------");
   } catch (err) {
     logger.err(err);
-    // eslint-disable-next-line n/no-process-exit
     process.exit(1);
   }
 })();
