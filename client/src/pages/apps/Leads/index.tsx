@@ -408,6 +408,23 @@ const LeadsPage: React.FC = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
+  const isCloseDatePassed = (dateStr?: string) => {
+    if (!dateStr) return false;
+    const cleanStr = String(dateStr).split("T")[0];
+    const parts = cleanStr.split("-");
+    let closeDate: Date;
+    if (parts.length === 3) {
+      closeDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      closeDate = new Date(dateStr);
+    }
+    if (isNaN(closeDate.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    closeDate.setHours(0, 0, 0, 0);
+    return closeDate.getTime() < today.getTime();
+  };
+
   const avatarColors = [
     "bg-[#6c8ebf] text-white",
     "bg-[#e6b93d] text-white",
@@ -742,6 +759,13 @@ const LeadsPage: React.FC = () => {
                                   <p className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] truncate leading-tight">
                                     {lead.title}
                                   </p>
+                                  {isCloseDatePassed(lead.expected_close_date) && (
+                                    <span className="text-red-500 shrink-0" title="Expected Close Date has passed">
+                                      <svg className="w-3.5 h-3.5 text-red-500 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      </svg>
+                                    </span>
+                                  )}
                                   {rottenInfo.isRotten && (
                                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 font-bold shrink-0">
                                       🍅 {rottenInfo.daysIdle}d
@@ -933,13 +957,15 @@ const LeadsPage: React.FC = () => {
                                   </p>
                                 </div>
                               </div>
-                              {/* Alert triangle (always visible) + edit/delete on hover */}
+                              {/* Alert triangle (only visible when Expected Close Date has passed) + edit/delete on hover */}
                               <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
-                                <span className="text-red-400 opacity-70" title="Lead Alert">
-                                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                  </svg>
-                                </span>
+                                {isCloseDatePassed(lead.expected_close_date) && (
+                                  <span className="text-red-500 opacity-90" title="Expected Close Date has passed">
+                                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                    </svg>
+                                  </span>
+                                )}
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
                                   <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
                                     <i className="mgc_edit_line text-xs"></i>
@@ -1014,7 +1040,10 @@ const LeadsPage: React.FC = () => {
                             {(lead.expected_close_date || lead.status !== undefined) && (
                               <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
                                 {lead.expected_close_date && (
-                                  <span className="flex items-center gap-1 text-gray-400">
+                                  <span
+                                    className={`flex items-center gap-1 ${isCloseDatePassed(lead.expected_close_date) ? "text-red-500 font-semibold" : "text-gray-400"}`}
+                                    title={isCloseDatePassed(lead.expected_close_date) ? "Expected Close Date has passed" : undefined}
+                                  >
                                     <i className="mgc_calendar_line text-[11px]"></i>
                                     {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                                   </span>
