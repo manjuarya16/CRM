@@ -2,15 +2,13 @@
   "compilerOptions": {
     "rootDir": "./src",
     "module": "commonjs",
-    "moduleResolution": "node",
     "target": "es2020",
-    "baseUrl": ".",
     "paths": {
       "@src/*": [
-        "src/*"
+        "./src/*"
       ],
       "@/*": [
-        "src/*"
+        "./src/*"
       ]
     },
     "resolveJsonModule": true,
