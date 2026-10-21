@@ -31,41 +31,86 @@ export const SalesRepReport: React.FC<SalesRepReportProps> = ({
   const kpis = reportData?.kpis;
   const reps = reportData?.reps || [];
 
+  const selectedOwner = filterState.selectedOwnerId;
+  const isAllReps = !selectedOwner || selectedOwner === 'all';
+  const singleRep = !isAllReps
+    ? reps.find((r: ISalesRepItem) => r.rep_name === selectedOwner || String(r.user_id) === selectedOwner) || reps[0]
+    : null;
+
   const kpiItems: IReportKpiItem[] = useMemo(() => {
     if (!kpis) return [];
+
+    if (isAllReps) {
+      return [
+        {
+          label: 'Active Sales Reps',
+          value: formatDisplayNumber(kpis.total_active_reps),
+          subtitle: 'Team members with deals',
+        },
+        {
+          label: 'Team Won Revenue',
+          value: formatCompactInr(kpis.team_won_revenue),
+          subtitle: 'Closed deals revenue',
+        },
+        {
+          label: 'Open Pipeline Value',
+          value: formatCompactInr(kpis.team_open_pipeline),
+          subtitle: 'Deals currently in progress',
+        },
+        {
+          label: 'Team Win Rate',
+          value: `${kpis.team_win_rate}%`,
+          subtitle: 'Won deals vs closed',
+        },
+        {
+          label: 'Top Performer',
+          value: kpis.top_performer_name || '—',
+          subtitle: 'Leading revenue generator',
+        },
+        {
+          label: 'Team Activities',
+          value: formatDisplayNumber(kpis.total_team_activities),
+          subtitle: 'Calls, meetings & tasks',
+        },
+      ];
+    }
+
+    // When a specific Sales Rep is selected, Top Performer is omitted
     return [
       {
-        label: 'Active Sales Reps',
-        value: formatDisplayNumber(kpis.total_active_reps),
-        subtitle: 'Team members with deals',
+        label: 'Total Deals',
+        value: formatDisplayNumber(singleRep?.total_leads ?? kpis.total_active_reps),
+        subtitle: `${singleRep?.won_leads ?? 0} won, ${singleRep?.lost_leads ?? 0} lost`,
       },
       {
-        label: 'Team Won Revenue',
-        value: formatCompactInr(kpis.team_won_revenue),
+        label: 'Won Revenue',
+        value: formatCompactInr(singleRep?.won_value ?? kpis.team_won_revenue),
         subtitle: 'Closed deals revenue',
       },
       {
         label: 'Open Pipeline Value',
-        value: formatCompactInr(kpis.team_open_pipeline),
+        value: formatCompactInr(singleRep?.open_value ?? kpis.team_open_pipeline),
         subtitle: 'Deals currently in progress',
       },
       {
-        label: 'Team Win Rate',
-        value: `${kpis.team_win_rate}%`,
+        label: 'Win Rate',
+        value: `${singleRep ? singleRep.win_rate : kpis.team_win_rate}%`,
         subtitle: 'Won deals vs closed',
       },
       {
-        label: 'Top Performer',
-        value: kpis.top_performer_name || '—',
-        subtitle: 'Leading revenue generator',
+        label: 'Avg Sales Cycle',
+        value: singleRep && singleRep.avg_cycle_days > 0 ? `${singleRep.avg_cycle_days} days` : '—',
+        subtitle: 'Created to won duration',
       },
       {
-        label: 'Team Activities',
-        value: formatDisplayNumber(kpis.total_team_activities),
-        subtitle: 'Calls, meetings & tasks',
+        label: 'Activities',
+        value: formatDisplayNumber(singleRep?.total_activities ?? kpis.total_team_activities),
+        subtitle: singleRep
+          ? `${singleRep.completed_activities} done${singleRep.overdue_activities > 0 ? `, ${singleRep.overdue_activities} overdue` : ''}`
+          : 'Calls, meetings & tasks',
       },
     ];
-  }, [kpis]);
+  }, [kpis, isAllReps, singleRep]);
 
   const revenueBars = useMemo(() => {
     if (!reportData?.revenue_by_rep) return [];
@@ -213,8 +258,8 @@ export const SalesRepReport: React.FC<SalesRepReportProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ReportPanel
-          title="Won Revenue by Sales Rep"
-          subtitle="Top team members by closed deal revenue"
+          title={isAllReps ? "Won Revenue by Sales Rep" : `${singleRep?.rep_name || selectedOwner} - Won Revenue`}
+          subtitle={isAllReps ? "Top team members by closed deal revenue" : "Closed deal revenue for selected representative"}
         >
           <HorizontalBarsChart
             items={revenueBars}
@@ -223,8 +268,8 @@ export const SalesRepReport: React.FC<SalesRepReportProps> = ({
         </ReportPanel>
 
         <ReportPanel
-          title="Win Rate by Sales Rep (%)"
-          subtitle="Conversion efficiency across active sales representatives"
+          title={isAllReps ? "Win Rate by Sales Rep (%)" : `${singleRep?.rep_name || selectedOwner} - Win Rate (%)`}
+          subtitle={isAllReps ? "Conversion efficiency across active sales representatives" : "Conversion efficiency for selected representative"}
         >
           <HorizontalBarsChart
             items={winRateBars}
@@ -236,8 +281,8 @@ export const SalesRepReport: React.FC<SalesRepReportProps> = ({
 
       <ReportDataTable
         tableId="sales-reps-leaderboard"
-        title="Sales Representatives Leaderboard"
-        unit="representatives"
+        title={isAllReps ? "Sales Representatives Leaderboard" : `${singleRep?.rep_name || selectedOwner} Performance`}
+        unit={isAllReps ? "representatives" : "representative"}
         columns={columns}
         rows={reps}
         defaultSortKey="won_value"
