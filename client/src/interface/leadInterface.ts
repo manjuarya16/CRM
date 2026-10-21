@@ -125,4 +125,19 @@ export interface ILeadContactItem {
   value: string;
 }
 
+export interface IVoiceLeadData {
+  title?: string;
+  personName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  organizationName?: string;
+  jobTitle?: string;
+  leadValue?: number | null;
+  expectedCloseDate?: string | null;
+  description?: string;
+  source?: string;
+  rawTranscript?: string;
+  translatedTranscript?: string;
+}
+
 export type LeadStore = LeadState;

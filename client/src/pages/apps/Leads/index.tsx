@@ -8,6 +8,7 @@ import API from "@/config";
 import { usePermission } from "@/hooks/usePermission";
 import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { realtimeService } from "@/services/realtimeService";
+import { VoiceLeadModal } from "@/components/VoiceLeadModal";
 
 interface LeadStageDropdownProps {
   currentStageId: number;
@@ -143,6 +144,9 @@ const LeadsPage: React.FC = () => {
 
   // Magic AI Configuration state
   const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
+
+  // Voice Lead Modal
+  const [showVoiceModal, setShowVoiceModal] = useState<boolean>(false);
 
   // Upload File Modal
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
@@ -464,6 +468,19 @@ const LeadsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-x-2.5">
+          {/* Voice Lead button */}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowVoiceModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors cursor-pointer"
+              title="Create Lead using Voice Assistant"
+            >
+              <i className="mgc_mic_line text-sm text-[#0e90d9]"></i>
+              <span>Voice Lead</span>
+            </button>
+          )}
+
           {/* Upload File button */}
           {isDocGenEnabled && canCreate && (
             <button
@@ -1233,6 +1250,20 @@ const LeadsPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* VOICE LEAD CREATION MODAL */}
+      <VoiceLeadModal
+        isOpen={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        onLeadCreated={() => {
+          if (viewMode === "kanban") {
+            fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
+          } else {
+            fetchLeads(page, perPage, search, filterForm);
+          }
+        }}
+        pipelineId={selectedPipelineId}
+      />
 
       {/* UPLOAD FILE MODAL (MAGIC AI / DOCUMENT LEAD CREATION) */}
       {showUploadModal && (

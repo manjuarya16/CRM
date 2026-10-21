@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
+import { VoiceLeadModal } from "@/components/VoiceLeadModal";
 import { ProductRow, ILeadContactItem } from "@/interface";
 
 const TABS = [
@@ -85,6 +86,7 @@ const parseContactItems = (data: any, defaultLabel: string = "Work"): ILeadConta
 
 const CreateLeadPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const paramStageId = searchParams.get("lead_pipeline_stage_id") || searchParams.get("stage_id");
   const paramPipelineId = searchParams.get("lead_pipeline_id") || searchParams.get("pipeline_id");
@@ -97,6 +99,7 @@ const CreateLeadPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState("lead-details");
   const [saving, setSaving] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Users for Sales Owner
@@ -219,6 +222,37 @@ const CreateLeadPage: React.FC = () => {
       setDetails((d) => ({ ...d, lead_pipeline_stage_id: "" }));
     }
   }, [details.lead_pipeline_id]);
+
+  useEffect(() => {
+    const voiceData = (location.state as any)?.voiceLead;
+    if (voiceData) {
+      if (voiceData.title) setDetails((d) => ({ ...d, title: voiceData.title }));
+      if (voiceData.description) setDetails((d) => ({ ...d, description: voiceData.description }));
+      if (voiceData.leadValue !== undefined && voiceData.leadValue !== null) {
+        setDetails((d) => ({ ...d, lead_value: String(voiceData.leadValue) }));
+      }
+      if (voiceData.expectedCloseDate) {
+        setDetails((d) => ({ ...d, expected_close_date: voiceData.expectedCloseDate }));
+      }
+      if (voiceData.personName) {
+        setPersonName(voiceData.personName);
+        setPersonSearch(voiceData.personName);
+      }
+      if (voiceData.contactEmail) {
+        setContactEmails([{ label: "Work", value: voiceData.contactEmail }]);
+      }
+      if (voiceData.contactPhone) {
+        setContactPhones([{ label: "Work", value: voiceData.contactPhone }]);
+      }
+      if (voiceData.organizationName && organizations.length > 0) {
+        const orgName = voiceData.organizationName.toLowerCase().trim();
+        const foundOrg = organizations.find((o) => (o.name || "").toLowerCase().trim() === orgName);
+        if (foundOrg) {
+          setOrganizationId(String(foundOrg.id));
+        }
+      }
+    }
+  }, [location.state, organizations]);
 
   const scrollToSection = (id: string) => {
     setActiveTab(id);
@@ -673,6 +707,16 @@ const CreateLeadPage: React.FC = () => {
               {fmtCurrency(totalLeadValue > 0 ? totalLeadValue : (parseFloat(details.lead_value) || 0))}
             </span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowVoiceModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 rounded-lg text-xs sm:text-sm font-semibold transition shadow-2xs cursor-pointer"
+            title="Auto-fill form using voice dictation"
+          >
+            <i className="mgc_mic_line text-sm"></i>
+            <span>Voice Auto-Fill</span>
+          </button>
 
           <Link
             to="/leads"
@@ -1580,6 +1624,13 @@ const CreateLeadPage: React.FC = () => {
             </div>
           </div>
         </form>
+
+        {/* Voice Lead Modal */}
+        <VoiceLeadModal
+          isOpen={showVoiceModal}
+          onClose={() => setShowVoiceModal(false)}
+          onLeadCreated={() => navigate("/leads")}
+        />
       </div>
   );
 };
