@@ -2,58 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import API from "@/config";
-import { IVoiceLeadData } from "@/interface";
-
-interface VoiceLeadModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onLeadCreated?: () => void;
-  pipelineId?: number | string;
-  stageId?: number | string;
-}
-
-interface ILanguageOption {
-  code: string;
-  id: string;
-  label: string;
-  flag: string;
-  native: string;
-  badge?: string;
-  isAutoTranslate?: boolean;
-}
-
-const SUPPORTED_LANGUAGES: ILanguageOption[] = [
-  { code: "en-IN", id: "en-IN", flag: "🇮🇳", label: "English", native: "India", isAutoTranslate: false },
-  { code: "en-US", id: "en-US", flag: "🇺🇸", label: "English", native: "US", isAutoTranslate: false },
-  { code: "en-GB", id: "en-GB", flag: "🇬🇧", label: "English", native: "UK", isAutoTranslate: false },
-  { code: "hi-IN", id: "hi-IN", flag: "🇮🇳", label: "Hindi", native: "हिंदी", badge: "Auto-Translates", isAutoTranslate: true },
-  { code: "en-IN", id: "hinglish", flag: "🇮🇳", label: "Hinglish", native: "Hindi in Eng", badge: "Auto-Translates", isAutoTranslate: true },
-  { code: "es-ES", id: "es-ES", flag: "🇪🇸", label: "Spanish", native: "Español", badge: "Auto-Translates", isAutoTranslate: true },
-  { code: "fr-FR", id: "fr-FR", flag: "🇫🇷", label: "French", native: "Français", badge: "Auto-Translates", isAutoTranslate: true },
-  { code: "de-DE", id: "de-DE", flag: "🇩🇪", label: "German", native: "Deutsch", badge: "Auto-Translates", isAutoTranslate: true },
-  { code: "ar-SA", id: "ar-SA", flag: "🇸🇦", label: "Arabic", native: "العربية", badge: "Auto-Translates", isAutoTranslate: true },
-];
-
-const SAMPLE_VOICE_PROMPTS = [
-  {
-    langId: "en-IN",
-    text: "New lead for Rahul Sharma from Horizon Tech, phone 9876543210, email rahul@horizon.com, budget 75000 rupees, closing next week",
-    badge: "English (India)",
-    flag: "🇮🇳",
-  },
-  {
-    langId: "hi-IN",
-    text: "रोहित शर्मा के लिए नया लीड, स्काईलाइन प्राइवेट लिमिटेड, फोन 9876543210, बजट 1 लाख रुपये, अगले हफ्ते क्लोज होगा",
-    badge: "Hindi (हिंदी)",
-    flag: "🇮🇳",
-  },
-  {
-    langId: "hinglish",
-    text: "Ramesh Kumar ke liye naya lead banao, Skyline company se, phone number 9876543210, budget 50000 rupees",
-    badge: "Hinglish",
-    flag: "🇮🇳",
-  },
-];
+import { IVoiceLeadData, VoiceLeadModalProps } from "@/interface";
+import { useVoiceLanguages } from "@/hooks";
 
 export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
   isOpen,
@@ -64,14 +14,23 @@ export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
 }) => {
   const navigate = useNavigate();
 
+  // Language management hook
+  const {
+    languages,
+    samplePrompts,
+    selectedLanguageId,
+    setSelectedLanguageId,
+    currentLanguage,
+    isLangDropdownOpen,
+    setIsLangDropdownOpen,
+  } = useVoiceLanguages("en-IN");
+
   // Voice recording states
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [interimText, setInterimText] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [speechSupported, setSpeechSupported] = useState(true);
-  const [selectedLanguageId, setSelectedLanguageId] = useState("en-IN");
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
 
   // Processing & Form states
   const [isProcessing, setIsProcessing] = useState(false);
@@ -100,8 +59,6 @@ export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
   const baseTranscriptRef = useRef("");
   const isListeningRef = useRef(false);
 
-  const currentLanguage =
-    SUPPORTED_LANGUAGES.find((l) => l.id === selectedLanguageId) || SUPPORTED_LANGUAGES[0];
 
   // Close language dropdown on outside click
   useEffect(() => {
@@ -647,7 +604,7 @@ export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
                     <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-1">
                       Select Spoken Language
                     </div>
-                    {SUPPORTED_LANGUAGES.map((lang) => {
+                    {languages.map((lang) => {
                       const isSelected = lang.id === selectedLanguageId;
                       return (
                         <button
@@ -761,7 +718,7 @@ export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
                   <span>Example voice commands (click any to try instantly):</span>
                 </span>
                 <div className="flex flex-col gap-2">
-                  {SAMPLE_VOICE_PROMPTS.map((prompt, idx) => (
+                  {samplePrompts.map((prompt, idx) => (
                     <button
                       key={idx}
                       type="button"

@@ -140,4 +140,31 @@ export interface IVoiceLeadData {
   translatedTranscript?: string;
 }
 
+export interface VoiceLeadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onLeadCreated?: () => void;
+  pipelineId?: number | string;
+  stageId?: number | string;
+}
+
+export type IVoiceLeadModalProps = VoiceLeadModalProps;
+
+export interface ILanguageOption {
+  code: string;
+  id: string;
+  label: string;
+  flag: string;
+  native: string;
+  badge?: string;
+  isAutoTranslate?: boolean;
+}
+
+export interface ISampleVoicePrompt {
+  langId: string;
+  text: string;
+  badge: string;
+  flag: string;
+}
+
 export type LeadStore = LeadState;
