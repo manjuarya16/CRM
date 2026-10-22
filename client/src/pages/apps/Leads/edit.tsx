@@ -217,25 +217,54 @@ const EditLeadPage: React.FC = () => {
         setLoading(false);
       });
 
-      useLeadStore.getState().fetchLeadProducts(Number(id)).then(() => {
+      useLeadStore.getState().fetchLeadProducts(Number(id)).then(async () => {
         const prods = useLeadStore.getState().leadProducts;
         if (Array.isArray(prods) && prods.length > 0) {
-          setProductRows(
-            prods.map((lp: any) => ({
-              id: lp.id,
-              product_id: String(lp.product_id),
-              product_name: lp.product_name || "",
-              quantity: String(lp.quantity || 1),
-              price: String(lp.price || 0),
-              warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
-              warehouse_location_id: lp.warehouse_location_id ? String(lp.warehouse_location_id) : "",
-            }))
+          const rowsWithInvs = await Promise.all(
+            prods.map(async (lp: any) => {
+              let inventories: any[] = [];
+              let prodName = lp.product_name || "";
+              let prodPrice = lp.price !== undefined && lp.price !== null ? String(lp.price) : "0";
+              if (lp.product_id) {
+                try {
+                  const pData = await useProductStore.getState().fetchProductById(Number(lp.product_id));
+                  if (pData) {
+                    if (Array.isArray(pData.inventories)) {
+                      inventories = pData.inventories;
+                    }
+                    if (!prodName && pData.name) {
+                      prodName = pData.name;
+                    }
+                    if ((!prodPrice || prodPrice === "0") && pData.price) {
+                      prodPrice = String(pData.price);
+                    }
+                    setProducts((prev) => {
+                      if (!prev.some((p) => String(p.id) === String(lp.product_id))) {
+                        return [...prev, pData];
+                      }
+                      return prev;
+                    });
+                  }
+                } catch (e) {}
+              }
+              return {
+                id: lp.id,
+                product_id: String(lp.product_id || ""),
+                product_name: prodName,
+                quantity: String(lp.quantity || 1),
+                price: prodPrice,
+                warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
+                warehouse_location_id: lp.warehouse_location_id ? String(lp.warehouse_location_id) : "",
+                inventories,
+              };
+            })
           );
+          setProductRows(rowsWithInvs);
         } else {
-          setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" }]);
+          setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [] }]);
         }
       }).catch(() => {
-        setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" }]);
+        setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [] }]);
       });
     }
   }, [id]);
@@ -1304,6 +1333,7 @@ const EditLeadPage: React.FC = () => {
               };
 
               const availableWarehouses = warehouses.filter((w) => {
+                if (row.warehouse_id && String(w.id) === String(row.warehouse_id)) return true;
                 if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
                 return validWarehouseIds.has(Number(w.id));
               });
@@ -1328,6 +1358,7 @@ const EditLeadPage: React.FC = () => {
               );
 
               const availableLocations = allLocations.filter((loc: any) => {
+                if (row.warehouse_location_id && String(loc.id) === String(row.warehouse_location_id)) return true;
                 if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
                 return validLocationIds.has(Number(loc.id));
               });
@@ -1412,6 +1443,11 @@ const EditLeadPage: React.FC = () => {
                                 className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                               >
                                 <option value="">Select a product...</option>
+                                {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                                  <option value={row.product_id}>
+                                    {row.product_name || `Product #${row.product_id}`}
+                                  </option>
+                                )}
                                 {products.map((p) => (
                                   <option key={p.id} value={p.id}>
                                     {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
@@ -1434,6 +1470,11 @@ const EditLeadPage: React.FC = () => {
                                     className={`${inputCls} pr-7 truncate`}
                                   >
                                     <option value="">Select Warehouse</option>
+                                    {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
+                                      <option value={row.warehouse_id}>
+                                        {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
+                                      </option>
+                                    )}
                                     {availableWarehouses.map((w) => (
                                       <option key={w.id} value={w.id}>
                                         {getWarehouseLabel(w)}
@@ -1455,6 +1496,11 @@ const EditLeadPage: React.FC = () => {
                                     className={`${inputCls} pr-7 truncate disabled:opacity-50`}
                                   >
                                     <option value="">Select Location</option>
+                                    {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
+                                      <option value={row.warehouse_location_id}>
+                                        {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
+                                      </option>
+                                    )}
                                     {availableLocations.map((loc: any) => (
                                       <option key={loc.id} value={loc.id}>
                                         {getLocationLabel(loc)}
@@ -1582,6 +1628,11 @@ const EditLeadPage: React.FC = () => {
                             className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           >
                             <option value="">Select a product...</option>
+                            {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                              <option value={row.product_id}>
+                                {row.product_name || `Product #${row.product_id}`}
+                              </option>
+                            )}
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
@@ -1606,6 +1657,11 @@ const EditLeadPage: React.FC = () => {
                                 className={`${inputCls} pr-7 truncate text-xs`}
                               >
                                 <option value="">Select Warehouse</option>
+                                {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
+                                  <option value={row.warehouse_id}>
+                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
+                                  </option>
+                                )}
                                 {availableWarehouses.map((w) => (
                                   <option key={w.id} value={w.id}>
                                     {getWarehouseLabel(w)}
@@ -1625,6 +1681,11 @@ const EditLeadPage: React.FC = () => {
                                 className={`${inputCls} pr-7 truncate text-xs disabled:opacity-50`}
                               >
                                 <option value="">Select Location</option>
+                                {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
+                                  <option value={row.warehouse_location_id}>
+                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
+                                  </option>
+                                )}
                                 {availableLocations.map((loc: any) => (
                                   <option key={loc.id} value={loc.id}>
                                     {getLocationLabel(loc)}

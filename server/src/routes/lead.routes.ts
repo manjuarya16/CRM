@@ -21,6 +21,29 @@ const upload = multer({
   },
 });
 
+// Configure multer for general lead attachments (accepts any document/file like .jmx, txt, csv, pdf, etc. max 50MB)
+const leadAttachmentDir = path.join(process.cwd(), "uploads", "leads");
+if (!fs.existsSync(leadAttachmentDir)) {
+  fs.mkdirSync(leadAttachmentDir, { recursive: true });
+}
+const uploadLeadAttachment = multer({
+  dest: leadAttachmentDir,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+});
+
+// Helper middleware to catch multer errors gracefully without throwing 500
+const handleMulterUpload = (uploadMiddleware: any) => (req: Request, res: Response, next: any) => {
+  uploadMiddleware(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "File upload error",
+      });
+    }
+    next();
+  });
+};
+
 const audioDir = path.join(process.cwd(), "uploads", "voice");
 if (!fs.existsSync(audioDir)) {
   fs.mkdirSync(audioDir, { recursive: true });
@@ -59,7 +82,7 @@ router.get("/kanban", requireAuth, (req: Request, res: Response) => {
 router.post(
   "/create-by-ai",
   requireAuth,
-  upload.single("file"),
+  handleMulterUpload(upload.single("file")),
   (req: Request, res: Response) => {
     leadService.createLeadByAI(req, res);
   }
@@ -88,7 +111,7 @@ router.post(
 router.post(
   "/:id/upload-file",
   requireAuth,
-  upload.single("file"),
+  handleMulterUpload(uploadLeadAttachment.single("file")),
   (req: Request, res: Response) => {
     leadService.uploadLeadFile(req, res);
   }

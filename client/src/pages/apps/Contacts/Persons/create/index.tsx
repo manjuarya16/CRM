@@ -118,7 +118,9 @@ const CreatePersonPage: React.FC = () => {
       cleanVal = startsWithPlus ? "+" + digitsAndSymbols : digitsAndSymbols;
 
       const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-      if (digitsOnly.length > 15) {
+      if (/^0+$/.test(digitsOnly) && digitsOnly.length >= 7) {
+        errorMsg = "Contact number cannot consist of only zeros.";
+      } else if (digitsOnly.length > 15) {
         errorMsg = "Mobile number cannot exceed 15 digits.";
       }
     }
@@ -152,6 +154,13 @@ const CreatePersonPage: React.FC = () => {
     if (!val || val.trim() === "") return;
     const cleanVal = val.trim();
     const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
+    if (/^0+$/.test(digitsOnly)) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: "Contact number cannot consist of only zeros.",
+      }));
+      return;
+    }
     if (digitsOnly.length < 7) {
       setErrors((prev) => ({
         ...prev,

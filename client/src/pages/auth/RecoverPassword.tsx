@@ -107,7 +107,7 @@ const RecoverPassword = () => {
               label="New Password"
               type="password"
               name="new_password"
-              placeholder="••••••••"
+              placeholder="Enter new password"
               value={newPassword}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
               containerClass="mb-4"
@@ -120,7 +120,7 @@ const RecoverPassword = () => {
               label="Confirm New Password"
               type="password"
               name="confirm_password"
-              placeholder="••••••••"
+              placeholder="Enter password to confirm"
               value={confirmPassword}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
               containerClass="mb-4"

@@ -158,7 +158,7 @@ const EditOrganizationPage: React.FC = () => {
 
       const res = await useOrganizationStore.getState().updateOrganization(id!, payload);
       await useTagStore.getState().saveEntityTags("organization", id!, selectedTagIds);
-      if (res.data?.success || res.status === 200) {
+      if (res?.success || res?.data?.id || res?.id || res?.status === 200) {
         Swal.fire({
           icon: "success",
           title: "Success",
