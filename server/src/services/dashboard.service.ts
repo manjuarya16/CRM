@@ -374,10 +374,18 @@ export class DashboardService {
           const em = typeof r.emails === "string" ? JSON.parse(r.emails) : r.emails;
           emailStr = Array.isArray(em) ? em[0]?.value : "";
         } catch { emailStr = ""; }
+
+        let contactStr = "";
+        try {
+          const cn = typeof r.contact_numbers === "string" ? JSON.parse(r.contact_numbers) : r.contact_numbers;
+          contactStr = Array.isArray(cn) ? (cn[0]?.value || "") : (typeof cn === "string" ? cn : "");
+        } catch { contactStr = ""; }
+
         return {
           id: r.id,
           name: r.name,
           email: emailStr,
+          contact_number: contactStr,
           deals_count: Number(r.deals_count) || 0,
           revenue: Number(r.revenue) || 0,
         };

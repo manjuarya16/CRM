@@ -96,6 +96,14 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
       person_id,
     }: IActivityCreateInput = req.body;
 
+    if (type === "note" && (!comment || !String(comment).trim())) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Note content cannot be empty",
+      });
+      return;
+    }
+
     const currentUserId = user_id || (req as any).user?.id || null;
 
     const result = await connection.query(

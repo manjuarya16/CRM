@@ -9,6 +9,14 @@ export const activitySchema = z.object({
   is_done: z.boolean().optional().default(false),
   user_id: z.coerce.number().optional().nullable(),
   location: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.type === 'note' && (!data.comment || !data.comment.trim())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Note content cannot be empty',
+      path: ['comment'],
+    });
+  }
 });
 
 export type ActivityInput = z.infer<typeof activitySchema>;

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
 export const createMailSchema = z.object({
   subject: z.string().optional().default(''),
   to: z.union([
@@ -27,6 +29,34 @@ export const createMailSchema = z.object({
   quote_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   organization_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
   parent_id: z.union([z.number(), z.string()]).nullable().optional().transform((v) => (v ? Number(v) : null)),
+}).superRefine((data, ctx) => {
+  const isDraft = data.is_draft;
+  if (!isDraft) {
+    const recipients = (data.reply_to && data.reply_to.length > 0) ? data.reply_to : data.to;
+    if (!recipients || recipients.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one recipient email address is required',
+        path: ['reply_to'],
+      });
+    }
+  }
+  const checkList = (list: string[] | undefined, field: string) => {
+    if (!list) return;
+    for (const em of list) {
+      if (em && !emailRegex.test(em.trim())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid email address format: "${em}"`,
+          path: [field],
+        });
+      }
+    }
+  };
+  checkList(data.to, 'to');
+  checkList(data.reply_to, 'reply_to');
+  checkList(data.cc, 'cc');
+  checkList(data.bcc, 'bcc');
 });
 
 export const updateMailSchema = z.object({

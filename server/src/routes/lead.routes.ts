@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import leadService from "@/services/leadService";
 import { requireAuth } from "@/middleware/auth";
 
@@ -18,6 +19,40 @@ const upload = multer({
       cb(new Error("Only PDF and image files are allowed (pdf, jpeg, jpg, png, webp, bmp)"));
     }
   },
+});
+
+// Configure multer for general lead attachments (accepts any document/file like .jmx, txt, csv, pdf, etc. max 50MB)
+const leadAttachmentDir = path.join(process.cwd(), "uploads", "leads");
+if (!fs.existsSync(leadAttachmentDir)) {
+  fs.mkdirSync(leadAttachmentDir, { recursive: true });
+}
+const uploadLeadAttachment = multer({
+  dest: leadAttachmentDir,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+});
+
+// Helper middleware to catch multer errors gracefully without throwing 500
+const handleMulterUpload = (uploadMiddleware: any) => (req: Request, res: Response, next: any) => {
+  uploadMiddleware(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "File upload error",
+      });
+    }
+    next();
+  });
+};
+
+const audioDir = path.join(process.cwd(), "uploads", "voice");
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir, { recursive: true });
+}
+
+// Configure multer for voice audio recording uploads (max 25MB)
+const uploadAudio = multer({
+  dest: audioDir,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
 });
 
 // ─── Static routes (must come before dynamic /:id) ──────────────────────────
@@ -47,16 +82,36 @@ router.get("/kanban", requireAuth, (req: Request, res: Response) => {
 router.post(
   "/create-by-ai",
   requireAuth,
-  upload.single("file"),
+  handleMulterUpload(upload.single("file")),
   (req: Request, res: Response) => {
     leadService.createLeadByAI(req, res);
+  }
+);
+
+// ─── Voice Lead Creation ────────────────────────────────────────────────────
+
+router.post(
+  "/parse-voice",
+  requireAuth,
+  uploadAudio.single("audio"),
+  (req: Request, res: Response) => {
+    leadService.parseVoiceLead(req, res);
+  }
+);
+
+router.post(
+  "/create-by-voice",
+  requireAuth,
+  uploadAudio.single("audio"),
+  (req: Request, res: Response) => {
+    leadService.createLeadByVoice(req, res);
   }
 );
 
 router.post(
   "/:id/upload-file",
   requireAuth,
-  upload.single("file"),
+  handleMulterUpload(uploadLeadAttachment.single("file")),
   (req: Request, res: Response) => {
     leadService.uploadLeadFile(req, res);
   }

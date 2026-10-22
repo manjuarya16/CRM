@@ -61,7 +61,7 @@ const Login = () => {
             label="Password"
             type="password"
             name="password"
-            placeholder="••••••••"
+            placeholder="enter password"
             containerClass="mb-4"
             className="form-input w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent text-slate-800 dark:text-slate-100 transition-all"
             labelClassName="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider"

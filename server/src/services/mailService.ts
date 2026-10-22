@@ -168,7 +168,7 @@ export class MailService {
         `SELECT * FROM public.fn_save_email(
           $1, $2, $3, $4, $5, $6, $7::jsonb,
           $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb,
-          $13, $14, $15, $16, $17, $18
+          $13, $14, $15, $16, $17, $18, $19
         )`,
         [
           parsedSubject,
@@ -189,10 +189,12 @@ export class MailService {
           data.lead_id || null,
           data.parent_id || null,
           user?.id || null,
+          null,
         ]
       );
 
       const createdEmail = emailInsertResult.rows[0];
+      const createdEmailId = createdEmail?.id ?? createdEmail?.fn_save_email;
 
       // Insert file attachments via procedural function
       if (files && files.length > 0) {
@@ -200,7 +202,7 @@ export class MailService {
           const attachPath = `/uploads/mail/${file.filename}`;
           await client.query(
             'SELECT * FROM public.fn_add_email_attachment($1, $2, $3, $4, $5)',
-            [file.originalname, attachPath, file.size, file.mimetype, createdEmail.id]
+            [file.originalname, attachPath, file.size, file.mimetype, createdEmailId]
           );
         }
       }
@@ -243,7 +245,7 @@ export class MailService {
       }
 
       await client.query('COMMIT');
-      return await this.getEmailById(createdEmail.id);
+      return await this.getEmailById(createdEmailId || createdEmail?.id);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

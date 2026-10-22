@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
@@ -217,25 +217,54 @@ const EditLeadPage: React.FC = () => {
         setLoading(false);
       });
 
-      useLeadStore.getState().fetchLeadProducts(Number(id)).then(() => {
+      useLeadStore.getState().fetchLeadProducts(Number(id)).then(async () => {
         const prods = useLeadStore.getState().leadProducts;
         if (Array.isArray(prods) && prods.length > 0) {
-          setProductRows(
-            prods.map((lp: any) => ({
-              id: lp.id,
-              product_id: String(lp.product_id),
-              product_name: lp.product_name || "",
-              quantity: String(lp.quantity || 1),
-              price: String(lp.price || 0),
-              warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
-              warehouse_location_id: lp.warehouse_location_id ? String(lp.warehouse_location_id) : "",
-            }))
+          const rowsWithInvs = await Promise.all(
+            prods.map(async (lp: any) => {
+              let inventories: any[] = [];
+              let prodName = lp.product_name || "";
+              let prodPrice = lp.price !== undefined && lp.price !== null ? String(lp.price) : "0";
+              if (lp.product_id) {
+                try {
+                  const pData = await useProductStore.getState().fetchProductById(Number(lp.product_id));
+                  if (pData) {
+                    if (Array.isArray(pData.inventories)) {
+                      inventories = pData.inventories;
+                    }
+                    if (!prodName && pData.name) {
+                      prodName = pData.name;
+                    }
+                    if ((!prodPrice || prodPrice === "0") && pData.price) {
+                      prodPrice = String(pData.price);
+                    }
+                    setProducts((prev) => {
+                      if (!prev.some((p) => String(p.id) === String(lp.product_id))) {
+                        return [...prev, pData];
+                      }
+                      return prev;
+                    });
+                  }
+                } catch (e) {}
+              }
+              return {
+                id: lp.id,
+                product_id: String(lp.product_id || ""),
+                product_name: prodName,
+                quantity: String(lp.quantity || 1),
+                price: prodPrice,
+                warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
+                warehouse_location_id: lp.warehouse_location_id ? String(lp.warehouse_location_id) : "",
+                inventories,
+              };
+            })
           );
+          setProductRows(rowsWithInvs);
         } else {
-          setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" }]);
+          setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [] }]);
         }
       }).catch(() => {
-        setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" }]);
+        setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [] }]);
       });
     }
   }, [id]);
@@ -463,16 +492,90 @@ const EditLeadPage: React.FC = () => {
     return runningTotal + itemQuantity * itemPrice;
   }, 0);
 
-  const filteredPersons = persons.filter((person) => {
-    if (!personSearch) return true;
-    if (personId && personSearch === (persons.find((item) => String(item.id) === String(personId))?.name || "")) return true;
-    const query = personSearch.toLowerCase().trim();
-    const name = (person.name || "").toLowerCase();
-    const email = getPersonEmail(person).toLowerCase();
-    const phone = getPersonPhone(person).toLowerCase();
-    const organizationName = getPersonOrg(person, organizations).toLowerCase();
-    return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
-  });
+  const uniqueSources = useMemo(() => {
+    const seen = new Set<string>();
+    return (sources || []).filter((s) => {
+      const nameKey = (s.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(s.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(s.id));
+      return true;
+    });
+  }, [sources]);
+
+  const uniqueTypes = useMemo(() => {
+    const seen = new Set<string>();
+    return (types || []).filter((t) => {
+      const nameKey = (t.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(t.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(t.id));
+      return true;
+    });
+  }, [types]);
+
+  const uniquePipelines = useMemo(() => {
+    const seen = new Set<string>();
+    return (pipelines || []).filter((p) => {
+      const nameKey = (p.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(p.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(p.id));
+      return true;
+    });
+  }, [pipelines]);
+
+  const uniqueStages = useMemo(() => {
+    const seen = new Set<string>();
+    return (stages || []).filter((st) => {
+      const nameKey = (st.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(st.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(st.id));
+      return true;
+    });
+  }, [stages]);
+
+  const uniqueUsers = useMemo(() => {
+    const seen = new Set<string>();
+    return (users || []).filter((u) => {
+      const key = `${u.id}-${(u.email || u.name || "").trim().toLowerCase()}`;
+      if (seen.has(key) || seen.has(String(u.id))) return false;
+      seen.add(key);
+      seen.add(String(u.id));
+      return true;
+    });
+  }, [users]);
+
+  const uniqueOrganizations = useMemo(() => {
+    const seen = new Set<string>();
+    return (organizations || []).filter((o) => {
+      const nameKey = (o.name || "").trim().toLowerCase();
+      if (!nameKey || seen.has(nameKey) || seen.has(String(o.id))) return false;
+      seen.add(nameKey);
+      seen.add(String(o.id));
+      return true;
+    });
+  }, [organizations]);
+
+  const filteredPersons = useMemo(() => {
+    const seen = new Set<string>();
+    return (persons || []).filter((person) => {
+      if (!person) return false;
+      const key = String(person.id || person.name || "");
+      if (seen.has(key)) return false;
+      seen.add(key);
+
+      if (!personSearch) return true;
+      if (personId && personSearch === (persons.find((item) => String(item.id) === String(personId))?.name || "")) return true;
+      const query = personSearch.toLowerCase().trim();
+      const name = (person.name || "").toLowerCase();
+      const email = getPersonEmail(person).toLowerCase();
+      const phone = getPersonPhone(person).toLowerCase();
+      const organizationName = getPersonOrg(person, organizations).toLowerCase();
+      return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
+    });
+  }, [persons, personSearch, personId, organizations]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -701,150 +804,150 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {/* Title */}
-              <div className="md:col-span-2 lg:col-span-4">
-                <label className={labelCls}>
-                  Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={details.title}
-                  onChange={(e) => {
-                    setDetails({ ...details, title: e.target.value });
-                    clearError("title");
-                  }}
-                  className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                />
-                {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
-              </div>
+            {/* Title */}
+            <div className="md:col-span-2 lg:col-span-4">
+              <label className={labelCls}>
+                Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={details.title}
+                onChange={(e) => {
+                  setDetails({ ...details, title: e.target.value });
+                  clearError("title");
+                }}
+                className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+              />
+              {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
+            </div>
 
-              {/* Sales Owner Dropdown */}
-              <div>
-                <label className={labelCls}>Sales Owner</label>
-                <select
-                  value={details.user_id}
-                  onChange={(e) => setDetails({ ...details, user_id: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">-- Select Sales Owner --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Sales Owner Dropdown */}
+            <div>
+              <label className={labelCls}>Sales Owner</label>
+              <select
+                value={details.user_id}
+                onChange={(e) => setDetails({ ...details, user_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- Select Sales Owner --</option>
+                {uniqueUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {/* Lead Value */}
-              <div>
-                <label className={labelCls}>Lead Value (₹)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={details.lead_value}
-                  onChange={(e) => setDetails({ ...details, lead_value: e.target.value })}
-                  className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                />
-                {totalLeadValue > 0 && (
-                  <p className="text-xs text-[#0088cc] mt-1 font-medium">
-                    Auto from products: {fmtCurrency(totalLeadValue)}
-                  </p>
-                )}
-              </div>
+            {/* Lead Value */}
+            <div>
+              <label className={labelCls}>Lead Value (₹)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={details.lead_value}
+                onChange={(e) => setDetails({ ...details, lead_value: e.target.value })}
+                className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+              />
+              {totalLeadValue > 0 && (
+                <p className="text-xs text-[#0088cc] mt-1 font-medium">
+                  Auto from products: {fmtCurrency(totalLeadValue)}
+                </p>
+              )}
+            </div>
 
-              {/* Expected Close Date */}
-              <div>
-                <label className={labelCls}>Expected Close Date</label>
-                <input
-                  type="date"
-                  value={details.expected_close_date}
-                  onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
+            {/* Expected Close Date */}
+            <div>
+              <label className={labelCls}>Expected Close Date</label>
+              <input
+                type="date"
+                value={details.expected_close_date}
+                onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
+                className={inputCls}
+              />
+            </div>
 
-              {/* Lead Source */}
-              <div>
-                <label className={labelCls}>Lead Source</label>
-                <select
-                  value={details.lead_source_id}
-                  onChange={(e) => setDetails({ ...details, lead_source_id: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">Select Source</option>
-                  {sources.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Lead Source */}
+            <div>
+              <label className={labelCls}>Lead Source</label>
+              <select
+                value={details.lead_source_id}
+                onChange={(e) => setDetails({ ...details, lead_source_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Select Source</option>
+                {uniqueSources.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
 
-              {/* Lead Type */}
-              <div>
-                <label className={labelCls}>Lead Type</label>
-                <select
-                  value={details.lead_type_id}
-                  onChange={(e) => setDetails({ ...details, lead_type_id: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">Select Type</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Lead Type */}
+            <div>
+              <label className={labelCls}>Lead Type</label>
+              <select
+                value={details.lead_type_id}
+                onChange={(e) => setDetails({ ...details, lead_type_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Select Type</option>
+                {uniqueTypes.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
 
-              {/* Pipeline */}
-              <div>
-                <label className={labelCls}>Pipeline</label>
-                <select
-                  value={details.lead_pipeline_id}
-                  onChange={(e) => setDetails({ ...details, lead_pipeline_id: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">Select Pipeline</option>
-                  {pipelines.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Pipeline */}
+            <div>
+              <label className={labelCls}>Pipeline</label>
+              <select
+                value={details.lead_pipeline_id}
+                onChange={(e) => setDetails({ ...details, lead_pipeline_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Select Pipeline</option>
+                {uniquePipelines.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
 
-              {/* Stage */}
-              <div>
-                <label className={labelCls}>Stage</label>
-                <select
-                  value={details.lead_pipeline_stage_id}
-                  onChange={(e) => setDetails({ ...details, lead_pipeline_stage_id: e.target.value })}
-                  className={inputCls}
-                  disabled={!details.lead_pipeline_id}
-                >
-                  <option value="">Select Stage</option>
-                  {stages.map((st) => (
-                    <option key={st.id} value={st.id}>{st.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Stage */}
+            <div>
+              <label className={labelCls}>Stage</label>
+              <select
+                value={details.lead_pipeline_stage_id}
+                onChange={(e) => setDetails({ ...details, lead_pipeline_stage_id: e.target.value })}
+                className={inputCls}
+                disabled={!details.lead_pipeline_id}
+              >
+                <option value="">Select Stage</option>
+                {uniqueStages.map((st) => (
+                  <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+            </div>
 
-              {/* Description */}
-              <div className="md:col-span-2 lg:col-span-4">
-                <label className={labelCls}>Description</label>
-                <textarea
-                  rows={4}
-                  value={details.description}
-                  onChange={(e) => setDetails({ ...details, description: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
+            {/* Description */}
+            <div className="md:col-span-2 lg:col-span-4">
+              <label className={labelCls}>Description</label>
+              <textarea
+                rows={4}
+                value={details.description}
+                onChange={(e) => setDetails({ ...details, description: e.target.value })}
+                className={inputCls}
+              />
+            </div>
 
-              {/* Tags */}
-              <div className="md:col-span-2 lg:col-span-4">
-                <label className={labelCls}>Tags</label>
-                <TagPicker
-                  selectedTagIds={selectedTagIds}
-                  onChange={setSelectedTagIds}
-                />
-              </div>
+            {/* Tags */}
+            <div className="md:col-span-2 lg:col-span-4">
+              <label className={labelCls}>Tags</label>
+              <TagPicker
+                selectedTagIds={selectedTagIds}
+                onChange={setSelectedTagIds}
+              />
             </div>
           </div>
+        </div>
 
         {/* 👤 CARD 2: CONTACT PERSON */}
         <div
@@ -864,302 +967,287 @@ const EditLeadPage: React.FC = () => {
             </div>
           </div>
 
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Name * Searchable Dropdown */}
-              <div className="relative" ref={personDropdownRef}>
-                <label className={labelCls}>
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={personSearch}
-                    onFocus={() => setIsPersonDropdownOpen(true)}
-                    onChange={(e) => {
-                      setPersonSearch(e.target.value);
-                      setPersonName(e.target.value);
-                      if (personId) setPersonId("");
-                      clearError("personName");
-                      setIsPersonDropdownOpen(true);
-                    }}
-                    placeholder="Click to Add"
-                    className={`${inputCls} pr-8 ${errors.personName ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                  />
-                  {personSearch ? (
+          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Name * Searchable Dropdown */}
+            <div className="relative" ref={personDropdownRef}>
+              <label className={labelCls}>
+                Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={personSearch}
+                  onFocus={() => setIsPersonDropdownOpen(true)}
+                  onChange={(e) => {
+                    setPersonSearch(e.target.value);
+                    setPersonName(e.target.value);
+                    if (personId) setPersonId("");
+                    clearError("personName");
+                    setIsPersonDropdownOpen(true);
+                  }}
+                  placeholder="Click to Add"
+                  className={`${inputCls} pr-8 ${errors.personName ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                />
+                {personSearch ? (
+                  <button
+                    type="button"
+                    onClick={handleClearPerson}
+                    className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                ) : (
+                  <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
+                )}
+              </div>
+              {errors.personName && (
+                <p className="mt-1 text-xs text-red-500 font-medium">{errors.personName}</p>
+              )}
+
+              {/* Dropdown popup */}
+              {isPersonDropdownOpen && (
+                <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                  {filteredPersons.length > 0 ? (
+                    filteredPersons.map((p) => {
+                      const email = getPersonEmail(p);
+                      const phone = getPersonPhone(p);
+                      const org = getPersonOrg(p, organizations);
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectPerson(p)}
+                          className="px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex flex-col border-b last:border-b-0 border-gray-100 dark:border-gray-700"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {p.name}
+                              {org && <span className="text-gray-500 dark:text-gray-400 font-normal"> • {org}</span>}
+                            </span>
+                          </div>
+                          {(email || phone) && (
+                            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              {email && <span>{email}</span>}
+                              {email && phone && <span>•</span>}
+                              {phone && <span>{phone}</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                      No contacts found. Type a name to create a new contact.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Organization */}
+            <div>
+              <label className={labelCls}>Organization</label>
+              <select
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Click to add</option>
+                {uniqueOrganizations.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Email * */}
+            <div className="flex flex-col gap-1.5">
+              <label className={labelCls}>
+                Email <span className="text-red-500">*</span>
+              </label>
+              {contactEmails.map((em, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
+                    }`}>
+                    <input
+                      type="email"
+                      value={em.value}
+                      onChange={(e) => {
+                        handleEmailChange(idx, "value", e.target.value);
+                        clearError("contactEmail");
+                      }}
+                      placeholder=""
+                      className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
+                    />
+                    <select
+                      value={em.label}
+                      onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
+                      className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
+                    >
+                      <option value="Work">Work</option>
+                      <option value="Home">Home</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  {contactEmails.length > 1 && (
                     <button
                       type="button"
-                      onClick={handleClearPerson}
-                      className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                      onClick={() => handleRemoveEmailRow(idx)}
+                      className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                      title="Remove email"
                     >
                       ✕
                     </button>
-                  ) : (
-                    <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
                   )}
                 </div>
-                {errors.personName && (
-                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.personName}</p>
-                )}
+              ))}
+              {errors.contactEmail && (
+                <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactEmail}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleAddEmailRow}
+                className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
+              >
+                + Add More
+              </button>
+            </div>
 
-                {/* Dropdown popup */}
-                {isPersonDropdownOpen && (
-                  <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                    {filteredPersons.length > 0 ? (
-                      filteredPersons.map((p) => {
-                        const email = getPersonEmail(p);
-                        const phone = getPersonPhone(p);
-                        const org = getPersonOrg(p, organizations);
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => handleSelectPerson(p)}
-                            className="px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex flex-col border-b last:border-b-0 border-gray-100 dark:border-gray-700"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                                {p.name}
-                                {org && <span className="text-gray-500 dark:text-gray-400 font-normal"> • {org}</span>}
-                              </span>
-                            </div>
-                            {(email || phone) && (
-                              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                {email && <span>{email}</span>}
-                                {email && phone && <span>•</span>}
-                                {phone && <span>{phone}</span>}
+            {/* Contact Number */}
+            <div className="flex flex-col gap-1.5">
+              <label className={labelCls}>Contact Number</label>
+              {contactPhones.map((pn, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
+                    <input
+                      type="tel"
+                      value={pn.value}
+                      onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                      placeholder=""
+                      className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
+                    />
+                    <select
+                      value={pn.label}
+                      onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
+                      className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
+                    >
+                      <option value="Work">Work</option>
+                      <option value="Mobile">Mobile</option>
+                      <option value="Home">Home</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  {contactPhones.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoneRow(idx)}
+                      className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                      title="Remove phone"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={handleAddPhoneRow}
+                className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
+              >
+                + Add More
+              </button>
+            </div>
+
+            {/* Organization Contacts List */}
+            {(() => {
+              const orgContacts = organizationId
+                ? persons.filter((p) => String(p.organization_id) === String(organizationId))
+                : [];
+              if (orgContacts.length === 0) return null;
+              const orgObj = organizations.find((o) => String(o.id) === String(organizationId));
+
+              return (
+                <div className="mt-2 p-3.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i className="mgc_group_line text-sm text-[#0088cc]"></i>
+                        Organization Contacts ({orgContacts.length})
+                      </h4>
+                      <p className="text-[11px] text-gray-500">
+                        {orgObj?.name ? `Contacts associated with ${orgObj.name}` : "Contacts associated with this organization"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {orgContacts.map((contact) => {
+                      const isPrimary = String(contact.id) === String(personId);
+                      const cEmail = getPersonEmail(contact);
+                      const cPhone = getPersonPhone(contact);
+
+                      return (
+                        <div
+                          key={contact.id}
+                          className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${isPrimary
+                            ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
+                            : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                            }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                }`}>
+                                {contact.name?.substring(0, 2).toUpperCase()}
                               </div>
+                              <div>
+                                <p className="text-xs font-bold text-gray-800 dark:text-gray-100">
+                                  {contact.name}
+                                </p>
+                                {contact.job_title && (
+                                  <p className="text-[10px] text-gray-500 font-medium">
+                                    {contact.job_title}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {isPrimary ? (
+                              <span className="px-2 py-0.5 text-[10px] font-bold bg-[#0088cc] text-white rounded-full shrink-0">
+                                Primary
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSelectPerson(contact)}
+                                className="px-2 py-0.5 text-[10px] font-semibold text-[#0088cc] border border-[#0088cc] rounded hover:bg-[#0088cc] hover:text-white transition-colors shrink-0"
+                              >
+                                Set Primary
+                              </button>
                             )}
                           </div>
-                        );
-                      })
-                    ) : (
-                      <div className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-                        No contacts found. Type a name to create a new contact.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Organization */}
-              <div>
-                <label className={labelCls}>Organization</label>
-                <select
-                  value={organizationId}
-                  onChange={(e) => setOrganizationId(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Click to add</option>
-                  {organizations.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Email * */}
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>
-                  Email <span className="text-red-500">*</span>
-                </label>
-                {contactEmails.map((em, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
-                      }`}>
-                      <input
-                        type="email"
-                        value={em.value}
-                        onChange={(e) => {
-                          handleEmailChange(idx, "value", e.target.value);
-                          clearError("contactEmail");
-                        }}
-                        placeholder=""
-                        className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
-                      />
-                      <select
-                        value={em.label}
-                        onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
-                        className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
-                      >
-                        <option value="Work">Work</option>
-                        <option value="Home">Home</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    {contactEmails.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEmailRow(idx)}
-                        className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
-                        title="Remove email"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {errors.contactEmail && (
-                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactEmail}</p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleAddEmailRow}
-                  className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
-                >
-                  + Add More
-                </button>
-              </div>
-
-              {/* Contact Number */}
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Contact Number</label>
-                {contactPhones.map((pn, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
-                      <input
-                        type="tel"
-                        value={pn.value}
-                        onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
-                        placeholder=""
-                        className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
-                      />
-                      <select
-                        value={pn.label}
-                        onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
-                        className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
-                      >
-                        <option value="Work">Work</option>
-                        <option value="Mobile">Mobile</option>
-                        <option value="Home">Home</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    {contactPhones.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePhoneRow(idx)}
-                        className="text-red-500 hover:text-red-700 px-2 py-1 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
-                        title="Remove phone"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleAddPhoneRow}
-                  className="self-start text-xs font-semibold text-[#0088cc] hover:underline flex items-center gap-1 mt-0.5"
-                >
-                  + Add More
-                </button>
-              </div>
-
-              {/* Organization */}
-              <div>
-                <label className={labelCls}>Organization</label>
-                <select
-                  value={organizationId}
-                  onChange={(e) => setOrganizationId(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Click to add</option>
-                  {organizations.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Organization Contacts List */}
-              {(() => {
-                const orgContacts = organizationId
-                  ? persons.filter((p) => String(p.organization_id) === String(organizationId))
-                  : [];
-                if (orgContacts.length === 0) return null;
-                const orgObj = organizations.find((o) => String(o.id) === String(organizationId));
-
-                return (
-                  <div className="mt-2 p-3.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <i className="mgc_group_line text-sm text-[#0088cc]"></i>
-                          Organization Contacts ({orgContacts.length})
-                        </h4>
-                        <p className="text-[11px] text-gray-500">
-                          {orgObj?.name ? `Contacts associated with ${orgObj.name}` : "Contacts associated with this organization"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {orgContacts.map((contact) => {
-                        const isPrimary = String(contact.id) === String(personId);
-                        const cEmail = getPersonEmail(contact);
-                        const cPhone = getPersonPhone(contact);
-
-                        return (
-                          <div
-                            key={contact.id}
-                            className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${isPrimary
-                              ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
-                              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                              }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                  }`}>
-                                  {contact.name?.substring(0, 2).toUpperCase()}
-                                </div>
-                                <div>
-                                  <p className="text-xs font-bold text-gray-800 dark:text-gray-100">
-                                    {contact.name}
-                                  </p>
-                                  {contact.job_title && (
-                                    <p className="text-[10px] text-gray-500 font-medium">
-                                      {contact.job_title}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-
-                              {isPrimary ? (
-                                <span className="px-2 py-0.5 text-[10px] font-bold bg-[#0088cc] text-white rounded-full shrink-0">
-                                  Primary
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectPerson(contact)}
-                                  className="px-2 py-0.5 text-[10px] font-semibold text-[#0088cc] border border-[#0088cc] rounded hover:bg-[#0088cc] hover:text-white transition-colors shrink-0"
-                                >
-                                  Set Primary
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="text-[11px] text-gray-500 space-y-0.5 pt-1 border-t border-gray-100 dark:border-gray-700/60">
-                              {cPhone && (
-                                <p className="flex items-center gap-1">
-                                  <i className="mgc_phone_line text-gray-400 text-xs"></i>
-                                  {cPhone}
-                                </p>
-                              )}
-                              {cEmail && (
-                                <p className="flex items-center gap-1">
-                                  <i className="mgc_mail_line text-gray-400 text-xs"></i>
-                                  {cEmail}
-                                </p>
-                              )}
-                            </div>
+                          <div className="text-[11px] text-gray-500 space-y-0.5 pt-1 border-t border-gray-100 dark:border-gray-700/60">
+                            {cPhone && (
+                              <p className="flex items-center gap-1">
+                                <i className="mgc_phone_line text-gray-400 text-xs"></i>
+                                {cPhone}
+                              </p>
+                            )}
+                            {cEmail && (
+                              <p className="flex items-center gap-1">
+                                <i className="mgc_mail_line text-gray-400 text-xs"></i>
+                                {cEmail}
+                              </p>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
           </div>
+        </div>
 
         {/* ⚙️ CARD 3: CUSTOM FIELDS */}
         <div
@@ -1205,466 +1293,497 @@ const EditLeadPage: React.FC = () => {
             </button>
           </div>
 
-            {(() => {
-              const hasPhysicalProduct = productRows.some((r) => {
-                if (!r.product_id) return true;
-                const prod = products.find((p) => String(p.id) === String(r.product_id));
-                return prod && prod.type !== "Service" && prod.type?.toLowerCase() !== "service";
-              });
+          {(() => {
+            const hasPhysicalProduct = productRows.some((r) => {
+              if (!r.product_id) return true;
+              const prod = products.find((p) => String(p.id) === String(r.product_id));
+              return prod && prod.type !== "Service" && prod.type?.toLowerCase() !== "service";
+            });
 
-              const getRowData = (row: any, index: number) => {
-                const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
-                const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-                const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
-                const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
-                const prodErr = errors[`product_${index}`];
-                const qtyErr = errors[`quantity_${index}`];
-                const priceErr = errors[`price_${index}`];
+            const getRowData = (row: any, index: number) => {
+              const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
+              const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+              const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
+              const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
+              const prodErr = errors[`product_${index}`];
+              const qtyErr = errors[`quantity_${index}`];
+              const priceErr = errors[`price_${index}`];
 
-                // Dependent Warehouses for selected product
-                const productInventories = row.inventories || [];
-                const hasInvRecords = productInventories.length > 0;
-                const validWarehouseIds = new Set(
-                  productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
-                );
+              // Dependent Warehouses for selected product
+              const productInventories = row.inventories || [];
+              const hasInvRecords = productInventories.length > 0;
+              const validWarehouseIds = new Set(
+                productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
+              );
 
-                // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
-                const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
-                  if (!row.product_id) return 0;
-                  return productRows.reduce((sum, r, rIdx) => {
-                    if (rIdx === index) return sum;
-                    if (String(r.product_id) !== String(row.product_id)) return sum;
-                    if (locId && String(r.warehouse_location_id) === String(locId)) {
-                      return sum + (parseFloat(r.quantity) || 0);
-                    }
-                    if (!locId && wId && String(r.warehouse_id) === String(wId)) {
-                      return sum + (parseFloat(r.quantity) || 0);
-                    }
-                    return sum;
-                  }, 0);
-                };
-
-                const availableWarehouses = warehouses.filter((w) => {
-                  if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
-                  return validWarehouseIds.has(Number(w.id));
-                });
-
-                const getWarehouseLabel = (w: any) => {
-                  if (!row.product_id || !hasInvRecords) return w.name;
-                  const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
-                  const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
-                  const usedOther = getUsedQtyInOtherRows(undefined, w.id);
-                  const availStock = Math.max(0, dbTotalStock - usedOther);
-                  return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
-                };
-
-                // Dependent Locations for selected warehouse
-                const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
-                const allLocations = selectedW?.locations || [];
-                const locInvsForW = productInventories.filter(
-                  (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
-                );
-                const validLocationIds = new Set(
-                  locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
-                );
-
-                const availableLocations = allLocations.filter((loc: any) => {
-                  if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
-                  return validLocationIds.has(Number(loc.id));
-                });
-
-                const getLocationLabel = (loc: any) => {
-                  if (!row.product_id || !hasInvRecords) return loc.name;
-                  const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
-                  if (!invForLoc) return loc.name;
-                  const dbLocStock = Number(invForLoc.in_stock) || 0;
-                  const usedOther = getUsedQtyInOtherRows(loc.id);
-                  const availStock = Math.max(0, dbLocStock - usedOther);
-                  return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
-                };
-
-                const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
-                const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
-                const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
-                const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
-                const reqQty = Number(row.quantity || 0);
-                const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
-                const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
-
-                return {
-                  selectedProd,
-                  isService,
-                  effectiveQty,
-                  rowAmount,
-                  prodErr,
-                  qtyErr,
-                  priceErr,
-                  availableWarehouses,
-                  getWarehouseLabel,
-                  availableLocations,
-                  getLocationLabel,
-                  locStock,
-                  isStockShortage,
-                  shortageQty,
-                };
+              // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
+              const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
+                if (!row.product_id) return 0;
+                return productRows.reduce((sum, r, rIdx) => {
+                  if (rIdx === index) return sum;
+                  if (String(r.product_id) !== String(row.product_id)) return sum;
+                  if (locId && String(r.warehouse_location_id) === String(locId)) {
+                    return sum + (parseFloat(r.quantity) || 0);
+                  }
+                  if (!locId && wId && String(r.warehouse_id) === String(wId)) {
+                    return sum + (parseFloat(r.quantity) || 0);
+                  }
+                  return sum;
+                }, 0);
               };
 
-              return (
-                <>
-                  {/* Desktop Table View */}
-                  <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                    <table className="w-full text-left border-collapse text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
-                          <th className="py-2.5 px-3 min-w-[220px]">
-                            Product <span className="text-red-500">*</span>
-                          </th>
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
-                          <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
-                          <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
-                          <th className="py-2.5 px-3 w-12 text-center"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productRows.map((row, index) => {
-                          const {
-                            isService,
-                            rowAmount,
-                            prodErr,
-                            qtyErr,
-                            priceErr,
-                            availableWarehouses,
-                            getWarehouseLabel,
-                            availableLocations,
-                            getLocationLabel,
-                            locStock,
-                            isStockShortage,
-                            shortageQty,
-                          } = getRowData(row, index);
+              const availableWarehouses = warehouses.filter((w) => {
+                if (row.warehouse_id && String(w.id) === String(row.warehouse_id)) return true;
+                if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
+                return validWarehouseIds.has(Number(w.id));
+              });
 
-                          return (
-                            <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
+              const getWarehouseLabel = (w: any) => {
+                if (!row.product_id || !hasInvRecords) return w.name;
+                const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
+                const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
+                const usedOther = getUsedQtyInOtherRows(undefined, w.id);
+                const availStock = Math.max(0, dbTotalStock - usedOther);
+                return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
+              };
+
+              // Dependent Locations for selected warehouse
+              const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
+              const allLocations = selectedW?.locations || [];
+              const locInvsForW = productInventories.filter(
+                (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
+              );
+              const validLocationIds = new Set(
+                locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
+              );
+
+              const availableLocations = allLocations.filter((loc: any) => {
+                if (row.warehouse_location_id && String(loc.id) === String(row.warehouse_location_id)) return true;
+                if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
+                return validLocationIds.has(Number(loc.id));
+              });
+
+              const getLocationLabel = (loc: any) => {
+                if (!row.product_id || !hasInvRecords) return loc.name;
+                const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
+                if (!invForLoc) return loc.name;
+                const dbLocStock = Number(invForLoc.in_stock) || 0;
+                const usedOther = getUsedQtyInOtherRows(loc.id);
+                const availStock = Math.max(0, dbLocStock - usedOther);
+                return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
+              };
+
+              const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
+              const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
+              const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
+              const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
+              const reqQty = Number(row.quantity || 0);
+              const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
+              const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
+
+              return {
+                selectedProd,
+                isService,
+                effectiveQty,
+                rowAmount,
+                prodErr,
+                qtyErr,
+                priceErr,
+                availableWarehouses,
+                getWarehouseLabel,
+                availableLocations,
+                getLocationLabel,
+                locStock,
+                isStockShortage,
+                shortageQty,
+              };
+            };
+
+            return (
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                        <th className="py-2.5 px-3 min-w-[220px]">
+                          Product <span className="text-red-500">*</span>
+                        </th>
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
+                        {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
+                        <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
+                        <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
+                        <th className="py-2.5 px-3 w-12 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productRows.map((row, index) => {
+                        const {
+                          isService,
+                          rowAmount,
+                          prodErr,
+                          qtyErr,
+                          priceErr,
+                          availableWarehouses,
+                          getWarehouseLabel,
+                          availableLocations,
+                          getLocationLabel,
+                          locStock,
+                          isStockShortage,
+                          shortageQty,
+                        } = getRowData(row, index);
+
+                        return (
+                          <tr key={index} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="py-2 px-3 align-top">
+                              <select
+                                value={row.product_id}
+                                onChange={(e) => selectProduct(index, e.target.value)}
+                                className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                              >
+                                <option value="">Select a product...</option>
+                                {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                                  <option value={row.product_id}>
+                                    {row.product_name || `Product #${row.product_id}`}
+                                  </option>
+                                )}
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                            </td>
+                            {hasPhysicalProduct && (
                               <td className="py-2 px-3 align-top">
-                                <select
-                                  value={row.product_id}
-                                  onChange={(e) => selectProduct(index, e.target.value)}
-                                  className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                                >
-                                  <option value="">Select a product...</option>
-                                  {products.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                                {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
-                              </td>
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <select
-                                      value={row.warehouse_id || ""}
-                                      onChange={(e) => {
-                                        updateProductRow(index, "warehouse_id", e.target.value);
-                                        updateProductRow(index, "warehouse_location_id", "");
-                                      }}
-                                      className={`${inputCls} pr-7 truncate`}
-                                    >
-                                      <option value="">Select Warehouse</option>
-                                      {availableWarehouses.map((w) => (
-                                        <option key={w.id} value={w.id}>
-                                          {getWarehouseLabel(w)}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  )}
-                                </td>
-                              )}
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <select
-                                      value={row.warehouse_location_id || ""}
-                                      onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
-                                      disabled={!row.warehouse_id}
-                                      className={`${inputCls} pr-7 truncate disabled:opacity-50`}
-                                    >
-                                      <option value="">Select Location</option>
-                                      {availableLocations.map((loc: any) => (
-                                        <option key={loc.id} value={loc.id}>
-                                          {getLocationLabel(loc)}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  )}
-                                </td>
-                              )}
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={row.quantity}
-                                        onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
-                                        className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
-                                          ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
-                                          : ""
-                                          }`}
-                                      />
-                                      {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                                      {isStockShortage && locStock !== null && (
-                                        locStock > 0 ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
-                                            className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
-                                          >
-                                            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
-                                            <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
-                                          </button>
-                                        ) : (
-                                          <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
-                                            ⚠️ Out of stock (fully allocated in previous row). Please select another location.
-                                          </div>
-                                        )
-                                      )}
-                                    </>
-                                  )}
-                                </td>
-                              )}
-                              <td className="py-2 px-3 align-top">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={row.price}
-                                  onChange={(e) => updateProductRow(index, "price", e.target.value)}
-                                  disabled
-                                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                                />
-                                {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
-                              </td>
-                              <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
-                                {fmtCurrency(rowAmount)}
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                {productRows.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeProductRow(index)}
-                                    className="text-gray-400 hover:text-red-500 font-bold p-1"
-                                    title="Remove item"
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <select
+                                    value={row.warehouse_id || ""}
+                                    onChange={(e) => {
+                                      updateProductRow(index, "warehouse_id", e.target.value);
+                                      updateProductRow(index, "warehouse_location_id", "");
+                                    }}
+                                    className={`${inputCls} pr-7 truncate`}
                                   >
-                                    &times;
-                                  </button>
+                                    <option value="">Select Warehouse</option>
+                                    {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
+                                      <option value={row.warehouse_id}>
+                                        {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
+                                      </option>
+                                    )}
+                                    {availableWarehouses.map((w) => (
+                                      <option key={w.id} value={w.id}>
+                                        {getWarehouseLabel(w)}
+                                      </option>
+                                    ))}
+                                  </select>
                                 )}
                               </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile Cards View */}
-                  <div className="md:hidden space-y-3">
-                    {productRows.map((row, index) => {
-                      const {
-                        isService,
-                        rowAmount,
-                        prodErr,
-                        qtyErr,
-                        priceErr,
-                        availableWarehouses,
-                        getWarehouseLabel,
-                        availableLocations,
-                        getLocationLabel,
-                        locStock,
-                        isStockShortage,
-                        shortageQty,
-                      } = getRowData(row, index);
-
-                      return (
-                        <div
-                          key={index}
-                          className="p-3.5 bg-gray-50/70 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3 relative shadow-xs"
-                        >
-                          <div className="flex items-center justify-between border-b border-gray-200/70 dark:border-gray-700 pb-2">
-                            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                              Item #{index + 1} {isService && <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">Service</span>}
-                            </span>
-                            {productRows.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeProductRow(index)}
-                                className="text-xs font-medium text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1"
-                              >
-                                <span className="text-base leading-none">&times;</span> Remove
-                              </button>
                             )}
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                              Product <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={row.product_id}
-                              onChange={(e) => selectProduct(index, e.target.value)}
-                              className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                            >
-                              <option value="">Select a product...</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
-                                </option>
-                              ))}
-                            </select>
-                            {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
-                          </div>
-
-                          {!isService && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Warehouse
-                                </label>
-                                <select
-                                  value={row.warehouse_id || ""}
-                                  onChange={(e) => {
-                                    updateProductRow(index, "warehouse_id", e.target.value);
-                                    updateProductRow(index, "warehouse_location_id", "");
-                                  }}
-                                  className={`${inputCls} pr-7 truncate text-xs`}
-                                >
-                                  <option value="">Select Warehouse</option>
-                                  {availableWarehouses.map((w) => (
-                                    <option key={w.id} value={w.id}>
-                                      {getWarehouseLabel(w)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Location
-                                </label>
-                                <select
-                                  value={row.warehouse_location_id || ""}
-                                  onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
-                                  disabled={!row.warehouse_id}
-                                  className={`${inputCls} pr-7 truncate text-xs disabled:opacity-50`}
-                                >
-                                  <option value="">Select Location</option>
-                                  {availableLocations.map((loc: any) => (
-                                    <option key={loc.id} value={loc.id}>
-                                      {getLocationLabel(loc)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2.5">
-                            {!isService ? (
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Quantity
-                                </label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={row.quantity}
-                                  onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
-                                  className={`${inputCls} text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                    qtyErr || isStockShortage
-                                      ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
-                                      : ""
-                                  }`}
-                                />
-                                {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                              </div>
-                            ) : (
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Quantity
-                                </label>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 py-2">1 (Service)</div>
-                              </div>
+                            {hasPhysicalProduct && (
+                              <td className="py-2 px-3 align-top">
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <select
+                                    value={row.warehouse_location_id || ""}
+                                    onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                    disabled={!row.warehouse_id}
+                                    className={`${inputCls} pr-7 truncate disabled:opacity-50`}
+                                  >
+                                    <option value="">Select Location</option>
+                                    {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
+                                      <option value={row.warehouse_location_id}>
+                                        {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
+                                      </option>
+                                    )}
+                                    {availableLocations.map((loc: any) => (
+                                      <option key={loc.id} value={loc.id}>
+                                        {getLocationLabel(loc)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </td>
                             )}
-
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                Price (₹)
-                              </label>
+                            {hasPhysicalProduct && (
+                              <td className="py-2 px-3 align-top">
+                                {isService ? (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                ) : (
+                                  <>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={row.quantity}
+                                      onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                      className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
+                                        ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                        : ""
+                                        }`}
+                                    />
+                                    {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                                    {isStockShortage && locStock !== null && (
+                                      locStock > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                                          className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                                        >
+                                          <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
+                                          <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                                        </button>
+                                      ) : (
+                                        <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
+                                          ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                                        </div>
+                                      )
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                            )}
+                            <td className="py-2 px-3 align-top">
                               <input
                                 type="number"
                                 step="0.01"
                                 value={row.price}
                                 onChange={(e) => updateProductRow(index, "price", e.target.value)}
                                 disabled
-                                className={`${inputCls} text-xs bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                               />
                               {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
+                              {fmtCurrency(rowAmount)}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {productRows.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeProductRow(index)}
+                                  className="text-gray-400 hover:text-red-500 font-bold p-1"
+                                  title="Remove item"
+                                >
+                                  &times;
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards View */}
+                <div className="md:hidden space-y-3">
+                  {productRows.map((row, index) => {
+                    const {
+                      isService,
+                      rowAmount,
+                      prodErr,
+                      qtyErr,
+                      priceErr,
+                      availableWarehouses,
+                      getWarehouseLabel,
+                      availableLocations,
+                      getLocationLabel,
+                      locStock,
+                      isStockShortage,
+                      shortageQty,
+                    } = getRowData(row, index);
+
+                    return (
+                      <div
+                        key={index}
+                        className="p-3.5 bg-gray-50/70 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3 relative shadow-xs"
+                      >
+                        <div className="flex items-center justify-between border-b border-gray-200/70 dark:border-gray-700 pb-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Item #{index + 1} {isService && <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">Service</span>}
+                          </span>
+                          {productRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeProductRow(index)}
+                              className="text-xs font-medium text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1"
+                            >
+                              <span className="text-base leading-none">&times;</span> Remove
+                            </button>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Product <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={row.product_id}
+                            onChange={(e) => selectProduct(index, e.target.value)}
+                            className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                          >
+                            <option value="">Select a product...</option>
+                            {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                              <option value={row.product_id}>
+                                {row.product_name || `Product #${row.product_id}`}
+                              </option>
+                            )}
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                        </div>
+
+                        {!isService && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Warehouse
+                              </label>
+                              <select
+                                value={row.warehouse_id || ""}
+                                onChange={(e) => {
+                                  updateProductRow(index, "warehouse_id", e.target.value);
+                                  updateProductRow(index, "warehouse_location_id", "");
+                                }}
+                                className={`${inputCls} pr-7 truncate text-xs`}
+                              >
+                                <option value="">Select Warehouse</option>
+                                {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
+                                  <option value={row.warehouse_id}>
+                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
+                                  </option>
+                                )}
+                                {availableWarehouses.map((w) => (
+                                  <option key={w.id} value={w.id}>
+                                    {getWarehouseLabel(w)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Location
+                              </label>
+                              <select
+                                value={row.warehouse_location_id || ""}
+                                onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                disabled={!row.warehouse_id}
+                                className={`${inputCls} pr-7 truncate text-xs disabled:opacity-50`}
+                              >
+                                <option value="">Select Location</option>
+                                {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
+                                  <option value={row.warehouse_location_id}>
+                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
+                                  </option>
+                                )}
+                                {availableLocations.map((loc: any) => (
+                                  <option key={loc.id} value={loc.id}>
+                                    {getLocationLabel(loc)}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           </div>
+                        )}
 
-                          {isStockShortage && locStock !== null && (
-                            locStock > 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
-                                className="w-full text-left p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
-                              >
-                                <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
-                                <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
-                              </button>
-                            ) : (
-                              <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs font-medium text-red-700 dark:text-red-300">
-                                ⚠️ Out of stock (fully allocated in previous row). Please select another location.
-                              </div>
-                            )
+                        <div className="grid grid-cols-2 gap-2.5">
+                          {!isService ? (
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Quantity
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={row.quantity}
+                                onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                className={`${inputCls} text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qtyErr || isStockShortage
+                                    ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                    : ""
+                                  }`}
+                              />
+                              {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Quantity
+                              </label>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 py-2">1 (Service)</div>
+                            </div>
                           )}
 
-                          <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
-                            <span className="font-medium text-gray-500 dark:text-gray-400">Line Amount:</span>
-                            <span className="font-bold text-gray-800 dark:text-white text-sm">{fmtCurrency(rowAmount)}</span>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                              Price (₹)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={row.price}
+                              onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                              disabled
+                              className={`${inputCls} text-xs bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                            />
+                            {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            })()}
 
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={addProductRow}
-                className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-              >
-                + Add Product
-              </button>
-              <div className="flex items-center gap-2 text-right">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total:</span>
-                <span className="text-base sm:text-lg font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
-              </div>
+                        {isStockShortage && locStock !== null && (
+                          locStock > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                              className="w-full text-left p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                            >
+                              <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
+                              <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                            </button>
+                          ) : (
+                            <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs font-medium text-red-700 dark:text-red-300">
+                              ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                            </div>
+                          )
+                        )}
+
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
+                          <span className="font-medium text-gray-500 dark:text-gray-400">Line Amount:</span>
+                          <span className="font-bold text-gray-800 dark:text-white text-sm">{fmtCurrency(rowAmount)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+
+          <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={addProductRow}
+              className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              + Add Product
+            </button>
+            <div className="flex items-center gap-2 text-right">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total:</span>
+              <span className="text-base sm:text-lg font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
             </div>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
+    </div>
   );
 };
 

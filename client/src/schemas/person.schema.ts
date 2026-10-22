@@ -42,6 +42,13 @@ export const contactItemSchema = z.object({
         return;
       }
       const digitsOnly = val.replace(/[^0-9]/g, "");
+      if (/^0+$/.test(digitsOnly)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Contact number cannot consist of only zeros.",
+        });
+        return;
+      }
       if (digitsOnly.length < 7) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -61,7 +68,14 @@ export const contactItemSchema = z.object({
 });
 
 export const personSchema = z.object({
-  name: z.string().trim().min(1, "Person name is required").max(191, "Name is too long"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Person name is required")
+    .max(191, "Name is too long")
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: "Person name must contain at least one letter.",
+    }),
   emails: z.array(emailItemSchema).optional().default([]),
   contact_numbers: z.array(contactItemSchema).optional().default([]),
   organization_id: z.coerce.number().optional().nullable(),
