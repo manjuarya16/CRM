@@ -277,6 +277,7 @@ const EditQuotePage: React.FC = () => {
 
     setItems([...items, added]);
     setNewItem({ product_id: "", quantity: "1", price: "0", discount_percent: "0", tax_percent: "0" });
+    setErrors((prev) => ({ ...prev, items: "", item_product: "" }));
   };
 
   const handleRemoveItem = (index: number) => {

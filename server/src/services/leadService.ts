@@ -1077,8 +1077,14 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
     const destPath = path.join(uploadDir, uniqueName);
 
     if (file.path && fs.existsSync(file.path)) {
-      fs.copyFileSync(file.path, destPath);
-      try { fs.unlinkSync(file.path); } catch (e) {}
+      try {
+        fs.renameSync(file.path, destPath);
+      } catch {
+        fs.copyFileSync(file.path, destPath);
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      }
+    } else if (file.buffer) {
+      fs.writeFileSync(destPath, file.buffer);
     }
 
     const fileUrl = `/uploads/leads/${uniqueName}`;

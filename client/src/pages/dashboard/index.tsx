@@ -741,13 +741,30 @@ export const DashboardPage: React.FC = () => {
                     </div>
 
                     {/* Person Details */}
-                    <div className="flex flex-col truncate">
+                    <div className="flex flex-col min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
                         {person.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {person.email || "No email"}
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {person.contact_number && (
+                          <span className="inline-flex items-center gap-1 truncate text-gray-700 dark:text-gray-300 font-medium">
+                            <i className="mgc_phone_line text-[11px] text-[#0088cc]"></i>
+                            <span>{person.contact_number}</span>
+                          </span>
+                        )}
+                        {person.contact_number && person.email && (
+                          <span className="text-gray-300 dark:text-gray-600">•</span>
+                        )}
+                        {person.email && (
+                          <span className="inline-flex items-center gap-1 truncate">
+                            <i className="mgc_mail_line text-[11px]"></i>
+                            <span className="truncate">{person.email}</span>
+                          </span>
+                        )}
+                        {!person.contact_number && !person.email && (
+                          <span>No contact details</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

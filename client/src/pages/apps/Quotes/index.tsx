@@ -268,14 +268,20 @@ const QuotesPage: React.FC = () => {
 
   const handleSendEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailTo.trim()) {
       Swal.fire("Warning", "Recipient email is required", "warning");
+      return;
+    }
+    if (!emailRegex.test(emailTo.trim())) {
+      Swal.fire("Warning", "Please enter a valid recipient email address (e.g. name@domain.com)", "warning");
       return;
     }
     setSendingEmail(true);
     try {
       const formData = new FormData();
       formData.append("to", JSON.stringify([emailTo.trim()]));
+      formData.append("reply_to", JSON.stringify([emailTo.trim()]));
       formData.append("subject", emailSubject);
       formData.append("reply", emailBody);
       if (selectedQuoteForEmail?.id) {
@@ -541,18 +547,23 @@ const QuotesPage: React.FC = () => {
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
+                <div className="relative inline-flex items-center">
+                  <select
+                    value={perPage}
+                    onChange={(e) => {
+                      setPerPage(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="h-8 pl-3 pr-7 min-w-[64px] appearance-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                  <div className="pointer-events-none absolute right-2 flex items-center text-gray-400">
+                    <i className="mgc_down_line text-xs"></i>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1220,6 +1231,38 @@ const QuotesPage: React.FC = () => {
       {/* PRINT / PDF PREVIEW MODAL */}
       {previewModalOpen && previewQuote && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+          <style>{`
+            @media print {
+              html, body {
+                height: auto !important;
+                overflow: visible !important;
+                background: white !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #quote-printable-invoice,
+              #quote-printable-invoice * {
+                visibility: visible !important;
+              }
+              #quote-printable-invoice {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 10px !important;
+                border: none !important;
+                box-shadow: none !important;
+                background: white !important;
+                color: black !important;
+              }
+              @page {
+                size: auto;
+                margin: 10mm 12mm;
+              }
+            }
+          `}</style>
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-3xl w-full p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto">
             {/* Modal Controls */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-200 dark:border-gray-700 print:hidden">
@@ -1245,7 +1288,7 @@ const QuotesPage: React.FC = () => {
             </div>
 
             {/* Printable Invoice Container */}
-            <div className="p-4 sm:p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 space-y-5 text-gray-800 dark:text-gray-200 print:border-none print:p-0">
+            <div id="quote-printable-invoice" className="p-4 sm:p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 space-y-5 text-gray-800 dark:text-gray-200 print:border-none print:p-0">
               {/* Invoice Header */}
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                 <div>

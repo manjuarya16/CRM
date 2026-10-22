@@ -111,7 +111,7 @@ const CreateOrganizationPage: React.FC = () => {
       if (createdOrgId && selectedTagIds.length > 0) {
         await useTagStore.getState().saveEntityTags("organization", createdOrgId, selectedTagIds);
       }
-      if (res.data?.success || res.status === 200 || res.status === 201) {
+      if (res?.success || res?.data?.id || res?.id || res?.status === 200 || res?.status === 201) {
         Swal.fire({
           icon: "success",
           title: "Success",

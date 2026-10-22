@@ -151,10 +151,15 @@ const ViewUserPage: React.FC = () => {
         Swal.fire("Success", "File activity logged", "success");
         setSelectedFile(null);
       } else if (activeModal === "note") {
+        const noteComment = (modalForm.comment || modalForm.description || "").trim();
+        if (!noteComment) {
+          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
+          return;
+        }
         await addActivity({
           title: modalForm.title || "User Note",
           type: "note",
-          comment: modalForm.comment || modalForm.description,
+          comment: noteComment,
           user_id: userId,
         });
         Swal.fire("Success", "Note saved", "success");
