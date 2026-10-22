@@ -151,10 +151,15 @@ const ViewUserPage: React.FC = () => {
         Swal.fire("Success", "File activity logged", "success");
         setSelectedFile(null);
       } else if (activeModal === "note") {
+        const noteComment = (modalForm.comment || modalForm.description || "").trim();
+        if (!noteComment) {
+          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
+          return;
+        }
         await addActivity({
           title: modalForm.title || "User Note",
           type: "note",
-          comment: modalForm.comment || modalForm.description,
+          comment: noteComment,
           user_id: userId,
         });
         Swal.fire("Success", "Note saved", "success");
@@ -237,10 +242,7 @@ const ViewUserPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to="/settings/users"
-            onClick={() => {
-              // Trigger edit modal when returning or navigate
-            }}
+            to={`/settings/users/edit/${selectedUser.id}`}
             className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             Edit User
@@ -440,7 +442,7 @@ const ViewUserPage: React.FC = () => {
                     const filtered = userActivities.filter((a) => {
                       const t = (a.type || "").toLowerCase();
                       if (activeTab === "all") return true;
-                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(t) && !a.is_done;
+                      if (activeTab === "planned") return ["call", "meeting", "lunch", "task"].includes(t) && !a.is_done;
                       if (activeTab === "notes") return t === "note";
                       if (activeTab === "calls") return t === "call";
                       if (activeTab === "meetings") return t === "meeting";
@@ -469,7 +471,7 @@ const ViewUserPage: React.FC = () => {
                         {filtered.map((act) => {
                           const fileUrl = extractFileUrl(act.comment);
                           const t = (act.type || "").toLowerCase();
-                          const isScheduledType = ["call", "meeting", "lunch"].includes(t);
+                          const isScheduledType = ["call", "meeting", "lunch", "task"].includes(t);
 
                           return (
                             <div key={act.id} className="p-4 bg-[#f8fafc] dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800 space-y-2">

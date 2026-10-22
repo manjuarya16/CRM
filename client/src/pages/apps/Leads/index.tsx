@@ -1247,7 +1247,7 @@ const LeadsPage: React.FC = () => {
 
             <form onSubmit={handleUploadSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">File Upload *</label>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Upload a File *</label>
                 <input
                   type="file"
                   required

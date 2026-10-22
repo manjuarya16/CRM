@@ -2,7 +2,14 @@ import { z } from "zod";
 import { zodResolver } from "@/utils/zodResolver";
 
 export const quoteSchema = z.object({
-  subject: z.string().trim().min(1, "Subject is required").max(191, "Subject is too long"),
+  subject: z
+    .string()
+    .trim()
+    .min(1, "Subject is required")
+    .max(191, "Subject is too long")
+    .refine((val) => /[a-zA-Z0-9]/.test(val), {
+      message: "Subject must contain alphanumeric characters",
+    }),
   description: z.string().trim().optional().or(z.literal("")),
   billing_address: z.any().optional(),
   shipping_address: z.any().optional(),

@@ -29,6 +29,12 @@ const getActivityBadge = (type: string) => {
         icon: "mgc_calendar_line",
         label: "Meeting",
       };
+    case "task":
+      return {
+        badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+        icon: "mgc_task_line",
+        label: "Task",
+      };
     case "lunch":
       return {
         badgeClass: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800",
@@ -199,6 +205,7 @@ const LeadViewPage: React.FC = () => {
   const [personsList, setPersonsList] = useState<any[]>([]);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [submittingAction, setSubmittingAction] = useState<boolean>(false);
 
   // Forms state for quick actions
   const [modalForm, setModalForm] = useState({
@@ -361,6 +368,7 @@ const LeadViewPage: React.FC = () => {
 
   const handleQuickActionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmittingAction(true);
     try {
       if (activeModal === "mail") {
         await addActivity({
@@ -391,11 +399,15 @@ const LeadViewPage: React.FC = () => {
           Swal.fire("Success", "File activity logged", "success");
         }
       } else if (activeModal === "note") {
-
+        if (!modalForm.comment?.trim()) {
+          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
+          setSubmittingAction(false);
+          return;
+        }
         await addActivity({
-          title: modalForm.title || "Note",
+          title: modalForm.title?.trim() || "Note",
           type: "note",
-          comment: modalForm.comment,
+          comment: modalForm.comment.trim(),
           lead_id: leadId,
           person_id: selectedLead?.person_id,
         });
@@ -418,6 +430,8 @@ const LeadViewPage: React.FC = () => {
       fetchActivities(1, 100, "", leadId);
     } catch (err: any) {
       Swal.fire("Error", err.message || "Failed to process action", "error");
+    } finally {
+      setSubmittingAction(false);
     }
   };
 
@@ -829,7 +843,7 @@ const getPersonEmail = (person: any): string => {
                   {(() => {
                     const filtered = leadActivities.filter((a) => {
                       if (activeTab === "all") return true;
-                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(a.type) && !a.is_done;
+                      if (activeTab === "planned") return ["call", "meeting", "lunch", "task"].includes(a.type) && !a.is_done;
                       if (activeTab === "notes") return a.type === "note";
                       if (activeTab === "calls") return a.type === "call";
                       if (activeTab === "meetings") return a.type === "meeting";
@@ -918,8 +932,8 @@ const getPersonEmail = (person: any): string => {
                                     </Link>
                                   )}
 
-                                  {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Lunch) */}
-                                  {["call", "meeting", "lunch"].includes(act.type) && (
+                                  {/* Status Tag: ONLY for scheduled activities (Call, Meeting, Task, Lunch) */}
+                                  {["call", "meeting", "lunch", "task"].includes(act.type) && (
                                     <button
                                       onClick={async () => {
                                         await updateActivity(act.id, { is_done: !act.is_done });
@@ -997,7 +1011,12 @@ const getPersonEmail = (person: any): string => {
                       <select
                         value={newProd.product_id}
                         onChange={(e) => {
-                          setNewProd({ ...newProd, product_id: e.target.value });
+                          const selP = productsList.find((p) => String(p.id) === e.target.value);
+                          setNewProd({
+                            ...newProd,
+                            product_id: e.target.value,
+                            price: selP ? String(selP.price || 0) : "",
+                          });
                           if (prodError) setProdError("");
                         }}
                         className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
@@ -1235,14 +1254,14 @@ const getPersonEmail = (person: any): string => {
             ) : (
               <>
                 <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 capitalize">
-                  {activeModal === "file" ? "Attach File" : activeModal === "note" ? "Add Note" : "Log Activity"}
+                  {activeModal === "file" ? "Upload a File" : activeModal === "note" ? "Add Note" : "Log Activity"}
                 </h3>
                 <form onSubmit={handleQuickActionSubmit} className="space-y-3">
 
                   {activeModal === "file" && (
                     <>
                       <div>
-                        <label className="block text-xs font-semibold mb-1">Select File *</label>
+                        <label className="block text-xs font-semibold mb-1">Upload a File *</label>
                         <input
                           type="file"
                           required
@@ -1345,10 +1364,13 @@ const getPersonEmail = (person: any): string => {
                       )}
 
                       <div>
-                        <label className="block text-xs font-semibold mb-1">Notes / Comment</label>
+                        <label className="block text-xs font-semibold mb-1">
+                          {activeModal === "note" ? "Note Content *" : "Notes / Comment"}
+                        </label>
                         <textarea
+                          required={activeModal === "note"}
                           rows={3}
-                          placeholder="Details..."
+                          placeholder={activeModal === "note" ? "Enter note content..." : "Details..."}
                           value={modalForm.comment}
                           onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
                           className="w-full px-3 py-1.5 border rounded text-xs"
@@ -1359,11 +1381,30 @@ const getPersonEmail = (person: any): string => {
 
 
                   <div className="flex justify-end gap-2 pt-2 border-t">
-                    <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 border rounded text-xs font-semibold">
+                    <button
+                      type="button"
+                      disabled={submittingAction}
+                      onClick={() => setActiveModal(null)}
+                      className="px-3 py-1.5 border rounded text-xs font-semibold disabled:opacity-50"
+                    >
                       Cancel
                     </button>
-                    <button type="submit" className="px-4 py-1.5 bg-[#0088cc] text-white rounded text-xs font-bold">
-                      Submit
+                    <button
+                      type="submit"
+                      disabled={submittingAction}
+                      className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {submittingAction ? (
+                        <>
+                          <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>{activeModal === "file" ? "Uploading..." : "Saving..."}</span>
+                        </>
+                      ) : (
+                        <span>{activeModal === "file" ? "Upload a File" : "Submit"}</span>
+                      )}
                     </button>
                   </div>
                 </form>

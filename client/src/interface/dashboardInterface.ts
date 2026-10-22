@@ -30,6 +30,7 @@ export interface ITopPerson {
   id: number;
   name: string;
   email: string;
+  contact_number?: string;
   deals_count: number;
   revenue: number;
 }

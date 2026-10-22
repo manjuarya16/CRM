@@ -128,10 +128,15 @@ const ViewPersonPage: React.FC = () => {
         Swal.fire("Success", "File activity logged", "success");
         setSelectedFile(null);
       } else if (activeModal === "note") {
+        const noteComment = (modalForm.comment || modalForm.description || "").trim();
+        if (!noteComment) {
+          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
+          return;
+        }
         await addActivity({
           title: modalForm.title || "Note",
           type: "note",
-          comment: modalForm.comment || modalForm.description,
+          comment: noteComment,
           person_id: personId,
         });
         Swal.fire("Success", "Note saved", "success");
@@ -474,7 +479,7 @@ const ViewPersonPage: React.FC = () => {
                     const filtered = personActivities.filter((a) => {
                       const t = (a.type || "").toLowerCase();
                       if (activeTab === "all") return true;
-                      if (activeTab === "planned") return ["call", "meeting", "lunch"].includes(t) && !a.is_done;
+                      if (activeTab === "planned") return ["call", "meeting", "lunch", "task"].includes(t) && !a.is_done;
                       if (activeTab === "notes") return t === "note";
                       if (activeTab === "calls") return t === "call";
                       if (activeTab === "meetings") return t === "meeting";
@@ -503,7 +508,7 @@ const ViewPersonPage: React.FC = () => {
                         {filtered.map((act) => {
                           const fileUrl = extractFileUrl(act.comment);
                           const t = (act.type || "").toLowerCase();
-                          const isScheduledType = ["call", "meeting", "lunch"].includes(t);
+                          const isScheduledType = ["call", "meeting", "lunch", "task"].includes(t);
 
                           return (
                             <div key={act.id} className="p-4 bg-[#f8fafc] dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800 space-y-2">

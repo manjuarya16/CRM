@@ -16,12 +16,13 @@ interface PasswordInputProps {
 /* Password Input */
 const PasswordInput = ({
   name,
-  placeholder,
+  placeholder = "Enter password",
   refCallback,
   errors,
   control,
   register,
   className,
+  type: _unusedType,
   ...otherProps
 }: PasswordInputProps) => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -30,16 +31,16 @@ const PasswordInput = ({
     <>
       <div className="relative flex items-center">
         <input
-          type={showPassword ? "text" : "password"}
-          placeholder={placeholder}
+          placeholder={placeholder || "Enter password"}
           name={name}
           id={name}
           ref={(r: HTMLInputElement) => {
             if (refCallback) refCallback(r);
           }}
           className={`${className} pe-10 ${errors && errors[name] ? "border-red-500 text-red-700" : ""}`}
-          {...(register ? register(name) : {})}
           {...otherProps}
+          {...(register ? register(name) : {})}
+          type={showPassword ? "text" : "password"}
           autoComplete={name}
         />
         <button

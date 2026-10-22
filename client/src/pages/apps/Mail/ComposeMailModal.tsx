@@ -169,6 +169,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   }, []);
 
   const fetchTemplates = async () => {
+    if (templates.length > 0) return;
     try {
       setLoadingTemplates(true);
       const res = await API.get("/email-templates");
@@ -226,21 +227,34 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     setShowMoreTools(false);
   };
 
+  const isValidEmail = (email: string) => /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email.trim());
+
   const handleAddEmail = (type: "to" | "cc" | "bcc", value: string) => {
-    const emails = value
+    const rawTokens = value
       .split(/[,;\s]+/)
       .map((e) => e.trim())
-      .filter((e) => e.length > 0 && e.includes("@"));
+      .filter(Boolean);
 
-    if (type === "to") {
-      setToList((prev) => Array.from(new Set([...prev, ...emails])));
-      setToInput("");
-    } else if (type === "cc") {
-      setCcList((prev) => Array.from(new Set([...prev, ...emails])));
-      setCcInput("");
+    const validEmails = rawTokens.filter((e) => isValidEmail(e));
+    const invalidEmails = rawTokens.filter((e) => !isValidEmail(e));
+
+    if (invalidEmails.length > 0) {
+      setErrorMsg(`Invalid email format: "${invalidEmails.join(", ")}". Please enter a valid email (e.g. name@domain.com).`);
     } else {
-      setBccList((prev) => Array.from(new Set([...prev, ...emails])));
-      setBccInput("");
+      setErrorMsg(null);
+    }
+
+    if (validEmails.length > 0) {
+      if (type === "to") {
+        setToList((prev) => Array.from(new Set([...prev, ...validEmails])));
+        setToInput("");
+      } else if (type === "cc") {
+        setCcList((prev) => Array.from(new Set([...prev, ...validEmails])));
+        setCcInput("");
+      } else {
+        setBccList((prev) => Array.from(new Set([...prev, ...validEmails])));
+        setBccInput("");
+      }
     }
   };
 
@@ -251,9 +265,15 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-      setAttachments((prev) => [...prev, ...newFiles]);
+      setAttachments((prev) => {
+        const uniqueNew = newFiles.filter(
+          (nf) => !prev.some((pf) => pf.name === nf.name && pf.size === nf.size)
+        );
+        return [...prev, ...uniqueNew];
+      });
+      e.target.value = "";
     }
   };
 
@@ -311,7 +331,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       }
     }
 
-    setSelectedTemplateId(template.id);
+    setSelectedTemplateId(String(template.id));
     if (template.subject) {
       setSubject(template.subject);
     }
@@ -419,14 +439,34 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
 
   const handleSubmit = async (isDraft: boolean) => {
     let finalTo = [...toList];
-    if (toInput.trim() && toInput.includes("@")) {
-      finalTo.push(toInput.trim());
+    if (toInput.trim()) {
+      if (isValidEmail(toInput.trim())) {
+        finalTo.push(toInput.trim());
+        setToInput("");
+      } else {
+        setErrorMsg(`Invalid recipient email address: "${toInput.trim()}". Please enter a valid email.`);
+        return;
+      }
+    }
+
+    if (showCc && ccInput.trim()) {
+      if (!isValidEmail(ccInput.trim())) {
+        setErrorMsg(`Invalid CC email address: "${ccInput.trim()}".`);
+        return;
+      }
+    }
+
+    if (showBcc && bccInput.trim()) {
+      if (!isValidEmail(bccInput.trim())) {
+        setErrorMsg(`Invalid BCC email address: "${bccInput.trim()}".`);
+        return;
+      }
     }
 
     const currentContent = editorRef.current?.innerHTML || reply;
 
     if (!isDraft && finalTo.length === 0) {
-      setErrorMsg("Please specify at least one recipient email address.");
+      setErrorMsg("Please specify at least one valid recipient email address.");
       return;
     }
 
@@ -445,6 +485,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       formData.append("reply", currentContent);
       formData.append("is_draft", isDraft ? "1" : "0");
       formData.append("reply_to", JSON.stringify(finalTo));
+      formData.append("to", JSON.stringify(finalTo));
       if (ccList.length > 0) formData.append("cc", JSON.stringify(ccList));
       if (bccList.length > 0) formData.append("bcc", JSON.stringify(bccList));
       if (leadId) formData.append("lead_id", String(leadId));
@@ -468,7 +509,9 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       const successText = res?.message || (isDraft ? "Draft saved successfully!" : "Email sent successfully!");
       if (onSuccess) onSuccess(successText);
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || "Failed to process email.");
+      const msg = err.response?.data?.message || err.message || "Failed to process email.";
+      setErrorMsg(msg);
+      Swal.fire("Error", msg, "error");
     } finally {
       setSending(false);
       setSavingDraft(false);
@@ -768,17 +811,17 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
                       <span className="hidden sm:inline">Template:</span>
                     </span>
                     <select
-                      value={selectedTemplateId}
+                      value={String(selectedTemplateId || "")}
                       onChange={(e) => handleSelectTemplate(e.target.value)}
-                      disabled={loadingTemplates}
+                      disabled={loadingTemplates && templates.length === 0}
                       className="px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-[#0088cc] focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] transition cursor-pointer max-w-[190px] truncate"
                       title="Select Email Template"
                     >
                       <option value="">
-                        {loadingTemplates ? "Loading templates..." : "-- Select Template --"}
+                        {loadingTemplates && templates.length === 0 ? "Loading templates..." : "-- Select Template --"}
                       </option>
                       {templates.map((t) => (
-                        <option key={t.id} value={t.id} title={t.subject ? `Subject: ${t.subject}` : undefined}>
+                        <option key={t.id} value={String(t.id)} title={t.subject ? `Subject: ${t.subject}` : undefined}>
                           {t.name}
                         </option>
                       ))}
