@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import leadService from "@/services/leadService";
 import { requireAuth } from "@/middleware/auth";
 
@@ -18,6 +19,17 @@ const upload = multer({
       cb(new Error("Only PDF and image files are allowed (pdf, jpeg, jpg, png, webp, bmp)"));
     }
   },
+});
+
+const audioDir = path.join(process.cwd(), "uploads", "voice");
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir, { recursive: true });
+}
+
+// Configure multer for voice audio recording uploads (max 25MB)
+const uploadAudio = multer({
+  dest: audioDir,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
 });
 
 // ─── Static routes (must come before dynamic /:id) ──────────────────────────
@@ -50,6 +62,26 @@ router.post(
   upload.single("file"),
   (req: Request, res: Response) => {
     leadService.createLeadByAI(req, res);
+  }
+);
+
+// ─── Voice Lead Creation ────────────────────────────────────────────────────
+
+router.post(
+  "/parse-voice",
+  requireAuth,
+  uploadAudio.single("audio"),
+  (req: Request, res: Response) => {
+    leadService.parseVoiceLead(req, res);
+  }
+);
+
+router.post(
+  "/create-by-voice",
+  requireAuth,
+  uploadAudio.single("audio"),
+  (req: Request, res: Response) => {
+    leadService.createLeadByVoice(req, res);
   }
 );
 
