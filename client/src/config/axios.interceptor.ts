@@ -87,10 +87,11 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       config.headers["Content-Type"] =
         config.headers["Content-Type"] || "application/json";
 
-      // Attach tenant / organization context headers
+      // Attach tenant / organization context headers if slug exists
       const { slug } = getSubdomain();
-      config.headers["X-Tenant-Slug"] = slug || "default";
-      config.headers["X-Tenant-Id"] = "1";
+      if (slug) {
+        config.headers["X-Tenant-Slug"] = slug;
+      }
 
       return config;
     } catch (error) {

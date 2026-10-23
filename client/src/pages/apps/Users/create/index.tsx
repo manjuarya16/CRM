@@ -48,6 +48,7 @@ const UserCreate = () => {
   const [states, setStates] = useState<Array<any>>([]);
   const [cities, setCities] = useState<Array<any>>([]);
   const [errors, setErrors] = useState<Record<string, string | string[]>>({});
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [formValid, setFormValid] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [profileFile, setProfileFile] = useState<File | null>(null);
@@ -552,14 +553,25 @@ const UserCreate = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Password <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password || ""}
-                    onChange={handleChange}
-                    className={inputCls("password")}
-                    placeholder="Enter password"
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      value={formData.password || ""}
+                      onChange={handleChange}
+                      className={`${inputCls("password")} pe-11`}
+                      placeholder="Enter password"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-1 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer select-none"
+                    >
+                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-lg block`}></i>
+                    </button>
+                  </div>
                   {renderFieldErrors("password")}
                 </div>
 

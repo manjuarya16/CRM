@@ -27,6 +27,80 @@ const getInitials = (name: string) => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+const formatContactNumber = (raw: any): string => {
+  if (!raw) return "";
+  let parsed = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return trimmed;
+      }
+    } else {
+      return trimmed;
+    }
+  }
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return parsed;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const first = parsed[0];
+    if (!first) return "";
+    if (typeof first === "string") return first;
+    if (typeof first === "object" && first !== null) {
+      return first.value || first.phone || first.number || first.contact || "";
+    }
+    return String(first);
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    return parsed.value || parsed.phone || parsed.number || parsed.contact || "";
+  }
+  return String(parsed);
+};
+
+const formatEmail = (raw: any): string => {
+  if (!raw) return "";
+  let parsed = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return trimmed;
+      }
+    } else {
+      return trimmed;
+    }
+  }
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return parsed;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const first = parsed[0];
+    if (!first) return "";
+    if (typeof first === "string") return first;
+    if (typeof first === "object" && first !== null) {
+      return first.value || first.email || "";
+    }
+    return String(first);
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    return parsed.value || parsed.email || "";
+  }
+  return String(parsed);
+};
+
 const pastelAvatarStyles = [
   { bg: "#FED7AA", text: "#9A3412" }, // Orange pastel
   { bg: "#FEF08A", text: "#854D0E" }, // Yellow pastel
@@ -727,6 +801,9 @@ export const DashboardPage: React.FC = () => {
             <div className="flex flex-col">
               {(data.top_persons || []).slice(0, 5).map((person, idx) => {
                 const avatarStyle = pastelAvatarStyles[idx % pastelAvatarStyles.length];
+                const contactNum = formatContactNumber(person.contact_number || (person as any).contact_numbers);
+                const emailVal = formatEmail(person.email || (person as any).emails);
+
                 return (
                   <div
                     key={idx}
@@ -746,22 +823,22 @@ export const DashboardPage: React.FC = () => {
                         {person.name}
                       </p>
                       <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                        {person.contact_number && (
+                        {contactNum && (
                           <span className="inline-flex items-center gap-1 truncate text-gray-700 dark:text-gray-300 font-medium">
                             <i className="mgc_phone_line text-[11px] text-[#0088cc]"></i>
-                            <span>{person.contact_number}</span>
+                            <span>{contactNum}</span>
                           </span>
                         )}
-                        {person.contact_number && person.email && (
+                        {contactNum && emailVal && (
                           <span className="text-gray-300 dark:text-gray-600">•</span>
                         )}
-                        {person.email && (
+                        {emailVal && (
                           <span className="inline-flex items-center gap-1 truncate">
                             <i className="mgc_mail_line text-[11px]"></i>
-                            <span className="truncate">{person.email}</span>
+                            <span className="truncate">{emailVal}</span>
                           </span>
                         )}
-                        {!person.contact_number && !person.email && (
+                        {!contactNum && !emailVal && (
                           <span>No contact details</span>
                         )}
                       </div>

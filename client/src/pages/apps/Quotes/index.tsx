@@ -104,6 +104,8 @@ const QuotesPage: React.FC = () => {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailToError, setEmailToError] = useState("");
+  const [emailSubjectError, setEmailSubjectError] = useState("");
 
   // PDF / Print Preview Modal
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -241,11 +243,95 @@ const QuotesPage: React.FC = () => {
     }
   };
 
+  const validateRecipientEmail = (email: string): string => {
+    const trimmed = email.trim();
+    if (!trimmed) return "Recipient email is required.";
+    const strictEmailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+    if (!strictEmailRegex.test(trimmed)) {
+      return "Please enter a valid recipient email address without trailing dots (e.g. name@domain.com).";
+    }
+    return "";
+  };
+
   const handlePrint = () => {
-    window.print();
+    const invoiceEl = document.getElementById("quote-printable-invoice");
+    if (!invoiceEl) {
+      window.print();
+      return;
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    doc.open();
+    const styleTags = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .map((el) => el.outerHTML)
+      .join("\n");
+
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Quotation #${previewQuote?.id || ""}</title>
+          ${styleTags}
+          <style>
+            html, body {
+              background: white !important;
+              color: black !important;
+              padding: 16px !important;
+              margin: 0 !important;
+              height: auto !important;
+              overflow: visible !important;
+            }
+            #quote-printable-invoice {
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+            @page {
+              size: auto;
+              margin: 10mm 12mm;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="quote-printable-invoice">
+            ${invoiceEl.innerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch {}
+      }, 1500);
+    }, 400);
   };
 
   const handleOpenSendEmail = async (quote: IQuote) => {
+    setEmailToError("");
+    setEmailSubjectError("");
     try {
       const fullQuote = (await useQuoteStore.getState().fetchQuoteById(quote.id)) || quote;
       setSelectedQuoteForEmail(fullQuote);
@@ -268,21 +354,25 @@ const QuotesPage: React.FC = () => {
 
   const handleSendEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailTo.trim()) {
-      Swal.fire("Warning", "Recipient email is required", "warning");
+    const toErr = validateRecipientEmail(emailTo);
+    if (toErr) {
+      setEmailToError(toErr);
+      Swal.fire("Warning", toErr, "warning");
       return;
     }
-    if (!emailRegex.test(emailTo.trim())) {
-      Swal.fire("Warning", "Please enter a valid recipient email address (e.g. name@domain.com)", "warning");
+    if (!emailSubject.trim()) {
+      setEmailSubjectError("Subject is required");
+      Swal.fire("Warning", "Subject is required", "warning");
       return;
     }
+    setEmailToError("");
+    setEmailSubjectError("");
     setSendingEmail(true);
     try {
       const formData = new FormData();
       formData.append("to", JSON.stringify([emailTo.trim()]));
       formData.append("reply_to", JSON.stringify([emailTo.trim()]));
-      formData.append("subject", emailSubject);
+      formData.append("subject", emailSubject.trim());
       formData.append("reply", emailBody);
       if (selectedQuoteForEmail?.id) {
         formData.append("quote_id", String(selectedQuoteForEmail.id));
@@ -568,23 +658,18 @@ const QuotesPage: React.FC = () => {
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
-                <div className="relative inline-flex items-center">
-                  <select
-                    value={perPage}
-                    onChange={(e) => {
-                      setPerPage(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="h-8 pl-3 pr-7 min-w-[64px] appearance-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <div className="pointer-events-none absolute right-2 flex items-center text-gray-400">
-                    <i className="mgc_down_line text-xs"></i>
-                  </div>
-                </div>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-8 pl-3 pr-8 min-w-[78px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
               </div>
             </div>
           </div>
@@ -656,7 +741,7 @@ const QuotesPage: React.FC = () => {
                         <span>{statusInfo.label}</span>
                       </span>
                     </div>
-                    <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                    <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 shrink-0 whitespace-nowrap">
                       {formatAmount(quote.grand_total)}
                     </span>
                   </div>
@@ -1072,7 +1157,7 @@ const QuotesPage: React.FC = () => {
 
             {/* 💻 DESKTOP TABLE VIEW (>= md screens) with Expandable Separate Entries */}
             <div className="hidden md:block overflow-x-auto no-scrollbar scroll-smooth">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full min-w-[1050px] text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/60 border-b border-gray-200/80 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-semibold">
                     <th className="py-3 px-3 w-10 text-center">
@@ -1085,12 +1170,12 @@ const QuotesPage: React.FC = () => {
                         <i className={`mgc_down_line text-xs font-bold transition-transform ${allExpanded ? "rotate-180" : ""}`}></i>
                       </button>
                     </th>
-                    <th className="py-3 px-4">Quote & Subject</th>
-                    <th className="py-3 px-4">Customer</th>
-                    <th className="py-3 px-4">Sales Rep</th>
-                    <th className="py-3 px-4">Validity & Status</th>
-                    <th className="py-3 px-4 text-right">Total Amount</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 min-w-[200px]">Quote & Subject</th>
+                    <th className="py-3 px-4 min-w-[160px]">Customer</th>
+                    <th className="py-3 px-4 min-w-[120px]">Sales Rep</th>
+                    <th className="py-3 px-4 min-w-[150px]">Validity & Status</th>
+                    <th className="py-3 px-4 text-right min-w-[160px]">Total Amount</th>
+                    <th className="py-3 px-4 text-right min-w-[110px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1190,12 +1275,12 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Grand Total & Financial Breakdown */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[160px]">
+                            <div className="flex flex-col items-end">
                               <span className="text-sm font-black text-gray-900 dark:text-white">
                                 {formatAmount(quote.grand_total)}
                               </span>
-                              <div className="text-[11px] text-gray-400 space-x-1">
+                              <div className="text-[11px] text-gray-400 flex items-center justify-end gap-1 flex-wrap">
                                 <span>Sub: {formatAmount(quote.sub_total)}</span>
                                 {Number(quote.tax_amount) > 0 && <span>· Tax: +{formatAmount(quote.tax_amount)}</span>}
                                 {Number(quote.discount_amount) > 0 && (
@@ -1413,26 +1498,51 @@ const QuotesPage: React.FC = () => {
             <form onSubmit={handleSendEmailSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Recipient Email *
+                  Recipient Email <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   value={emailTo}
-                  onChange={(e) => setEmailTo(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEmailTo(val);
+                    if (val.trim()) {
+                      setEmailToError(validateRecipientEmail(val));
+                    } else {
+                      setEmailToError("");
+                    }
+                  }}
+                  onBlur={(e) => {
+                    setEmailToError(validateRecipientEmail(e.target.value));
+                  }}
                   placeholder="customer@example.com"
-                  required
-                  className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                  className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                    emailToError ? "!border-red-500 ring-1 ring-red-500/20" : "border-gray-300 dark:border-gray-600"
+                  } rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]`}
                 />
+                {emailToError && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{emailToError}</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Subject</label>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Subject <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                  onChange={(e) => {
+                    setEmailSubject(e.target.value);
+                    if (emailSubjectError) setEmailSubjectError("");
+                  }}
+                  className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border ${
+                    emailSubjectError ? "!border-red-500 ring-1 ring-red-500/20" : "border-gray-300 dark:border-gray-600"
+                  } rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]`}
                 />
+                {emailSubjectError && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{emailSubjectError}</p>
+                )}
               </div>
 
               <div>
@@ -1470,32 +1580,24 @@ const QuotesPage: React.FC = () => {
 
       {/* PRINT / PDF PREVIEW MODAL */}
       {previewModalOpen && previewQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
           <style>{`
             @media print {
               html, body {
                 height: auto !important;
                 overflow: visible !important;
                 background: white !important;
+                color: black !important;
               }
-              body * {
-                visibility: hidden !important;
-              }
-              #quote-printable-invoice,
-              #quote-printable-invoice * {
-                visibility: visible !important;
+              body > *:not(.fixed) {
+                display: none !important;
               }
               #quote-printable-invoice {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
-                margin: 0 !important;
-                padding: 10px !important;
                 border: none !important;
                 box-shadow: none !important;
-                background: white !important;
-                color: black !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
               }
               @page {
                 size: auto;

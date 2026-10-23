@@ -29,7 +29,7 @@ const PasswordInput = ({
 
   return (
     <>
-      <div className="relative flex items-center">
+      <div className="relative flex items-center w-full">
         <input
           placeholder={placeholder || "Enter password"}
           name={name}
@@ -37,7 +37,7 @@ const PasswordInput = ({
           ref={(r: HTMLInputElement) => {
             if (refCallback) refCallback(r);
           }}
-          className={`${className} pe-10 ${errors && errors[name] ? "border-red-500 text-red-700" : ""}`}
+          className={`${className} pe-11 ${errors && errors[name] ? "border-red-500 text-red-700" : ""}`}
           {...otherProps}
           {...(register ? register(name) : {})}
           type={showPassword ? "text" : "password"}
@@ -45,8 +45,14 @@ const PasswordInput = ({
         />
         <button
           type="button"
-          onClick={() => setShowPassword(!showPassword)}
-          className="absolute end-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+          tabIndex={-1}
+          aria-label={showPassword ? "Hide password" : "Show password"}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowPassword((prev) => !prev);
+          }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-1 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer select-none"
         >
           <i
             className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-lg block`}

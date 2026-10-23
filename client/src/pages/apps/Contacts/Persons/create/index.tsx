@@ -97,6 +97,21 @@ const CreatePersonPage: React.FC = () => {
     }));
   };
 
+  const validatePersonName = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "Person name is required.";
+    if (/^[0-9\W_]+$/.test(trimmed)) {
+      return "Person name cannot consist of only numbers or special characters.";
+    }
+    if (!/^[a-zA-Z\s.'-]+$/.test(trimmed)) {
+      return "Person name can only contain letters, spaces, hyphens, and apostrophes.";
+    }
+    if (!/[a-zA-Z]/.test(trimmed)) {
+      return "Person name must contain at least one letter.";
+    }
+    return "";
+  };
+
   const handleContactChange = (
     index: number,
     field: "label" | "value",
@@ -118,7 +133,7 @@ const CreatePersonPage: React.FC = () => {
       cleanVal = startsWithPlus ? "+" + digitsAndSymbols : digitsAndSymbols;
 
       const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-      if (/^0+$/.test(digitsOnly) && digitsOnly.length >= 7) {
+      if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
         errorMsg = "Contact number cannot consist of only zeros.";
       } else if (digitsOnly.length > 15) {
         errorMsg = "Mobile number cannot exceed 15 digits.";
@@ -154,7 +169,7 @@ const CreatePersonPage: React.FC = () => {
     if (!val || val.trim() === "") return;
     const cleanVal = val.trim();
     const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-    if (/^0+$/.test(digitsOnly)) {
+    if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
       setErrors((prev) => ({
         ...prev,
         contact_numbers: "Contact number cannot consist of only zeros.",
@@ -189,7 +204,14 @@ const CreatePersonPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setErrors({});
+
+    const nameErr = validatePersonName(formData.name);
+    if (nameErr) {
+      setErrors((prev) => ({ ...prev, name: nameErr }));
+      return;
+    }
 
     const payloadToValidate = {
       name: formData.name.trim(),
@@ -222,9 +244,13 @@ const CreatePersonPage: React.FC = () => {
       setSaving(true);
       const savedPerson = await usePersonStore.getState().savePerson(payload as any);
       if (savedPerson?.id && selectedTagIds.length > 0) {
-        await useTagStore.getState().saveEntityTags("person", savedPerson.id, selectedTagIds);
+        try {
+          await useTagStore.getState().saveEntityTags("person", savedPerson.id, selectedTagIds);
+        } catch (tagErr) {
+          console.warn("Failed to attach tags to person:", tagErr);
+        }
       }
-      Swal.fire({
+      await Swal.fire({
         icon: "success",
         title: "Success",
         text: "Person created successfully",
@@ -349,8 +375,18 @@ const CreatePersonPage: React.FC = () => {
                 type="text"
                 value={formData.name}
                 onChange={(e) => {
-                  setFormData({ ...formData, name: e.target.value });
-                  if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                  const val = e.target.value;
+                  setFormData({ ...formData, name: val });
+                  if (val.trim()) {
+                    const err = validatePersonName(val);
+                    setErrors((prev) => ({ ...prev, name: err }));
+                  } else {
+                    setErrors((prev) => ({ ...prev, name: "" }));
+                  }
+                }}
+                onBlur={(e) => {
+                  const err = validatePersonName(e.target.value);
+                  setErrors((prev) => ({ ...prev, name: err }));
                 }}
                 placeholder="e.g. John Doe"
                 className={`${inputCls} ${errors.name ? "!border-red-500 !ring-red-500/20" : ""}`}

@@ -231,8 +231,35 @@ const EditQuotePage: React.FC = () => {
     }
   };
 
+  const validateQuoteSubject = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "Subject is required.";
+    if (/^[0-9\W_]+$/.test(trimmed)) {
+      return "Quote subject cannot consist of only special characters or numbers.";
+    }
+    if (!/[a-zA-Z]/.test(trimmed)) {
+      return "Quote subject must contain at least one letter.";
+    }
+    return "";
+  };
+
+  useEffect(() => {
+    if (items.length > 0) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.items;
+        delete next.item_product;
+        return next;
+      });
+    }
+  }, [items.length]);
+
   const handleProductSelect = (productIdStr: string) => {
-    if (errors.item_product) setErrors((prev) => ({ ...prev, item_product: "" }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.item_product;
+      return next;
+    });
     const pId = Number(productIdStr);
     const prod = products.find((p) => p.id === pId);
     if (prod) {
@@ -252,7 +279,12 @@ const EditQuotePage: React.FC = () => {
       setErrors((prev) => ({ ...prev, item_product: "Please select a product" }));
       return;
     }
-    setErrors((prev) => ({ ...prev, item_product: "" }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.item_product;
+      delete next.items;
+      return next;
+    });
     const prod = products.find((p) => p.id === Number(newItem.product_id));
     const qty = Number(newItem.quantity) || 1;
     const price = Number(newItem.price) || 0;
@@ -277,7 +309,12 @@ const EditQuotePage: React.FC = () => {
 
     setItems([...items, added]);
     setNewItem({ product_id: "", quantity: "1", price: "0", discount_percent: "0", tax_percent: "0" });
-    setErrors((prev) => ({ ...prev, items: "", item_product: "" }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.items;
+      delete next.item_product;
+      return next;
+    });
   };
 
   const handleRemoveItem = (index: number) => {
@@ -316,6 +353,13 @@ const EditQuotePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const subjErr = validateQuoteSubject(formData.subject);
+    if (subjErr) {
+      setErrors((prev) => ({ ...prev, subject: subjErr }));
+      Swal.fire("Validation Error", subjErr, "warning");
+      return;
+    }
 
     const validation = quoteSchema.safeParse({
       subject: formData.subject.trim(),
@@ -505,8 +549,18 @@ const EditQuotePage: React.FC = () => {
                   placeholder="e.g. Quotation for Enterprise License Package"
                   value={formData.subject}
                   onChange={(e) => {
-                    setFormData({ ...formData, subject: e.target.value });
-                    if (errors.subject) setErrors((prev) => ({ ...prev, subject: "" }));
+                    const val = e.target.value;
+                    setFormData({ ...formData, subject: val });
+                    if (val.trim()) {
+                      const err = validateQuoteSubject(val);
+                      setErrors((prev) => ({ ...prev, subject: err }));
+                    } else {
+                      setErrors((prev) => ({ ...prev, subject: "" }));
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const err = validateQuoteSubject(e.target.value);
+                    setErrors((prev) => ({ ...prev, subject: err }));
                   }}
                   className={`${inputCls} ${errors.subject ? "border-red-500 ring-1 ring-red-500/20" : ""}`}
                 />
@@ -1079,7 +1133,7 @@ const EditQuotePage: React.FC = () => {
                   </span>
                   <span className="text-[10px] text-gray-400">Net Payable Amount</span>
                 </div>
-                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 shrink-0 whitespace-nowrap">
                   {fmtCurrency(grandTotal)}
                 </span>
               </div>

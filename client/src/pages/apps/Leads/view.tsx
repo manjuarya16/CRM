@@ -602,7 +602,8 @@ const LeadViewPage: React.FC = () => {
           Swal.fire("Success", "File activity logged", "success");
         }
       } else if (activeModal === "note") {
-        if (!modalForm.comment?.trim()) {
+        const trimmedComment = modalForm.comment?.trim();
+        if (!trimmedComment) {
           Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
           setSubmittingAction(false);
           return;
@@ -610,12 +611,33 @@ const LeadViewPage: React.FC = () => {
         await addActivity({
           title: modalForm.title?.trim() || "Note",
           type: "note",
-          comment: modalForm.comment.trim(),
+          comment: trimmedComment,
           lead_id: leadId,
           person_id: selectedLead?.person_id,
         });
         Swal.fire("Success", "Note saved", "success");
       } else if (activeModal === "activity") {
+        if (/^[0-9\W_]+$/.test(modalForm.title.trim()) || !/[a-zA-Z]/.test(modalForm.title)) {
+          Swal.fire("Validation Error", "Title must contain at least one letter and cannot be only special characters or numbers.", "warning");
+          setSubmittingAction(false);
+          return;
+        }
+        if (modalForm.schedule_to) {
+          const toDate = new Date(modalForm.schedule_to);
+          if (toDate.getTime() < Date.now() - 60000) {
+            Swal.fire("Validation Error", "Schedule To date/time cannot be in the past.", "warning");
+            setSubmittingAction(false);
+            return;
+          }
+          if (modalForm.schedule_from) {
+            const fromDate = new Date(modalForm.schedule_from);
+            if (toDate.getTime() < fromDate.getTime()) {
+              Swal.fire("Validation Error", "Schedule To must be after Schedule From.", "warning");
+              setSubmittingAction(false);
+              return;
+            }
+          }
+        }
         await addActivity({
           title: modalForm.title,
           type: modalForm.type,
@@ -771,7 +793,7 @@ const getPersonEmail = (person: any): string => {
                 className="flex flex-col items-center justify-center p-3 bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-300 rounded-xl hover:bg-sky-200 transition-colors font-bold text-xs gap-1 border border-sky-300 shadow-sm"
               >
                 <i className="mgc_attachment_line text-lg"></i>
-                File
+                Upload File
               </button>
               <button
                 onClick={() => setActiveModal("note")}
@@ -1502,7 +1524,7 @@ const getPersonEmail = (person: any): string => {
                             const badge = p.is_recurring ? getContractStatusBadge(p.contract_start_date, p.contract_end_date) : null;
                             return (
                               <tr key={p.id} className="border-b hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
-                                <td className="p-2 font-semibold text-gray-900 dark:text-gray-100">{p.product_name}</td>
+                                <td className="p-2 font-semibold text-gray-900 dark:text-gray-100">{p.product_name || p.name || `Product #${p.product_id || p.id}`}</td>
                                 <td className="p-2">
                                   {p.is_recurring ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-[11px] font-semibold">
@@ -1799,6 +1821,7 @@ const getPersonEmail = (person: any): string => {
                               <label className="block text-xs font-semibold mb-1">Schedule To</label>
                               <input
                                 type="datetime-local"
+                                min={modalForm.schedule_from || new Date().toISOString().slice(0, 16)}
                                 value={modalForm.schedule_to || ""}
                                 onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
                                 className="w-full px-3 py-1.5 border rounded text-xs"
@@ -1836,7 +1859,7 @@ const getPersonEmail = (person: any): string => {
                     </button>
                     <button
                       type="submit"
-                      disabled={submittingAction}
+                      disabled={submittingAction || (activeModal === "note" && !modalForm.comment?.trim())}
                       className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {submittingAction ? (

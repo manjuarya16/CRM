@@ -235,7 +235,7 @@ export function ReportDataTable<T = any>({
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg pl-2.5 pr-8 min-w-[74px] py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>

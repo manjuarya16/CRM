@@ -425,8 +425,8 @@ const EditLeadPage: React.FC = () => {
             setProductRows(
               prods.map((lp: any) => ({
                 id: lp.id,
-                product_id: String(lp.product_id),
-                product_name: lp.product_name || "",
+                product_id: String(lp.product_id || lp.id || ""),
+                product_name: lp.product_name || lp.name || "",
                 quantity: String(lp.quantity || 1),
                 price: String(lp.price || 0),
                 warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
@@ -907,12 +907,20 @@ const EditLeadPage: React.FC = () => {
       fieldErrors.personName = "Contact Person Name is required";
     }
 
+    const strictEmailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     const firstEmail = contactEmails[0]?.value?.trim();
     if (!firstEmail) {
       fieldErrors.contactEmail = "Contact Person Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
-      fieldErrors.contactEmail = "Please enter a valid email address";
+    } else if (!strictEmailRegex.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address without trailing dots (e.g. name@domain.com)";
     }
+
+    contactEmails.forEach((ce, idx) => {
+      const val = ce.value?.trim();
+      if (val && !strictEmailRegex.test(val)) {
+        fieldErrors[`contactEmail_${idx}`] = "Please enter a valid email address (e.g. name@domain.com)";
+      }
+    });
 
     // Product rows validation
     productRows.forEach((row, idx) => {
@@ -2021,6 +2029,11 @@ const EditLeadPage: React.FC = () => {
                                   className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                                 >
                                   <option value="">Select an item...</option>
+                                  {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                                    <option key={row.product_id} value={row.product_id}>
+                                      {row.product_name || `Product #${row.product_id}`}
+                                    </option>
+                                  )}
                                   {products.map((p) => (
                                     <option key={p.id} value={p.id}>
                                       {p.name} {p.sku ? `(${p.sku})` : ""}{" "}
@@ -2462,6 +2475,11 @@ const EditLeadPage: React.FC = () => {
                             className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           >
                             <option value="">Select an item...</option>
+                            {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
+                              <option key={row.product_id} value={row.product_id}>
+                                {row.product_name || `Product #${row.product_id}`}
+                              </option>
+                            )}
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.name} {p.sku ? `(${p.sku})` : ""}{" "}

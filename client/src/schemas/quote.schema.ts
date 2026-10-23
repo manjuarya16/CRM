@@ -7,8 +7,11 @@ export const quoteSchema = z.object({
     .trim()
     .min(1, "Subject is required")
     .max(191, "Subject is too long")
-    .refine((val) => /[a-zA-Z0-9]/.test(val), {
-      message: "Subject must contain alphanumeric characters",
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: "Quote subject cannot consist of only special characters or numbers",
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: "Quote subject must contain at least one letter",
     }),
   description: z.string().trim().optional().or(z.literal("")),
   billing_address: z.any().optional(),
