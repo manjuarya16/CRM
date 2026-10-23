@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
+import { VoiceLeadModal } from "@/components/VoiceLeadModal";
 import { ProductRow, ILeadContactItem } from "@/interface";
+
 
 const TABS = [
   { id: "lead-details", label: "Lead Details" },
@@ -85,6 +87,7 @@ const parseContactItems = (data: any, defaultLabel: string = "Work"): ILeadConta
 
 const CreateLeadPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const paramStageId = searchParams.get("lead_pipeline_stage_id") || searchParams.get("stage_id");
   const paramPipelineId = searchParams.get("lead_pipeline_id") || searchParams.get("pipeline_id");
@@ -97,7 +100,9 @@ const CreateLeadPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState("lead-details");
   const [saving, setSaving] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
 
   // Users for Sales Owner
   const [users, setUsers] = useState<any[]>([]);
@@ -131,7 +136,19 @@ const CreateLeadPage: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [productRows, setProductRows] = useState<ProductRow[]>([
-    { product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "" },
+    {
+      product_id: "",
+      product_name: "",
+      quantity: "1",
+      price: "0",
+      warehouse_id: "",
+      warehouse_location_id: "",
+      is_recurring: false,
+      billing_cycle: "monthly",
+      contract_duration: "12",
+      contract_start_date: new Date().toISOString().split("T")[0],
+      contract_end_date: "",
+    },
   ]);
 
   // Custom Fields & Attributes
@@ -220,6 +237,38 @@ const CreateLeadPage: React.FC = () => {
     }
   }, [details.lead_pipeline_id]);
 
+  useEffect(() => {
+    const voiceData = (location.state as any)?.voiceLead;
+    if (voiceData) {
+      if (voiceData.title) setDetails((d) => ({ ...d, title: voiceData.title }));
+      if (voiceData.description) setDetails((d) => ({ ...d, description: voiceData.description }));
+      if (voiceData.leadValue !== undefined && voiceData.leadValue !== null) {
+        setDetails((d) => ({ ...d, lead_value: String(voiceData.leadValue) }));
+      }
+      if (voiceData.expectedCloseDate) {
+        setDetails((d) => ({ ...d, expected_close_date: voiceData.expectedCloseDate }));
+      }
+      if (voiceData.personName) {
+        setPersonName(voiceData.personName);
+        setPersonSearch(voiceData.personName);
+      }
+      if (voiceData.contactEmail) {
+        setContactEmails([{ label: "Work", value: voiceData.contactEmail }]);
+      }
+      if (voiceData.contactPhone) {
+        setContactPhones([{ label: "Work", value: voiceData.contactPhone }]);
+      }
+      if (voiceData.organizationName && organizations.length > 0) {
+        const orgName = voiceData.organizationName.toLowerCase().trim();
+        const foundOrg = organizations.find((o) => (o.name || "").toLowerCase().trim() === orgName);
+        if (foundOrg) {
+          setOrganizationId(String(foundOrg.id));
+        }
+      }
+    }
+  }, [location.state, organizations]);
+
+
   const scrollToSection = (id: string) => {
     setActiveTab(id);
     const el = sectionRefs.current[id];
@@ -307,11 +356,116 @@ const CreateLeadPage: React.FC = () => {
     }
   };
 
+  const getDurationOptionsForCycle = (cycle?: string) => {
+  const c = (cycle || "monthly").toLowerCase();
+  switch (c) {
+    case "quarterly":
+      return [
+        { value: "3", label: "1 Quarter (3 Mo)" },
+        { value: "6", label: "2 Quarters (6 Mo)" },
+        { value: "9", label: "3 Quarters (9 Mo)" },
+        { value: "12", label: "4 Quarters (1 Yr / 12 Mo)" },
+        { value: "24", label: "8 Quarters (2 Yr / 24 Mo)" },
+        { value: "36", label: "12 Quarters (3 Yr / 36 Mo)" },
+        { value: "60", label: "20 Quarters (5 Yr / 60 Mo)" },
+      ];
+    case "half-yearly":
+      return [
+        { value: "6", label: "1 Half-Year (6 Mo)" },
+        { value: "12", label: "2 Half-Years (1 Yr / 12 Mo)" },
+        { value: "18", label: "3 Half-Years (1.5 Yr / 18 Mo)" },
+        { value: "24", label: "4 Half-Years (2 Yr / 24 Mo)" },
+        { value: "36", label: "6 Half-Years (3 Yr / 36 Mo)" },
+        { value: "60", label: "10 Half-Years (5 Yr / 60 Mo)" },
+      ];
+    case "yearly":
+    case "annually":
+      return [
+        { value: "12", label: "1 Year (12 Mo)" },
+        { value: "24", label: "2 Years (24 Mo)" },
+        { value: "36", label: "3 Years (36 Mo)" },
+        { value: "48", label: "4 Years (48 Mo)" },
+        { value: "60", label: "5 Years (60 Mo)" },
+      ];
+    case "monthly":
+    default:
+      return [
+        { value: "1", label: "1 Month" },
+        { value: "3", label: "3 Months" },
+        { value: "6", label: "6 Months" },
+        { value: "12", label: "12 Months (1 Yr)" },
+        { value: "24", label: "24 Months (2 Yr)" },
+        { value: "36", label: "36 Months (3 Yr)" },
+        { value: "60", label: "60 Months (5 Yr)" },
+      ];
+  }
+};
+
+const getAdjustedDurationForCycle = (newCycle: string, currentDuration?: string | number) => {
+  const options = getDurationOptionsForCycle(newCycle);
+  const curStr = String(currentDuration || "12");
+  const exists = options.some((opt) => opt.value === curStr);
+  if (exists) return curStr;
+  const has12 = options.find((opt) => opt.value === "12");
+  return has12 ? "12" : (options[0]?.value || "12");
+};
+
+const formatCycleDuration = (cycle?: string, duration?: number | string) => {
+  const c = (cycle || "monthly").toLowerCase();
+  const months = Number(duration) || 12;
+
+  if (c === "yearly" || c === "annually") {
+    const years = Math.max(1, Math.round(months / 12));
+    return `${years} ${years === 1 ? "Year" : "Years"} (${months} mo)`;
+  }
+  if (c === "half-yearly") {
+    const periods = Math.max(1, Math.round(months / 6));
+    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    return `${periods} Half-Yr${periods === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
+  }
+  if (c === "quarterly") {
+    const quarters = Math.max(1, Math.round(months / 3));
+    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    return `${quarters} Quarter${quarters === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
+  }
+  if (months >= 12 && months % 12 === 0) {
+    const years = months / 12;
+    return `${months} Months (${years} ${years === 1 ? "Yr" : "Yrs"})`;
+  }
+  return `${months} ${months === 1 ? "Month" : "Months"}`;
+};
+
+const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
+    if (!startDateStr) return "";
+    const parts = startDateStr.split("-").map(Number);
+    if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
+    const [y, m, d] = parts;
+    const months = parseInt(durationMonthsStr || "12", 10) || 12;
+    const date = new Date(y, m - 1, d);
+    date.setMonth(date.getMonth() + months);
+    date.setDate(date.getDate() - 1);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // Product row handlers
   const handleAddProductRow = () => {
+    const todayStr = new Date().toISOString().split("T")[0];
     setProductRows((rows) => [
       ...rows,
-      { product_id: "", product_name: "", quantity: "1", price: "0" },
+      {
+        product_id: "",
+        product_name: "",
+        quantity: "1",
+        price: "0",
+        is_recurring: false,
+        billing_cycle: "monthly",
+        contract_duration: "12",
+        contract_start_date: todayStr,
+        contract_end_date: computeContractEndDate(todayStr, "12"),
+      },
     ]);
   };
 
@@ -320,25 +474,67 @@ const CreateLeadPage: React.FC = () => {
     clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
-  const handleProductRowChange = (idx: number, field: keyof ProductRow, val: string) => {
+  const handleProductRowChange = (idx: number, field: keyof ProductRow, val: any) => {
     setProductRows((rows) => {
       const next = [...rows];
       next[idx] = { ...next[idx], [field]: val };
       if (field === "product_id") {
-        const prod = products.find((p) => String(p.id) === val);
+        const prod = products.find((p) => String(p.id) === String(val));
         if (prod) {
           next[idx].product_name = prod.name || "";
           next[idx].price = String(prod.price ?? 0);
-          if (prod.type === "Service" || prod.type?.toLowerCase() === "service") {
+          const isService = prod.type === "Service" || prod.type?.toLowerCase() === "service";
+          if (isService) {
             next[idx].quantity = "1";
             next[idx].warehouse_id = "";
             next[idx].warehouse_location_id = "";
+            next[idx].is_recurring = true; // Default services to recurring
           }
+        }
+        if (!next[idx].billing_cycle) next[idx].billing_cycle = "monthly";
+        if (!next[idx].contract_duration) next[idx].contract_duration = "12";
+        if (!next[idx].contract_start_date) {
+          next[idx].contract_start_date = new Date().toISOString().split("T")[0];
+        }
+        if (!next[idx].contract_end_date) {
+          next[idx].contract_end_date = computeContractEndDate(next[idx].contract_start_date, next[idx].contract_duration);
         }
         next[idx].warehouse_id = "";
         next[idx].warehouse_location_id = "";
         next[idx].inventories = [];
       }
+
+      if (field === "billing_cycle") {
+        const adjustedDuration = getAdjustedDurationForCycle(val, next[idx].contract_duration);
+        next[idx].contract_duration = adjustedDuration;
+        if (next[idx].contract_start_date) {
+          next[idx].contract_end_date = computeContractEndDate(next[idx].contract_start_date, adjustedDuration);
+        }
+      }
+
+      if (field === "is_recurring" && val) {
+        const todayStr = new Date().toISOString().split("T")[0];
+        if (!next[idx].contract_start_date) {
+          next[idx].contract_start_date = todayStr;
+        }
+        if (!next[idx].contract_duration) {
+          next[idx].contract_duration = "12";
+        }
+        if (!next[idx].contract_end_date) {
+          next[idx].contract_end_date = computeContractEndDate(next[idx].contract_start_date, next[idx].contract_duration);
+        }
+      }
+
+      if (field === "contract_start_date") {
+        next[idx].contract_end_date = computeContractEndDate(val, next[idx].contract_duration || "12");
+      }
+
+      if (field === "contract_duration") {
+        if (next[idx].contract_start_date) {
+          next[idx].contract_end_date = computeContractEndDate(next[idx].contract_start_date, val);
+        }
+      }
+
       return next;
     });
 
@@ -376,6 +572,9 @@ const CreateLeadPage: React.FC = () => {
         warehouse_id: "",
         warehouse_location_id: "",
         inventories: currentRow.inventories,
+        is_recurring: currentRow.is_recurring,
+        billing_cycle: currentRow.billing_cycle,
+        contract_duration: currentRow.contract_duration,
       };
 
       next.splice(idx + 1, 0, newRow);
@@ -405,12 +604,52 @@ const CreateLeadPage: React.FC = () => {
     });
   };
 
+  const calculateRowTotal = (row: ProductRow, isService: boolean = false) => {
+    const qty = isService ? 1 : (parseFloat(row.quantity) || 0);
+    const price = parseFloat(row.price) || 0;
+    if (!row.is_recurring) {
+      return qty * price;
+    }
+    const cycle = (row.billing_cycle || "monthly").toLowerCase();
+    const durationMonths = parseInt(row.contract_duration || "12", 10) || 1;
+    let cycles = durationMonths;
+    if (cycle === "yearly" || cycle === "annually") {
+      cycles = Math.max(1, Math.round(durationMonths / 12));
+    } else if (cycle === "half-yearly") {
+      cycles = Math.max(1, Math.round(durationMonths / 6));
+    } else if (cycle === "quarterly") {
+      cycles = Math.max(1, Math.round(durationMonths / 3));
+    } else {
+      cycles = durationMonths;
+    }
+    return qty * price * cycles;
+  };
+
   const totalLeadValue = productRows.reduce((runningTotal, row) => {
     const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
     const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-    const itemQuantity = isService ? 1 : (parseFloat(row.quantity) || 0);
-    const itemPrice = parseFloat(row.price) || 0;
-    return runningTotal + itemQuantity * itemPrice;
+    return runningTotal + calculateRowTotal(row, isService);
+  }, 0);
+
+  const oneTimeTotal = productRows.reduce((sum, row) => {
+    if (row.is_recurring) return sum;
+    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
+    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+    return sum + calculateRowTotal(row, isService);
+  }, 0);
+
+  const mrrTotal = productRows.reduce((sum, row) => {
+    if (!row.is_recurring) return sum;
+    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
+    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+    const qty = isService ? 1 : (parseFloat(row.quantity) || 0);
+    const price = parseFloat(row.price) || 0;
+    const cycleRate = qty * price;
+    const cycle = (row.billing_cycle || "monthly").toLowerCase();
+    if (cycle === "yearly" || cycle === "annually") return sum + cycleRate / 12;
+    if (cycle === "half-yearly") return sum + cycleRate / 6;
+    if (cycle === "quarterly") return sum + cycleRate / 3;
+    return sum + cycleRate;
   }, 0);
 
   const filteredPersons = persons.filter((person) => {
@@ -492,6 +731,11 @@ const CreateLeadPage: React.FC = () => {
             price: parseFloat(r.price) || 0,
             warehouse_id: isService ? undefined : (r.warehouse_id ? Number(r.warehouse_id) : undefined),
             warehouse_location_id: isService ? undefined : (r.warehouse_location_id ? Number(r.warehouse_location_id) : undefined),
+            is_recurring: Boolean(r.is_recurring),
+            billing_cycle: r.is_recurring ? (r.billing_cycle || "monthly") : undefined,
+            contract_duration: r.is_recurring ? (Number(r.contract_duration) || 12) : 1,
+            contract_start_date: r.is_recurring ? (r.contract_start_date || undefined) : undefined,
+            contract_end_date: r.is_recurring ? (r.contract_end_date || undefined) : undefined,
           };
         });
 
@@ -600,12 +844,23 @@ const CreateLeadPage: React.FC = () => {
             </span>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setShowVoiceModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 rounded-lg text-xs sm:text-sm font-semibold transition shadow-2xs cursor-pointer"
+            title="Auto-fill form using voice dictation"
+          >
+            <i className="mgc_mic_line text-sm"></i>
+            <span>Voice Auto-Fill</span>
+          </button>
+
           <Link
             to="/leads"
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
           >
             Cancel
           </Link>
+
 
           <button
             type="button"
@@ -1057,7 +1312,21 @@ const CreateLeadPage: React.FC = () => {
                 const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
                 const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
                 const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
-                const rowAmount = effectiveQty * (parseFloat(row.price) || 0);
+                const unitPrice = parseFloat(row.price) || 0;
+                const cycleAmount = effectiveQty * unitPrice;
+                const rowAmount = calculateRowTotal(row, isService);
+
+                const cycle = (row.billing_cycle || "monthly").toLowerCase();
+                const durationMonths = parseInt(row.contract_duration || "12", 10) || 1;
+                let cyclesCount = durationMonths;
+                if (cycle === "yearly" || cycle === "annually") {
+                  cyclesCount = Math.max(1, Math.round(durationMonths / 12));
+                } else if (cycle === "half-yearly") {
+                  cyclesCount = Math.max(1, Math.round(durationMonths / 6));
+                } else if (cycle === "quarterly") {
+                  cyclesCount = Math.max(1, Math.round(durationMonths / 3));
+                }
+
                 const prodErr = errors[`product_${idx}`];
                 const qtyErr = errors[`quantity_${idx}`];
                 const priceErr = errors[`price_${idx}`];
@@ -1136,7 +1405,11 @@ const CreateLeadPage: React.FC = () => {
                   selectedProd,
                   isService,
                   effectiveQty,
+                  unitPrice,
+                  cycleAmount,
                   rowAmount,
+                  cyclesCount,
+                  durationMonths,
                   prodErr,
                   qtyErr,
                   priceErr,
@@ -1153,26 +1426,30 @@ const CreateLeadPage: React.FC = () => {
               return (
                 <>
                   {/* Desktop Table View */}
-                  <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="hidden md:block overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
                     <table className="w-full text-left border-collapse text-sm">
                       <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
+                        <tr className="bg-gray-50/80 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
                           <th className="py-2.5 px-3 min-w-[220px]">
-                            Product <span className="text-red-500">*</span>
+                            Product / Service <span className="text-red-500">*</span>
                           </th>
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Warehouse</th>}
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[180px]">Location</th>}
-                          {hasPhysicalProduct && <th className="py-2.5 px-3 min-w-[130px] w-32">Quantity</th>}
-                          <th className="py-2.5 px-3 min-w-[180px] w-48">Price (₹)</th>
-                          <th className="py-2.5 px-3 min-w-[160px] w-44">Amount</th>
-                          <th className="py-2.5 px-3 w-12 text-center"></th>
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 w-44">Warehouse</th>}
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 w-44">Location</th>}
+                          {hasPhysicalProduct && <th className="py-2.5 px-3 w-24">Qty</th>}
+                          <th className="py-2.5 px-3 w-32">Price (₹)</th>
+                          <th className="py-2.5 px-3 w-36 text-right">Amount</th>
+                          <th className="py-2.5 px-2 w-10 text-center"></th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                         {productRows.map((row, idx) => {
                           const {
                             isService,
+                            unitPrice,
+                            cycleAmount,
                             rowAmount,
+                            cyclesCount,
+                            durationMonths,
                             prodErr,
                             qtyErr,
                             priceErr,
@@ -1185,132 +1462,257 @@ const CreateLeadPage: React.FC = () => {
                             shortageQty,
                           } = getRowData(row, idx);
 
+                          const colSpanTotal = hasPhysicalProduct ? 7 : 4;
+
                           return (
-                            <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                              <td className="py-2 px-3 align-top">
-                                <select
-                                  value={row.product_id}
-                                  onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
-                                  className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                                >
-                                  <option value="">Select a product...</option>
-                                  {products.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                                {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
-                              </td>
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <select
-                                      value={row.warehouse_id || ""}
-                                      onChange={(e) => {
-                                        handleProductRowChange(idx, "warehouse_id", e.target.value);
-                                        handleProductRowChange(idx, "warehouse_location_id", "");
-                                      }}
-                                      className={`${inputCls} pr-7 truncate`}
-                                    >
-                                      <option value="">Select Warehouse</option>
-                                      {availableWarehouses.map((w) => (
-                                        <option key={w.id} value={w.id}>
-                                          {getWarehouseLabel(w)}
-                                        </option>
-                                      ))}
-                                    </select>
+                            <React.Fragment key={idx}>
+                              {/* Tier 1: Main Product & Pricing Row */}
+                              <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                                <td className="py-2.5 px-3 align-top">
+                                  <select
+                                    value={row.product_id}
+                                    onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
+                                    className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                  >
+                                    <option value="">Select an item...</option>
+                                    {products.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                                </td>
+
+                                {hasPhysicalProduct && (
+                                  <td className="py-2.5 px-3 align-top">
+                                    {isService ? (
+                                      <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    ) : (
+                                      <select
+                                        value={row.warehouse_id || ""}
+                                        onChange={(e) => {
+                                          handleProductRowChange(idx, "warehouse_id", e.target.value);
+                                          handleProductRowChange(idx, "warehouse_location_id", "");
+                                        }}
+                                        className={`${inputCls} pr-7 truncate`}
+                                      >
+                                        <option value="">Select Warehouse</option>
+                                        {availableWarehouses.map((w) => (
+                                          <option key={w.id} value={w.id}>
+                                            {getWarehouseLabel(w)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </td>
+                                )}
+
+                                {hasPhysicalProduct && (
+                                  <td className="py-2.5 px-3 align-top">
+                                    {isService ? (
+                                      <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    ) : (
+                                      <select
+                                        value={row.warehouse_location_id || ""}
+                                        onChange={(e) => handleProductRowChange(idx, "warehouse_location_id", e.target.value)}
+                                        disabled={!row.warehouse_id}
+                                        className={`${inputCls} pr-7 truncate disabled:opacity-50`}
+                                      >
+                                        <option value="">Select Location</option>
+                                        {availableLocations.map((loc: any) => (
+                                          <option key={loc.id} value={loc.id}>
+                                            {getLocationLabel(loc)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </td>
+                                )}
+
+                                {hasPhysicalProduct && (
+                                  <td className="py-2.5 px-3 align-top">
+                                    {isService ? (
+                                      <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    ) : (
+                                      <>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={row.quantity}
+                                          onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
+                                          className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                            qtyErr || isStockShortage
+                                              ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
+                                              : ""
+                                          }`}
+                                        />
+                                        {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                                        {isStockShortage && locStock !== null && (
+                                          locStock > 0 ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => triggerStockShortagePopup(idx, locStock, shortageQty)}
+                                              className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                                            >
+                                              <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} in stock</span>
+                                              <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from other</span>
+                                            </button>
+                                          ) : (
+                                            <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
+                                              ⚠️ Out of stock
+                                            </div>
+                                          )
+                                        )}
+                                      </>
+                                    )}
+                                  </td>
+                                )}
+
+                                <td className="py-2.5 px-3 align-top">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={row.price}
+                                    onChange={(e) => handleProductRowChange(idx, "price", e.target.value)}
+                                    disabled
+                                    className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                                  />
+                                  {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                                </td>
+
+                                <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top text-right pt-3">
+                                  <div>{fmtCurrency(rowAmount)}</div>
+                                  {row.is_recurring && (
+                                    <div className="text-[11px] text-blue-600 dark:text-blue-400 font-normal">
+                                      {fmtCurrency(cycleAmount)} / {row.billing_cycle || "monthly"}
+                                    </div>
                                   )}
                                 </td>
-                              )}
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <select
-                                      value={row.warehouse_location_id || ""}
-                                      onChange={(e) => handleProductRowChange(idx, "warehouse_location_id", e.target.value)}
-                                      disabled={!row.warehouse_id}
-                                      className={`${inputCls} pr-7 truncate disabled:opacity-50`}
+
+                                <td className="py-2 px-2 text-center align-top pt-2.5">
+                                  {productRows.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveProductRow(idx)}
+                                      className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                      title="Remove item"
                                     >
-                                      <option value="">Select Location</option>
-                                      {availableLocations.map((loc: any) => (
-                                        <option key={loc.id} value={loc.id}>
-                                          {getLocationLabel(loc)}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      <i className="mgc_delete_2_line text-base"></i>
+                                    </button>
                                   )}
                                 </td>
-                              )}
-                              {hasPhysicalProduct && (
-                                <td className="py-2 px-3 align-top">
-                                  {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
-                                  ) : (
-                                    <>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={row.quantity}
-                                        onChange={(e) => handleProductRowChange(idx, "quantity", e.target.value)}
-                                        className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                          qtyErr || isStockShortage
-                                            ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
-                                            : ""
-                                        }`}
-                                      />
-                                      {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                                      {isStockShortage && locStock !== null && (
-                                        locStock > 0 ? (
+                              </tr>
+
+                              {/* Tier 2: Billing & Contract Details Sub-bar */}
+                              <tr className="bg-slate-50/70 dark:bg-slate-800/40 border-b border-gray-200 dark:border-gray-700">
+                                <td colSpan={colSpanTotal} className="px-3.5 py-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                          Billing:
+                                        </span>
+                                        {/* Segmented Pill Switch */}
+                                        <div className="inline-flex p-0.5 rounded-lg bg-gray-200/80 dark:bg-gray-700 border border-gray-300/50 dark:border-gray-600">
                                           <button
                                             type="button"
-                                            onClick={() => triggerStockShortagePopup(idx, locStock, shortageQty)}
-                                            className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
+                                            onClick={() => {
+                                              if (row.is_recurring) handleProductRowChange(idx, "is_recurring", false);
+                                            }}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                                              !row.is_recurring
+                                                ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-xs"
+                                                : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                                            }`}
                                           >
-                                            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
-                                            <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                                            One-Time
                                           </button>
-                                        ) : (
-                                          <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
-                                            ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!row.is_recurring) handleProductRowChange(idx, "is_recurring", true);
+                                            }}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                                              row.is_recurring
+                                                ? "bg-blue-600 text-white shadow-xs"
+                                                : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                                            }`}
+                                          >
+                                            <i className="mgc_refresh_2_line text-xs"></i>
+                                            Recurring
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {row.is_recurring ? (
+                                        <div className="flex flex-wrap items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Cycle:</span>
+                                            <select
+                                              value={row.billing_cycle || "monthly"}
+                                              onChange={(e) => handleProductRowChange(idx, "billing_cycle", e.target.value)}
+                                              className="py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                            >
+                                              <option value="monthly">Monthly</option>
+                                              <option value="quarterly">Quarterly (3 Mo)</option>
+                                              <option value="half-yearly">Half-Yearly (6 Mo)</option>
+                                              <option value="yearly">Yearly (12 Mo)</option>
+                                            </select>
                                           </div>
-                                        )
+
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Duration:</span>
+                                            <select
+                                              value={row.contract_duration || "12"}
+                                              onChange={(e) => handleProductRowChange(idx, "contract_duration", e.target.value)}
+                                              className="py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                            >
+                                              {getDurationOptionsForCycle(row.billing_cycle).map((opt) => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Start:</span>
+                                            <input
+                                              type="date"
+                                              value={row.contract_start_date || ""}
+                                              onChange={(e) => handleProductRowChange(idx, "contract_start_date", e.target.value)}
+                                              className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                            />
+                                          </div>
+
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
+                                            <input
+                                              type="date"
+                                              value={row.contract_end_date || ""}
+                                              onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
+                                              className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-gray-400 dark:text-gray-500 italic pl-1">
+                                          Standard one-off sale
+                                        </span>
                                       )}
-                                    </>
-                                  )}
+                                    </div>
+
+                                    {row.is_recurring && (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200/80 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-medium">
+                                        <i className="mgc_calendar_line text-sm text-blue-500"></i>
+                                        <span>
+                                          Contract: <strong>{fmtCurrency(cycleAmount)}</strong> / {row.billing_cycle || "monthly"} &times; {cyclesCount} {cyclesCount === 1 ? "cycle" : "cycles"} ({formatCycleDuration(row.billing_cycle, durationMonths)}) = <span className="font-bold text-blue-800 dark:text-blue-200">{fmtCurrency(rowAmount)}</span>
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </td>
-                              )}
-                              <td className="py-2 px-3 align-top">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={row.price}
-                                  onChange={(e) => handleProductRowChange(idx, "price", e.target.value)}
-                                  disabled
-                                  className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                                />
-                                {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
-                              </td>
-                              <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top pt-3">
-                                {fmtCurrency(rowAmount)}
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                {productRows.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveProductRow(idx)}
-                                    className="text-gray-400 hover:text-red-500 font-bold p-1"
-                                    title="Remove item"
-                                  >
-                                    &times;
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
+                              </tr>
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1322,7 +1724,10 @@ const CreateLeadPage: React.FC = () => {
                     {productRows.map((row, idx) => {
                       const {
                         isService,
+                        cycleAmount,
                         rowAmount,
+                        cyclesCount,
+                        durationMonths,
                         prodErr,
                         qtyErr,
                         priceErr,
@@ -1350,21 +1755,21 @@ const CreateLeadPage: React.FC = () => {
                                 onClick={() => handleRemoveProductRow(idx)}
                                 className="text-xs font-medium text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1"
                               >
-                                <span className="text-base leading-none">&times;</span> Remove
+                                <i className="mgc_delete_2_line text-sm"></i> Remove
                               </button>
                             )}
                           </div>
 
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                              Product <span className="text-red-500">*</span>
+                              Product / Service <span className="text-red-500">*</span>
                             </label>
                             <select
                               value={row.product_id}
                               onChange={(e) => handleProductRowChange(idx, "product_id", e.target.value)}
                               className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                             >
-                              <option value="">Select a product...</option>
+                              <option value="">Select an item...</option>
                               {products.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
@@ -1372,6 +1777,84 @@ const CreateLeadPage: React.FC = () => {
                               ))}
                             </select>
                             {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                          </div>
+
+                          {/* Mobile Billing Segmented Switch */}
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Billing Type</label>
+                            <div className="inline-flex p-0.5 rounded-lg bg-gray-200/80 dark:bg-gray-700 w-full border border-gray-300/40 dark:border-gray-600">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (row.is_recurring) handleProductRowChange(idx, "is_recurring", false);
+                                }}
+                                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all text-center ${
+                                  !row.is_recurring ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-xs" : "text-gray-500 dark:text-gray-400"
+                                }`}
+                              >
+                                One-Time
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!row.is_recurring) handleProductRowChange(idx, "is_recurring", true);
+                                }}
+                                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all text-center flex items-center justify-center gap-1.5 ${
+                                  row.is_recurring ? "bg-blue-600 text-white shadow-xs" : "text-gray-500 dark:text-gray-400"
+                                }`}
+                              >
+                                <i className="mgc_refresh_2_line text-xs"></i>
+                                Recurring
+                              </button>
+                            </div>
+
+                            {row.is_recurring && (
+                              <div className="grid grid-cols-2 gap-2 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
+                                <div>
+                                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Billing Cycle</label>
+                                  <select
+                                    value={row.billing_cycle || "monthly"}
+                                    onChange={(e) => handleProductRowChange(idx, "billing_cycle", e.target.value)}
+                                    className={`${inputCls} !py-1 text-xs`}
+                                  >
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly (3 Mo)</option>
+                                    <option value="half-yearly">Half-Yearly (6 Mo)</option>
+                                    <option value="yearly">Yearly (12 Mo)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Contract Duration</label>
+                                  <select
+                                    value={row.contract_duration || "12"}
+                                    onChange={(e) => handleProductRowChange(idx, "contract_duration", e.target.value)}
+                                    className={`${inputCls} !py-1 text-xs`}
+                                  >
+                                    {getDurationOptionsForCycle(row.billing_cycle).map((opt) => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Start Date</label>
+                                  <input
+                                    type="date"
+                                    value={row.contract_start_date || ""}
+                                    onChange={(e) => handleProductRowChange(idx, "contract_start_date", e.target.value)}
+                                    className={`${inputCls} !py-1 text-xs`}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
+                                  <input
+                                    type="date"
+                                    value={row.contract_end_date || ""}
+                                    onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
+                                    className={`${inputCls} !py-1 text-xs`}
+                                  />
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {!isService && (
@@ -1439,10 +1922,10 @@ const CreateLeadPage: React.FC = () => {
                               </div>
                             ) : (
                               <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Quantity
-                                </label>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 py-2">1 (Service)</div>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                                <div className="py-2 px-3 bg-gray-100 dark:bg-gray-800/60 rounded-lg text-xs text-gray-600 dark:text-gray-400 font-medium">
+                                  Service (Fixed)
+                                </div>
                               </div>
                             )}
 
@@ -1469,19 +1952,26 @@ const CreateLeadPage: React.FC = () => {
                                 onClick={() => triggerStockShortagePopup(idx, locStock, shortageQty)}
                                 className="w-full text-left p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
                               >
-                                <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} available in stock</span>
-                                <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from another location</span>
+                                <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} in stock</span>
+                                <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from other</span>
                               </button>
                             ) : (
                               <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs font-medium text-red-700 dark:text-red-300">
-                                ⚠️ Out of stock (fully allocated in previous row). Please select another location.
+                                ⚠️ Out of stock. Please select another location.
                               </div>
                             )
                           )}
 
                           <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
                             <span className="font-medium text-gray-500 dark:text-gray-400">Line Amount:</span>
-                            <span className="font-bold text-gray-800 dark:text-white text-sm">{fmtCurrency(rowAmount)}</span>
+                            <div className="text-right">
+                              <span className="font-bold text-gray-800 dark:text-white text-sm block">{fmtCurrency(rowAmount)}</span>
+                              {row.is_recurring && (
+                                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium block">
+                                  {fmtCurrency(cycleAmount)} / {row.billing_cycle || "monthly"} &times; {cyclesCount} {cyclesCount === 1 ? "cycle" : "cycles"}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -1491,23 +1981,60 @@ const CreateLeadPage: React.FC = () => {
               );
             })()}
 
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
+            {/* Revenue Summary Card */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/50 dark:from-slate-800/80 dark:via-slate-800/60 dark:to-slate-900 border border-gray-200/80 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-6">
+                <div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 block font-medium">One-Time Revenue</span>
+                  <span className="text-base font-bold text-gray-800 dark:text-gray-100">{fmtCurrency(oneTimeTotal)}</span>
+                </div>
+
+                {mrrTotal > 0 && (
+                  <>
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block"></div>
+                    <div>
+                      <span className="text-xs text-blue-600 dark:text-blue-400 block font-semibold flex items-center gap-1">
+                        <i className="mgc_refresh_2_line text-sm"></i> Monthly Recurring (MRR)
+                      </span>
+                      <span className="text-base font-bold text-blue-700 dark:text-blue-300">{fmtCurrency(mrrTotal)} / mo</span>
+                    </div>
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block"></div>
+                    <div>
+                      <span className="text-xs text-indigo-600 dark:text-indigo-400 block font-semibold">Annual Recurring (ARR)</span>
+                      <span className="text-base font-bold text-indigo-700 dark:text-indigo-300">{fmtCurrency(mrrTotal * 12)} / yr</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="text-right ml-auto">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block">Total Deal Value</span>
+                <span className="text-2xl font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
                 onClick={handleAddProductRow}
-                className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                className="px-3.5 py-1.5 border border-dashed border-gray-300 dark:border-gray-600 hover:border-[#0e90d9] text-gray-600 hover:text-[#0e90d9] dark:text-gray-300 rounded-lg text-xs font-semibold transition flex items-center gap-1.5"
               >
-                + Add Product
+                <i className="mgc_add_line text-sm"></i>
+                <span>Add Another Item</span>
               </button>
-              <div className="flex items-center gap-2 text-right">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total:</span>
-                <span className="text-base sm:text-lg font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
-              </div>
             </div>
           </div>
         </form>
+
+        {/* Voice Lead Modal */}
+        <VoiceLeadModal
+          isOpen={showVoiceModal}
+          onClose={() => setShowVoiceModal(false)}
+          onLeadCreated={() => navigate("/leads")}
+        />
       </div>
   );
 };
+
 
 export default CreateLeadPage;

@@ -9,6 +9,7 @@ export interface UserData {
   permission_type?: string;
   permissions?: string[] | any;
   organization_id?: number;
+  tenant_id?: number;
   branch_id?: number;
 }
 

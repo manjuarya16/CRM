@@ -6,7 +6,9 @@ import { ILead, ILeadStage } from "@/interface";
 import { getRottenInfo } from "@/utils/rottenHelper";
 import API from "@/config";
 import { usePermission } from "@/hooks/usePermission";
+import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { realtimeService } from "@/services/realtimeService";
+import { VoiceLeadModal } from "@/components/VoiceLeadModal";
 
 interface LeadStageDropdownProps {
   currentStageId: number;
@@ -130,9 +132,7 @@ const LeadsPage: React.FC = () => {
     deleteLead, deleteBulkLeads, updateLeadStage
   } = useLeadStore();
 
-  const [viewMode, setViewMode] = useState<"kanban" | "table">(() =>
-    typeof window !== "undefined" && window.innerWidth < 768 ? "kanban" : "table"
-  );
+  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode<"kanban" | "table">(768, "kanban", "kanban");
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | "">("");
   const [search, setSearch] = useState<string>("");
   const [onlyRotten, setOnlyRotten] = useState<boolean>(false);
@@ -142,8 +142,40 @@ const LeadsPage: React.FC = () => {
   const [mobileActiveStageId, setMobileActiveStageId] = useState<number | "all">("all");
   const [mobileKanbanLayout, setMobileKanbanLayout] = useState<"list" | "board">("list");
 
+  // Dynamic Kanban Board container height to stretch cleanly to the end of the screen
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const [boardHeight, setBoardHeight] = useState<string>("calc(100vh - 200px)");
+
+  // Auto-calculate Kanban Board container height to stretch to the end of the screen
+  useEffect(() => {
+    if (viewMode !== "kanban") return;
+
+    const calculateHeight = () => {
+      if (boardContainerRef.current) {
+        const rect = boardContainerRef.current.getBoundingClientRect();
+        const footerEl = document.querySelector("footer");
+        const footerHeight = footerEl ? footerEl.getBoundingClientRect().height : 0;
+        // Extend completely to the bottom edge of the viewport / screen
+        const available = window.innerHeight - rect.top - footerHeight;
+        setBoardHeight(`${Math.max(380, Math.floor(available))}px`);
+      }
+    };
+
+    calculateHeight();
+    window.addEventListener("resize", calculateHeight);
+    const timer = setTimeout(calculateHeight, 150);
+
+    return () => {
+      window.removeEventListener("resize", calculateHeight);
+      clearTimeout(timer);
+    };
+  }, [viewMode, selectedPipelineId, search, onlyRotten, mobileKanbanLayout, stages.length, kanbanLeads.length]);
+
   // Magic AI Configuration state
   const [isDocGenEnabled, setIsDocGenEnabled] = useState<boolean>(true);
+
+  // Voice Lead Modal
+  const [showVoiceModal, setShowVoiceModal] = useState<boolean>(false);
 
   // Upload File Modal
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
@@ -408,23 +440,6 @@ const LeadsPage: React.FC = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  const isCloseDatePassed = (dateStr?: string) => {
-    if (!dateStr) return false;
-    const cleanStr = String(dateStr).split("T")[0];
-    const parts = cleanStr.split("-");
-    let closeDate: Date;
-    if (parts.length === 3) {
-      closeDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-    } else {
-      closeDate = new Date(dateStr);
-    }
-    if (isNaN(closeDate.getTime())) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    closeDate.setHours(0, 0, 0, 0);
-    return closeDate.getTime() < today.getTime();
-  };
-
   const avatarColors = [
     "bg-[#6c8ebf] text-white",
     "bg-[#e6b93d] text-white",
@@ -465,7 +480,7 @@ const LeadsPage: React.FC = () => {
     : displayKanbanLeads.filter((l) => l.lead_pipeline_stage_id === mobileActiveStageId);
 
   return (
-    <div className="p-1 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+    <div className={`p-1 sm:p-4 lg:p-6 ${viewMode === "kanban" ? "space-y-3 pb-0 -mb-3 sm:-mb-4 md:-mb-6" : "space-y-4 sm:space-y-6"}`}>
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm dark:text-gray-300 shadow-2xs">
         <div className="flex flex-col gap-1.5">
@@ -482,6 +497,19 @@ const LeadsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-x-2.5">
+          {/* Voice Lead button */}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowVoiceModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors cursor-pointer"
+              title="Create Lead using Voice Assistant"
+            >
+              <i className="mgc_mic_line text-sm text-[#0e90d9]"></i>
+              <span>Voice Lead</span>
+            </button>
+          )}
+
           {/* Upload File button */}
           {isDocGenEnabled && canCreate && (
             <button
@@ -492,6 +520,15 @@ const LeadsPage: React.FC = () => {
               <span>Upload File</span>
             </button>
           )}
+
+          <Link
+            to="/reports/recurring-contracts"
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
+            title="Open Recurring Contracts & Renewals Report"
+          >
+            <i className="mgc_repeat_line text-sm text-purple-600 dark:text-purple-400"></i>
+            <span>Contracts & Renewals</span>
+          </Link>
 
           {canCreate && (
             <Link
@@ -598,26 +635,32 @@ const LeadsPage: React.FC = () => {
           {/* View Toggle Buttons */}
           <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
             <button
-              onClick={() => setViewMode("kanban")}
-              title="Kanban Board View"
+              onClick={() => {
+                setHasUserToggled(true);
+                setViewMode("kanban");
+              }}
+              title="Cards View"
               className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "kanban"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
                 }`}
             >
-              <i className="mgc_layout_grid_line text-base"></i>
-              <span className="hidden sm:inline text-xs">Kanban</span>
+              <i className="mgc_grid_2_line text-base"></i>
+              <span className="hidden sm:inline text-xs font-bold">Cards</span>
             </button>
             <button
-              onClick={() => setViewMode("table")}
-              title="Table Grid View"
+              onClick={() => {
+                setHasUserToggled(true);
+                setViewMode("table");
+              }}
+              title="Table View"
               className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${viewMode === "table"
                   ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-sm"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
                 }`}
             >
-              <i className="mgc_list_check_line text-base"></i>
-              <span className="hidden sm:inline text-xs">Table</span>
+              <i className="mgc_table_line text-base"></i>
+              <span className="hidden sm:inline text-xs font-bold">Table</span>
             </button>
           </div>
         </div>
@@ -759,13 +802,6 @@ const LeadsPage: React.FC = () => {
                                   <p className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] truncate leading-tight">
                                     {lead.title}
                                   </p>
-                                  {isCloseDatePassed(lead.expected_close_date) && (
-                                    <span className="text-red-500 shrink-0" title="Expected Close Date has passed">
-                                      <svg className="w-3.5 h-3.5 text-red-500 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                      </svg>
-                                    </span>
-                                  )}
                                   {rottenInfo.isRotten && (
                                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 font-bold shrink-0">
                                       🍅 {rottenInfo.daysIdle}d
@@ -843,8 +879,12 @@ const LeadsPage: React.FC = () => {
           </div>
 
           {/* KANBAN BOARD VIEW (Shown on >= md, or on mobile when board layout chosen) */}
-          <div className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} overflow-x-auto pb-4 scroll-smooth`}>
-            <div className="flex gap-4 min-w-max items-start">
+          <div
+            ref={boardContainerRef}
+            style={{ height: boardHeight }}
+            className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} kanban-board-scroll overflow-x-auto pb-0 scroll-smooth sticky bottom-0`}
+          >
+            <div className="flex gap-4 min-w-max h-full items-stretch">
               {(() => {
                 const validStageIds = new Set(stages.map((s) => s.id));
                 return stages.map((stage, idx) => {
@@ -869,9 +909,9 @@ const LeadsPage: React.FC = () => {
                       await updateLeadStage(leadId, stage.id, true);
                       fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
                     }}
-                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 space-y-3 transition-colors hover:border-[#0088cc]/50"
+                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 flex flex-col h-full min-h-0 transition-colors hover:border-[#0088cc]/50"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between shrink-0 mb-2">
                       <div>
                         <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
                           {stage.name}
@@ -893,26 +933,26 @@ const LeadsPage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shrink-0 mb-3">
                       <div
                         className="h-full bg-[#0088cc] rounded-full transition-all duration-300"
                         style={{ width: `${Math.min(100, (stageLeads.length / Math.max(1, kanbanLeads.length)) * 100 * 2)}%` }}
                       ></div>
                     </div>
 
-                    <div className="space-y-3 min-h-[120px]">
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 kanban-column-scroll">
                       {loading ? (
                         <div className="text-center py-8">
                           <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent"></div>
                         </div>
                       ) : stageLeads.length === 0 ? (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
-                          <div className="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
-                            <svg className="w-8 h-8 stroke-current" fill="none" viewBox="0 0 24 24">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200/80 dark:border-gray-700/80 shadow-sm flex flex-col items-center justify-center text-center space-y-2.5 h-full min-h-[180px]">
+                          <div className="w-12 h-12 rounded-full bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-300">
+                            <svg className="w-6 h-6 stroke-current" fill="none" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                             </svg>
                           </div>
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             <h4 className="text-xs font-bold text-gray-800 dark:text-gray-100">
                               {onlyRotten ? "No Rotten Leads" : "Your Leads List is Empty"}
                             </h4>
@@ -923,59 +963,75 @@ const LeadsPage: React.FC = () => {
                           {!onlyRotten && canCreate && (
                             <Link
                               to={`/leads/create?lead_pipeline_stage_id=${stage.id}&lead_pipeline_id=${selectedPipelineId || stage.lead_pipeline_id || ""}`}
-                              className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
+                              className="px-3.5 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-bold transition-colors shadow-sm inline-block"
                             >
                               Create Lead
                             </Link>
                           )}
                         </div>
                       ) : (
-                        stageLeads.map((lead) => (
-                          <div
-                            key={lead.id}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", String(lead.id));
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
-                          >
-                            {/* ROW 1: Avatar + Person + Company + alert icon */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                {/* Solid color avatar */}
-                                <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
-                                  {getInitials(lead.person_name || lead.title)}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
-                                    {lead.person_name || "No Person"}
-                                  </p>
-                                  {/* Company name in teal/blue like the screenshot */}
-                                  <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
-                                    {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
-                                  </p>
-                                </div>
-                              </div>
-                              {/* Alert triangle (only visible when Expected Close Date has passed) + edit/delete on hover */}
-                              <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
-                                {isCloseDatePassed(lead.expected_close_date) && (
-                                  <span className="text-red-500 opacity-90" title="Expected Close Date has passed">
-                                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                    </svg>
+                        stageLeads.map((lead) => {
+                          const rottenInfo = getRottenInfo(lead, currentPipeline);
+                          const isOverdue = Boolean(
+                            lead.status !== false &&
+                            lead.expected_close_date &&
+                            new Date(lead.expected_close_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0)
+                          );
+                          const hasAlert = rottenInfo.isRotten || isOverdue;
+                          const alertTitle = rottenInfo.isRotten && isOverdue
+                            ? `Warning: Rotten (${rottenInfo.daysIdle}d idle) & Overdue close date`
+                            : rottenInfo.isRotten
+                            ? `Rotten: Idle for ${rottenInfo.daysIdle} days without updates (threshold: ${rottenInfo.rottenDaysThreshold}d)`
+                            : isOverdue
+                            ? `Overdue: Expected close date was ${new Date(lead.expected_close_date!).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                            : "";
+
+                          return (
+                            <div
+                              key={lead.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", String(lead.id));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                            >
+                              {/* ROW 1: Avatar + Person + Company + alert icon */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {/* Solid color avatar */}
+                                  <span className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${colorClass}`}>
+                                    {getInitials(lead.person_name || lead.title)}
                                   </span>
-                                )}
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
-                                  <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
-                                    <i className="mgc_edit_line text-xs"></i>
-                                  </Link>
-                                  <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
-                                    <i className="mgc_delete_line text-xs"></i>
-                                  </button>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate leading-tight">
+                                      {lead.person_name || "No Person"}
+                                    </p>
+                                    {/* Company name in teal/blue like the screenshot */}
+                                    <p className="text-[11px] text-[#0088cc] dark:text-[#4ab8f5] truncate leading-tight font-medium">
+                                      {(lead as any).organization_name || (lead as any).company_name || "\u00a0"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {/* Alert triangle (shown only when rotten or overdue) + edit/delete on hover */}
+                                <div className="flex items-center gap-0.5 flex-shrink-0 pt-0.5">
+                                  {hasAlert && (
+                                    <span className="text-red-500 opacity-80 hover:opacity-100 transition-opacity cursor-help" title={alertTitle}>
+                                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center ml-1">
+                                    <Link to={`/leads/edit/${lead.id}`} className="p-0.5 text-gray-400 hover:text-[#0088cc]" title="Edit">
+                                      <i className="mgc_edit_line text-xs"></i>
+                                    </Link>
+                                    <button onClick={() => handleDelete(lead)} className="p-0.5 text-gray-400 hover:text-red-500" title="Delete">
+                                      <i className="mgc_delete_line text-xs"></i>
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
                             {/* ROW 2: Lead title */}
                             <Link
@@ -1041,8 +1097,8 @@ const LeadsPage: React.FC = () => {
                               <div className="flex items-center gap-2 pt-1.5 border-t border-gray-200 dark:border-gray-700/50 text-[10px]">
                                 {lead.expected_close_date && (
                                   <span
-                                    className={`flex items-center gap-1 ${isCloseDatePassed(lead.expected_close_date) ? "text-red-500 font-semibold" : "text-gray-400"}`}
-                                    title={isCloseDatePassed(lead.expected_close_date) ? "Expected Close Date has passed" : undefined}
+                                    className={`flex items-center gap-1 ${isOverdue ? "text-red-500 dark:text-red-400 font-medium" : "text-gray-400"}`}
+                                    title={isOverdue ? "Overdue: Expected close date has passed" : undefined}
                                   >
                                     <i className="mgc_calendar_line text-[11px]"></i>
                                     {new Date(lead.expected_close_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -1056,7 +1112,8 @@ const LeadsPage: React.FC = () => {
                               </div>
                             )}
                           </div>
-                        ))
+                        );
+                      })
                       )}
                     </div>
                   </div>
@@ -1235,6 +1292,20 @@ const LeadsPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* VOICE LEAD CREATION MODAL */}
+      <VoiceLeadModal
+        isOpen={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        onLeadCreated={() => {
+          if (viewMode === "kanban") {
+            fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
+          } else {
+            fetchLeads(page, perPage, search, filterForm);
+          }
+        }}
+        pipelineId={selectedPipelineId}
+      />
 
       {/* UPLOAD FILE MODAL (MAGIC AI / DOCUMENT LEAD CREATION) */}
       {showUploadModal && (

@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 
 import path from 'path';
 import fs from 'fs';
+import { resolveTenant } from '@/middleware/tenant.middleware';
 
 export function createApp(): express.Express {
   const app = express();
@@ -47,6 +48,10 @@ export function createApp(): express.Express {
         "Authorization",
         "X-Authorization",
         "x-authorization",
+        "X-Tenant-Slug",
+        "x-tenant-slug",
+        "X-Tenant-Id",
+        "x-tenant-id",
         "X-Requested-With",
         "Accept",
         "Origin",
@@ -90,6 +95,8 @@ export function createApp(): express.Express {
     }
     next();
   });
+
+  app.use(resolveTenant);
 
   app.use('/api', routes);
 

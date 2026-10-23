@@ -67,6 +67,11 @@ export interface ILeadProduct {
   warehouse_location_id?: number;
   warehouse_name?: string;
   warehouse_location_name?: string;
+  is_recurring?: boolean;
+  billing_cycle?: string;
+  contract_duration?: number;
+  contract_start_date?: string;
+  contract_end_date?: string;
 }
 
 export interface ProductRow {
@@ -78,6 +83,11 @@ export interface ProductRow {
   warehouse_id?: string;
   warehouse_location_id?: string;
   inventories?: any[];
+  is_recurring?: boolean;
+  billing_cycle?: string; // "monthly" | "quarterly" | "half-yearly" | "yearly"
+  contract_duration?: string; // number of months (e.g. "1", "3", "6", "12", "24", "36")
+  contract_start_date?: string;
+  contract_end_date?: string;
 }
 
 export interface LeadState {
@@ -109,7 +119,12 @@ export interface LeadState {
     quantity?: number,
     price?: number,
     warehouseId?: number,
-    warehouseLocationId?: number
+    warehouseLocationId?: number,
+    isRecurring?: boolean,
+    billingCycle?: string,
+    contractDuration?: number,
+    contractStartDate?: string,
+    contractEndDate?: string
   ) => Promise<any>;
   deleteLeadProduct: (itemId: number, leadId: number) => Promise<void>;
   fetchSources: () => Promise<void>;
@@ -125,4 +140,47 @@ export interface ILeadContactItem {
   value: string;
 }
 
+export interface IVoiceLeadData {
+  title?: string;
+  personName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  organizationName?: string;
+  jobTitle?: string;
+  leadValue?: number | null;
+  expectedCloseDate?: string | null;
+  description?: string;
+  source?: string;
+  rawTranscript?: string;
+  translatedTranscript?: string;
+}
+
+export interface VoiceLeadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onLeadCreated?: () => void;
+  pipelineId?: number | string;
+  stageId?: number | string;
+}
+
+export type IVoiceLeadModalProps = VoiceLeadModalProps;
+
+export interface ILanguageOption {
+  code: string;
+  id: string;
+  label: string;
+  flag: string;
+  native: string;
+  badge?: string;
+  isAutoTranslate?: boolean;
+}
+
+export interface ISampleVoicePrompt {
+  langId: string;
+  text: string;
+  badge: string;
+  flag: string;
+}
+
 export type LeadStore = LeadState;
+

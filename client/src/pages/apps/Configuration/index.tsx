@@ -119,6 +119,7 @@ const CONFIG_NAV: { category: string; items: ConfigNavItem[] }[] = [
 // ── Menu label entries (Krayin general.settings.menu.*) ──────────────────────
 const MENU_LABEL_FIELDS: { key: string; label: string; placeholder: string }[] = [
   { key: "dashboard", label: "Dashboard", placeholder: "Dashboard" },
+  { key: "organization-profile", label: "Organization Profile", placeholder: "Organization Profile" },
   { key: "leads", label: "Leads", placeholder: "Leads" },
   { key: "quotes", label: "Quotes", placeholder: "Quotes" },
   { key: "mail", label: "Mail", placeholder: "Mail" },
@@ -133,6 +134,7 @@ const MENU_LABEL_FIELDS: { key: string; label: string; placeholder: string }[] =
   { key: "contacts.organizations", label: "Contacts → Organizations", placeholder: "Organizations" },
   { key: "products", label: "Products", placeholder: "Products" },
   { key: "settings", label: "Settings", placeholder: "Settings" },
+  { key: "settings.organization-profile", label: "Settings → Organization Profile", placeholder: "Organization Profile" },
   { key: "configuration", label: "Configuration", placeholder: "Configuration" },
 ];
 
