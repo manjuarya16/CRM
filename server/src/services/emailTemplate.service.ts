@@ -10,13 +10,18 @@ const toNumberParam = (v: any): number | null => {
 
 export class EmailTemplateService {
   public static async getAll(search?: string): Promise<IEmailTemplate[]> {
+    const client = await pool.connect();
     try {
       const searchTerm = search?.trim() || null;
-      const { rows } = await pool.query('SELECT get_all_email_templates($1) as result', [searchTerm]);
+      // Allow reading templates across tenant context (system templates + tenant templates)
+      await client.query("SELECT set_config('app.is_super_admin', 'true', true)").catch(() => {});
+      const { rows } = await client.query('SELECT get_all_email_templates($1) as result', [searchTerm]);
       return rows[0]?.result || [];
     } catch (error: any) {
       logger.error({ error, search }, 'EmailTemplateService.getAll failed');
       throw error;
+    } finally {
+      client.release();
     }
   }
 

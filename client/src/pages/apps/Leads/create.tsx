@@ -676,12 +676,20 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       fieldErrors.personName = "Contact Person Name is required";
     }
 
+    const strictEmailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     const firstEmail = contactEmails[0]?.value?.trim();
     if (!firstEmail) {
       fieldErrors.contactEmail = "Contact Person Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
-      fieldErrors.contactEmail = "Please enter a valid email address";
+    } else if (!strictEmailRegex.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address without trailing dots (e.g. name@domain.com)";
     }
+
+    contactEmails.forEach((ce, idx) => {
+      const val = ce.value?.trim();
+      if (val && !strictEmailRegex.test(val)) {
+        fieldErrors[`contactEmail_${idx}`] = "Please enter a valid email address (e.g. name@domain.com)";
+      }
+    });
 
     // Product rows validation
     productRows.forEach((row, idx) => {

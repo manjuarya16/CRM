@@ -107,7 +107,7 @@ export async function recognizeImageWithAutoOrientation(imageBuffer: Buffer, fil
 export function extractTextFromBuffer(buffer: Buffer, originalFilename: string): string {
   const ext = path.extname(originalFilename).toLowerCase();
 
-  if (ext === '.txt' || ext === '.csv' || ext === '.json' || ext === '.md' || ext === '.html') {
+  if (['.txt', '.csv', '.json', '.md', '.html', '.jmx', '.xml', '.log', '.tsv', '.yaml', '.yml'].includes(ext)) {
     return buffer.toString('utf8');
   }
 
