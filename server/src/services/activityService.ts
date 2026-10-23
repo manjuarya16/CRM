@@ -7,6 +7,7 @@ import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/ac
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
+import { activitySchema } from "@/schemas/activity.schema";
 
 const logger = pino();
 
@@ -82,6 +83,16 @@ const getActivityById = async (req: Request, res: Response): Promise<void> => {
 const createActivity = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
+    const validation = activitySchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: validation.error.issues[0]?.message || "Invalid activity data",
+        errors: validation.error.issues,
+      });
+      return;
+    }
+
     connection = await pool.connect();
     const {
       title,
@@ -157,6 +168,16 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
 const updateActivity = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
+    const validation = activitySchema.partial().safeParse(req.body);
+    if (!validation.success) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: validation.error.issues[0]?.message || "Invalid activity data",
+        errors: validation.error.issues,
+      });
+      return;
+    }
+
     connection = await pool.connect();
     const id = Number(req.params.id || req.body.id);
     const {

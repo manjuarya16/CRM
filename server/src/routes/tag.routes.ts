@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { TagService } from '@/services/tag.service';
+import { tagSchema } from '@/schemas/tag.schema';
 
 const router = Router();
 
@@ -30,11 +31,16 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/tags
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const validation = tagSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error.issues[0]?.message || 'Invalid tag data',
+        errors: validation.error.issues,
+      });
+    }
     const { name, color, user_id } = req.body;
     const userId = (req as any).user?.id || user_id;
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ success: false, message: 'Tag name is required' });
-    }
     const saved = await TagService.save({ name: name.trim(), color: color || '#0088cc' }, undefined, userId);
     return res.status(201).json({ success: true, data: saved, message: 'Tag created successfully' });
   } catch (error: any) {
@@ -45,6 +51,14 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/tags/:id
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const validation = tagSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error.issues[0]?.message || 'Invalid tag data',
+        errors: validation.error.issues,
+      });
+    }
     const { name, color, user_id } = req.body;
     const userId = (req as any).user?.id || user_id;
     const saved = await TagService.save(

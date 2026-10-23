@@ -855,6 +855,8 @@ export class DataTransferService {
         return custom;
       };
 
+      const seenInFile = new Map<string, number>();
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const savepointName = `sp_${i}`;
@@ -871,6 +873,12 @@ export class DataTransferService {
             const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
             if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
             const titleStr = titleVal ? String(titleVal).trim() : '';
+
+            const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
 
             // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
             const finalPersonId = await resolvePersonId(
@@ -984,6 +992,12 @@ export class DataTransferService {
             const nameVal = row.name || row.Name || row['Person Name'];
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
+
+            const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
 
             const cleanJobTitle = (title: any) => {
               if (!title || typeof title !== 'string') return null;
@@ -1111,6 +1125,12 @@ export class DataTransferService {
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
 
+            const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
+
             const finalUserId = await resolveUserId(
               client,
               row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
@@ -1176,6 +1196,13 @@ export class DataTransferService {
             if (!idVal && !skuVal) throw new Error(`Row ${i + 1}: sku or id is required`);
             const skuStr = skuVal ? String(skuVal).trim() : '';
             const prodName = row.name || row.Name || row['Product Name'] || skuStr;
+
+            const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
+
             const description = row.description || row.Description || null;
             const quantity = Number(row.quantity || row.Quantity || 0);
             const price = Number(row.price || row.Price || 0);
@@ -1461,6 +1488,8 @@ export class DataTransferService {
         [type]
       );
 
+      const seenInFile = new Map<string, number>();
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         let rowError: string | null = null;
@@ -1484,17 +1513,23 @@ export class DataTransferService {
               rowError = 'Field "title" or "id" is required';
             } else {
               const titleStr = titleVal ? String(titleVal).trim() : '';
-              const existingLead = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['leads', idVal || null, titleStr || null]
-              );
-              const exists = existingLead.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Lead with title "${titleStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'title'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existingLead = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['leads', idVal || null, titleStr || null]
+                );
+                const exists = existingLead.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Lead with title "${titleStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'persons') {
@@ -1504,17 +1539,23 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existing = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['persons', idVal || null, nameStr || null]
-              );
-              const exists = existing.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Person "${nameStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existing = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['persons', idVal || null, nameStr || null]
+                );
+                const exists = existing.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Person "${nameStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'organizations') {
@@ -1524,17 +1565,23 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existingOrg = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['organizations', idVal || null, nameStr || null]
-              );
-              const exists = existingOrg.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Organization "${nameStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existingOrg = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['organizations', idVal || null, nameStr || null]
+                );
+                const exists = existingOrg.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Organization "${nameStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'products') {
@@ -1545,18 +1592,24 @@ export class DataTransferService {
               rowError = 'Field "sku" is required for products';
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
-              const prodName = nameVal ? String(nameVal).trim() : skuStr;
-              const existingProd = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
-                ['products', idVal || null, skuStr || null, prodName || null]
-              );
-              const exists = existingProd.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Product with SKU "${skuStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate SKU matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const prodName = nameVal ? String(nameVal).trim() : skuStr;
+                const existingProd = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
+                  ['products', idVal || null, skuStr || null, prodName || null]
+                );
+                const exists = existingProd.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Product with SKU "${skuStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for update`;
+                }
               }
             }
           }
