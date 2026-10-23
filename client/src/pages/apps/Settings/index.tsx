@@ -3,6 +3,20 @@ import { SettingItem, SettingCategory } from "@/interface";
 
 const SETTINGS_SECTIONS: SettingCategory[] = [
   {
+    id: "organization",
+    title: "Organization",
+    subtitle: "Manage your company profile, branding, tax details, and regional preferences",
+    items: [
+      {
+        id: "organization_profile",
+        title: "Company Profile",
+        description: "Update company name, logo, contact, registered address, GSTIN/PAN and currency",
+        icon: "mgc_building_2_line",
+        url: "/organization",
+      },
+    ],
+  },
+  {
     id: "user",
     title: "User",
     subtitle: "Manage all your users and their permissions in the CRM, what they're allowed to do.",

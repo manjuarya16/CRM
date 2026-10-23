@@ -27,6 +27,7 @@ import { InventoryReport } from './components/InventoryReport';
 import { WinLossReport } from './components/WinLossReport';
 import { ProductServiceMixReport } from './components/ProductServiceMixReport';
 import { StaleLeadsReport } from './components/StaleLeadsReport';
+import { RecurringContractsReport } from './components/RecurringContractsReport';
 
 const ReportsPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
@@ -57,6 +58,7 @@ const ReportsPage: React.FC = () => {
     winLossData,
     productServiceMixData,
     staleLeadsData,
+    recurringContractsData,
     filterOptions,
     fetchFilterOptions,
     fetchReportOverview,
@@ -75,6 +77,7 @@ const ReportsPage: React.FC = () => {
     fetchWinLossReport,
     fetchProductServiceMixReport,
     fetchStaleLeadsReport,
+    fetchRecurringContractsReport,
   } = useReportStore();
 
   // Slide-over Record Drawer state
@@ -163,6 +166,7 @@ const ReportsPage: React.FC = () => {
       'win-loss',
       'product-service-mix',
       'stale-leads',
+      'recurring-contracts',
     ];
 
     const prodParam = searchParams.get('product') || searchParams.get('productId');
@@ -233,6 +237,9 @@ const ReportsPage: React.FC = () => {
       case 'stale-leads':
         fetchStaleLeadsReport();
         break;
+      case 'recurring-contracts':
+        fetchRecurringContractsReport();
+        break;
       default:
         fetchReportOverview();
     }
@@ -254,6 +261,7 @@ const ReportsPage: React.FC = () => {
     fetchWinLossReport,
     fetchProductServiceMixReport,
     fetchStaleLeadsReport,
+    fetchRecurringContractsReport,
   ]);
 
   // Re-fetch when active tab or critical filters change
@@ -375,6 +383,11 @@ const ReportsPage: React.FC = () => {
       title: 'Stale Leads & Follow-up Gaps',
       subtitle: 'Open leads nobody is working on: no next step, no recent activity, or past target close date.',
       basis: 'Lead created date',
+    },
+    'recurring-contracts': {
+      title: 'Recurring Contracts & Renewals',
+      subtitle: 'Track active recurring contracts, subscription cycles, renewals due, and expiring agreements over time.',
+      basis: 'Contract start & end date',
     },
   };
 
@@ -552,6 +565,17 @@ const ReportsPage: React.FC = () => {
       { label: 'Past Close Date', filters: { selectedIssueFlag: 'Past close date' } },
       { label: 'Missing Details', filters: { selectedIssueFlag: 'Missing details' } },
     ],
+    'recurring-contracts': [
+      { label: 'All Contracts', filters: { selectedContractStatus: '', selectedBillingCycle: '', selectedProductType: '' } },
+      { label: 'Active Contracts', filters: { selectedContractStatus: 'active' } },
+      { label: 'Renewals Due (<= 30d)', filters: { selectedContractStatus: 'expiring_30' } },
+      { label: 'Expiring in 60d', filters: { selectedContractStatus: 'expiring_60' } },
+      { label: 'Expired (Past Due)', filters: { selectedContractStatus: 'expired' } },
+      { label: 'Quarterly', filters: { selectedBillingCycle: 'quarterly' } },
+      { label: 'Yearly', filters: { selectedBillingCycle: 'yearly' } },
+      { label: 'Services Only', filters: { selectedProductType: 'Service' } },
+      { label: 'Products Only', filters: { selectedProductType: 'Product' } },
+    ],
   };
 
   const currentQuickViews = quickViewsMap[activeTab] || [];
@@ -686,6 +710,7 @@ const ReportsPage: React.FC = () => {
             { key: 'win-loss', label: 'Win / Loss', icon: 'mgc_trophy_line' },
             { key: 'product-service-mix', label: 'Product vs Service', icon: 'mgc_shuffle_line' },
             { key: 'stale-leads', label: 'Stale Leads', icon: 'mgc_alarm_line' },
+            { key: 'recurring-contracts', label: 'Recurring & Contracts', icon: 'mgc_repeat_line' },
           ].map((tabItem) => {
             const isActive = activeTab === tabItem.key;
             return (
@@ -1744,6 +1769,89 @@ const ReportsPage: React.FC = () => {
                 </div>
               </>
             )}
+
+            {/* Recurring Contracts Filters */}
+            {activeTab === 'recurring-contracts' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Contract Status</label>
+                  <select
+                    value={filterState.selectedContractStatus || ''}
+                    onChange={(e) => setFilterState({ selectedContractStatus: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Contracts</option>
+                    <option value="active">Active Contracts</option>
+                    <option value="expiring_30">Renewals Due (Within 30 Days)</option>
+                    <option value="expiring_60">Expiring in 31-60 Days</option>
+                    <option value="expiring_90">Expiring in 61-90 Days</option>
+                    <option value="expired">Expired (Past Due)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Billing Cycle</label>
+                  <select
+                    value={filterState.selectedBillingCycle || ''}
+                    onChange={(e) => setFilterState({ selectedBillingCycle: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Cycles</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="half_yearly">Half-Yearly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Offering Type</label>
+                  <select
+                    value={filterState.selectedProductType || ''}
+                    onChange={(e) => setFilterState({ selectedProductType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Types (Products & Services)</option>
+                    <option value="Service">Services Only</option>
+                    <option value="Product">Physical Products Only</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Owner</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Owners</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search contract, SKU, lead…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* 4. Applied Filters Tags Strip (.applied) */}
@@ -2318,6 +2426,22 @@ const ReportsPage: React.FC = () => {
                 fetchStaleLeadsReport();
               }}
               onOpenDrawer={handleOpenLeadDrawer}
+            />
+          )}
+
+          {activeTab === 'recurring-contracts' && (
+            <RecurringContractsReport
+              reportData={recurringContractsData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchRecurringContractsReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchRecurringContractsReport();
+              }}
+              onOpenDrawer={(leadId, leadTitle) => handleOpenLeadDrawerById(leadId, leadTitle)}
             />
           )}
         </div>

@@ -5,6 +5,7 @@ import {
   getToken,
   isTokenExpired,
 } from "@/lib/auth-utils";
+import { getSubdomain } from "@/utils/subdomain";
 
 // Simple notification function (no external dependency)
 const showNotification = (
@@ -85,6 +86,11 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       // Add standard headers
       config.headers["Content-Type"] =
         config.headers["Content-Type"] || "application/json";
+
+      // Attach tenant / organization context headers
+      const { slug } = getSubdomain();
+      config.headers["X-Tenant-Slug"] = slug || "default";
+      config.headers["X-Tenant-Id"] = "1";
 
       return config;
     } catch (error) {

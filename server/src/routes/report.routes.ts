@@ -18,6 +18,7 @@ import {
   getWinLossReport,
   getProductServiceMixReport,
   getStaleLeadsReport,
+  getRecurringContractsReport,
 } from '@/services/report.service';
 
 const router = Router();
@@ -88,6 +89,10 @@ router.get('/product-service-mix', requireAuth, (req: Request, res: Response) =>
 
 router.get('/stale-leads', requireAuth, (req: Request, res: Response) => {
   getStaleLeadsReport(req, res);
+});
+
+router.get('/recurring-contracts', requireAuth, (req: Request, res: Response) => {
+  getRecurringContractsReport(req, res);
 });
 
 export default router;

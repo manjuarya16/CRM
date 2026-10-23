@@ -19,6 +19,13 @@ const MENU_ITEMS: MenuItemTypes[] = [
     url: "/dashboard",
   },
   {
+    key: "organization-profile",
+    label: "Organization Profile",
+    isTitle: false,
+    icon: "mgc_building_2_line",
+    url: "/organization",
+  },
+  {
     key: "reports",
     label: "Reports",
     isTitle: false,
@@ -120,6 +127,12 @@ const MENU_ITEMS: MenuItemTypes[] = [
         url: "/reports/stale-leads",
         parentKey: "reports",
       },
+      {
+        key: "reports-recurring-contracts",
+        label: "Recurring & Contracts",
+        url: "/reports/recurring-contracts",
+        parentKey: "reports",
+      },
     ],
   },
   {
@@ -183,6 +196,12 @@ const MENU_ITEMS: MenuItemTypes[] = [
     isTitle: false,
     icon: "mgc_settings_3_line",
     children: [
+      {
+        key: "organization-profile",
+        label: "Organization Profile",
+        url: "/organization",
+        parentKey: "settings",
+      },
       {
         key: "settings-overview",
         label: "All Settings",

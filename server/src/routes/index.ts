@@ -31,6 +31,7 @@ import whatsappRoutes from '@/routes/whatsapp.routes';
 import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
 import reportRoutes from '@/routes/report.routes';
+import tenantRoutes from '@/routes/tenant.routes';
 
 const router = Router();
 
@@ -50,6 +51,7 @@ router.use('/realtimes', realtimeRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/dashboards', dashboardRoutes);
 router.use('/auth', authRoutes);
+router.use('/tenant', tenantRoutes);
 router.use('/organizations', organizationRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/quotes', quoteRoutes);

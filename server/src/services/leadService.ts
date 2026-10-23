@@ -263,7 +263,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             lead.id,
             Number(p.product_id),
@@ -271,6 +271,11 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -422,7 +427,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             id,
             Number(p.product_id),
@@ -430,6 +435,11 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -609,10 +619,23 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
-    const { product_id, quantity, price, warehouse_id, warehouse_location_id } = req.body;
+    const {
+      product_id,
+      quantity,
+      price,
+      warehouse_id,
+      warehouse_location_id,
+      is_recurring,
+      billing_cycle,
+      contract_duration,
+      contract_start_date,
+      contract_end_date,
+      start_date,
+      end_date,
+    } = req.body;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
       [
         leadId,
         product_id,
@@ -620,6 +643,11 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
         price || null,
         warehouse_id ? Number(warehouse_id) : null,
         warehouse_location_id ? Number(warehouse_location_id) : null,
+        is_recurring === true || is_recurring === "true",
+        billing_cycle || null,
+        contract_duration ? Number(contract_duration) : 1,
+        contract_start_date || start_date || null,
+        contract_end_date || end_date || null,
       ]
     );
 
