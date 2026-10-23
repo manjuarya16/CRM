@@ -49,8 +49,16 @@ export const useAuthStore = create<AuthState>()(
             API.defaults.headers.common["Authorization"] =
               `Bearer ${data.token}`;
 
+            const userWithDefaults = data.user
+              ? {
+                  ...data.user,
+                  tenant_id: data.user.tenant_id || 1,
+                  organization_id: data.user.organization_id || data.user.tenant_id || 1,
+                }
+              : null;
+
             set({
-              user: data.user,
+              user: userWithDefaults,
               token: data.token,
               userLoggedIn: true,
               loading: false,
@@ -223,8 +231,15 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user: UserData | null) => {
+        const userWithDefaults = user
+          ? {
+              ...user,
+              tenant_id: (user as any).tenant_id || 1,
+              organization_id: user.organization_id || (user as any).tenant_id || 1,
+            }
+          : null;
         set({
-          user,
+          user: userWithDefaults,
           userLoggedIn: user !== null,
         });
       },
@@ -273,12 +288,19 @@ export const useAuthStore = create<AuthState>()(
         if (token && appUser) {
           try {
             const userSession = JSON.parse(appUser);
+            const userWithDefaults = userSession
+              ? {
+                  ...userSession,
+                  tenant_id: userSession.tenant_id || 1,
+                  organization_id: userSession.organization_id || userSession.tenant_id || 1,
+                }
+              : null;
             // Set the authorization header
             API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
             set({
               token,
-              user: userSession,
+              user: userWithDefaults,
               userLoggedIn: true,
               error: null,
             });

@@ -26,6 +26,7 @@ export interface IOutcomeMixItem {
   label: string;
   count: number;
   color: string;
+  value?: number;
 }
 
 export interface IOwnerValueItem {
@@ -161,6 +162,11 @@ export interface IProductLineItem {
   organization_name: string;
   warehouse_name: string;
   lead_created_at: string;
+  is_recurring?: boolean;
+  billing_cycle?: string;
+  contract_duration?: number;
+  contract_start_date?: string;
+  contract_end_date?: string;
 }
 
 export interface IProductLinesKpis {
@@ -339,6 +345,8 @@ export interface IReportFilterState {
   selectedDealType?: string;
   selectedStaleDays?: number | string;
   selectedIssueFlag?: string;
+  selectedContractStatus?: string;
+  selectedBillingCycle?: string;
 }
 
 export type ReportTabType =
@@ -357,7 +365,8 @@ export type ReportTabType =
   | 'inventory'
   | 'win-loss'
   | 'product-service-mix'
-  | 'stale-leads';
+  | 'stale-leads'
+  | 'recurring-contracts';
 
 export interface ISalesRepItem {
   user_id: number;
@@ -696,6 +705,72 @@ export interface IStaleLeadsReportData {
   leads: IStaleLeadItem[];
 }
 
+// Recurring Contracts & Renewals Report Interfaces
+export interface IRecurringContractItem {
+  line_id: number;
+  lead_id: number;
+  lead_title: string;
+  organization_name: string;
+  person_name: string;
+  owner_name: string;
+  user_id: number;
+  product_id: number;
+  item_name: string;
+  item_type: string;
+  sku: string;
+  quantity: number;
+  unit_price: number;
+  cycle_amount: number;
+  is_recurring: boolean;
+  billing_cycle: string;
+  contract_duration_months: number;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  days_until_expiry: number;
+  expiry_status: 'active' | 'expiring_30' | 'expiring_60' | 'expiring_90' | 'expired';
+  mrr: number;
+  arr: number;
+  total_contract_value: number;
+  pipeline_name: string;
+  stage_name: string;
+  outcome: 'open' | 'won' | 'lost';
+  lead_created_at: string;
+}
+
+export interface IRecurringContractsKpis {
+  total_contracts: number;
+  active_contracts: number;
+  total_mrr: number;
+  total_arr: number;
+  total_tcv: number;
+  expiring_30_count: number;
+  expiring_30_mrr: number;
+  expiring_60_count: number;
+  expiring_90_count: number;
+  expired_count: number;
+  expired_mrr: number;
+  won_contracts: number;
+  open_contracts: number;
+}
+
+export interface ICycleBreakdownItem {
+  label: string;
+  count: number;
+  total_cycle_amount: number;
+  total_mrr: number;
+  total_arr: number;
+}
+
+export interface IRecurringContractsReportData {
+  kpis: IRecurringContractsKpis;
+  status_mix: IOutcomeMixItem[];
+  cycle_breakdown: ICycleBreakdownItem[];
+  offering_mix: IReportChartDataItem[];
+  upcoming_expiries: (IReportChartDataItem & { month_date?: string })[];
+  contracts: IRecurringContractItem[];
+  insights: string[];
+}
+
 export interface IReportFilterOptionItem {
   id: number | string;
   name: string;
@@ -731,6 +806,7 @@ export interface IReportStore {
   winLossData: IWinLossReportData | null;
   productServiceMixData: IProductServiceMixReportData | null;
   staleLeadsData: IStaleLeadsReportData | null;
+  recurringContractsData: IRecurringContractsReportData | null;
   filterOptions: IReportFilterOptions | null;
   loading: boolean;
   error: string | null;
@@ -756,6 +832,7 @@ export interface IReportStore {
   fetchWinLossReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
   fetchProductServiceMixReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
   fetchStaleLeadsReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
+  fetchRecurringContractsReport: (customFilters?: Partial<IReportFilterState>) => Promise<void>;
 }
 
 export interface IReportColumnDefinition<T = any> {
@@ -786,6 +863,7 @@ export interface IReportChartDataItem {
   value: number;
   displayText?: string;
   color?: string;
+  count?: number;
 }
 
 export interface IReportStackedBarSegment {

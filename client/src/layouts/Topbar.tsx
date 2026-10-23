@@ -133,6 +133,11 @@ const profileMenus: ProfileMenuItem[] = [
     icon: "mgc_user_3_line me-2",
     redirectTo: "/profile",
   },
+  {
+    label: "Company Profile",
+    icon: "mgc_building_2_line me-2",
+    redirectTo: "/organization",
+  },
   // {
   //   label: 'Lock Screen',
   //   icon: 'mgc_lock_line me-2',

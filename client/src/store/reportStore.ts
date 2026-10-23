@@ -99,6 +99,8 @@ const initialFilterState: IReportFilterState = {
   selectedDealType: '',
   selectedStaleDays: 14,
   selectedIssueFlag: '',
+  selectedContractStatus: '',
+  selectedBillingCycle: '',
 };
 
 export const useReportStore = create<IReportStore>((set, get) => ({
@@ -118,6 +120,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
   winLossData: null,
   productServiceMixData: null,
   staleLeadsData: null,
+  recurringContractsData: null,
   filterOptions: null,
   loading: false,
   error: null,
@@ -580,6 +583,34 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       }
     } catch (error: any) {
       set({ error: error?.response?.data?.message || error.message || 'Error fetching stale leads report' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  fetchRecurringContractsReport: async (customFilters?: Partial<IReportFilterState>) => {
+    set({ loading: true, error: null });
+    try {
+      const activeFilters = { ...get().filterState, ...(customFilters || {}) };
+      const queryParams = new URLSearchParams();
+
+      if (activeFilters.fromDate) queryParams.append('from', activeFilters.fromDate);
+      if (activeFilters.toDate) queryParams.append('to', activeFilters.toDate);
+      if (activeFilters.selectedOwnerId) queryParams.append('owner', activeFilters.selectedOwnerId);
+      if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
+      if (activeFilters.selectedBillingCycle) queryParams.append('cycle', activeFilters.selectedBillingCycle);
+      if (activeFilters.selectedContractStatus) queryParams.append('status', activeFilters.selectedContractStatus);
+      if (activeFilters.selectedProductType) queryParams.append('product_type', activeFilters.selectedProductType);
+      if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
+
+      const response = await API.get(`/reports/recurring-contracts?${queryParams.toString()}`);
+      if (response.data?.success) {
+        set({ recurringContractsData: response.data.data });
+      } else {
+        set({ error: response.data?.message || 'Failed to fetch recurring contracts report' });
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Error fetching recurring contracts report' });
     } finally {
       set({ loading: false });
     }

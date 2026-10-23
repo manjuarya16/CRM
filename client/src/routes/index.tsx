@@ -178,6 +178,9 @@ const GoogleContactsPage = React.lazy(
 const TagsPage = React.lazy(
   () => import("../pages/apps/Settings/Tags"),
 );
+const OrganizationProfilePage = React.lazy(
+  () => import("../pages/apps/Organization"),
+);
 
 const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
@@ -697,6 +700,21 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/google-contacts",
     name: "Settings Google Contacts",
     element: <GoogleContactsPage />,
+  },
+  {
+    path: "/organization",
+    name: "Organization Profile",
+    element: <OrganizationProfilePage />,
+  },
+  {
+    path: "/settings/organization",
+    name: "Organization Settings",
+    element: <OrganizationProfilePage />,
+  },
+  {
+    path: "/settings/organization-profile",
+    name: "Organization Profile",
+    element: <OrganizationProfilePage />,
   },
 
   {

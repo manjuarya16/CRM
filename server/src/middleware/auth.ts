@@ -2,6 +2,8 @@ import { NextFunction, Request, Response } from 'express';
 import { passport } from '@/config/passport';
 import type { PublicUser } from '@/interfaces';
 
+import { runWithTenantContext } from '@/context/tenantContext';
+
 declare global {
   namespace Express {
     interface User extends PublicUser {}
@@ -16,7 +18,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       return;
     }
     req.user = user;
-    next();
+    const activeTenantId = user.tenant_id || req.tenant?.id || 1;
+    const activeSlug = req.tenant?.slug || 'default';
+
+    runWithTenantContext({ tenantId: activeTenantId, tenantSlug: activeSlug }, () => {
+      next();
+    });
   })(req, res, next);
 }
 

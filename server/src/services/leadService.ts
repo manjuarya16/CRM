@@ -9,6 +9,8 @@ import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
 import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from "@/utils/documentParser";
+import { parseVoiceTranscript, transcribeAudioWithWhisper, translateToEnglish, IVoiceLeadExtractedData } from "@/utils/voiceLeadParser";
+import { configService } from "@/services/configService";
 
 const logger = pino();
 
@@ -123,7 +125,39 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       ? Number(rawStageId)
       : null;
 
-    // Resolve person_id: use existing or create new person via procedural function save_person
+    const currentUserId = user_id || (req as any).user?.id || null;
+
+    // ─── STEP 1: RESOLVE OR CREATE ORGANIZATION FIRST ───────────────────────
+    const rawOrgId = req.body.organization_id || (person && person.organization_id) || null;
+    let organizationId: number | null = rawOrgId ? Number(rawOrgId) : null;
+    const orgName = (
+      req.body.organization_name ||
+      (typeof req.body.organization === "string" ? req.body.organization : req.body.organization?.name) ||
+      (person && (typeof person.organization === "string" ? person.organization : person.organization?.name)) ||
+      ""
+    ).trim();
+
+    if (!organizationId && orgName) {
+      const existingOrgRes = await connection.query(
+        "SELECT * FROM public.fn_find_organization_by_name($1)",
+        [orgName]
+      );
+      if (existingOrgRes.rows.length > 0) {
+        organizationId = existingOrgRes.rows[0].id;
+      } else {
+        const newOrgRes = await connection.query(
+          "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
+          [orgName, null, currentUserId, "{}"]
+        );
+        const newOrg = newOrgRes.rows[0]?.result;
+        if (newOrg && newOrg.id) {
+          organizationId = newOrg.id;
+          WorkflowService.triggerWorkflows("organizations", "create", newOrg).catch((e) => logger.error(e));
+        }
+      }
+    }
+
+    // ─── STEP 2: RESOLVE OR CREATE CONTACT PERSON SECOND ────────────────────
     let person_id = rawPersonId ? Number(rawPersonId) : null;
 
     if (!person_id && person && person.name) {
@@ -145,21 +179,51 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         phonesJson = JSON.stringify([]);
       }
 
-      const personRes = await connection.query(
-        "SELECT save_person($1, $2::jsonb, $3::jsonb, $4) as result",
-        [
-          person.name,
-          emailsJson,
-          phonesJson,
-          person.organization_id ? Number(person.organization_id) : null,
-        ]
+      // Check if person already exists by contact
+      const emailVal = person.email || (Array.isArray(person.emails) && person.emails[0]?.value) || null;
+      const phoneVal = person.phone || (Array.isArray(person.contact_numbers) && person.contact_numbers[0]?.value) || null;
+
+      const pFindRes = await connection.query(
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3, $4)",
+        [emailVal, phoneVal, person.name, organizationId || null]
       );
-      person_id = personRes.rows[0]?.result?.id || null;
+
+      if (pFindRes.rows.length > 0) {
+        person_id = pFindRes.rows[0].id;
+        if (organizationId && !pFindRes.rows[0].organization_id) {
+          await connection.query(
+            "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
+            [organizationId, person_id]
+          );
+        }
+      } else {
+        // Create new person linked with organization
+        const personRes = await connection.query(
+          "SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result",
+          [
+            person.name,
+            emailsJson,
+            phonesJson,
+            organizationId || null,
+            person.job_title || null,
+            currentUserId,
+            "{}",
+          ]
+        );
+        const newPerson = personRes.rows[0]?.result;
+        if (newPerson && newPerson.id) {
+          person_id = newPerson.id;
+          WorkflowService.triggerWorkflows("persons", "create", newPerson).catch((e) => logger.error(e));
+        }
+      }
+    } else if (person_id && organizationId) {
+      await connection.query(
+        "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
+        [organizationId, person_id]
+      );
     }
 
-    const rawOrgId = req.body.organization_id || (person && person.organization_id) || null;
-    const orgId = rawOrgId ? Number(rawOrgId) : null;
-
+    // ─── STEP 3: CREATE THE LEAD THIRD ──────────────────────────────────────
     let validExpectedCloseDate: string | null = null;
     if (expected_close_date) {
       const parsedDate = new Date(expected_close_date);
@@ -174,13 +238,13 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         title,
         description || null,
         lead_value || null,
-        user_id || (req as any).user?.id || null,
+        currentUserId,
         person_id,
         lead_source_id || null,
         lead_type_id || null,
         lead_pipeline_id || null,
         validExpectedCloseDate,
-        orgId,
+        organizationId,
       ]
     );
 
@@ -199,7 +263,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             lead.id,
             Number(p.product_id),
@@ -207,6 +271,11 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -358,7 +427,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             id,
             Number(p.product_id),
@@ -366,6 +435,11 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -545,10 +619,23 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
-    const { product_id, quantity, price, warehouse_id, warehouse_location_id } = req.body;
+    const {
+      product_id,
+      quantity,
+      price,
+      warehouse_id,
+      warehouse_location_id,
+      is_recurring,
+      billing_cycle,
+      contract_duration,
+      contract_start_date,
+      contract_end_date,
+      start_date,
+      end_date,
+    } = req.body;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
       [
         leadId,
         product_id,
@@ -556,6 +643,11 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
         price || null,
         warehouse_id ? Number(warehouse_id) : null,
         warehouse_location_id ? Number(warehouse_location_id) : null,
+        is_recurring === true || is_recurring === "true",
+        billing_cycle || null,
+        contract_duration ? Number(contract_duration) : 1,
+        contract_start_date || start_date || null,
+        contract_end_date || end_date || null,
       ]
     );
 
@@ -1051,6 +1143,281 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+const parseVoiceLead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    let transcript = req.body?.transcript || "";
+    const audioFile = (req as any).file;
+
+    if (!transcript && audioFile && audioFile.path) {
+      try {
+        const configMap = await configService.getAllConfigs();
+        const apiKey =
+          (configMap["general.magic_ai.settings.api_key"] ? String(configMap["general.magic_ai.settings.api_key"]) : "") ||
+          process.env.OPENAI_API_KEY;
+        if (apiKey) {
+          const transcribed = await transcribeAudioWithWhisper(audioFile.path, apiKey);
+          if (transcribed) {
+            transcript = transcribed;
+          }
+        }
+      } catch (e: any) {
+        logger.warn(`Audio transcription failed: ${e.message}`);
+      }
+    }
+
+    if (!transcript || !transcript.trim()) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "No voice transcript or audio provided. Please speak or provide a transcript.",
+      });
+      return;
+    }
+
+    const language = req.body?.language || "auto";
+    const extracted = await parseVoiceTranscript(transcript, language);
+
+    res.status(HttpStatusCodes.OK).json({
+      success: true,
+      message: "Voice transcript processed successfully",
+      data: extracted,
+    });
+  } catch (error: any) {
+    logger.error(`Error parsing voice lead: ${error.message}`);
+    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to process voice transcript",
+    });
+  }
+};
+
+const createLeadByVoice = async (req: Request, res: Response): Promise<void> => {
+  let connection: PoolClient | undefined;
+  try {
+    connection = await pool.connect();
+    const currentUserId = (req as any).user?.id || null;
+
+    let transcript = req.body?.transcript || "";
+    const language = req.body?.language || "auto";
+    const audioFile = (req as any).file;
+
+    if (!transcript && audioFile && audioFile.path) {
+      try {
+        const configMap = await configService.getAllConfigs();
+        const apiKey =
+          (configMap["general.magic_ai.settings.api_key"] ? String(configMap["general.magic_ai.settings.api_key"]) : "") ||
+          process.env.OPENAI_API_KEY;
+        if (apiKey) {
+          const transcribed = await transcribeAudioWithWhisper(audioFile.path, apiKey);
+          if (transcribed) {
+            transcript = transcribed;
+          }
+        }
+      } catch (e: any) {
+        logger.warn(`Audio transcription failed: ${e.message}`);
+      }
+    }
+
+    // Extract default values from transcript if fields are not explicitly provided
+    let extracted: Partial<IVoiceLeadExtractedData> = {};
+    if (transcript && transcript.trim()) {
+      extracted = await parseVoiceTranscript(transcript, language);
+    }
+
+    let title = (req.body?.title || extracted.title || "New Voice Lead").trim();
+    let personName = (req.body?.personName || req.body?.person_name || extracted.personName || "").trim();
+    const contactEmail = (req.body?.contactEmail || req.body?.email || extracted.contactEmail || "").trim();
+    const contactPhone = (req.body?.contactPhone || req.body?.phone || extracted.contactPhone || "").trim();
+    let organizationName = (req.body?.organizationName || req.body?.organization_name || extracted.organizationName || "").trim();
+    const leadValue = req.body?.leadValue !== undefined && req.body?.leadValue !== ""
+      ? Number(req.body.leadValue)
+      : (extracted.leadValue !== undefined && extracted.leadValue !== null ? Number(extracted.leadValue) : null);
+    let description = (req.body?.description || extracted.description || transcript || "Created via Voice Assistant").trim();
+    const expectedCloseDate = req.body?.expectedCloseDate || req.body?.expected_close_date || extracted.expectedCloseDate || null;
+    const reqPipelineId = req.body?.lead_pipeline_id || req.body?.pipeline_id || null;
+    const reqStageId = req.body?.lead_pipeline_stage_id || req.body?.stage_id || null;
+
+    // Ensure all saved fields are translated to English
+    if (title && /[^\u0000-\u007F]/.test(title)) {
+      try {
+        title = await translateToEnglish(title, language);
+      } catch (e) {}
+    }
+    if (personName && /[^\u0000-\u007F]/.test(personName)) {
+      try {
+        personName = await translateToEnglish(personName, language);
+      } catch (e) {}
+    }
+    if (organizationName && /[^\u0000-\u007F]/.test(organizationName)) {
+      try {
+        organizationName = await translateToEnglish(organizationName, language);
+      } catch (e) {}
+    }
+    if (description && /[^\u0000-\u007F]/.test(description)) {
+      try {
+        description = await translateToEnglish(description, language);
+      } catch (e) {}
+    }
+
+    // 1. Resolve or Create Organization
+    let organizationId: number | null = null;
+    if (organizationName) {
+      const existingOrgRes = await connection.query(
+        "SELECT * FROM public.fn_find_organization_by_name($1)",
+        [organizationName]
+      );
+      if (existingOrgRes.rows.length > 0) {
+        organizationId = existingOrgRes.rows[0].id;
+      } else {
+        const newOrgRes = await connection.query(
+          "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
+          [organizationName, null, currentUserId, "{}"]
+        );
+        const newOrg = newOrgRes.rows[0]?.result;
+        if (newOrg && newOrg.id) {
+          organizationId = newOrg.id;
+          WorkflowService.triggerWorkflows("organizations", "create", newOrg).catch((e) => logger.error(e));
+        }
+      }
+    }
+
+    // 2. Resolve or Create Person (Contact)
+    let personId: number | null = null;
+    let resolvedPersonName = personName || null;
+
+    if (contactEmail || contactPhone || personName) {
+      const pFindRes = await connection.query(
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3, $4)",
+        [contactEmail || null, contactPhone || null, personName || null, organizationId || null]
+      );
+      if (pFindRes.rows.length > 0) {
+        personId = pFindRes.rows[0].id;
+        resolvedPersonName = pFindRes.rows[0].name;
+        if (organizationId && !pFindRes.rows[0].organization_id) {
+          await connection.query(
+            "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
+            [organizationId, personId]
+          );
+        }
+      } else {
+        const newPersonName = personName || (contactEmail ? contactEmail.split("@")[0] : "Voice Contact");
+        const emailArr = contactEmail ? [{ label: "work", value: contactEmail }] : [];
+        const phoneArr = contactPhone ? [{ label: "work", value: contactPhone }] : [];
+
+        const newPersonRes = await connection.query(
+          "SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result",
+          [
+            newPersonName,
+            JSON.stringify(emailArr),
+            JSON.stringify(phoneArr),
+            organizationId || null,
+            null,
+            currentUserId,
+            "{}",
+          ]
+        );
+        const newPerson = newPersonRes.rows[0]?.result;
+        if (newPerson && newPerson.id) {
+          personId = newPerson.id;
+          resolvedPersonName = newPerson.name;
+          WorkflowService.triggerWorkflows("persons", "create", newPerson).catch((e) => logger.error(e));
+        }
+      }
+    } else if (personId && organizationId) {
+      await connection.query(
+        "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
+        [organizationId, personId]
+      );
+    }
+
+    // 3. Resolve Lead Source (Find "Voice" or default)
+    let sourceId: number | null = null;
+    const sRes = await connection.query(
+      "SELECT * FROM public.fn_find_lead_source_by_name($1)",
+      ["Voice"]
+    );
+    if (sRes.rows.length > 0) {
+      sourceId = sRes.rows[0].id;
+    }
+
+    // 4. Resolve default pipeline and first stage
+    let pipelineId: number | null = reqPipelineId ? Number(reqPipelineId) : null;
+    let stageId: number | null = reqStageId ? Number(reqStageId) : null;
+
+    if (!pipelineId) {
+      const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
+      const defaultPipeline = pipelineRes.rows.find((p: any) => p.is_default) || pipelineRes.rows[0];
+      if (defaultPipeline) {
+        pipelineId = defaultPipeline.id;
+      }
+    }
+
+    if (pipelineId && !stageId) {
+      const stageRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
+      if (stageRes.rows.length > 0) {
+        stageId = stageRes.rows[0].id;
+      }
+    }
+
+    let validExpectedCloseDate: string | null = null;
+    if (expectedCloseDate) {
+      const parsedDate = new Date(expectedCloseDate);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpectedCloseDate = parsedDate.toISOString().split("T")[0];
+      }
+    }
+
+    // 5. Create Lead in PostgreSQL
+    const leadResult = await connection.query(
+      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [
+        title,
+        description,
+        leadValue || null,
+        currentUserId,
+        personId,
+        sourceId,
+        null, // type_id
+        pipelineId,
+        validExpectedCloseDate,
+        organizationId,
+      ]
+    );
+
+    const lead = leadResult.rows[0];
+
+    if (lead) {
+      if (stageId) {
+        await connection.query(
+          "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
+          [lead.id, stageId]
+        );
+      }
+
+      WorkflowService.triggerWorkflows("leads", "create", lead).catch((e) => logger.error(e));
+      notifyCRMActivity({
+        title: "New Lead Created via Voice",
+        message: `Lead "${title}" was created via Voice Assistant.`,
+        module: "lead",
+        entityId: lead.id,
+      }).catch((e) => logger.error(e));
+    }
+
+    res.status(HttpStatusCodes.CREATED).json({
+      success: true,
+      message: `Lead "${title}" created successfully via Voice Assistant!`,
+      data: lead,
+    });
+  } catch (error: any) {
+    logger.error(`Error creating voice lead: ${error.message}`);
+    res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to create lead via voice",
+    });
+  } finally {
+    connection?.release();
+  }
+};
+
 export default {
   getLeads,
   getLeadById,
@@ -1069,4 +1436,6 @@ export default {
   getKanbanLeads,
   createLeadByAI,
   uploadLeadFile,
+  parseVoiceLead,
+  createLeadByVoice,
 };

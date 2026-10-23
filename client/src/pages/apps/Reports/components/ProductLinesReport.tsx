@@ -10,6 +10,7 @@ import {
   formatCurrencyInr,
   formatCompactInr,
   formatDisplayNumber,
+  formatDateDisplay,
 } from '../reportHelpers';
 import { ReportKpiCards } from './ReportKpiCards';
 import { ReportDataTable } from './ReportDataTable';
@@ -164,6 +165,34 @@ export const ProductLinesReport: React.FC<ProductLinesReportProps> = ({
           </div>
         ),
         exportAccessor: (line) => line.amount,
+      },
+      {
+        key: 'is_recurring',
+        header: 'Billing / Contract',
+        render: (line) => {
+          if (!line.is_recurring) {
+            return (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                One-Time
+              </span>
+            );
+          }
+          return (
+            <div className="flex flex-col">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 w-fit">
+                <i className="mgc_repeat_line text-[10px]" />
+                <span className="capitalize">{line.billing_cycle || 'Recurring'}</span>
+                {line.contract_duration ? ` (${line.contract_duration} Mo)` : ''}
+              </span>
+              {line.contract_start_date && (
+                <span className="text-[10px] text-gray-400 mt-0.5">
+                  {formatDateDisplay(line.contract_start_date)} {line.contract_end_date ? `to ${formatDateDisplay(line.contract_end_date)}` : ''}
+                </span>
+              )}
+            </div>
+          );
+        },
+        exportAccessor: (line) => (line.is_recurring ? `Recurring (${line.billing_cycle}, ${line.contract_duration}mo)` : 'One-Time'),
       },
       {
         key: 'pipeline_name',
