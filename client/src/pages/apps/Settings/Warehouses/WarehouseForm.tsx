@@ -136,11 +136,49 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
     e.preventDefault();
 
     const errMap: Record<string, string> = {};
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       errMap.name = "Warehouse name is required";
+    } else if (/^[0-9\W_]+$/.test(trimmedName)) {
+      errMap.name = "Warehouse name cannot consist of only special characters or numbers";
+    } else if (!/[a-zA-Z]/.test(trimmedName)) {
+      errMap.name = "Warehouse name must contain at least one letter";
     }
-    if (!contactName.trim()) {
+
+    const trimmedContact = contactName.trim();
+    if (!trimmedContact) {
       errMap.contact_name = "Contact person name is required";
+    } else if (/^[0-9\W_]+$/.test(trimmedContact)) {
+      errMap.contact_name = "Contact person name cannot consist of only special characters or numbers";
+    } else if (!/[a-zA-Z]/.test(trimmedContact)) {
+      errMap.contact_name = "Contact person name must contain at least one letter";
+    }
+
+    if (contactNumber.trim()) {
+      const cleaned = contactNumber.trim();
+      let coreDigits = cleaned;
+      if (cleaned.startsWith("+")) {
+        const match = cleaned.match(/^\+\d{1,3}(\d{10})$/);
+        if (!match) {
+          errMap.contact_numbers = "Please enter a valid 10-digit mobile number (e.g. 9876543210 or +919876543210).";
+        } else {
+          coreDigits = match[1];
+        }
+      } else {
+        if (!/^\d+$/.test(cleaned)) {
+          errMap.contact_numbers = "Mobile number must contain only digits.";
+        } else if (cleaned.length !== 10) {
+          errMap.contact_numbers = "Mobile number must be exactly 10 digits.";
+        }
+        coreDigits = cleaned;
+      }
+      if (!errMap.contact_numbers) {
+        if (/^(\d)\1{9}$/.test(coreDigits)) {
+          errMap.contact_numbers = "Mobile number cannot consist of all identical digits (e.g. 0000000000).";
+        } else if (coreDigits.startsWith("0")) {
+          errMap.contact_numbers = "Mobile number cannot start with 0.";
+        }
+      }
     }
 
     if (Object.keys(errMap).length > 0) {
@@ -368,10 +406,18 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 <input
                   type="text"
                   value={contactNumber}
-                  onChange={(e) => setContactNumber(e.target.value)}
-                  placeholder="+1 (555) 019-2834"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent"
+                  onChange={(e) => {
+                    setContactNumber(e.target.value);
+                    if (errors.contact_numbers) setErrors((prev) => ({ ...prev, contact_numbers: "" }));
+                  }}
+                  placeholder="e.g. 9876543210 or +919876543210"
+                  className={`w-full px-3.5 py-2.5 text-sm border ${
+                    errors.contact_numbers ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
                 />
+                {errors.contact_numbers && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contact_numbers}</p>
+                )}
               </div>
             </div>
           </div>

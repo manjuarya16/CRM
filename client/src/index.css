@@ -271,3 +271,22 @@ a[data-variant="secondary"] {
   background: rgba(156, 163, 175, 0.6);
 }
 
+/* ========================================================
+   SELECT DROPDOWN PADDING & CHEVRON FIXES
+   Prevents background dropdown arrows from overlapping text or numbers
+   ======================================================== */
+select:not([multiple]),
+.form-select {
+  padding-right: 2.25rem !important;
+  background-position: right 0.65rem center !important;
+}
+
+select.per-page-select,
+.per-page-select {
+  min-width: 5.25rem !important;
+  padding-left: 0.625rem !important;
+  padding-right: 1.75rem !important;
+  background-position: right 0.4rem center !important;
+}
+
+

@@ -85,6 +85,7 @@ export const EventForm: React.FC<EventFormProps> = ({ initialData, isEdit }) => 
           </label>
           <input
             type="date"
+            min={new Date().toISOString().split("T")[0]}
             {...register("date")}
             className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
               errors.date ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
