@@ -272,9 +272,37 @@ const DataTransferPage: React.FC = () => {
                   setPage(1);
                 }}
                 placeholder="Search imports..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                className="w-full pl-8 pr-8 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setPage(1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+                  title="Clear search"
+                >
+                  <i className="mgc_close_line text-sm"></i>
+                </button>
+              )}
             </div>
+            {(search || typeFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("all");
+                  setPage(1);
+                }}
+                className="px-2.5 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-1 transition-colors shrink-0"
+                title="Clear all filters"
+              >
+                <i className="mgc_refresh_3_line text-xs"></i>
+                <span>Clear</span>
+              </button>
+            )}
 
             {/* View Toggle Buttons matching Leads */}
             <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
@@ -604,7 +632,7 @@ const DataTransferPage: React.FC = () => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="pl-2.5 pr-8 min-w-[74px] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer"
+                className="per-page-select pl-2.5 pr-8 min-w-[5.25rem] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>

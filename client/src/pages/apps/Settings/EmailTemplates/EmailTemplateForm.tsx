@@ -49,6 +49,11 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
     setValue("content", current + " " + tag + " ");
   };
 
+  const insertSubjectTag = (tag: string) => {
+    const current = watch("subject") || "";
+    setValue("subject", (current ? current + " " : "") + tag + " ", { shouldValidate: true });
+  };
+
   const onInvalid = (_errs: any) => {};
 
   const onSubmit = async (data: EmailTemplateInput) => {
@@ -88,9 +93,24 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Subject Line <span className="text-red-500">*</span>
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Subject Line <span className="text-red-500">*</span>
+            </label>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-gray-400">Insert tag:</span>
+              {PLACEHOLDERS.map((p) => (
+                <button
+                  type="button"
+                  key={p.tag}
+                  onClick={() => insertSubjectTag(p.tag)}
+                  className="text-[11px] px-2 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <input
             type="text"
             {...register("subject")}

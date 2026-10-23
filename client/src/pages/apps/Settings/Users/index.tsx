@@ -77,6 +77,7 @@ const UsersPage: React.FC = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   useEffect(() => {
     fetchUsers();
@@ -892,7 +893,7 @@ const UsersPage: React.FC = () => {
                 setSelectedRole(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[125px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Roles</option>
               {flattenedRoles.map((r) => (
@@ -909,7 +910,7 @@ const UsersPage: React.FC = () => {
                 setSelectedGroup(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[125px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Groups</option>
               {groups.map((g) => (
@@ -926,7 +927,7 @@ const UsersPage: React.FC = () => {
                 setSelectedStatus(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[115px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -973,7 +974,7 @@ const UsersPage: React.FC = () => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="pl-2.5 pr-8 min-w-[74px] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
+                className="per-page-select pl-2.5 pr-8 min-w-[5.25rem] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -1284,19 +1285,30 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Password {editingUser ? "(Leave blank to keep)" : <span className="text-red-500">*</span>}
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.password
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      className={`w-full px-3.5 pr-10 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                        errors.password
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                    </button>
+                  </div>
                   {errors.password && (
                     <p className="mt-1 text-xs text-red-500 font-medium">{errors.password}</p>
                   )}
@@ -1306,22 +1318,33 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Confirm Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.confirm_password}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        confirm_password: e.target.value,
-                      })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.confirm_password
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.confirm_password}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          confirm_password: e.target.value,
+                        })
+                      }
+                      className={`w-full px-3.5 pr-10 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                        errors.confirm_password
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                    </button>
+                  </div>
                   {errors.confirm_password && (
                     <p className="mt-1 text-xs text-red-500 font-medium">{errors.confirm_password}</p>
                   )}

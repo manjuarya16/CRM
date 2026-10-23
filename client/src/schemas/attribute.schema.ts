@@ -10,9 +10,18 @@ export const attributeSchema = z.object({
   code: z
     .string()
     .min(1, 'Attribute code is required')
-    .max(100, 'Attribute code cannot exceed 100 characters')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Code can only contain letters, numbers, and underscores (e.g. custom_field_1)'),
-  name: z.string().min(1, 'Attribute name is required').max(255, 'Attribute name cannot exceed 255 characters'),
+    .max(100, 'Attribute code cannot exceed 100 characters'),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Attribute name is required')
+    .max(255, 'Attribute name cannot exceed 255 characters')
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: 'Attribute name cannot consist of only special characters or numbers',
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: 'Attribute name must contain at least one letter',
+    }),
   type: z.enum([
     'text',
     'textarea',

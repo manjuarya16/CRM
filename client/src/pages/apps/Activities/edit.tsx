@@ -59,6 +59,10 @@ const EditActivityPage: React.FC = () => {
             person_id: act.person_id ? String(act.person_id) : "",
             user_id: act.user_id ? String(act.user_id) : "",
           });
+          const initialTitleErr = validateTitle(act.title || "");
+          if (initialTitleErr) {
+            setErrors((prev) => ({ ...prev, title: initialTitleErr }));
+          }
         }
         setLoading(false);
       });
@@ -111,6 +115,7 @@ const EditActivityPage: React.FC = () => {
         ...(titleErr ? { title: titleErr } : {}),
         ...(schedErr ? { schedule_to: schedErr } : {}),
       }));
+      Swal.fire("Validation Error", titleErr || schedErr, "warning");
       return;
     }
 

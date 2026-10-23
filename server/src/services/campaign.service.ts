@@ -119,21 +119,31 @@ export class CampaignService {
 
     const uniqueRecipients = [...new Set(recipientEmails)];
     let sentCount = 0;
+    const BATCH_SIZE = 5;
 
-    for (const email of uniqueRecipients) {
-      try {
-        const ctx = await fetchTemplateContext({ to_email: email });
-        const parsedSubject = parsePlaceholders(campaign.subject || tmpl.subject, ctx);
-        const parsedBody = parsePlaceholders(tmpl.content, ctx);
+    for (let i = 0; i < uniqueRecipients.length; i += BATCH_SIZE) {
+      const chunk = uniqueRecipients.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        chunk.map(async (email) => {
+          const ctx = await fetchTemplateContext({ to_email: email });
+          const parsedSubject = parsePlaceholders(campaign.subject || tmpl.subject, ctx);
+          const parsedBody = parsePlaceholders(tmpl.content, ctx);
 
-        await sendRealMail({
-          to: email,
-          subject: parsedSubject,
-          html: parsedBody,
-        });
-        sentCount++;
-      } catch (err: any) {
-        logger.error({ err: err?.message, email, campaignId: numId }, 'Error sending campaign email to recipient');
+          await sendRealMail({
+            to: email,
+            subject: parsedSubject,
+            html: parsedBody,
+          });
+        })
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const res = results[j];
+        if (res.status === 'fulfilled') {
+          sentCount++;
+        } else {
+          logger.error({ err: (res as PromiseRejectedResult).reason?.message, email: chunk[j], campaignId: numId }, 'Error sending campaign email to recipient');
+        }
       }
     }
 

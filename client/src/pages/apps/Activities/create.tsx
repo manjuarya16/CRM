@@ -88,6 +88,7 @@ const CreateActivityPage: React.FC = () => {
         ...(titleErr ? { title: titleErr } : {}),
         ...(schedErr ? { schedule_to: schedErr } : {}),
       }));
+      Swal.fire("Validation Error", titleErr || schedErr, "warning");
       return;
     }
 

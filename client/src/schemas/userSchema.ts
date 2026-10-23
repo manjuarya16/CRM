@@ -23,7 +23,13 @@ const baseUserFields = {
       .string()
       .min(2, "Name must be at least 2 characters")
       .max(100, "Name must not exceed 100 characters")
-      .regex(/^[A-Za-z\s'\-\.]+$/, "Name contains invalid characters"),
+      .regex(/^[A-Za-z\s'\-\.]+$/, "Name contains invalid characters")
+      .refine((val) => !/^[0-9\W_]+$/.test(val), {
+        message: "Name cannot consist of only special characters or numbers",
+      })
+      .refine((val) => /[a-zA-Z]/.test(val), {
+        message: "Name must contain at least one letter",
+      }),
   ),
 
   email: z.string().trim().email("Invalid email address"),
