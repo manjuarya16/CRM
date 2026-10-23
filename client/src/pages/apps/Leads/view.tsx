@@ -8,6 +8,162 @@ import { ComposeMailModal } from "@/pages/apps/Mail/ComposeMailModal";
 import { getRottenInfo } from "@/utils/rottenHelper";
 import { stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
 
+const getDurationOptionsForCycle = (cycle?: string) => {
+  const c = (cycle || "monthly").toLowerCase();
+  switch (c) {
+    case "quarterly":
+      return [
+        { value: "3", label: "1 Quarter (3 Mo)" },
+        { value: "6", label: "2 Quarters (6 Mo)" },
+        { value: "9", label: "3 Quarters (9 Mo)" },
+        { value: "12", label: "4 Quarters (1 Yr / 12 Mo)" },
+        { value: "24", label: "8 Quarters (2 Yr / 24 Mo)" },
+        { value: "36", label: "12 Quarters (3 Yr / 36 Mo)" },
+        { value: "60", label: "20 Quarters (5 Yr / 60 Mo)" },
+      ];
+    case "half-yearly":
+      return [
+        { value: "6", label: "1 Half-Year (6 Mo)" },
+        { value: "12", label: "2 Half-Years (1 Yr / 12 Mo)" },
+        { value: "18", label: "3 Half-Years (1.5 Yr / 18 Mo)" },
+        { value: "24", label: "4 Half-Years (2 Yr / 24 Mo)" },
+        { value: "36", label: "6 Half-Years (3 Yr / 36 Mo)" },
+        { value: "60", label: "10 Half-Years (5 Yr / 60 Mo)" },
+      ];
+    case "yearly":
+    case "annually":
+      return [
+        { value: "12", label: "1 Year (12 Mo)" },
+        { value: "24", label: "2 Years (24 Mo)" },
+        { value: "36", label: "3 Years (36 Mo)" },
+        { value: "48", label: "4 Years (48 Mo)" },
+        { value: "60", label: "5 Years (60 Mo)" },
+      ];
+    case "monthly":
+    default:
+      return [
+        { value: "1", label: "1 Month" },
+        { value: "3", label: "3 Months" },
+        { value: "6", label: "6 Months" },
+        { value: "12", label: "12 Months (1 Yr)" },
+        { value: "24", label: "24 Months (2 Yr)" },
+        { value: "36", label: "36 Months (3 Yr)" },
+        { value: "60", label: "60 Months (5 Yr)" },
+      ];
+  }
+};
+
+const getAdjustedDurationForCycle = (newCycle: string, currentDuration?: string | number) => {
+  const options = getDurationOptionsForCycle(newCycle);
+  const curStr = String(currentDuration || "12");
+  const exists = options.some((opt) => opt.value === curStr);
+  if (exists) return curStr;
+  const has12 = options.find((opt) => opt.value === "12");
+  return has12 ? "12" : (options[0]?.value || "12");
+};
+
+const formatCycleDuration = (cycle?: string, duration?: number | string) => {
+  const c = (cycle || "monthly").toLowerCase();
+  const months = Number(duration) || 12;
+
+  if (c === "yearly" || c === "annually") {
+    const years = Math.max(1, Math.round(months / 12));
+    return `${years} ${years === 1 ? "Year" : "Years"} (${months} mo)`;
+  }
+  if (c === "half-yearly") {
+    const periods = Math.max(1, Math.round(months / 6));
+    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    return `${periods} Half-Yr${periods === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
+  }
+  if (c === "quarterly") {
+    const quarters = Math.max(1, Math.round(months / 3));
+    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    return `${quarters} Quarter${quarters === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
+  }
+  if (months >= 12 && months % 12 === 0) {
+    const years = months / 12;
+    return `${months} Months (${years} ${years === 1 ? "Yr" : "Yrs"})`;
+  }
+  return `${months} ${months === 1 ? "Month" : "Months"}`;
+};
+
+const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
+  if (!startDateStr) return "";
+  const parts = startDateStr.split("-").map(Number);
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
+  const [y, m, d] = parts;
+  const months = parseInt(durationMonthsStr || "12", 10) || 12;
+  const date = new Date(y, m - 1, d);
+  date.setMonth(date.getMonth() + months);
+  date.setDate(date.getDate() - 1);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const formatDateDisplay = (dateStr?: string) => {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+};
+
+const getContractStatusBadge = (startDate?: string, endDate?: string) => {
+  if (!endDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+
+  const start = startDate ? new Date(startDate) : null;
+  if (start) start.setHours(0, 0, 0, 0);
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysUntilEnd = Math.round((end.getTime() - today.getTime()) / msPerDay);
+
+  if (start && start.getTime() > today.getTime()) {
+    const daysUntilStart = Math.round((start.getTime() - today.getTime()) / msPerDay);
+    return {
+      status: "Upcoming",
+      badgeCls: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800",
+      icon: "mgc_time_line",
+      text: `Starts in ${daysUntilStart}d`,
+    };
+  }
+
+  if (daysUntilEnd < 0) {
+    const expiredDays = Math.abs(daysUntilEnd);
+    return {
+      status: "Expired",
+      badgeCls: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
+      icon: "mgc_alert_line",
+      text: `Expired ${expiredDays}d ago`,
+    };
+  }
+
+  if (daysUntilEnd <= 30) {
+    return {
+      status: "Expiring Soon",
+      badgeCls: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
+      icon: "mgc_alarm_line",
+      text: `${daysUntilEnd}d left`,
+    };
+  }
+
+  return {
+    status: "Active",
+    badgeCls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800",
+    icon: "mgc_check_circle_line",
+    text: `${daysUntilEnd}d left`,
+  };
+};
+
 const getActivityBadge = (type: string) => {
   switch (type?.toLowerCase()) {
     case "email":
@@ -226,7 +382,19 @@ const LeadViewPage: React.FC = () => {
 
   // Add Product form
   const [warehousesList, setWarehousesList] = useState<any[]>([]);
-  const [newProd, setNewProd] = useState({ product_id: "", quantity: "1", price: "", warehouse_id: "", warehouse_location_id: "" });
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [newProd, setNewProd] = useState({
+    product_id: "",
+    quantity: "1",
+    price: "",
+    warehouse_id: "",
+    warehouse_location_id: "",
+    is_recurring: false,
+    billing_cycle: "monthly",
+    contract_duration: "12",
+    contract_start_date: todayStr,
+    contract_end_date: computeContractEndDate(todayStr, "12"),
+  });
   const [prodError, setProdError] = useState<string>("");
 
   const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
@@ -354,15 +522,40 @@ const LeadViewPage: React.FC = () => {
       return;
     }
     setProdError("");
+    const selectedP = productsList.find((p) => String(p.id) === String(newProd.product_id));
+    const isService = selectedP?.type === "Service" || selectedP?.type?.toLowerCase() === "service";
+    const isRecurring = Boolean(newProd.is_recurring ?? isService);
+    const billingCycle = isRecurring ? (newProd.billing_cycle || "monthly") : undefined;
+    const contractDuration = isRecurring ? (Number(newProd.contract_duration) || 12) : undefined;
+    const contractStartDate = isRecurring ? (newProd.contract_start_date || new Date().toISOString().split("T")[0]) : undefined;
+    const contractEndDate = isRecurring ? (newProd.contract_end_date || computeContractEndDate(contractStartDate, String(contractDuration || 12))) : undefined;
+
     await addLeadProduct(
       leadId,
       Number(newProd.product_id),
       Number(newProd.quantity) || 1,
       newProd.price ? Number(newProd.price) : undefined,
-      newProd.warehouse_id ? Number(newProd.warehouse_id) : undefined,
-      newProd.warehouse_location_id ? Number(newProd.warehouse_location_id) : undefined
+      isService ? undefined : (newProd.warehouse_id ? Number(newProd.warehouse_id) : undefined),
+      isService ? undefined : (newProd.warehouse_location_id ? Number(newProd.warehouse_location_id) : undefined),
+      isRecurring,
+      billingCycle,
+      contractDuration,
+      contractStartDate,
+      contractEndDate
     );
-    setNewProd({ product_id: "", quantity: "1", price: "", warehouse_id: "", warehouse_location_id: "" });
+    const todayStr = new Date().toISOString().split("T")[0];
+    setNewProd({
+      product_id: "",
+      quantity: "1",
+      price: "",
+      warehouse_id: "",
+      warehouse_location_id: "",
+      is_recurring: false,
+      billing_cycle: "monthly",
+      contract_duration: "12",
+      contract_start_date: todayStr,
+      contract_end_date: computeContractEndDate(todayStr, "12"),
+    });
     fetchLeadById(leadId);
   };
 
@@ -1005,137 +1198,379 @@ const getPersonEmail = (person: any): string => {
               {/* PRODUCTS TAB */}
               {activeTab === "products" && (
                 <div className="space-y-4">
-                  <form onSubmit={handleAddProduct} className="flex flex-wrap gap-2 items-end bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border">
-                    <div className="flex-1 min-w-[180px]">
-                      <label className="block text-xs font-semibold mb-1">Product</label>
-                      <select
-                        value={newProd.product_id}
-                        onChange={(e) => {
-                          const selP = productsList.find((p) => String(p.id) === e.target.value);
-                          setNewProd({
-                            ...newProd,
-                            product_id: e.target.value,
-                            price: selP ? String(selP.price || 0) : "",
-                          });
-                          if (prodError) setProdError("");
-                        }}
-                        className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
-                          } rounded text-xs`}
-                      >
-                        <option value="">Select Product</option>
-                        {productsList.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name} (₹{p.price})</option>
-                        ))}
-                      </select>
-                      {prodError && <p className="mt-1 text-xs text-red-500 font-medium">{prodError}</p>}
-                    </div>
+                  {/* Recurring Contracts Tracking Bar */}
+                  {(() => {
+                    const recurringProds = leadProducts.filter((p) => p.is_recurring);
+                    if (recurringProds.length === 0) return null;
 
-                    {/* Warehouse Dropdown */}
-                    <div className="flex-1 min-w-[150px]">
-                      <label className="block text-xs font-semibold mb-1">Warehouse</label>
-                      <select
-                        value={newProd.warehouse_id}
-                        onChange={(e) => {
-                          setNewProd({ ...newProd, warehouse_id: e.target.value, warehouse_location_id: "" });
-                        }}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
-                      >
-                        <option value="">Select Warehouse</option>
-                        {warehousesList.map((w) => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    const expiringSoon = recurringProds.filter((p) => {
+                      const b = getContractStatusBadge(p.contract_start_date, p.contract_end_date);
+                      return b?.status === "Expiring Soon";
+                    });
+                    const expired = recurringProds.filter((p) => {
+                      const b = getContractStatusBadge(p.contract_start_date, p.contract_end_date);
+                      return b?.status === "Expired";
+                    });
+                    const active = recurringProds.filter((p) => {
+                      const b = getContractStatusBadge(p.contract_start_date, p.contract_end_date);
+                      return b?.status === "Active";
+                    });
 
-                    {/* Storage Location Dropdown */}
-                    {(() => {
-                      const selectedW = warehousesList.find((w) => String(w.id) === newProd.warehouse_id);
-                      const availableLocations = selectedW?.locations || [];
-                      return (
-                        <div className="flex-1 min-w-[150px]">
-                          <label className="block text-xs font-semibold mb-1">Location</label>
-                          <select
-                            value={newProd.warehouse_location_id}
-                            onChange={(e) => setNewProd({ ...newProd, warehouse_location_id: e.target.value })}
-                            disabled={!newProd.warehouse_id}
-                            className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs disabled:opacity-50"
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-amber-50/50 dark:from-gray-800/80 dark:via-gray-800/50 dark:to-gray-800/80 rounded-xl border border-blue-100 dark:border-gray-700 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
+                            {active.length}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">Active Contracts</div>
+                            <div className="text-[11px] text-gray-500 dark:text-gray-400">Live & currently active</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            expiringSoon.length > 0
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ring-2 ring-amber-400 animate-pulse"
+                              : "bg-gray-100 text-gray-500 dark:bg-gray-800"
+                          }`}>
+                            {expiringSoon.length}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">Expiring Soon (≤30d)</div>
+                            <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                              {expiringSoon.length > 0 ? `${expiringSoon.length} contract(s) up for renewal` : "No upcoming renewals"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            expired.length > 0 ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "bg-gray-100 text-gray-500 dark:bg-gray-800"
+                          }`}>
+                            {expired.length}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">Expired Contracts</div>
+                            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                              {expired.length > 0 ? `${expired.length} contract(s) expired` : "None"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="sm:col-span-3 flex justify-end pt-2 border-t border-blue-100/60 dark:border-gray-700/60">
+                          <Link
+                            to="/reports/recurring-contracts"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0e90d9] hover:underline"
                           >
-                            <option value="">Select Location</option>
-                            {availableLocations.map((loc: any) => (
-                              <option key={loc.id} value={loc.id}>{loc.name}</option>
+                            <i className="mgc_repeat_line text-xs" />
+                            <span>Open Contracts & Renewals Report &rarr;</span>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <form onSubmit={handleAddProduct} className="space-y-3 bg-gray-50 dark:bg-gray-900/40 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div className="flex flex-wrap gap-2 items-end">
+                      <div className="flex-1 min-w-[180px]">
+                        <label className="block text-xs font-semibold mb-1">Product</label>
+                        <select
+                          value={newProd.product_id}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const prod = productsList.find((p) => String(p.id) === String(val));
+                            const isService = prod?.type === "Service" || prod?.type?.toLowerCase() === "service";
+                            const todayStr = new Date().toISOString().split("T")[0];
+                            setNewProd((prev) => ({
+                              ...prev,
+                              product_id: val,
+                              price: prod ? String(prod.price || 0) : prev.price,
+                              quantity: isService ? "1" : (prev.quantity || "1"),
+                              is_recurring: isService ? true : prev.is_recurring,
+                              contract_start_date: prev.contract_start_date || todayStr,
+                              contract_duration: prev.contract_duration || "12",
+                              contract_end_date: computeContractEndDate(prev.contract_start_date || todayStr, prev.contract_duration || "12"),
+                            }));
+                            if (prodError) setProdError("");
+                          }}
+                          className={`w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border ${prodError ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600"
+                            } rounded text-xs`}
+                        >
+                          <option value="">Select Product</option>
+                          {productsList.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} (₹{p.price})</option>
+                          ))}
+                        </select>
+                        {prodError && <p className="mt-1 text-xs text-red-500 font-medium">{prodError}</p>}
+                      </div>
+
+                      {/* Warehouse Dropdown */}
+                      {(() => {
+                        const selectedP = productsList.find((p) => String(p.id) === String(newProd.product_id));
+                        const isService = selectedP?.type === "Service" || selectedP?.type?.toLowerCase() === "service";
+                        if (isService) return null;
+                        return (
+                          <div className="flex-1 min-w-[150px]">
+                            <label className="block text-xs font-semibold mb-1">Warehouse</label>
+                            <select
+                              value={newProd.warehouse_id}
+                              onChange={(e) => {
+                                setNewProd({ ...newProd, warehouse_id: e.target.value, warehouse_location_id: "" });
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                            >
+                              <option value="">Select Warehouse</option>
+                              {warehousesList.map((w) => (
+                                <option key={w.id} value={w.id}>{w.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Storage Location Dropdown */}
+                      {(() => {
+                        const selectedP = productsList.find((p) => String(p.id) === String(newProd.product_id));
+                        const isService = selectedP?.type === "Service" || selectedP?.type?.toLowerCase() === "service";
+                        if (isService) return null;
+                        const selectedW = warehousesList.find((w) => String(w.id) === newProd.warehouse_id);
+                        const availableLocations = selectedW?.locations || [];
+                        return (
+                          <div className="flex-1 min-w-[150px]">
+                            <label className="block text-xs font-semibold mb-1">Location</label>
+                            <select
+                              value={newProd.warehouse_location_id}
+                              onChange={(e) => setNewProd({ ...newProd, warehouse_location_id: e.target.value })}
+                              disabled={!newProd.warehouse_id}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs disabled:opacity-50"
+                            >
+                              <option value="">Select Location</option>
+                              {availableLocations.map((loc: any) => (
+                                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="w-20">
+                        <label className="block text-xs font-semibold mb-1">Qty</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={newProd.quantity}
+                          onChange={(e) => setNewProd({ ...newProd, quantity: e.target.value })}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border rounded text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pb-1">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(newProd.is_recurring)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const todayStr = new Date().toISOString().split("T")[0];
+                              setNewProd((prev) => ({
+                                ...prev,
+                                is_recurring: checked,
+                                contract_start_date: prev.contract_start_date || todayStr,
+                                contract_duration: prev.contract_duration || "12",
+                                contract_end_date: computeContractEndDate(prev.contract_start_date || todayStr, prev.contract_duration || "12"),
+                              }));
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>Recurring</span>
+                        </label>
+                      </div>
+
+                      <button type="submit" className="px-3.5 py-1.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-xs font-bold rounded shadow-xs transition-colors">
+                        + Add Product
+                      </button>
+                    </div>
+
+                    {newProd.is_recurring && (
+                      <div className="flex flex-wrap items-center gap-3 pt-2.5 border-t border-gray-200/80 dark:border-gray-700 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Cycle:</span>
+                          <select
+                            value={newProd.billing_cycle || "monthly"}
+                            onChange={(e) => {
+                              const cycle = e.target.value;
+                              const adjusted = getAdjustedDurationForCycle(cycle, newProd.contract_duration);
+                              setNewProd((prev) => ({
+                                ...prev,
+                                billing_cycle: cycle,
+                                contract_duration: adjusted,
+                                contract_end_date: computeContractEndDate(prev.contract_start_date, adjusted),
+                              }));
+                            }}
+                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                          >
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly (3 Mo)</option>
+                            <option value="half-yearly">Half-Yearly (6 Mo)</option>
+                            <option value="yearly">Yearly (12 Mo)</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Duration:</span>
+                          <select
+                            value={newProd.contract_duration || "12"}
+                            onChange={(e) => {
+                              const dur = e.target.value;
+                              setNewProd((prev) => ({
+                                ...prev,
+                                contract_duration: dur,
+                                contract_end_date: computeContractEndDate(prev.contract_start_date, dur),
+                              }));
+                            }}
+                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                          >
+                            {getDurationOptionsForCycle(newProd.billing_cycle).map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
                             ))}
                           </select>
                         </div>
-                      );
-                    })()}
 
-                    <div className="w-20">
-                      <label className="block text-xs font-semibold mb-1">Qty</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newProd.quantity}
-                        onChange={(e) => setNewProd({ ...newProd, quantity: e.target.value })}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-900 border rounded text-xs"
-                      />
-                    </div>
-                    <button type="submit" className="px-3 py-1.5 bg-[#0088cc] text-white text-xs font-bold rounded">
-                      + Add Product
-                    </button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Start Date:</span>
+                          <input
+                            type="date"
+                            value={newProd.contract_start_date || ""}
+                            onChange={(e) => {
+                              const start = e.target.value;
+                              setNewProd((prev) => ({
+                                ...prev,
+                                contract_start_date: start,
+                                contract_end_date: computeContractEndDate(start, prev.contract_duration || "12"),
+                              }));
+                            }}
+                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End Date:</span>
+                          <input
+                            type="date"
+                            value={newProd.contract_end_date || ""}
+                            onChange={(e) => setNewProd({ ...newProd, contract_end_date: e.target.value })}
+                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </form>
 
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b bg-gray-50 dark:bg-gray-900/50">
-                        <th className="p-2">Product</th>
-                        <th className="p-2">SKU</th>
-                        <th className="p-2">Warehouse</th>
-                        <th className="p-2">Location</th>
-                        <th className="p-2">Qty</th>
-                        <th className="p-2">Price</th>
-                        <th className="p-2">Amount</th>
-                        <th className="p-2 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leadProducts.length === 0 ? (
-                        <tr><td colSpan={8} className="text-center py-6 text-gray-400">No products added.</td></tr>
-                      ) : (
-                        leadProducts.map((p) => (
-                          <tr key={p.id} className="border-b">
-                            <td className="p-2 font-semibold">{p.product_name}</td>
-                            <td className="p-2 text-gray-500 font-mono">{p.sku || "-"}</td>
-                            <td className="p-2">
-                              {p.warehouse_name ? (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-medium">
-                                  {p.warehouse_name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 italic">-</span>
-                              )}
-                            </td>
-                            <td className="p-2">
-                              {p.warehouse_location_name ? (
-                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[11px] font-medium">
-                                  {p.warehouse_location_name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 italic">-</span>
-                              )}
-                            </td>
-                            <td className="p-2">{p.quantity}</td>
-                            <td className="p-2">₹{Number(p.price || 0).toFixed(2)}</td>
-                            <td className="p-2 font-bold">₹{Number(p.amount || 0).toFixed(2)}</td>
-                            <td className="p-2 text-right">
-                              <button onClick={() => deleteLeadProduct(p.id, leadId)} className="text-red-500 hover:underline">
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b bg-gray-50 dark:bg-gray-900/50">
+                          <th className="p-2">Product</th>
+                          <th className="p-2">Type / Schedule</th>
+                          <th className="p-2">Contract Period</th>
+                          <th className="p-2">Contract Status</th>
+                          <th className="p-2">SKU</th>
+                          <th className="p-2">Warehouse</th>
+                          <th className="p-2">Location</th>
+                          <th className="p-2">Qty</th>
+                          <th className="p-2">Price</th>
+                          <th className="p-2">Amount</th>
+                          <th className="p-2 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadProducts.length === 0 ? (
+                          <tr><td colSpan={11} className="text-center py-6 text-gray-400">No products added.</td></tr>
+                        ) : (
+                          leadProducts.map((p) => {
+                            const badge = p.is_recurring ? getContractStatusBadge(p.contract_start_date, p.contract_end_date) : null;
+                            return (
+                              <tr key={p.id} className="border-b hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
+                                <td className="p-2 font-semibold text-gray-900 dark:text-gray-100">{p.product_name}</td>
+                                <td className="p-2">
+                                  {p.is_recurring ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-[11px] font-semibold">
+                                      <i className="mgc_refresh_2_line text-xs text-blue-600"></i>
+                                      <span className="capitalize">{p.billing_cycle || "Monthly"}</span> ({formatCycleDuration(p.billing_cycle, p.contract_duration)})
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-[11px] font-medium">
+                                      One-Time
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {p.is_recurring ? (
+                                    <div className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap space-y-0.5">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-gray-400 text-[10px] w-6">From:</span>
+                                        <span>{formatDateDisplay(p.contract_start_date)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 font-medium">
+                                        <span className="text-gray-400 text-[10px] w-6">To:</span>
+                                        <span>{formatDateDisplay(p.contract_end_date)}</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 italic text-[11px]">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {badge ? (
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${badge.badgeCls}`}>
+                                      <i className={`${badge.icon} text-xs`}></i>
+                                      <span className="font-semibold">{badge.status}</span>
+                                      <span className="opacity-80">({badge.text})</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 italic text-[11px]">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-gray-500 font-mono">{p.sku || "-"}</td>
+                                <td className="p-2">
+                                  {p.warehouse_name ? (
+                                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-medium">
+                                      {p.warehouse_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {p.warehouse_location_name ? (
+                                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[11px] font-medium">
+                                      {p.warehouse_location_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2">{p.quantity}</td>
+                                <td className="p-2">
+                                  ₹{Number(p.price || 0).toFixed(2)}
+                                  {p.is_recurring && (
+                                    <span className="text-[10px] text-blue-600 block">/{p.billing_cycle || "mo"}</span>
+                                  )}
+                                </td>
+                                <td className="p-2 font-bold">₹{Number(p.amount || 0).toFixed(2)}</td>
+                                <td className="p-2 text-right">
+                                  <button onClick={() => deleteLeadProduct(p.id, leadId)} className="text-red-500 hover:underline">
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
