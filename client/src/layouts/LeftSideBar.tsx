@@ -97,6 +97,8 @@ const SideBarContent = () => {
           if (!item.children) {
             const itemKeyLower = item.key.toLowerCase().trim();
             const singularKey = itemKeyLower.endsWith("s") ? itemKeyLower.slice(0, -1) : itemKeyLower;
+            const parentKeyLower = item.parentKey ? item.parentKey.toLowerCase().trim() : "";
+            const parentSingular = parentKeyLower.endsWith("s") ? parentKeyLower.slice(0, -1) : parentKeyLower;
             if (itemKeyLower === "settings-organization" || itemKeyLower === "organization-profile") {
               return (
                 allowedKeys?.has("organization") ||
@@ -106,7 +108,18 @@ const SideBarContent = () => {
                 false
               );
             }
-            return allowedKeys?.has(item.key) || allowedKeys?.has(itemKeyLower) || allowedKeys?.has(singularKey) || false;
+            return (
+              item.key === "settings-overview" ||
+              allowedKeys?.has(item.key) ||
+              allowedKeys?.has(itemKeyLower) ||
+              allowedKeys?.has(singularKey) ||
+              (Boolean(parentKeyLower) && (
+                allowedKeys?.has(parentKeyLower) ||
+                allowedKeys?.has(parentSingular) ||
+                allowedKeys?.has(`${parentSingular}s`)
+              )) ||
+              false
+            );
           }
           return true;
         })

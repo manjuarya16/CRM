@@ -521,6 +521,15 @@ const LeadsPage: React.FC = () => {
             </button>
           )}
 
+          <Link
+            to="/reports/recurring-contracts"
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
+            title="Open Recurring Contracts & Renewals Report"
+          >
+            <i className="mgc_repeat_line text-sm text-purple-600 dark:text-purple-400"></i>
+            <span>Contracts & Renewals</span>
+          </Link>
+
           {canCreate && (
             <Link
               to="/leads/create"

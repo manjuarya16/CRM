@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useReportStore } from '@/store';
 import {
   ReportTabType,
@@ -19,10 +19,20 @@ import { ProductLinesReport } from './components/ProductLinesReport';
 import { PipelineReport } from './components/PipelineReport';
 import { ActivitiesReport } from './components/ActivitiesReport';
 import { QuotesReport } from './components/QuotesReport';
+import { SalesRepReport } from './components/SalesRepReport';
+import { MarketingReport } from './components/MarketingReport';
+import { AccountsReport } from './components/AccountsReport';
+import { ForecastReport } from './components/ForecastReport';
+import { InventoryReport } from './components/InventoryReport';
+import { WinLossReport } from './components/WinLossReport';
+import { ProductServiceMixReport } from './components/ProductServiceMixReport';
+import { StaleLeadsReport } from './components/StaleLeadsReport';
+import { RecurringContractsReport } from './components/RecurringContractsReport';
 import { DataSetupReport } from './components/DataSetupReport';
 
 const ReportsPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const {
@@ -41,6 +51,15 @@ const ReportsPage: React.FC = () => {
     pipelineData,
     activitiesData,
     quotesData,
+    salesRepsData,
+    marketingData,
+    accountsData,
+    forecastData,
+    inventoryData,
+    winLossData,
+    productServiceMixData,
+    staleLeadsData,
+    recurringContractsData,
     filterOptions,
     fetchFilterOptions,
     fetchReportOverview,
@@ -51,6 +70,15 @@ const ReportsPage: React.FC = () => {
     fetchPipelineReport,
     fetchActivitiesReport,
     fetchQuotesReport,
+    fetchSalesRepsReport,
+    fetchMarketingReport,
+    fetchAccountsReport,
+    fetchForecastReport,
+    fetchInventoryReport,
+    fetchWinLossReport,
+    fetchProductServiceMixReport,
+    fetchStaleLeadsReport,
+    fetchRecurringContractsReport,
   } = useReportStore();
 
   // Slide-over Record Drawer state
@@ -62,21 +90,63 @@ const ReportsPage: React.FC = () => {
     data: null,
   });
 
-  // Active Quick View per tab state to ensure strict single-selection
-  const [activeQuickViewMap, setActiveQuickViewMap] = useState<Record<string, string>>({
-    activities: 'All Activities',
-    leads: 'All Leads (Clubbed)',
-    sources: 'All Sources',
-    'product-value': 'All Products',
-    'product-lines': 'All Lines',
-    pipeline: 'All Pipelines',
-    quotes: 'All Quotes',
-  });
-
   // Load filter dropdown options from real database on mount
   useEffect(() => {
     fetchFilterOptions();
   }, [fetchFilterOptions]);
+
+  // Clean tab switching without cross-tab filter bleeding
+  const handleTabSwitch = useCallback(
+    (targetTab: ReportTabType, initialFilters?: Partial<IReportFilterState>) => {
+      // Reset module-specific filters so they don't corrupt the target report
+      const updates: Partial<IReportFilterState> = {
+        searchQuery: '',
+        selectedOwnerId: '',
+        selectedWarehouseId: '',
+        selectedProductId: '',
+        selectedProductType: '',
+        selectedPerson: '',
+        selectedOrg: '',
+        selectedPipelineId: '',
+        selectedStageId: '',
+        selectedOutcome: '',
+        activityStatus: '',
+        activityType: '',
+        activityOverdueOnly: '',
+        quoteStatus: '',
+        quoteExpiry: '',
+        agingFilter: '',
+        minValue: '',
+        maxValue: '',
+        selectedDealType: '',
+        selectedStaleDays: 14,
+        selectedIssueFlag: '',
+        ...(initialFilters || {}),
+      };
+
+      // Forward-looking deals for Revenue Forecast:
+      if (targetTab === 'forecast') {
+        updates.datePreset = 'all';
+        updates.fromDate = '';
+        updates.toDate = '';
+      } else if (targetTab === 'inventory') {
+        // Real-time current stock
+        updates.datePreset = 'all';
+        updates.fromDate = '';
+        updates.toDate = '';
+      } else if (!filterState.datePreset || filterState.datePreset === 'all') {
+        updates.datePreset = '90';
+      }
+
+      setFilterState(updates);
+      setActiveTab(targetTab);
+      const queryStr = updates.selectedProductId
+        ? `?product=${encodeURIComponent(updates.selectedProductId)}`
+        : '';
+      navigate(`/reports/${targetTab}${queryStr}`);
+    },
+    [filterState.datePreset, navigate, setActiveTab, setFilterState]
+  );
 
   // Sync route param with active tab
   useEffect(() => {
@@ -89,17 +159,34 @@ const ReportsPage: React.FC = () => {
       'pipeline',
       'activities',
       'quotes',
+      'sales-reps',
+      'marketing',
+      'accounts',
+      'forecast',
+      'inventory',
+      'win-loss',
+      'product-service-mix',
+      'stale-leads',
+      'recurring-contracts',
       'setup',
     ];
 
+    const prodParam = searchParams.get('product') || searchParams.get('productId');
+    const initialFilters: Partial<IReportFilterState> = {};
+    if (prodParam) {
+      initialFilters.selectedProductId = prodParam;
+    }
+
     if (tab && validTabs.includes(tab as ReportTabType)) {
       if (tab !== activeTab) {
-        setActiveTab(tab as ReportTabType);
+        handleTabSwitch(tab as ReportTabType, initialFilters);
+      } else if (prodParam && filterState.selectedProductId !== prodParam) {
+        setFilterState({ selectedProductId: prodParam });
       }
     } else if (!tab && activeTab !== 'overview') {
-      setActiveTab('overview');
+      handleTabSwitch('overview');
     }
-  }, [tab, activeTab, setActiveTab]);
+  }, [tab, activeTab, handleTabSwitch, searchParams, filterState.selectedProductId, setFilterState]);
 
   // Fetch report data for active tab
   const fetchCurrentTabReport = useCallback(() => {
@@ -128,6 +215,33 @@ const ReportsPage: React.FC = () => {
       case 'quotes':
         fetchQuotesReport();
         break;
+      case 'sales-reps':
+        fetchSalesRepsReport();
+        break;
+      case 'marketing':
+        fetchMarketingReport();
+        break;
+      case 'accounts':
+        fetchAccountsReport();
+        break;
+      case 'forecast':
+        fetchForecastReport();
+        break;
+      case 'inventory':
+        fetchInventoryReport();
+        break;
+      case 'win-loss':
+        fetchWinLossReport();
+        break;
+      case 'product-service-mix':
+        fetchProductServiceMixReport();
+        break;
+      case 'stale-leads':
+        fetchStaleLeadsReport();
+        break;
+      case 'recurring-contracts':
+        fetchRecurringContractsReport();
+        break;
       case 'setup':
         break;
       default:
@@ -143,6 +257,15 @@ const ReportsPage: React.FC = () => {
     fetchPipelineReport,
     fetchActivitiesReport,
     fetchQuotesReport,
+    fetchSalesRepsReport,
+    fetchMarketingReport,
+    fetchAccountsReport,
+    fetchForecastReport,
+    fetchInventoryReport,
+    fetchWinLossReport,
+    fetchProductServiceMixReport,
+    fetchStaleLeadsReport,
+    fetchRecurringContractsReport,
   ]);
 
   // Re-fetch when active tab or critical filters change
@@ -161,6 +284,10 @@ const ReportsPage: React.FC = () => {
     filterState.selectedStageId,
     filterState.selectedWarehouseId,
     filterState.selectedProductId,
+    filterState.selectedProductType,
+    filterState.selectedDealType,
+    filterState.selectedStaleDays,
+    filterState.selectedIssueFlag,
     filterState.selectedPerson,
     filterState.activityType,
     filterState.activityStatus,
@@ -221,10 +348,55 @@ const ReportsPage: React.FC = () => {
       subtitle: 'Quote value, status and expiry, with line items one click away.',
       basis: 'Quote created date',
     },
+    'sales-reps': {
+      title: 'Sales Reps & Team Performance',
+      subtitle: 'Individual and team sales metrics, deal conversion win rates, activities, and accepted quotes.',
+      basis: 'Deal and activity date',
+    },
+    marketing: {
+      title: 'Marketing & Inbound Web Forms',
+      subtitle: 'Inbound submission volume across web forms, auto-lead creation, and campaign outreach.',
+      basis: 'Form submission date',
+    },
+    accounts: {
+      title: 'Accounts & Organizations',
+      subtitle: 'Organization-level sales performance, deal history, contact counts, and engagement health.',
+      basis: 'Account interaction date',
+    },
+    forecast: {
+      title: 'Revenue Forecast & Deal Velocity',
+      subtitle: 'Weighted pipeline revenue projection based on stage win probabilities and target close dates.',
+      basis: 'Expected close date',
+    },
+    inventory: {
+      title: 'Warehouse & Inventory Stock',
+      subtitle: 'Real-time stock on hand, allocated quantities, stock status, and inventory asset valuation.',
+      basis: 'Current stock holding',
+    },
+    'win-loss': {
+      title: 'Win / Loss Analysis',
+      subtitle: 'Why we win and lose: by deal type, source, deal size and lost reason.',
+      basis: 'Closed date',
+    },
+    'product-service-mix': {
+      title: 'Product vs Service Mix',
+      subtitle: 'How much value comes from physical products vs services, attach rates, and bundling.',
+      basis: 'Lead created date',
+    },
+    'stale-leads': {
+      title: 'Stale Leads & Follow-up Gaps',
+      subtitle: 'Open leads nobody is working on: no next step, no recent activity, or past target close date.',
+      basis: 'Lead created date',
+    },
+    'recurring-contracts': {
+      title: 'Recurring Contracts & Renewals',
+      subtitle: 'Track active recurring contracts, subscription cycles, renewals due, and expiring agreements over time.',
+      basis: 'Contract start & end date',
+    },
     setup: {
       title: 'Data Setup & Database Functions',
-      subtitle: 'PostgreSQL procedural functions and schema health for reports.',
-      basis: 'Database architecture',
+      subtitle: 'Setup script definitions and SQL functions for reports.',
+      basis: 'System Configuration',
     },
   };
 
@@ -303,11 +475,11 @@ const ReportsPage: React.FC = () => {
     { label: string; filters: Partial<IReportFilterState>; preset?: string }[]
   > = {
     leads: [
-      { label: 'All Leads (Clubbed)', filters: { selectedOutcome: '', searchQuery: '', minValue: '', selectedSourceId: '', selectedOwnerId: '' } },
+      { label: 'All Leads (Clubbed)', filters: { selectedOutcome: '', searchQuery: '', selectedSourceId: '', selectedOwnerId: '' } },
       { label: 'My open leads', filters: { selectedOutcome: 'open' } },
+      { label: 'Won leads', filters: { selectedOutcome: 'won' } },
       { label: 'Closing this month', filters: { selectedOutcome: 'open', datePreset: 'month' } },
       { label: 'Past expected close', filters: { selectedOutcome: 'open' } },
-      { label: 'High value (₹10L+)', filters: { minValue: '1000000' } },
       { label: 'No lead source', filters: { selectedSourceId: 'unknown' } },
     ],
     sources: [
@@ -317,33 +489,101 @@ const ReportsPage: React.FC = () => {
       { label: 'New business', filters: { selectedTypeId: 'New Business' } },
     ],
     'product-value': [
-      { label: 'All Products', filters: { selectedOutcome: '', selectedWarehouseId: '' } },
+      { label: 'All Products', filters: { selectedOutcome: '', selectedWarehouseId: '', selectedProductType: '' } },
+      { label: 'Physical Products', filters: { selectedProductType: 'Product' } },
+      { label: 'Services Only', filters: { selectedProductType: 'Service' } },
       { label: 'Open pipeline only', filters: { selectedOutcome: 'open' } },
       { label: 'Won only', filters: { selectedOutcome: 'won' } },
-      { label: 'Nashik Main', filters: { selectedWarehouseId: 'Nashik Main' } },
     ],
     'product-lines': [
-      { label: 'All Lines', filters: { searchQuery: '', selectedOutcome: '' } },
+      { label: 'All Lines', filters: { searchQuery: '', selectedOutcome: '', selectedProductType: '' } },
+      { label: 'Physical Products', filters: { selectedProductType: 'Product' } },
+      { label: 'Services Only', filters: { selectedProductType: 'Service' } },
       { label: 'Open Leads Only', filters: { selectedOutcome: 'open' } },
       { label: 'Won Leads Only', filters: { selectedOutcome: 'won' } },
     ],
     pipeline: [
-      { label: 'All Pipelines', filters: { selectedPipelineId: '', agingFilter: '' } },
-      { label: 'Stuck over 30 days', filters: { agingFilter: '30' } },
+      { label: 'All Pipelines', filters: { selectedPipelineId: '' } },
       { label: 'Closing this month', filters: { datePreset: 'month' } },
+      { label: 'This Quarter', filters: { datePreset: '90' } },
     ],
     activities: [
-      { label: 'All Activities', filters: { activityStatus: '', activityOverdueOnly: '', activityType: '', datePreset: '90' } },
-      { label: 'Due today', filters: { datePreset: 'today', activityOverdueOnly: '', activityType: '', activityStatus: '' } },
-      { label: 'Overdue only', filters: { activityOverdueOnly: 'yes', activityType: '', activityStatus: '', datePreset: '90' } },
-      { label: 'Meetings only', filters: { activityType: 'Meeting', activityOverdueOnly: '', activityStatus: '', datePreset: '90' } },
-      { label: 'Tasks only', filters: { activityType: 'Task', activityOverdueOnly: '', activityStatus: '', datePreset: '90' } },
+      { label: 'All Activities', filters: { activityStatus: '', activityOverdueOnly: '', activityType: '' } },
+      { label: 'Due today', filters: { datePreset: 'today' }, preset: 'today' },
+      { label: 'Overdue only', filters: { activityOverdueOnly: 'yes' } },
+      { label: 'Meetings only', filters: { activityType: 'Meeting' } },
     ],
     quotes: [
       { label: 'All Quotes', filters: { quoteStatus: '', quoteExpiry: '' } },
       { label: 'Expiring soon', filters: { quoteExpiry: 'soon' } },
       { label: 'Awaiting decision', filters: { quoteStatus: 'Sent' } },
       { label: 'Accepted', filters: { quoteStatus: 'Accepted' } },
+    ],
+    'sales-reps': [
+      { label: 'All Sales Reps', filters: { selectedOwnerId: '', searchQuery: '', datePreset: '90' } },
+      { label: 'This Month', filters: { datePreset: 'month' } },
+      { label: 'Last 30 Days', filters: { datePreset: '30' } },
+      { label: 'All Time', filters: { datePreset: 'all', fromDate: '', toDate: '' } },
+    ],
+    marketing: [
+      { label: 'All Web Forms & Campaigns', filters: { searchQuery: '', datePreset: 'all', fromDate: '', toDate: '' } },
+      { label: 'This Month', filters: { datePreset: 'month' } },
+      { label: 'Last 30 Days', filters: { datePreset: '30' } },
+      { label: 'Last 90 Days', filters: { datePreset: '90' } },
+    ],
+    accounts: [
+      { label: 'All Accounts', filters: { searchQuery: '', datePreset: 'all', fromDate: '', toDate: '' } },
+      { label: 'This Month', filters: { datePreset: 'month' } },
+      { label: 'Last 30 Days', filters: { datePreset: '30' } },
+      { label: 'Last 90 Days', filters: { datePreset: '90' } },
+    ],
+    forecast: [
+      { label: 'All Open Deals', filters: { selectedPipelineId: '', searchQuery: '', datePreset: 'all', fromDate: '', toDate: '' } },
+      { label: 'Closing This Month', filters: { datePreset: 'month' } },
+      { label: 'Next 30 Days', filters: { datePreset: 'next30' } },
+      { label: 'Next 90 Days', filters: { datePreset: 'next90' } },
+      { label: 'Next 14 Days', filters: { datePreset: 'next14' } },
+    ],
+    inventory: [
+      { label: 'All Warehouses', filters: { selectedWarehouseId: '', searchQuery: '' } },
+      { label: 'Bhiwandi Hub', filters: { selectedWarehouseId: 'Bhiwandi Central Logistics Hub' } },
+      { label: 'Sriperumbudur Hub', filters: { selectedWarehouseId: 'Sriperumbudur Distribution Center' } },
+      { label: 'Gurugram Hub', filters: { selectedWarehouseId: 'Gurugram North Hub' } },
+      { label: 'Chakan Depot', filters: { selectedWarehouseId: 'Chakan Industrial Depot' } },
+    ],
+    'win-loss': [
+      { label: 'All Closed Deals', filters: { selectedOutcome: '', selectedDealType: '', selectedSourceId: '', selectedOwnerId: '' } },
+      { label: 'Won Deals', filters: { selectedOutcome: 'won' } },
+      { label: 'Lost Deals', filters: { selectedOutcome: 'lost' } },
+      { label: 'Product Deals Only', filters: { selectedDealType: 'Product only' } },
+      { label: 'Service Deals Only', filters: { selectedDealType: 'Service only' } },
+      { label: 'Product + Service Bundles', filters: { selectedDealType: 'Product + Service' } },
+    ],
+    'product-service-mix': [
+      { label: 'All Offerings', filters: { selectedProductType: '', selectedOutcome: '' } },
+      { label: 'Won Deals Only', filters: { selectedOutcome: 'won' } },
+      { label: 'Open Pipeline', filters: { selectedOutcome: 'open' } },
+      { label: 'Physical Products', filters: { selectedProductType: 'Product' } },
+      { label: 'Services Only', filters: { selectedProductType: 'Service' } },
+    ],
+    'stale-leads': [
+      { label: 'All Open Deals', filters: { selectedIssueFlag: '', selectedOwnerId: '' } },
+      { label: 'No Next Step', filters: { selectedIssueFlag: 'No next step' } },
+      { label: 'Idle 14+ Days', filters: { selectedIssueFlag: 'No recent activity', selectedStaleDays: 14 } },
+      { label: 'Idle 30+ Days', filters: { selectedIssueFlag: 'No recent activity', selectedStaleDays: 30 } },
+      { label: 'Past Close Date', filters: { selectedIssueFlag: 'Past close date' } },
+      { label: 'Missing Details', filters: { selectedIssueFlag: 'Missing details' } },
+    ],
+    'recurring-contracts': [
+      { label: 'All Contracts', filters: { selectedContractStatus: '', selectedBillingCycle: '', selectedProductType: '' } },
+      { label: 'Active Contracts', filters: { selectedContractStatus: 'active' } },
+      { label: 'Renewals Due (<= 30d)', filters: { selectedContractStatus: 'expiring_30' } },
+      { label: 'Expiring in 60d', filters: { selectedContractStatus: 'expiring_60' } },
+      { label: 'Expired (Past Due)', filters: { selectedContractStatus: 'expired' } },
+      { label: 'Quarterly', filters: { selectedBillingCycle: 'quarterly' } },
+      { label: 'Yearly', filters: { selectedBillingCycle: 'yearly' } },
+      { label: 'Services Only', filters: { selectedProductType: 'Service' } },
+      { label: 'Products Only', filters: { selectedProductType: 'Product' } },
     ],
   };
 
@@ -406,15 +646,6 @@ const ReportsPage: React.FC = () => {
     });
   };
 
-  const handleClearFiltersForTab = () => {
-    resetFilters();
-    const defaultLabel = currentQuickViews[0]?.label || '';
-    if (defaultLabel) {
-      setActiveQuickViewMap((prev) => ({ ...prev, [activeTab]: defaultLabel }));
-    }
-    fetchCurrentTabReport();
-  };
-
   return (
     <div className="space-y-4">
       {/* 🏷️ Header Card with Breadcrumb & Actions */}
@@ -468,6 +699,49 @@ const ReportsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 🧭 Horizontal Report Tabs Navigation Bar */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1.5 shadow-2xs overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 min-w-max">
+          {[
+            { key: 'overview', label: 'Overview', icon: 'mgc_dashboard_line' },
+            { key: 'leads', label: 'Lead Summary', icon: 'mgc_target_line' },
+            { key: 'sources', label: 'Lead Sources', icon: 'mgc_share_forward_line' },
+            { key: 'product-value', label: 'Product Value', icon: 'mgc_box_3_line' },
+            { key: 'product-lines', label: 'Product Lines', icon: 'mgc_list_check_3_line' },
+            { key: 'pipeline', label: 'Sales Pipeline', icon: 'mgc_filter_line' },
+            { key: 'activities', label: 'Activities', icon: 'mgc_calendar_line' },
+            { key: 'quotes', label: 'Quotes', icon: 'mgc_file_check_line' },
+            { key: 'sales-reps', label: 'Sales Reps', icon: 'mgc_user_star_line' },
+            { key: 'marketing', label: 'Marketing & Forms', icon: 'mgc_megaphone_line' },
+            { key: 'accounts', label: 'Accounts & Orgs', icon: 'mgc_community_line' },
+            { key: 'forecast', label: 'Revenue Forecast', icon: 'mgc_trending_up_line' },
+            { key: 'inventory', label: 'Inventory & Stock', icon: 'mgc_store_2_line' },
+            { key: 'win-loss', label: 'Win / Loss', icon: 'mgc_trophy_line' },
+            { key: 'product-service-mix', label: 'Product vs Service', icon: 'mgc_shuffle_line' },
+            { key: 'stale-leads', label: 'Stale Leads', icon: 'mgc_alarm_line' },
+            { key: 'recurring-contracts', label: 'Recurring & Contracts', icon: 'mgc_repeat_line' },
+            { key: 'setup', label: 'Data Setup', icon: 'mgc_settings_3_line' },
+          ].map((tabItem) => {
+            const isActive = activeTab === tabItem.key;
+            return (
+              <button
+                key={tabItem.key}
+                type="button"
+                onClick={() => handleTabSwitch(tabItem.key as ReportTabType)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-[#0e90d9] text-white shadow-xs font-semibold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60'
+                }`}
+              >
+                <i className={`${tabItem.icon} text-sm`} />
+                <span>{tabItem.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Filter Box (.fb) matching Sales CRM · Reports 1.html */}
       {activeTab !== 'overview' && activeTab !== 'setup' && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-2xs space-y-3.5">
@@ -478,21 +752,21 @@ const ReportsPage: React.FC = () => {
                 Quick Views:
               </span>
               {currentQuickViews.map((qv, qvIdx) => {
-                const isSelected =
-                  (activeQuickViewMap[activeTab] || currentQuickViews[0]?.label) === qv.label;
+                const isSelected = Object.entries(qv.filters).every(([key, val]) => {
+                  return String((filterState as any)[key] ?? '') === String(val ?? '');
+                });
 
                 return (
                   <button
                     key={qvIdx}
                     type="button"
                     onClick={() => {
-                      setActiveQuickViewMap((prev) => ({ ...prev, [activeTab]: qv.label }));
                       setFilterState(qv.filters);
                       fetchCurrentTabReport();
                     }}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer select-none ${
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${
                       isSelected
-                        ? 'bg-[#0e90d9] text-white shadow-xs font-semibold'
+                        ? 'bg-[#0e90d9] text-white shadow-xs'
                         : 'bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -504,59 +778,70 @@ const ReportsPage: React.FC = () => {
           )}
 
           {/* 2. Dates Row (.dates) */}
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs pb-3 border-b border-gray-100 dark:border-gray-700">
-            <div className="flex flex-wrap items-center gap-2">
-              {[
-                { key: 'today', label: 'Today' },
-                { key: '7', label: 'Last 7 days' },
-                { key: '30', label: 'Last 30 days' },
-                { key: '90', label: 'Last 90 days' },
-                { key: 'month', label: 'This month' },
-                { key: 'next14', label: 'Next 14 days' },
-              ].map((preset) => (
-                <button
-                  key={preset.key}
-                  type="button"
-                  onClick={() => {
-                    setFilterState({ datePreset: preset.key });
-                    fetchCurrentTabReport();
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
-                    filterState.datePreset === preset.key
-                      ? 'border-[#0e90d9] bg-blue-50 text-[#0e90d9] dark:bg-blue-950/40 dark:border-blue-700 font-semibold'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-
-              <div className="flex items-center gap-1.5 ml-2">
-                <span className="text-gray-500 dark:text-gray-400">From</span>
-                <input
-                  type="date"
-                  value={filterState.fromDate}
-                  onChange={(e) => {
-                    setFilterState({ fromDate: e.target.value, datePreset: '' });
-                  }}
-                  className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                />
-                <span className="text-gray-500 dark:text-gray-400">To</span>
-                <input
-                  type="date"
-                  value={filterState.toDate}
-                  onChange={(e) => {
-                    setFilterState({ toDate: e.target.value, datePreset: '' });
-                  }}
-                  className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                />
+          {activeTab === 'inventory' ? (
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2 font-medium">
+                <i className="mgc_store_2_line text-sm text-[#0e90d9]" />
+                <span>Inventory valuation & physical stock: <strong className="text-gray-800 dark:text-gray-200">Real-time warehouse balance on hand</strong></span>
               </div>
             </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { key: 'all', label: 'All Time' },
+                  { key: 'today', label: 'Today' },
+                  { key: '7', label: 'Last 7 days' },
+                  { key: '30', label: 'Last 30 days' },
+                  { key: '90', label: 'Last 90 days' },
+                  { key: 'month', label: 'This month' },
+                  { key: 'next30', label: 'Next 30 days' },
+                  { key: 'next90', label: 'Next 90 days' },
+                ].map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => {
+                      setFilterState({ datePreset: preset.key });
+                      fetchCurrentTabReport();
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
+                      filterState.datePreset === preset.key
+                        ? 'border-[#0e90d9] bg-blue-50 text-[#0e90d9] dark:bg-blue-950/40 dark:border-blue-700 font-semibold'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
 
-            <div className="text-gray-500 dark:text-gray-400 text-[11px] font-medium">
-              Date basis: <span className="font-semibold text-gray-700 dark:text-gray-300">{currentMeta.basis}</span>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <span className="text-gray-500 dark:text-gray-400">From</span>
+                  <input
+                    type="date"
+                    value={filterState.fromDate}
+                    onChange={(e) => {
+                      setFilterState({ fromDate: e.target.value, datePreset: '' });
+                    }}
+                    className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                  <span className="text-gray-500 dark:text-gray-400">To</span>
+                  <input
+                    type="date"
+                    value={filterState.toDate}
+                    onChange={(e) => {
+                      setFilterState({ toDate: e.target.value, datePreset: '' });
+                    }}
+                    className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="text-gray-500 dark:text-gray-400 text-[11px] font-medium">
+                Date basis: <span className="font-semibold text-gray-700 dark:text-gray-300">{currentMeta.basis}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 3. Filter Grid (.fgrid) customized per active report */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
@@ -664,24 +949,6 @@ const ReportsPage: React.FC = () => {
                     <option value="won">Won</option>
                     <option value="lost">Lost</option>
                   </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Min value (₹)</label>
-                  <input
-                    type="number"
-                    value={filterState.minValue}
-                    onChange={(e) => setFilterState({ minValue: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Max value (₹)</label>
-                  <input
-                    type="number"
-                    value={filterState.maxValue}
-                    onChange={(e) => setFilterState({ maxValue: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                  />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Expected close from</label>
@@ -795,7 +1062,11 @@ const ReportsPage: React.FC = () => {
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Product</label>
                   <select
-                    value={filterState.selectedProductId}
+                    value={
+                      filterOptions?.products.find(
+                        (p) => p.name === filterState.selectedProductId || String(p.id) === filterState.selectedProductId
+                      )?.name || filterState.selectedProductId || ''
+                    }
                     onChange={(e) => setFilterState({ selectedProductId: e.target.value })}
                     className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                   >
@@ -803,6 +1074,18 @@ const ReportsPage: React.FC = () => {
                     {filterOptions?.products.map((p) => (
                       <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Product Type</label>
+                  <select
+                    value={filterState.selectedProductType || ''}
+                    onChange={(e) => setFilterState({ selectedProductType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Types</option>
+                    <option value="Product">Physical Product</option>
+                    <option value="Service">Service</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -889,7 +1172,11 @@ const ReportsPage: React.FC = () => {
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Product</label>
                   <select
-                    value={filterState.selectedProductId}
+                    value={
+                      filterOptions?.products.find(
+                        (p) => p.name === filterState.selectedProductId || String(p.id) === filterState.selectedProductId
+                      )?.name || filterState.selectedProductId || ''
+                    }
                     onChange={(e) => setFilterState({ selectedProductId: e.target.value })}
                     className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                   >
@@ -897,6 +1184,18 @@ const ReportsPage: React.FC = () => {
                     {filterOptions?.products.map((p) => (
                       <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Product Type</label>
+                  <select
+                    value={filterState.selectedProductType || ''}
+                    onChange={(e) => setFilterState({ selectedProductType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Types</option>
+                    <option value="Product">Physical Product</option>
+                    <option value="Service">Service</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -997,20 +1296,6 @@ const ReportsPage: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Stage Aging</label>
-                  <select
-                    value={filterState.agingFilter}
-                    onChange={(e) => setFilterState({ agingFilter: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                  >
-                    <option value="">All</option>
-                    <option value="7">Over 7 days</option>
-                    <option value="15">Over 15 days</option>
-                    <option value="30">Over 30 days</option>
-                    <option value="rotten">Over pipeline limit</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Outcome</label>
                   <select
                     value={filterState.selectedOutcome}
@@ -1051,6 +1336,7 @@ const ReportsPage: React.FC = () => {
                     <option value="Task">Task</option>
                     <option value="Email">Email</option>
                     <option value="Lunch">Lunch</option>
+                    <option value="Note">Note</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -1067,7 +1353,7 @@ const ReportsPage: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Completion</label>
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Status</label>
                   <select
                     value={filterState.activityStatus}
                     onChange={(e) => setFilterState({ activityStatus: e.target.value })}
@@ -1076,6 +1362,7 @@ const ReportsPage: React.FC = () => {
                     <option value="">All</option>
                     <option value="Pending">Pending</option>
                     <option value="Completed">Completed</option>
+                    <option value="Overdue">Overdue</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -1193,14 +1480,514 @@ const ReportsPage: React.FC = () => {
                 </div>
               </>
             )}
+
+            {/* Sales Reps Filters */}
+            {activeTab === 'sales-reps' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Sales Representative</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Reps</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Accounts Filters */}
+            {activeTab === 'accounts' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search Account / Org</label>
+                  <input
+                    type="text"
+                    placeholder="Search organization…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Forecast Filters */}
+            {activeTab === 'forecast' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Inventory Filters */}
+            {activeTab === 'inventory' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Warehouse Hub</label>
+                  <select
+                    value={filterState.selectedWarehouseId}
+                    onChange={(e) => setFilterState({ selectedWarehouseId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Warehouses</option>
+                    {filterOptions?.warehouses.map((w) => (
+                      <option key={w.id} value={w.name}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search Item / SKU</label>
+                  <input
+                    type="text"
+                    placeholder="Search product or SKU…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Win / Loss Filters */}
+            {activeTab === 'win-loss' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Deal Type</label>
+                  <select
+                    value={filterState.selectedDealType || ''}
+                    onChange={(e) => setFilterState({ selectedDealType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Deal Types</option>
+                    <option value="Product only">Product only</option>
+                    <option value="Service only">Service only</option>
+                    <option value="Product + Service">Product + Service</option>
+                    <option value="No items">No items</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Outcome</label>
+                  <select
+                    value={filterState.selectedOutcome}
+                    onChange={(e) => setFilterState({ selectedOutcome: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">Won + Lost (All)</option>
+                    <option value="won">Won Only</option>
+                    <option value="lost">Lost Only</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Owner</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Owners</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Source</label>
+                  <select
+                    value={filterState.selectedSourceId}
+                    onChange={(e) => setFilterState({ selectedSourceId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Sources</option>
+                    {filterOptions?.sources.map((s) => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search deal or client…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Product vs Service Mix Filters */}
+            {activeTab === 'product-service-mix' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Offering Type</label>
+                  <select
+                    value={filterState.selectedProductType || ''}
+                    onChange={(e) => setFilterState({ selectedProductType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Offerings (Products & Services)</option>
+                    <option value="Product">Physical Products Only</option>
+                    <option value="Service">Services Only</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Deal Outcome</label>
+                  <select
+                    value={filterState.selectedOutcome}
+                    onChange={(e) => setFilterState({ selectedOutcome: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Outcomes</option>
+                    <option value="open">Open Pipeline</option>
+                    <option value="won">Won Deals</option>
+                    <option value="lost">Lost Deals</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Owner</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Owners</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search offering or lead…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Stale Leads Filters */}
+            {activeTab === 'stale-leads' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Follow-up Issue</label>
+                  <select
+                    value={filterState.selectedIssueFlag || ''}
+                    onChange={(e) => setFilterState({ selectedIssueFlag: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Open Deals</option>
+                    <option value="No next step">No next step</option>
+                    <option value="No recent activity">No recent activity</option>
+                    <option value="Past close date">Past close date</option>
+                    <option value="Missing details">Missing details</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Inactivity Window</label>
+                  <select
+                    value={String(filterState.selectedStaleDays || '14')}
+                    onChange={(e) => setFilterState({ selectedStaleDays: Number(e.target.value) })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="7">Idle over 7 days</option>
+                    <option value="14">Idle over 14 days (Standard)</option>
+                    <option value="30">Idle over 30 days (High Risk)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Owner</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Owners</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search lead or client…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Recurring Contracts Filters */}
+            {activeTab === 'recurring-contracts' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Contract Status</label>
+                  <select
+                    value={filterState.selectedContractStatus || ''}
+                    onChange={(e) => setFilterState({ selectedContractStatus: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Contracts</option>
+                    <option value="active">Active Contracts</option>
+                    <option value="expiring_30">Renewals Due (Within 30 Days)</option>
+                    <option value="expiring_60">Expiring in 31-60 Days</option>
+                    <option value="expiring_90">Expiring in 61-90 Days</option>
+                    <option value="expired">Expired (Past Due)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Billing Cycle</label>
+                  <select
+                    value={filterState.selectedBillingCycle || ''}
+                    onChange={(e) => setFilterState({ selectedBillingCycle: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Cycles</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="half_yearly">Half-Yearly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Offering Type</label>
+                  <select
+                    value={filterState.selectedProductType || ''}
+                    onChange={(e) => setFilterState({ selectedProductType: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Types (Products & Services)</option>
+                    <option value="Service">Services Only</option>
+                    <option value="Product">Physical Products Only</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Owner</label>
+                  <select
+                    value={filterState.selectedOwnerId}
+                    onChange={(e) => setFilterState({ selectedOwnerId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Owners</option>
+                    {filterOptions?.owners.map((o) => (
+                      <option key={o.id} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Pipeline</label>
+                  <select
+                    value={filterState.selectedPipelineId}
+                    onChange={(e) => setFilterState({ selectedPipelineId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Pipelines</option>
+                    {filterOptions?.pipelines.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search contract, SKU, lead…"
+                    value={filterState.searchQuery}
+                    onChange={(e) => setFilterState({ searchQuery: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* 4. Applied Filters Tags Strip (.applied) */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 text-xs">
             <span className="text-gray-400 text-[11px]">Showing</span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[11px]">
-              {currentMeta.basis}: {formatDateDisplay(filterState.fromDate)} – {formatDateDisplay(filterState.toDate)}
-            </span>
+            {activeTab === 'inventory' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
+                Real-time Stock on Hand
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[11px]">
+                {currentMeta.basis}: {formatDateDisplay(filterState.fromDate)} – {formatDateDisplay(filterState.toDate)}
+              </span>
+            )}
+
+            {filterState.searchQuery && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Search: "{filterState.searchQuery}"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ searchQuery: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.selectedPipelineId && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Pipeline: {filterState.selectedPipelineId}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ selectedPipelineId: '', selectedStageId: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.selectedStageId && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Stage: {filterState.selectedStageId}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ selectedStageId: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.activityType && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Type: {filterState.activityType}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ activityType: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.activityStatus && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Status: {filterState.activityStatus}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ activityStatus: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.activityOverdueOnly && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Overdue: {filterState.activityOverdueOnly === 'yes' ? 'Yes' : 'No'}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ activityOverdueOnly: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
+            {filterState.selectedPerson && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Person: {filterState.selectedPerson}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ selectedPerson: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
 
             {filterState.selectedOwnerId && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
@@ -1284,7 +2071,7 @@ const ReportsPage: React.FC = () => {
 
             {filterState.selectedProductId && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
-                Product: {filterState.selectedProductId}
+                Product: {filterOptions?.products.find((p) => p.name === filterState.selectedProductId || String(p.id) === filterState.selectedProductId)?.name || filterState.selectedProductId}
                 <button
                   type="button"
                   onClick={() => {
@@ -1314,6 +2101,22 @@ const ReportsPage: React.FC = () => {
               </span>
             )}
 
+            {filterState.selectedProductType && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
+                Type: {filterState.selectedProductType}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterState({ selectedProductType: '' });
+                    fetchCurrentTabReport();
+                  }}
+                  className="hover:text-red-500 ml-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+
             {filterState.quoteStatus && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
                 Status: {filterState.quoteStatus}
@@ -1330,25 +2133,12 @@ const ReportsPage: React.FC = () => {
               </span>
             )}
 
-            {filterState.minValue && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px]">
-                Min: ₹{Number(filterState.minValue).toLocaleString()}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilterState({ minValue: '' });
-                    fetchCurrentTabReport();
-                  }}
-                  className="hover:text-red-500 ml-0.5"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-
             <button
               type="button"
-              onClick={handleClearFiltersForTab}
+              onClick={() => {
+                resetFilters();
+                fetchCurrentTabReport();
+              }}
               className="text-[#0e90d9] hover:underline text-[11px] font-medium ml-2"
             >
               Clear filters
@@ -1406,7 +2196,10 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchLeadSummaryReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchLeadSummaryReport();
+              }}
               onOpenDrawer={handleOpenLeadDrawer}
             />
           )}
@@ -1419,7 +2212,10 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchLeadSourcesReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchLeadSourcesReport();
+              }}
               onDrillDownSource={(sourceName) => {
                 setFilterState({ selectedSourceId: sourceName });
                 navigate('/reports/leads');
@@ -1435,10 +2231,17 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchProductValueReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchProductValueReport();
+              }}
               onSelectProduct={(productName) => {
-                setFilterState({ selectedProductId: productName });
-                navigate('/reports/product-lines');
+                const matched = filterOptions?.products.find(
+                  (p) => p.name === productName || String(p.id) === String(productName)
+                );
+                const prodName = matched ? matched.name : productName;
+                handleTabSwitch('product-lines', { selectedProductId: prodName });
+                fetchProductLinesReport({ selectedProductId: prodName });
               }}
             />
           )}
@@ -1451,7 +2254,10 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchProductLinesReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchProductLinesReport();
+              }}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
             />
           )}
@@ -1464,7 +2270,10 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchPipelineReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchPipelineReport();
+              }}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
               onDrillDownStage={(stageName) => {
                 setFilterState({ selectedStageId: stageName });
@@ -1481,7 +2290,10 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchActivitiesReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchActivitiesReport();
+              }}
               onOpenDrawer={handleOpenActivityDrawer}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
             />
@@ -1495,9 +2307,151 @@ const ReportsPage: React.FC = () => {
                 setFilterState(updates);
                 fetchQuotesReport(updates);
               }}
-              onClearFilters={handleClearFiltersForTab}
+              onClearFilters={() => {
+                resetFilters();
+                fetchQuotesReport();
+              }}
               onOpenDrawer={handleOpenQuoteDrawer}
               onOpenLeadDrawer={handleOpenLeadDrawerById}
+            />
+          )}
+
+          {activeTab === 'sales-reps' && (
+            <SalesRepReport
+              reportData={salesRepsData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchSalesRepsReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchSalesRepsReport();
+              }}
+            />
+          )}
+
+          {activeTab === 'marketing' && (
+            <MarketingReport
+              reportData={marketingData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchMarketingReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchMarketingReport();
+              }}
+            />
+          )}
+
+          {activeTab === 'accounts' && (
+            <AccountsReport
+              reportData={accountsData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchAccountsReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchAccountsReport();
+              }}
+            />
+          )}
+
+          {activeTab === 'forecast' && (
+            <ForecastReport
+              reportData={forecastData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchForecastReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchForecastReport();
+              }}
+              onOpenLeadDrawer={handleOpenLeadDrawerById}
+            />
+          )}
+
+          {activeTab === 'inventory' && (
+            <InventoryReport
+              reportData={inventoryData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchInventoryReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchInventoryReport();
+              }}
+            />
+          )}
+
+          {activeTab === 'win-loss' && (
+            <WinLossReport
+              reportData={winLossData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchWinLossReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchWinLossReport();
+              }}
+              onOpenDrawer={handleOpenLeadDrawer}
+            />
+          )}
+
+          {activeTab === 'product-service-mix' && (
+            <ProductServiceMixReport
+              reportData={productServiceMixData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchProductServiceMixReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchProductServiceMixReport();
+              }}
+            />
+          )}
+
+          {activeTab === 'stale-leads' && (
+            <StaleLeadsReport
+              reportData={staleLeadsData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchStaleLeadsReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchStaleLeadsReport();
+              }}
+              onOpenDrawer={handleOpenLeadDrawer}
+            />
+          )}
+
+          {activeTab === 'recurring-contracts' && (
+            <RecurringContractsReport
+              reportData={recurringContractsData}
+              filterState={filterState}
+              onFilterChange={(updates) => {
+                setFilterState(updates);
+                fetchRecurringContractsReport(updates);
+              }}
+              onClearFilters={() => {
+                resetFilters();
+                fetchRecurringContractsReport();
+              }}
+              onOpenDrawer={(leadId, leadTitle) => handleOpenLeadDrawerById(leadId, leadTitle)}
             />
           )}
 

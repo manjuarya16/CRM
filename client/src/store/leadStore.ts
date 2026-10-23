@@ -243,7 +243,12 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     quantity = 1,
     price?: number,
     warehouseId?: number,
-    warehouseLocationId?: number
+    warehouseLocationId?: number,
+    isRecurring?: boolean,
+    billingCycle?: string,
+    contractDuration?: number,
+    contractStartDate?: string,
+    contractEndDate?: string
   ) => {
     try {
       const res = await API.post(`/leads/${leadId}/products`, {
@@ -252,6 +257,11 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
         price,
         warehouse_id: warehouseId,
         warehouse_location_id: warehouseLocationId,
+        is_recurring: isRecurring,
+        billing_cycle: billingCycle,
+        contract_duration: contractDuration,
+        contract_start_date: contractStartDate,
+        contract_end_date: contractEndDate,
       });
       if (res.data?.success) {
         const fresh = await API.get(`/leads/${leadId}/products`);
