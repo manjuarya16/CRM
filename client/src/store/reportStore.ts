@@ -292,6 +292,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       if (activeFilters.selectedWarehouseId) queryParams.append('warehouse', activeFilters.selectedWarehouseId);
       if (activeFilters.selectedPipelineId) queryParams.append('pipeline', activeFilters.selectedPipelineId);
       if (activeFilters.selectedStageId) queryParams.append('stage', activeFilters.selectedStageId);
+      if (activeFilters.selectedOrg) queryParams.append('organization', activeFilters.selectedOrg);
       if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
       if (activeFilters.selectedProductType) queryParams.append('type', activeFilters.selectedProductType);
 
@@ -601,6 +602,7 @@ export const useReportStore = create<IReportStore>((set, get) => ({
       if (activeFilters.selectedBillingCycle) queryParams.append('cycle', activeFilters.selectedBillingCycle);
       if (activeFilters.selectedContractStatus) queryParams.append('status', activeFilters.selectedContractStatus);
       if (activeFilters.selectedProductType) queryParams.append('product_type', activeFilters.selectedProductType);
+      if (activeFilters.selectedOrg) queryParams.append('organization', activeFilters.selectedOrg);
       if (activeFilters.searchQuery) queryParams.append('search', activeFilters.searchQuery);
 
       const response = await API.get(`/reports/recurring-contracts?${queryParams.toString()}`);

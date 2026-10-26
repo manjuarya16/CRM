@@ -159,6 +159,7 @@ export interface IProductLineItem {
   stage_name: string;
   outcome: 'open' | 'won' | 'lost';
   owner_name: string;
+  organization_id?: number | null;
   organization_name: string;
   warehouse_name: string;
   lead_created_at: string;
@@ -710,6 +711,7 @@ export interface IRecurringContractItem {
   line_id: number;
   lead_id: number;
   lead_title: string;
+  organization_id?: number | null;
   organization_name: string;
   person_name: string;
   owner_name: string;

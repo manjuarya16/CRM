@@ -55,7 +55,8 @@ export function getSubdomain(): SubdomainInfo {
   const parts = hostname.split('.');
   if (parts.length >= 3) {
     const sub = parts[0];
-    if (sub === 'www') {
+    const nonTenantSubdomains = ['www', 'crm', 'app', 'api', 'crmsrv', 'staging', 'mail'];
+    if (nonTenantSubdomains.includes(sub)) {
       return { type: 'root', host: hostname };
     }
     if (sub === 'admin') {

@@ -18,6 +18,9 @@ const getTenantId = (req: Request): number => {
   if ((req as any).user?.organization_id) {
     return Number((req as any).user.organization_id);
   }
+  if ((req as any).tenant?.id) {
+    return Number((req as any).tenant.id);
+  }
   return 1;
 };
 
@@ -213,13 +216,14 @@ export const getProductLinesReport = async (req: Request, res: Response): Promis
     const stage = req.query.stage ? String(req.query.stage) : req.query.stage_id ? String(req.query.stage_id) : null;
     const search = req.query.search ? String(req.query.search) : null;
     const productType = req.query.product_type ? String(req.query.product_type) : req.query.type ? String(req.query.type) : null;
+    const organization = req.query.organization ? String(req.query.organization) : req.query.organization_id ? String(req.query.organization_id) : req.query.org ? String(req.query.org) : null;
     const tenantId = getTenantId(req);
 
     const result = await connection.query(
       `SELECT fn_get_report_product_lines(
-        $1::timestamptz, $2::timestamptz, $3::varchar, $4::varchar, $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::varchar, $10::int
+        $1::timestamptz, $2::timestamptz, $3::varchar, $4::varchar, $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::varchar, $10::int, $11::varchar
       ) AS report_data`,
-      [fromDate, toDate, product, owner, warehouse, pipeline, stage, search, productType, tenantId]
+      [fromDate, toDate, product, owner, warehouse, pipeline, stage, search, productType, tenantId, organization]
     );
 
     const productLinesData = result.rows[0]?.report_data || null;
@@ -643,14 +647,15 @@ export const getRecurringContractsReport = async (req: Request, res: Response): 
     const status = req.query.status ? String(req.query.status) : req.query.contract_status ? String(req.query.contract_status) : null;
     const productType = req.query.product_type ? String(req.query.product_type) : req.query.type ? String(req.query.type) : null;
     const search = req.query.search ? String(req.query.search) : null;
+    const organization = req.query.organization ? String(req.query.organization) : req.query.organization_id ? String(req.query.organization_id) : req.query.org ? String(req.query.org) : null;
     const tenantId = getTenantId(req);
 
     const result = await connection.query(
       `SELECT fn_get_report_recurring_contracts(
         $1::timestamptz, $2::timestamptz, $3::varchar, $4::varchar, 
-        $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::int
+        $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::int, $10::varchar
       ) AS report_data`,
-      [fromDate, toDate, owner, pipeline, cycle, status, productType, search, tenantId]
+      [fromDate, toDate, owner, pipeline, cycle, status, productType, search, tenantId, organization]
     );
 
     const data = result.rows[0]?.report_data || null;

@@ -1841,6 +1841,19 @@ const ReportsPage: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Organization</label>
+                  <select
+                    value={filterState.selectedOrg}
+                    onChange={(e) => setFilterState({ selectedOrg: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Organizations</option>
+                    {filterOptions?.organizations.map((org) => (
+                      <option key={org.id} value={org.name}>{org.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
                   <input
                     type="text"

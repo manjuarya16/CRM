@@ -7,19 +7,29 @@ import { requireAuth } from "@/middleware/auth";
 
 const router = Router();
 
-// Configure multer for file uploads (max 50MB, pdf/images/documents/jmx/txt/csv)
-const upload = multer({
-  dest: path.join(process.cwd(), "uploads", "leads"),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
-});
-
-// Configure multer for general lead attachments (accepts any document/file like .jmx, txt, csv, pdf, etc. max 50MB)
+// Configure multer for streaming lead uploads directly to destination directory
 const leadAttachmentDir = path.join(process.cwd(), "uploads", "leads");
 if (!fs.existsSync(leadAttachmentDir)) {
   fs.mkdirSync(leadAttachmentDir, { recursive: true });
 }
+
+const leadDiskStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, leadAttachmentDir);
+  },
+  filename: (_req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `${Date.now()}-${safeName}`);
+  },
+});
+
+const upload = multer({
+  storage: leadDiskStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+});
+
 const uploadLeadAttachment = multer({
-  dest: leadAttachmentDir,
+  storage: leadDiskStorage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 

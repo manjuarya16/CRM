@@ -362,6 +362,7 @@ const LeadViewPage: React.FC = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingAction, setSubmittingAction] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Forms state for quick actions
   const [modalForm, setModalForm] = useState({
@@ -586,11 +587,21 @@ const LeadViewPage: React.FC = () => {
         if (selectedFile) {
           const formData = new FormData();
           formData.append("file", selectedFile);
+          if (modalForm.comment?.trim()) {
+            formData.append("comment", modalForm.comment.trim());
+          }
+          setUploadProgress(0);
           await API.post(`/leads/${leadId}/upload-file`, formData, {
-            headers: { "Content-Type": "multipart/form-data" },
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total) {
+                const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                setUploadProgress(percent);
+              }
+            },
           });
           Swal.fire("Success", "File uploaded and attached to lead", "success");
           setSelectedFile(null);
+          setUploadProgress(0);
         } else {
           await addActivity({
             title: modalForm.title || "File Attachment",
@@ -1747,6 +1758,20 @@ const getPersonEmail = (person: any): string => {
                           className="w-full px-3 py-1.5 border rounded text-xs"
                         />
                       </div>
+                      {activeModal === "file" && submittingAction && (
+                        <div className="w-full space-y-1 pt-1">
+                          <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+                            <span>Uploading file...</span>
+                            <span className="font-bold text-[#0088cc]">{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="bg-[#0088cc] h-2 rounded-full transition-all duration-150"
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -1868,7 +1893,7 @@ const getPersonEmail = (person: any): string => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          <span>{activeModal === "file" ? "Uploading..." : "Saving..."}</span>
+                          <span>{activeModal === "file" ? (uploadProgress > 0 ? `Uploading (${uploadProgress}%)...` : "Uploading...") : "Saving..."}</span>
                         </>
                       ) : (
                         <span>{activeModal === "file" ? "Upload a File" : "Submit"}</span>
