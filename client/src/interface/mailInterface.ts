@@ -78,6 +78,7 @@ export interface MailState {
   fetchCounts: () => Promise<void>;
   fetchEmailDetails: (id: number) => Promise<EmailItem | null>;
   markAsRead: (id: number, isRead: boolean) => Promise<void>;
+  toggleStarEmail: (id: number, isStarred?: boolean) => Promise<void>;
   removeEmail: (id: number, type?: "trash" | "delete") => Promise<void>;
   bulkMoveToFolder: (folder: string) => Promise<void>;
   bulkDelete: (type?: "trash" | "delete") => Promise<void>;

@@ -455,6 +455,35 @@ export class MailService {
   }
 
   /**
+   * Toggle starred status
+   */
+  async toggleStarStatus(emailId: number, isStarred?: boolean) {
+    const existing = await this.getEmailById(emailId);
+    if (!existing) {
+      throw new Error('Email not found');
+    }
+
+    let folders: string[] = Array.isArray(existing.folders) ? [...existing.folders] : [];
+    const currentlyStarred = folders.includes('starred');
+    const targetStarred = isStarred !== undefined ? Boolean(isStarred) : !currentlyStarred;
+
+    if (targetStarred) {
+      if (!folders.includes('starred')) {
+        folders.push('starred');
+      }
+    } else {
+      folders = folders.filter((f) => f !== 'starred');
+    }
+
+    await pool.query(
+      'UPDATE public.emails SET folders = $1::jsonb, updated_at = NOW() WHERE id = $2',
+      [JSON.stringify(folders), emailId]
+    );
+
+    return { success: true, id: emailId, is_starred: targetStarred, folders };
+  }
+
+  /**
    * Move email to trash or permanently delete
    */
   async deleteEmail(emailId: number, type: 'trash' | 'delete' = 'trash') {

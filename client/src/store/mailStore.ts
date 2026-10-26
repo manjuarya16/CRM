@@ -127,6 +127,51 @@ export const useMailStore = create<MailState>((set, get) => ({
     }
   },
 
+  toggleStarEmail: async (id: number, isStarred?: boolean) => {
+    try {
+      const { emails, currentEmail, activeFolder } = get();
+      const target = emails.find((e) => e.id === id) || (currentEmail?.id === id ? currentEmail : null);
+      const currentlyStarred = Array.isArray(target?.folders) ? target.folders.includes("starred") : false;
+      const nextStarred = isStarred !== undefined ? isStarred : !currentlyStarred;
+
+      // Optimistic state update
+      set({
+        emails: emails.map((e) => {
+          if (e.id === id) {
+            let nextFolders = Array.isArray(e.folders) ? [...e.folders] : [];
+            if (nextStarred && !nextFolders.includes("starred")) {
+              nextFolders.push("starred");
+            } else if (!nextStarred) {
+              nextFolders = nextFolders.filter((f) => f !== "starred");
+            }
+            return { ...e, folders: nextFolders };
+          }
+          return e;
+        }),
+        currentEmail:
+          currentEmail && currentEmail.id === id
+            ? {
+                ...currentEmail,
+                folders: nextStarred
+                  ? Array.from(new Set([...(currentEmail.folders || []), "starred"]))
+                  : (currentEmail.folders || []).filter((f) => f !== "starred"),
+              }
+            : currentEmail,
+      });
+
+      await API.patch(`/mail/${id}/star`, { is_starred: nextStarred });
+      get().fetchCounts();
+
+      // If user is inside the Starred folder and just unstarred an email, refresh the list
+      if (activeFolder === "starred" && !nextStarred) {
+        get().fetchEmails();
+      }
+    } catch (error) {
+      console.error("Failed to toggle star status", error);
+      get().fetchEmails();
+    }
+  },
+
   removeEmail: async (id: number, type: "trash" | "delete" = "trash") => {
     set({ actionLoading: true });
     try {
