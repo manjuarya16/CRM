@@ -254,6 +254,18 @@ router.patch('/:id/read', requireAuth, async (req: Request, res: Response, next:
   }
 });
 
+// PATCH /api/mail/:id/star - Toggle starred status
+router.patch('/:id/star', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    const isStarred = req.body.is_starred !== undefined ? Boolean(req.body.is_starred) : undefined;
+    const result = await mailService.toggleStarStatus(id, isStarred);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PUT /api/mail/:id/link - Update linked lead or person
 router.put('/:id/link', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -635,7 +635,7 @@ const EditLeadPage: React.FC = () => {
 
   const removeProductRow = (index: number) => {
     setProductRows((rows) => rows.filter((_, i) => i !== index));
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const updateProductRow = (
@@ -695,7 +695,7 @@ const EditLeadPage: React.FC = () => {
 
       return updated;
     });
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const selectProduct = (index: number, productId: string) => {
@@ -753,7 +753,7 @@ const EditLeadPage: React.FC = () => {
         .catch(() => {});
     }
 
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const handleSplitProductRow = (
@@ -922,33 +922,34 @@ const EditLeadPage: React.FC = () => {
       }
     });
 
-    // Product rows validation
+    // Product rows validation - At least one product is required
+    const hasAnyValidProduct = productRows.some((r) => r.product_id);
+    if (!hasAnyValidProduct) {
+      fieldErrors.products = "At least one product is required";
+      if (productRows.length > 0) {
+        fieldErrors.product_0 = "Please select a product";
+      }
+    }
+
     productRows.forEach((row, idx) => {
-      const hasAnyInput =
-        row.product_id ||
-        (row.quantity && row.quantity !== "1") ||
-        (row.price && row.price !== "0") ||
-        productRows.length > 1;
-      if (hasAnyInput) {
-        if (!row.product_id) {
-          fieldErrors[`product_${idx}`] = "Please select a product";
+      if (!row.product_id) {
+        fieldErrors[`product_${idx}`] = "Please select a product";
+      }
+      const selectedProd = products.find(
+        (p) => String(p.id) === String(row.product_id),
+      );
+      const isService =
+        selectedProd?.type?.toLowerCase() === "service" ||
+        selectedProd?.type === "Service";
+      if (!isService) {
+        const qty = Number(row.quantity);
+        if (isNaN(qty) || qty <= 0) {
+          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
         }
-        const selectedProd = products.find(
-          (p) => String(p.id) === String(row.product_id),
-        );
-        const isService =
-          selectedProd?.type?.toLowerCase() === "service" ||
-          selectedProd?.type === "Service";
-        if (!isService) {
-          const qty = Number(row.quantity);
-          if (isNaN(qty) || qty <= 0) {
-            fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
-          }
-        }
-        const price = Number(row.price);
-        if (isNaN(price) || price < 0) {
-          fieldErrors[`price_${idx}`] = "Price cannot be negative";
-        }
+      }
+      const price = Number(row.price);
+      if (isNaN(price) || price < 0) {
+        fieldErrors[`price_${idx}`] = "Price cannot be negative";
       }
     });
 
@@ -1779,6 +1780,13 @@ const EditLeadPage: React.FC = () => {
               <span>Add Product</span>
             </button>
           </div>
+
+          {errors.products && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 rounded-xl flex items-center gap-2 text-xs text-red-600 dark:text-red-400 font-medium">
+              <i className="mgc_alert_line text-base shrink-0"></i>
+              <span>{errors.products}</span>
+            </div>
+          )}
 
           {(() => {
             const hasPhysicalProduct = productRows.some((r) => {
