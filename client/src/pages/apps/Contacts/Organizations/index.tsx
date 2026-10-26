@@ -85,6 +85,24 @@ const OrganizationsPage: React.FC = () => {
     fetchOrgs();
   };
 
+  const handleClearSearch = () => {
+    setSearch("");
+    setPage(1);
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await useOrganizationStore.getState().fetchOrganizations(1, perPage, "");
+        const list = res?.data || [];
+        setOrganizations(list);
+        setTotal(res?.total !== undefined ? res.total : list.length);
+      } catch {
+        setOrganizations([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  };
+
   const formatDate = (dateStr: string | undefined): string => {
     if (!dateStr) return "-";
     try {
@@ -372,8 +390,18 @@ const OrganizationsPage: React.FC = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search organizations..."
-                className="pl-9 pr-3.5 py-2 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 w-44 sm:w-60 dark:text-gray-200 placeholder-gray-400 transition"
+                className="pl-9 pr-8 py-2 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 w-44 sm:w-60 dark:text-gray-200 placeholder-gray-400 transition"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  title="Clear search"
+                >
+                  <i className="mgc_close_line text-base"></i>
+                </button>
+              )}
             </div>
             <button
               type="submit"
@@ -381,6 +409,16 @@ const OrganizationsPage: React.FC = () => {
             >
               Filter
             </button>
+            {search && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 font-semibold text-xs sm:text-sm rounded-xl border border-gray-200 dark:border-gray-600 transition shadow-2xs"
+                title="Clear filter"
+              >
+                Clear
+              </button>
+            )}
           </form>
 
           {/* Right side: View Mode, Per Page & Pagination controls */}
@@ -415,15 +453,15 @@ const OrganizationsPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Per Page:</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                className="h-8 pl-3 pr-8 min-w-[72px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>

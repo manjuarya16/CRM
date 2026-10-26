@@ -183,33 +183,33 @@ export class PersonService {
       if (params.email && params.email.trim().includes('@')) {
         const emailVal = params.email.trim().toLowerCase();
         const { rows } = await client.query(
-          'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
-          [emailVal]
+          'SELECT id, name, organization_id FROM public.persons WHERE ($2::integer IS NULL OR id <> $2::integer) AND emails::text ILIKE $1 LIMIT 1',
+          ['%' + emailVal + '%', personId]
         );
-        const duplicate = rows.find((r: any) => !personId || r.id !== personId);
-        if (duplicate) {
+        if (rows.length > 0) {
           return {
             isDuplicate: true,
             field: 'email',
-            message: `Email address "${emailVal}" is already registered to another contact (${duplicate.name}).`,
-            existingPerson: duplicate,
+            message: `Email address "${emailVal}" is already registered to another contact (${rows[0].name}).`,
+            existingPerson: rows[0],
           };
         }
       }
 
       if (params.phone && params.phone.trim().length >= 3) {
         const phoneVal = params.phone.trim();
+        const digits = phoneVal.replace(/[^0-9]/g, '');
+        const searchPattern = digits.length >= 7 ? '%' + digits + '%' : '%' + phoneVal + '%';
         const { rows } = await client.query(
-          'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
-          [phoneVal]
+          'SELECT id, name, organization_id FROM public.persons WHERE ($2::integer IS NULL OR id <> $2::integer) AND contact_numbers::text ILIKE $1 LIMIT 1',
+          [searchPattern, personId]
         );
-        const duplicate = rows.find((r: any) => !personId || r.id !== personId);
-        if (duplicate) {
+        if (rows.length > 0) {
           return {
             isDuplicate: true,
             field: 'phone',
-            message: `Contact number "${phoneVal}" is already registered to another contact (${duplicate.name}).`,
-            existingPerson: duplicate,
+            message: `Contact number "${phoneVal}" is already registered to another contact (${rows[0].name}).`,
+            existingPerson: rows[0],
           };
         }
       }
@@ -287,29 +287,48 @@ export class PersonService {
         }
       }
 
+      // Intra-array duplicate check for emails
+      const seenEmailSet = new Set<string>();
+      for (const emailVal of emailList) {
+        if (seenEmailSet.has(emailVal)) {
+          throw new ApiError(400, `Duplicate email address "${emailVal}" is not allowed.`);
+        }
+        seenEmailSet.add(emailVal);
+      }
+
+      // Intra-array duplicate check for phone numbers
+      const seenPhoneSet = new Set<string>();
+      for (const phoneVal of phoneList) {
+        const digits = phoneVal.replace(/[^0-9]/g, '');
+        if (digits && seenPhoneSet.has(digits)) {
+          throw new ApiError(400, `Duplicate contact number "${phoneVal}" is not allowed.`);
+        }
+        if (digits) seenPhoneSet.add(digits);
+      }
+
       client = await pool.connect();
 
-      // Validate Duplicate Emails
+      // Validate Duplicate Emails against other persons
       for (const emailVal of emailList) {
         const { rows: dupEmails } = await client.query(
-          'SELECT * FROM public.fn_find_person_by_contact($1, null, null)',
-          [emailVal]
+          'SELECT id, name FROM public.persons WHERE ($2::integer IS NULL OR id <> $2::integer) AND emails::text ILIKE $1 LIMIT 1',
+          ['%' + emailVal + '%', personId]
         );
-        const duplicate = dupEmails.find((r: any) => !personId || r.id !== personId);
-        if (duplicate) {
-          throw new ApiError(400, `Email address "${emailVal}" is already registered to another contact (${duplicate.name}).`);
+        if (dupEmails.length > 0) {
+          throw new ApiError(400, `Email address "${emailVal}" is already registered to another contact (${dupEmails[0].name}).`);
         }
       }
 
-      // Validate Duplicate Phones
+      // Validate Duplicate Phones against other persons
       for (const phoneVal of phoneList) {
+        const digits = phoneVal.replace(/[^0-9]/g, '');
+        const searchPattern = digits.length >= 7 ? '%' + digits + '%' : '%' + phoneVal + '%';
         const { rows: dupPhones } = await client.query(
-          'SELECT * FROM public.fn_find_person_by_contact(null, $1, null)',
-          [phoneVal]
+          'SELECT id, name FROM public.persons WHERE ($2::integer IS NULL OR id <> $2::integer) AND contact_numbers::text ILIKE $1 LIMIT 1',
+          [searchPattern, personId]
         );
-        const duplicate = dupPhones.find((r: any) => !personId || r.id !== personId);
-        if (duplicate) {
-          throw new ApiError(400, `Contact number "${phoneVal}" is already registered to another contact (${duplicate.name}).`);
+        if (dupPhones.length > 0) {
+          throw new ApiError(400, `Contact number "${phoneVal}" is already registered to another contact (${dupPhones[0].name}).`);
         }
       }
 

@@ -261,8 +261,8 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
       {/* Analytics Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ReportPanel
-          title="Leads Created Per Week"
-          subtitle="Week starting Monday · Date basis: Created date"
+          title={reportData?.weeks && reportData.weeks.length > 0 && reportData.weeks[0].label.includes("-") ? "Leads Created Per Week" : "Leads Created Timeline"}
+          subtitle={reportData?.weeks && reportData.weeks.length > 0 && reportData.weeks[0].label.includes("-") ? "Weekly creation (Monday - Sunday) · Date basis: Created date" : "Daily creation · Date basis: Created date"}
           className="lg:col-span-2"
         >
           <VerticalColumnsChart items={weeklyColumnItems} emptyMessage="No leads created in this period" />

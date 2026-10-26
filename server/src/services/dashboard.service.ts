@@ -283,8 +283,9 @@ export class DashboardService {
           }
         });
       } else {
-        const curr = new Date(startDateObj);
-        while (curr <= endDateObj) {
+        const curr = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+        const endDay = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate());
+        while (curr <= endDay) {
           const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, "0")}-${String(curr.getDate()).padStart(2, "0")}`;
           const label = curr.toLocaleString("en-US", { month: "short", day: "numeric" });
           dateSeriesMap[dStr] = { date: dStr, label, won_revenue: 0, lost_revenue: 0, leads_count: 0, won_count: 0, lost_count: 0 };
@@ -368,16 +369,70 @@ export class DashboardService {
         LIMIT 5`,
         [startDateStr, endDateStr]
       );
+      const extractContact = (raw: any): string => {
+        if (!raw) return "";
+        let parsed = raw;
+        if (typeof raw === "string") {
+          const trimmed = raw.trim();
+          if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+            try { parsed = JSON.parse(trimmed); } catch { return trimmed; }
+          } else {
+            return trimmed;
+          }
+        }
+        if (typeof parsed === "string") {
+          try { parsed = JSON.parse(parsed); } catch { return parsed; }
+        }
+        if (Array.isArray(parsed)) {
+          const first = parsed[0];
+          if (!first) return "";
+          if (typeof first === "string") return first;
+          if (typeof first === "object" && first !== null) {
+            return first.value || first.phone || first.number || first.contact || "";
+          }
+          return String(first);
+        }
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed.value || parsed.phone || parsed.number || parsed.contact || "";
+        }
+        return String(parsed);
+      };
+
+      const extractEmail = (raw: any): string => {
+        if (!raw) return "";
+        let parsed = raw;
+        if (typeof raw === "string") {
+          const trimmed = raw.trim();
+          if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+            try { parsed = JSON.parse(trimmed); } catch { return trimmed; }
+          } else {
+            return trimmed;
+          }
+        }
+        if (typeof parsed === "string") {
+          try { parsed = JSON.parse(parsed); } catch { return parsed; }
+        }
+        if (Array.isArray(parsed)) {
+          const first = parsed[0];
+          if (!first) return "";
+          if (typeof first === "string") return first;
+          if (typeof first === "object" && first !== null) {
+            return first.value || first.email || "";
+          }
+          return String(first);
+        }
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed.value || parsed.email || "";
+        }
+        return String(parsed);
+      };
+
       const topPersons = topPersonsRes.rows.map((r: any) => {
-        let emailStr = "";
-        try {
-          const em = typeof r.emails === "string" ? JSON.parse(r.emails) : r.emails;
-          emailStr = Array.isArray(em) ? em[0]?.value : "";
-        } catch { emailStr = ""; }
         return {
           id: r.id,
           name: r.name,
-          email: emailStr,
+          email: extractEmail(r.emails),
+          contact_number: extractContact(r.contact_numbers),
           deals_count: Number(r.deals_count) || 0,
           revenue: Number(r.revenue) || 0,
         };

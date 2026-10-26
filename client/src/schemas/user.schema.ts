@@ -3,7 +3,17 @@ import { zodResolver } from "@/utils/zodResolver";
 
 export const userFormSchema = z
   .object({
-    name: z.string().trim().min(1, "Name is required").max(191, "Name is too long"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(191, "Name is too long")
+      .refine((val) => !/^[0-9\W_]+$/.test(val), {
+        message: "Name cannot consist of only special characters or numbers",
+      })
+      .refine((val) => /[a-zA-Z]/.test(val), {
+        message: "Name must contain at least one letter",
+      }),
     email: z.string().trim().email("Invalid email address").optional().or(z.literal("")),
     password: z
       .string()

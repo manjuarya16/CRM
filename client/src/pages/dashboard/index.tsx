@@ -27,6 +27,80 @@ const getInitials = (name: string) => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+const formatContactNumber = (raw: any): string => {
+  if (!raw) return "";
+  let parsed = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return trimmed;
+      }
+    } else {
+      return trimmed;
+    }
+  }
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return parsed;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const first = parsed[0];
+    if (!first) return "";
+    if (typeof first === "string") return first;
+    if (typeof first === "object" && first !== null) {
+      return first.value || first.phone || first.number || first.contact || "";
+    }
+    return String(first);
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    return parsed.value || parsed.phone || parsed.number || parsed.contact || "";
+  }
+  return String(parsed);
+};
+
+const formatEmail = (raw: any): string => {
+  if (!raw) return "";
+  let parsed = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return trimmed;
+      }
+    } else {
+      return trimmed;
+    }
+  }
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return parsed;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const first = parsed[0];
+    if (!first) return "";
+    if (typeof first === "string") return first;
+    if (typeof first === "object" && first !== null) {
+      return first.value || first.email || "";
+    }
+    return String(first);
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    return parsed.value || parsed.email || "";
+  }
+  return String(parsed);
+};
+
 const pastelAvatarStyles = [
   { bg: "#FED7AA", text: "#9A3412" }, // Orange pastel
   { bg: "#FEF08A", text: "#854D0E" }, // Yellow pastel
@@ -237,11 +311,9 @@ export const DashboardPage: React.FC = () => {
     stroke: { show: true, width: 2, colors: ["transparent"] },
     xaxis: {
       categories: timelinePoints.map((t) => t.label || t.date),
-      tickAmount: timelinePoints.length > 10 ? 6 : undefined,
       labels: {
         rotate: -45,
         rotateAlways: false,
-        hideOverlappingLabels: true,
         style: { colors: "#64748b", fontSize: "10px" },
       },
     },
@@ -727,6 +799,9 @@ export const DashboardPage: React.FC = () => {
             <div className="flex flex-col">
               {(data.top_persons || []).slice(0, 5).map((person, idx) => {
                 const avatarStyle = pastelAvatarStyles[idx % pastelAvatarStyles.length];
+                const contactNum = formatContactNumber((person as any).contact_number || (person as any).contact_numbers);
+                const emailVal = formatEmail((person as any).email || (person as any).emails);
+
                 return (
                   <div
                     key={idx}
@@ -741,13 +816,30 @@ export const DashboardPage: React.FC = () => {
                     </div>
 
                     {/* Person Details */}
-                    <div className="flex flex-col truncate">
+                    <div className="flex flex-col min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
                         {person.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {person.email || "No email"}
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {contactNum && (
+                          <span className="inline-flex items-center gap-1 truncate text-gray-700 dark:text-gray-300 font-medium">
+                            <i className="mgc_phone_line text-[11px] text-[#0088cc]"></i>
+                            <span>{contactNum}</span>
+                          </span>
+                        )}
+                        {contactNum && emailVal && (
+                          <span className="text-gray-300 dark:text-gray-600">•</span>
+                        )}
+                        {emailVal && (
+                          <span className="inline-flex items-center gap-1 truncate">
+                            <i className="mgc_mail_line text-[11px]"></i>
+                            <span className="truncate">{emailVal}</span>
+                          </span>
+                        )}
+                        {!contactNum && !emailVal && (
+                          <span>No contact details</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

@@ -9,7 +9,17 @@ export const webFormAttributeSchema = z.object({
 });
 export const saveWebFormSchema = z.object({
   form_id: z.string().min(1, 'Form ID is required').max(255),
-  title: z.string().min(1, 'Title is required').max(255),
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Title is required')
+    .max(255)
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: 'Webform title cannot consist of only special characters or numbers',
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: 'Webform title must contain at least one letter',
+    }),
   description: z.string().nullable().optional(),
   submit_button_label: z.string().default('Submit'),
   submit_success_action: z.enum(['message', 'redirect']).default('message'),

@@ -205,6 +205,21 @@ const EditPersonPage: React.FC = () => {
     }));
   };
 
+  const validatePersonName = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "Person name is required.";
+    if (/^[0-9\W_]+$/.test(trimmed)) {
+      return "Person name cannot consist of only numbers or special characters.";
+    }
+    if (!/^[a-zA-Z\s.'-]+$/.test(trimmed)) {
+      return "Person name can only contain letters, spaces, hyphens, and apostrophes.";
+    }
+    if (!/[a-zA-Z]/.test(trimmed)) {
+      return "Person name must contain at least one letter.";
+    }
+    return "";
+  };
+
   const handleContactChange = (
     index: number,
     field: "label" | "value",
@@ -226,7 +241,9 @@ const EditPersonPage: React.FC = () => {
       cleanVal = startsWithPlus ? "+" + digitsAndSymbols : digitsAndSymbols;
 
       const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-      if (digitsOnly.length > 15) {
+      if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
+        errorMsg = "Contact number cannot consist of only zeros.";
+      } else if (digitsOnly.length > 15) {
         errorMsg = "Mobile number cannot exceed 15 digits.";
       }
     }
@@ -244,8 +261,22 @@ const EditPersonPage: React.FC = () => {
     }
   };
 
-  const checkDuplicateEmail = async (val: string) => {
+  const checkDuplicateEmail = async (val: string, currentIndex?: number) => {
     if (!val || !val.trim().includes("@")) return;
+    const cleanVal = val.trim().toLowerCase();
+
+    // Check intra-form duplicates
+    const isLocalDuplicate = formData.emails.some(
+      (e, idx) => (currentIndex === undefined || idx !== currentIndex) && e.value.trim().toLowerCase() === cleanVal
+    );
+    if (isLocalDuplicate) {
+      setErrors((prev) => ({
+        ...prev,
+        emails: `Duplicate email address "${cleanVal}" is already entered. Each email must be unique.`,
+      }));
+      return;
+    }
+
     try {
       const data = await usePersonStore.getState().checkDuplicate(val.trim(), undefined, id);
       if (data?.isDuplicate) {
@@ -256,10 +287,17 @@ const EditPersonPage: React.FC = () => {
     }
   };
 
-  const checkDuplicateContact = async (val: string) => {
+  const checkDuplicateContact = async (val: string, currentIndex?: number) => {
     if (!val || val.trim() === "") return;
     const cleanVal = val.trim();
     const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
+    if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: "Contact number cannot consist of only zeros.",
+      }));
+      return;
+    }
     if (digitsOnly.length < 7) {
       setErrors((prev) => ({
         ...prev,
@@ -274,6 +312,21 @@ const EditPersonPage: React.FC = () => {
       }));
       return;
     }
+
+    // Check intra-form duplicates
+    const isLocalDuplicate = formData.contact_numbers.some((c, idx) => {
+      if (currentIndex !== undefined && idx === currentIndex) return false;
+      const otherDigits = c.value.replace(/[^0-9]/g, "");
+      return otherDigits.length >= 7 && otherDigits === digitsOnly;
+    });
+    if (isLocalDuplicate) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: `Duplicate mobile number "${cleanVal}" is already entered. Each mobile number must be unique.`,
+      }));
+      return;
+    }
+
     try {
       const data = await usePersonStore.getState().checkDuplicate(undefined, cleanVal, id);
       if (data?.isDuplicate) {
@@ -288,7 +341,14 @@ const EditPersonPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setErrors({});
+
+    const nameErr = validatePersonName(formData.name);
+    if (nameErr) {
+      setErrors((prev) => ({ ...prev, name: nameErr }));
+      return;
+    }
 
     const payloadToValidate = {
       name: formData.name.trim(),
@@ -320,8 +380,14 @@ const EditPersonPage: React.FC = () => {
     try {
       setSaving(true);
       await usePersonStore.getState().savePerson(payload as any, id);
-      await useTagStore.getState().saveEntityTags("person", id!, selectedTagIds);
-      Swal.fire({
+      if (id && selectedTagIds.length > 0) {
+        try {
+          await useTagStore.getState().saveEntityTags("person", id, selectedTagIds);
+        } catch (tagErr) {
+          console.warn("Failed to attach tags to person:", tagErr);
+        }
+      }
+      await Swal.fire({
         icon: "success",
         title: "Success",
         text: "Person updated successfully",
@@ -455,8 +521,18 @@ const EditPersonPage: React.FC = () => {
                 type="text"
                 value={formData.name}
                 onChange={(e) => {
-                  setFormData({ ...formData, name: e.target.value });
-                  if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                  const val = e.target.value;
+                  setFormData({ ...formData, name: val });
+                  if (val.trim()) {
+                    const err = validatePersonName(val);
+                    setErrors((prev) => ({ ...prev, name: err }));
+                  } else {
+                    setErrors((prev) => ({ ...prev, name: "" }));
+                  }
+                }}
+                onBlur={(e) => {
+                  const err = validatePersonName(e.target.value);
+                  setErrors((prev) => ({ ...prev, name: err }));
                 }}
                 placeholder="e.g. John Doe"
                 className={`${inputCls} ${errors.name ? "!border-red-500 !ring-red-500/20" : ""}`}
@@ -501,7 +577,7 @@ const EditPersonPage: React.FC = () => {
                         onChange={(e) =>
                           handleEmailChange(index, "value", e.target.value)
                         }
-                        onBlur={() => checkDuplicateEmail(emailItem.value)}
+                        onBlur={() => checkDuplicateEmail(emailItem.value, index)}
                         placeholder="john@example.com"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />
@@ -564,7 +640,7 @@ const EditPersonPage: React.FC = () => {
                         onChange={(e) =>
                           handleContactChange(index, "value", e.target.value)
                         }
-                        onBlur={() => checkDuplicateContact(contactItem.value)}
+                        onBlur={() => checkDuplicateContact(contactItem.value, index)}
                         placeholder="+91 98765 43210"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />

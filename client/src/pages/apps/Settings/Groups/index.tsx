@@ -524,7 +524,7 @@ const GroupsPage: React.FC = () => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                className="per-page-select pl-2.5 pr-8 min-w-[5.25rem] py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>

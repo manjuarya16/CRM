@@ -2,7 +2,17 @@ import { z } from "zod";
 import { zodResolver } from "@/utils/zodResolver";
 
 export const webhookSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(255),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Webhook name is required")
+    .max(255)
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: "Webhook name cannot consist of only special characters or numbers",
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: "Webhook name must contain at least one letter",
+    }),
   entity_type: z.string().trim().min(1, "Entity type is required"),
   description: z.string().nullable().optional(),
   method: z.enum(["GET", "POST", "PUT", "DELETE"]).default("POST"),
