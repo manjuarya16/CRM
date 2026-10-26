@@ -9,8 +9,6 @@ import { ZodError } from "zod";
 
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { usePermission } from "@/hooks/usePermission";
-import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
-import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const UsersPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -35,7 +33,7 @@ const UsersPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table");
 
   const AVATAR_COLORS = [
     "bg-blue-600 text-white",
@@ -79,6 +77,7 @@ const UsersPage: React.FC = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   useEffect(() => {
     fetchUsers();
@@ -86,7 +85,9 @@ const UsersPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (id && users.length > 0) {
+    if (location.pathname.includes("/create")) {
+      openCreateModal();
+    } else if (id && users.length > 0) {
       const u = users.find((x) => String(x.id) === String(id));
       if (u) {
         if (location.pathname.includes("/view")) {
@@ -780,13 +781,14 @@ const UsersPage: React.FC = () => {
               </Link>
             )}
             {canEdit && (
-              <Link
-                to={`/settings/users/edit/${user.id}`}
+              <button
+                type="button"
+                onClick={() => openEditModal(user)}
                 className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
                 title="Edit User"
               >
                 <i className="mgc_edit_line text-sm"></i>
-              </Link>
+              </button>
             )}
             {canDelete && (
               <button
@@ -831,32 +833,33 @@ const UsersPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               onClick={handleBulkDelete}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_delete_line text-base"></i>
+              <i className="mgc_delete_line text-sm"></i>
               <span>Delete ({selectedIds.length})</span>
             </button>
           )}
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
           >
-            <i className="mgc_download_line text-base text-gray-500 dark:text-gray-400"></i>
+            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
             <span>Export</span>
           </button>
           {canCreate && (
-            <Link
-              to="/settings/users/create"
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_add_line text-base"></i>
+              <i className="mgc_add_line text-sm"></i>
               <span>Create User</span>
-            </Link>
+            </button>
           )}
         </div>
       </div>
@@ -890,7 +893,7 @@ const UsersPage: React.FC = () => {
                 setSelectedRole(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[125px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Roles</option>
               {flattenedRoles.map((r) => (
@@ -907,7 +910,7 @@ const UsersPage: React.FC = () => {
                 setSelectedGroup(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[125px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Groups</option>
               {groups.map((g) => (
@@ -924,7 +927,7 @@ const UsersPage: React.FC = () => {
                 setSelectedStatus(e.target.value);
                 setPage(1);
               }}
-              className="px-2.5 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200"
+              className="pl-3 pr-8 min-w-[115px] py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -934,23 +937,44 @@ const UsersPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <ViewModeSwitcher
-              viewMode={viewMode}
-              onViewModeChange={(m) => {
-                setHasUserToggled(true);
-                setViewMode(m);
-              }}
-            />
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                className="per-page-select pl-2.5 pr-8 min-w-[5.25rem] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -959,12 +983,11 @@ const UsersPage: React.FC = () => {
             </div>
 
             {/* Quick pagination arrows in toolbar */}
-            <div className="h-8 flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-2xs shrink-0">
+            <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
-                type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-xs"></i>
@@ -973,10 +996,9 @@ const UsersPage: React.FC = () => {
                 {page}/{totalPages}
               </span>
               <button
-                type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-xs"></i>
@@ -1136,13 +1158,13 @@ const UsersPage: React.FC = () => {
                             </Link>
                           )}
                           {canEdit && (
-                            <Link
-                              to={`/settings/users/edit/${user.id}`}
+                            <button
+                              onClick={() => openEditModal(user)}
                               className="inline-flex items-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 p-1.5 rounded-lg transition-colors"
                               title="Edit User"
                             >
                               <i className="mgc_edit_line text-base"></i>
-                            </Link>
+                            </button>
                           )}
                           {canDelete && (
                             <button
@@ -1263,19 +1285,30 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Password {editingUser ? "(Leave blank to keep)" : <span className="text-red-500">*</span>}
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.password
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      className={`w-full px-3.5 pr-10 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                        errors.password
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                    </button>
+                  </div>
                   {errors.password && (
                     <p className="mt-1 text-xs text-red-500 font-medium">{errors.password}</p>
                   )}
@@ -1285,55 +1318,95 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Confirm Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.confirm_password}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        confirm_password: e.target.value,
-                      })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                      errors.confirm_password
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.confirm_password}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          confirm_password: e.target.value,
+                        })
+                      }
+                      className={`w-full px-3.5 pr-10 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                        errors.confirm_password
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                    </button>
+                  </div>
                   {errors.confirm_password && (
                     <p className="mt-1 text-xs text-red-500 font-medium">{errors.confirm_password}</p>
                   )}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-                  Role <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.role_id}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      role_id: Number(e.target.value),
-                    })
-                  }
-                  className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
-                    errors.role_id
-                      ? "border-red-500 focus:border-red-500"
-                      : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
-                  }`}
-                >
-                  {flattenedRoles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {"\u00A0\u00A0".repeat(r.__depth)}{r.__depth > 0 ? "└─ " : ""}{r.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.role_id && (
-                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.role_id}</p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                    Role <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.role_id}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        role_id: Number(e.target.value),
+                      })
+                    }
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.role_id
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
+                  >
+                    {flattenedRoles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {"\u00A0\u00A0".repeat(r.__depth)}{r.__depth > 0 ? "└─ " : ""}{r.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.role_id && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.role_id}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                    View Permission <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.view_permission}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        view_permission: e.target.value,
+                      })
+                    }
+                    className={`w-full px-3.5 py-2 text-sm bg-gray-50 dark:bg-gray-700 border rounded-lg focus:outline-none ${
+                      errors.view_permission
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-600 focus:border-[#0088cc]"
+                    }`}
+                  >
+                    <option value="global">Global (Access all data)</option>
+                    <option value="group">Group (Access group data)</option>
+                    <option value="individual">Individual (Only own data)</option>
+                  </select>
+                  {errors.view_permission && (
+                    <p className="mt-1 text-xs text-red-500 font-medium">{errors.view_permission}</p>
+                  )}
+                </div>
               </div>
 
               {/* Status Toggle */}
@@ -1503,12 +1576,15 @@ const UsersPage: React.FC = () => {
 
               {/* Modal Footer Actions */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                <Link
-                  to={`/settings/users/edit/${viewingUser.id}`}
+                <button
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    openEditModal(viewingUser);
+                  }}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <i className="mgc_edit_line text-sm"></i> Edit User
-                </Link>
+                </button>
                 <button
                   onClick={() => setIsViewModalOpen(false)}
                   className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"

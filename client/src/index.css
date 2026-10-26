@@ -271,3 +271,15 @@ a[data-variant="secondary"] {
 .kanban-column-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(156, 163, 175, 0.6);
 }
+
+/* Ensure select elements have enough room for both digits and dropdown indicator */
+select {
+  padding-right: 2rem !important;
+  background-position: right 0.5rem center !important;
+}
+
+.per-page-select {
+  min-width: 5.25rem !important;
+  padding-right: 1.75rem !important;
+  background-position: right 0.5rem center !important;
+}

@@ -42,8 +42,56 @@ const CreateActivityPage: React.FC = () => {
     }).catch(() => {});
   }, []);
 
+  const getMinDateTime = () => {
+    const d = new Date();
+    d.setSeconds(0, 0);
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+  };
+
+  const validateTitle = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "Title is required.";
+    if (/^[0-9\W_]+$/.test(trimmed)) {
+      return "Title cannot consist of only special characters or numbers.";
+    }
+    if (!/[a-zA-Z]/.test(trimmed)) {
+      return "Title must contain at least one letter.";
+    }
+    return "";
+  };
+
+  const validateScheduleTo = (to: string, from?: string): string => {
+    if (!to) return "";
+    const toDate = new Date(to);
+    if (isNaN(toDate.getTime())) return "Please enter a valid date and time.";
+    if (toDate.getTime() < Date.now() - 60000) {
+      return "Schedule To date/time cannot be in the past.";
+    }
+    if (from) {
+      const fromDate = new Date(from);
+      if (!isNaN(fromDate.getTime()) && toDate.getTime() < fromDate.getTime()) {
+        return "Schedule To date/time must be after Schedule From.";
+      }
+    }
+    return "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const titleErr = validateTitle(formData.title);
+    const schedErr = validateScheduleTo(formData.schedule_to, formData.schedule_from);
+    if (titleErr || schedErr) {
+      setErrors((prev) => ({
+        ...prev,
+        ...(titleErr ? { title: titleErr } : {}),
+        ...(schedErr ? { schedule_to: schedErr } : {}),
+      }));
+      Swal.fire("Validation Error", titleErr || schedErr, "warning");
+      return;
+    }
+
     const validation = activitySchema.safeParse({
       title: formData.title.trim(),
       type: formData.type,
@@ -187,8 +235,18 @@ const CreateActivityPage: React.FC = () => {
                 type="text"
                 value={formData.title}
                 onChange={(e) => {
-                  setFormData({ ...formData, title: e.target.value });
-                  if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
+                  const val = e.target.value;
+                  setFormData({ ...formData, title: val });
+                  if (val.trim()) {
+                    const err = validateTitle(val);
+                    setErrors((prev) => ({ ...prev, title: err }));
+                  } else {
+                    setErrors((prev) => ({ ...prev, title: "" }));
+                  }
+                }}
+                onBlur={(e) => {
+                  const err = validateTitle(e.target.value);
+                  setErrors((prev) => ({ ...prev, title: err }));
                 }}
                 placeholder="e.g. Call with client regarding new proposal"
                 className={`${inputCls} ${errors.title ? "!border-red-500 !ring-red-500/20" : ""}`}
@@ -247,8 +305,16 @@ const CreateActivityPage: React.FC = () => {
               <label className={labelCls}>Schedule From</label>
               <input
                 type="datetime-local"
+                min={getMinDateTime()}
                 value={formData.schedule_from}
-                onChange={(e) => setFormData({ ...formData, schedule_from: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, schedule_from: val });
+                  if (formData.schedule_to) {
+                    const err = validateScheduleTo(formData.schedule_to, val);
+                    setErrors((prev) => ({ ...prev, schedule_to: err }));
+                  }
+                }}
                 className={inputCls}
               />
             </div>
@@ -258,10 +324,23 @@ const CreateActivityPage: React.FC = () => {
               <label className={labelCls}>Schedule To</label>
               <input
                 type="datetime-local"
+                min={formData.schedule_from || getMinDateTime()}
                 value={formData.schedule_to}
-                onChange={(e) => setFormData({ ...formData, schedule_to: e.target.value })}
-                className={inputCls}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, schedule_to: val });
+                  const err = validateScheduleTo(val, formData.schedule_from);
+                  setErrors((prev) => ({ ...prev, schedule_to: err }));
+                }}
+                onBlur={(e) => {
+                  const err = validateScheduleTo(e.target.value, formData.schedule_from);
+                  setErrors((prev) => ({ ...prev, schedule_to: err }));
+                }}
+                className={`${inputCls} ${errors.schedule_to ? "!border-red-500 !ring-red-500/20" : ""}`}
               />
+              {errors.schedule_to && (
+                <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.schedule_to}</p>
+              )}
             </div>
 
             {/* Link Lead */}

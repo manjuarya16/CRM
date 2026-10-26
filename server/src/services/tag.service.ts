@@ -33,6 +33,12 @@ export class TagService {
   public static async save(data: { name: string; color?: string; user_id?: any }, id?: any, userId?: any) {
     const numId = toNumberParam(id);
     const numUserId = toNumberParam(userId || data.user_id);
+    if (data.name !== undefined) {
+      const trimmed = String(data.name).trim();
+      if (!trimmed || /^[0-9\W_]+$/.test(trimmed) || !/[a-zA-Z]/.test(trimmed)) {
+        throw new Error('Tag name must contain at least one letter and cannot be only special characters or numbers');
+      }
+    }
     try {
       const result = await pool.query('SELECT save_tag($1, $2, $3, $4) AS data', [
         data.name,

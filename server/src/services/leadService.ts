@@ -262,20 +262,32 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
     if (lead && Array.isArray(products) && products.length > 0) {
       for (const p of products) {
         if (!p.product_id) continue;
+        const pQty = Math.max(1, parseInt(String(p.quantity), 10) || 1);
+        const pPrice = p.price !== undefined && p.price !== null && p.price !== "" ? Number(p.price) : null;
+        const pWarehouse = p.warehouse_id ? Number(p.warehouse_id) : null;
+        const pWarehouseLoc = p.warehouse_location_id ? Number(p.warehouse_location_id) : null;
+        const pRecurring = Boolean(p.is_recurring === true || p.is_recurring === "true" || p.is_recurring === 1 || p.is_recurring === "1");
+        const pBilling = pRecurring && p.billing_cycle ? String(p.billing_cycle).trim() : null;
+        const pDuration = pRecurring ? Math.max(1, parseInt(String(p.contract_duration), 10) || 12) : 1;
+        const rawStart = p.contract_start_date || p.start_date;
+        const rawEnd = p.contract_end_date || p.end_date;
+        const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
+        const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             lead.id,
             Number(p.product_id),
-            Number(p.quantity) || 1,
-            p.price ? Number(p.price) : null,
-            p.warehouse_id ? Number(p.warehouse_id) : null,
-            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
-            p.is_recurring === true || p.is_recurring === "true",
-            p.billing_cycle || null,
-            p.contract_duration ? Number(p.contract_duration) : 1,
-            p.contract_start_date || p.start_date || null,
-            p.contract_end_date || p.end_date || null,
+            pQty,
+            pPrice,
+            pWarehouse,
+            pWarehouseLoc,
+            pRecurring,
+            pBilling,
+            pDuration,
+            pStartDate,
+            pEndDate,
           ]
         );
       }
@@ -426,20 +438,32 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       await connection.query("SELECT public.fn_clear_lead_products($1)", [id]);
       for (const p of products) {
         if (!p.product_id) continue;
+        const pQty = Math.max(1, parseInt(String(p.quantity), 10) || 1);
+        const pPrice = p.price !== undefined && p.price !== null && p.price !== "" ? Number(p.price) : null;
+        const pWarehouse = p.warehouse_id ? Number(p.warehouse_id) : null;
+        const pWarehouseLoc = p.warehouse_location_id ? Number(p.warehouse_location_id) : null;
+        const pRecurring = Boolean(p.is_recurring === true || p.is_recurring === "true" || p.is_recurring === 1 || p.is_recurring === "1");
+        const pBilling = pRecurring && p.billing_cycle ? String(p.billing_cycle).trim() : null;
+        const pDuration = pRecurring ? Math.max(1, parseInt(String(p.contract_duration), 10) || 12) : 1;
+        const rawStart = p.contract_start_date || p.start_date;
+        const rawEnd = p.contract_end_date || p.end_date;
+        const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
+        const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             id,
             Number(p.product_id),
-            Number(p.quantity) || 1,
-            p.price ? Number(p.price) : null,
-            p.warehouse_id ? Number(p.warehouse_id) : null,
-            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
-            p.is_recurring === true || p.is_recurring === "true",
-            p.billing_cycle || null,
-            p.contract_duration ? Number(p.contract_duration) : 1,
-            p.contract_start_date || p.start_date || null,
-            p.contract_end_date || p.end_date || null,
+            pQty,
+            pPrice,
+            pWarehouse,
+            pWarehouseLoc,
+            pRecurring,
+            pBilling,
+            pDuration,
+            pStartDate,
+            pEndDate,
           ]
         );
       }
@@ -1117,26 +1141,56 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
 
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
-    const actRes = await connection.query(
-      "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-      [
-        file.originalname,
-        "file",
-        fileUrl,
-        null,
-        null,
-        true,
-        (req as any).user?.id || null,
-        null,
-        leadId,
-        null,
-      ]
-    );
+    const safeTitle = (file.originalname || "Attached File").substring(0, 200);
+
+    let validUserId = (req as any).user?.id ? Number((req as any).user.id) : null;
+    if (validUserId) {
+      try {
+        const uCheck = await connection.query("SELECT id FROM users WHERE id = $1", [validUserId]);
+        if (uCheck.rows.length === 0) validUserId = null;
+      } catch {
+        validUserId = null;
+      }
+    }
+
+    let actData: any = null;
+    try {
+      const actRes = await connection.query(
+        "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        [
+          safeTitle,
+          "file",
+          fileUrl,
+          null,
+          null,
+          true,
+          validUserId,
+          null,
+          leadId,
+          null,
+        ]
+      );
+      actData = actRes.rows[0];
+    } catch (fnErr: any) {
+      logger.warn(`fn_create_activity fallback for file: ${fnErr.message}`);
+      const insRes = await connection.query(
+        `INSERT INTO activities (title, type, comment, is_done, user_id, created_at, updated_at)
+         VALUES ($1, 'file', $2, true, $3, NOW(), NOW()) RETURNING *`,
+        [safeTitle, fileUrl, validUserId]
+      );
+      actData = insRes.rows[0];
+      if (actData && leadId) {
+        await connection.query(
+          "INSERT INTO lead_activities (activity_id, lead_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [actData.id, leadId]
+        );
+      }
+    }
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "File attached successfully to lead.",
-      data: actRes.rows[0],
+      data: actData,
     });
   } catch (error: any) {
     logger.error(error);

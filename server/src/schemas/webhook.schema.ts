@@ -1,6 +1,16 @@
 import { z } from 'zod';
 export const saveWebhookSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(255)
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: 'Name cannot consist of only special characters or numbers',
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: 'Name must contain at least one letter',
+    }),
   entity_type: z.string().min(1, 'Entity type is required'),
   description: z.string().nullable().optional(),
   method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('POST'),
