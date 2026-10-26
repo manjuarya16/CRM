@@ -325,20 +325,16 @@ export const saveEntityAttributeValues = async (
   client: any,
   entityType: string,
   entityId: number,
-  customAttrs: Record<string, any>,
-  cachedAttrs?: any[]
+  customAttrs: Record<string, any>
 ): Promise<void> => {
   if (!customAttrs || typeof customAttrs !== 'object' || Object.keys(customAttrs).length === 0) return;
 
   try {
-    let dbAttrs: any[] = Array.isArray(cachedAttrs) && cachedAttrs.length > 0 ? cachedAttrs : [];
-    if (dbAttrs.length === 0) {
-      const { rows: attrResult } = await client.query(
-        'SELECT get_all_attributes($1, $2, $3, $4) AS data',
-        [null, entityType, null, null]
-      );
-      dbAttrs = attrResult[0]?.data || [];
-    }
+    const { rows: attrResult } = await client.query(
+      'SELECT get_all_attributes(null, $1) AS data',
+      [entityType]
+    );
+    const dbAttrs: any[] = attrResult[0]?.data || [];
 
     for (const [code, rawVal] of Object.entries(customAttrs)) {
       if (rawVal === undefined || rawVal === null || rawVal === '') continue;
@@ -411,7 +407,6 @@ export const saveEntityAttributeValues = async (
     }
   } catch (attrErr) {
     logger.warn({ attrErr, entityType, entityId }, 'Failed to save entity attribute_values');
-    throw attrErr;
   }
 };
 
@@ -860,11 +855,15 @@ export class DataTransferService {
         return custom;
       };
 
+      const seenInFile = new Map<string, number>();
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const savepointName = `sp_${i}`;
 
-        await client.query(`SAVEPOINT ${savepointName}`);
+        if (validationStrategy === 'skip_error_entries') {
+          await client.query(`SAVEPOINT ${savepointName}`);
+        }
 
         try {
           const rowCustomAttrs = extractCustomAttributes(row);
@@ -874,6 +873,12 @@ export class DataTransferService {
             const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
             if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
             const titleStr = titleVal ? String(titleVal).trim() : '';
+
+            const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
 
             // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
             const finalPersonId = await resolvePersonId(
@@ -922,7 +927,9 @@ export class DataTransferService {
               }
               const leadId = existingLead.rows[0].id;
               await client.query('SELECT public.fn_delete_lead($1)', [leadId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -954,7 +961,7 @@ export class DataTransferService {
                   JSON.stringify(mergedAttrs),
                 ]
               );
-              await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs, attrRows);
+              await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb) AS id',
@@ -977,7 +984,7 @@ export class DataTransferService {
               );
               const newLeadId = ins.rows[0]?.id;
               if (newLeadId) {
-                await saveEntityAttributeValues(client, 'leads', newLeadId, rowCustomAttrs, attrRows);
+                await saveEntityAttributeValues(client, 'leads', newLeadId, rowCustomAttrs);
               }
             }
           } else if (type === 'persons') {
@@ -985,6 +992,12 @@ export class DataTransferService {
             const nameVal = row.name || row.Name || row['Person Name'];
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
+
+            const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
 
             const cleanJobTitle = (title: any) => {
               if (!title || typeof title !== 'string') return null;
@@ -1021,7 +1034,9 @@ export class DataTransferService {
               }
               const personId = existing.rows[0].id;
               await client.query('SELECT delete_person($1)', [personId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1068,7 +1083,7 @@ export class DataTransferService {
                   JSON.stringify(mergedAttrs),
                 ]
               );
-              await saveEntityAttributeValues(client, 'persons', existingPerson.id, mergedAttrs, attrRows);
+              await saveEntityAttributeValues(client, 'persons', existingPerson.id, mergedAttrs);
             } else {
               const uniqueEmailsMap = new Map<string, string>();
               for (const e of newEmails) {
@@ -1101,7 +1116,7 @@ export class DataTransferService {
               );
               const newPersonId = ins.rows[0]?.id;
               if (newPersonId) {
-                await saveEntityAttributeValues(client, 'persons', newPersonId, rowCustomAttrs, attrRows);
+                await saveEntityAttributeValues(client, 'persons', newPersonId, rowCustomAttrs);
               }
             }
           } else if (type === 'organizations') {
@@ -1109,6 +1124,12 @@ export class DataTransferService {
             const nameVal = row.name || row.Name || row['Organization Name'];
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
+
+            const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
 
             const finalUserId = await resolveUserId(
               client,
@@ -1136,7 +1157,9 @@ export class DataTransferService {
               }
               const orgId = existingOrg.rows[0].id;
               await client.query('SELECT delete_organization($1)', [orgId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1156,7 +1179,7 @@ export class DataTransferService {
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb)',
                 [existingOrg.rows[0].id, nameStr, JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs)]
               );
-              await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs, attrRows);
+              await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb) AS id',
@@ -1164,7 +1187,7 @@ export class DataTransferService {
               );
               const newOrgId = ins.rows[0]?.id;
               if (newOrgId) {
-                await saveEntityAttributeValues(client, 'organizations', newOrgId, rowCustomAttrs, attrRows);
+                await saveEntityAttributeValues(client, 'organizations', newOrgId, rowCustomAttrs);
               }
             }
           } else if (type === 'products') {
@@ -1173,6 +1196,13 @@ export class DataTransferService {
             if (!idVal && !skuVal) throw new Error(`Row ${i + 1}: sku or id is required`);
             const skuStr = skuVal ? String(skuVal).trim() : '';
             const prodName = row.name || row.Name || row['Product Name'] || skuStr;
+
+            const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
+            if (fileKey && seenInFile.has(fileKey)) {
+              throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
+            }
+            if (fileKey) seenInFile.set(fileKey, i + 1);
+
             const description = row.description || row.Description || null;
             const quantity = Number(row.quantity || row.Quantity || 0);
             const price = Number(row.price || row.Price || 0);
@@ -1189,7 +1219,9 @@ export class DataTransferService {
               }
               const prodId = existingProd.rows[0].id;
               await client.query('SELECT public.fn_delete_product($1)', [prodId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1206,7 +1238,7 @@ export class DataTransferService {
                 'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb)',
                 [existingProd.rows[0].id, skuStr, prodName, description, quantity, price, JSON.stringify(mergedAttrs)]
               );
-              await saveEntityAttributeValues(client, 'products', existingProd.rows[0].id, mergedAttrs, attrRows);
+              await saveEntityAttributeValues(client, 'products', existingProd.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_product($1, $2, $3, $4, $5, $6, $7::jsonb) AS id',
@@ -1214,37 +1246,34 @@ export class DataTransferService {
               );
               const newProdId = ins.rows[0]?.id;
               if (newProdId) {
-                await saveEntityAttributeValues(client, 'products', newProdId, rowCustomAttrs, attrRows);
+                await saveEntityAttributeValues(client, 'products', newProdId, rowCustomAttrs);
               }
             }
           }
 
-          await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+          if (validationStrategy === 'skip_error_entries') {
+            await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+          }
           processed++;
         } catch (err: any) {
-          try {
+          if (validationStrategy === 'skip_error_entries') {
             await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-          } catch (rbErr) {
-            logger.warn({ rbErr, savepointName }, 'Failed to rollback to savepoint');
           }
           errorCount++;
           errorDetails.push({ row: i + 1, error: err.message, data: row });
 
-          if (validationStrategy === 'stop_on_errors') {
-            if (allowedErrors === 0 || errorCount > allowedErrors) {
-              aborted = true;
-              break;
-            }
-          } else if (validationStrategy === 'skip_error_entries') {
-            if (allowedErrors > 0 && errorCount > allowedErrors) {
-              aborted = true;
-              break;
-            }
+          if (validationStrategy === 'stop_on_errors' && errorCount > allowedErrors) {
+            aborted = true;
+            break;
+          }
+          if (validationStrategy === 'skip_error_entries' && allowedErrors > 0 && errorCount > allowedErrors) {
+            aborted = true;
+            break;
           }
         }
       }
 
-      if (aborted) {
+      if (aborted && validationStrategy === 'stop_on_errors') {
         // Rollback all changes so no partial corrupted data is committed
         await client.query('ROLLBACK');
         processed = 0;
@@ -1459,6 +1488,8 @@ export class DataTransferService {
         [type]
       );
 
+      const seenInFile = new Map<string, number>();
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         let rowError: string | null = null;
@@ -1482,17 +1513,23 @@ export class DataTransferService {
               rowError = 'Field "title" or "id" is required';
             } else {
               const titleStr = titleVal ? String(titleVal).trim() : '';
-              const existingLead = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['leads', idVal || null, titleStr || null]
-              );
-              const exists = existingLead.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Lead with title "${titleStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'title'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existingLead = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['leads', idVal || null, titleStr || null]
+                );
+                const exists = existingLead.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Lead with title "${titleStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Lead ${idVal ? `with ID ${idVal}` : `with title "${titleStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'persons') {
@@ -1502,17 +1539,23 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existing = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['persons', idVal || null, nameStr || null]
-              );
-              const exists = existing.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Person "${nameStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existing = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['persons', idVal || null, nameStr || null]
+                );
+                const exists = existing.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Person "${nameStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Person ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'organizations') {
@@ -1522,17 +1565,23 @@ export class DataTransferService {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const existingOrg = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
-                ['organizations', idVal || null, nameStr || null]
-              );
-              const exists = existingOrg.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Organization "${nameStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const existingOrg = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
+                  ['organizations', idVal || null, nameStr || null]
+                );
+                const exists = existingOrg.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Organization "${nameStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Organization ${idVal ? `with ID ${idVal}` : `"${nameStr}"`} not found for update`;
+                }
               }
             }
           } else if (type === 'products') {
@@ -1543,18 +1592,24 @@ export class DataTransferService {
               rowError = 'Field "sku" is required for products';
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
-              const prodName = nameVal ? String(nameVal).trim() : skuStr;
-              const existingProd = await client.query(
-                'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
-                ['products', idVal || null, skuStr || null, prodName || null]
-              );
-              const exists = existingProd.rows.length > 0;
-              if (action === 'delete' && !exists) {
-                rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for deletion`;
-              } else if (action === 'create_only' && exists) {
-                rowError = `Product with SKU "${skuStr}" already exists`;
-              } else if (action === 'update_only' && !exists) {
-                rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for update`;
+              const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
+              if (fileKey && seenInFile.has(fileKey)) {
+                rowError = `Duplicate entry in file: row ${i + 1} has duplicate SKU matching row ${seenInFile.get(fileKey)}`;
+              } else {
+                if (fileKey) seenInFile.set(fileKey, i + 1);
+                const prodName = nameVal ? String(nameVal).trim() : skuStr;
+                const existingProd = await client.query(
+                  'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
+                  ['products', idVal || null, skuStr || null, prodName || null]
+                );
+                const exists = existingProd.rows.length > 0;
+                if (action === 'delete' && !exists) {
+                  rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for deletion`;
+                } else if (action === 'create_only' && exists) {
+                  rowError = `Product with SKU "${skuStr}" already exists`;
+                } else if (action === 'update_only' && !exists) {
+                  rowError = `Product ${idVal ? `with ID ${idVal}` : `with SKU "${skuStr}"`} not found for update`;
+                }
               }
             }
           }

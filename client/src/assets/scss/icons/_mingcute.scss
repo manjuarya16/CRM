@@ -2197,10 +2197,12 @@
 .mgc_edit_3_line:before {
   content: "\ebd3";
 }
-.mgc_edit_fill:before {
+.mgc_edit_fill:before,
+.mgc_draft_fill:before {
   content: "\ebd4";
 }
-.mgc_edit_line:before {
+.mgc_edit_line:before,
+.mgc_draft_line:before {
   content: "\ebd5";
 }
 .mgc_egg_crack_fill:before {

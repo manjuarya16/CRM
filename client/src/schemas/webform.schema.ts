@@ -3,7 +3,17 @@ import { zodResolver } from "@/utils/zodResolver";
 
 export const webformSchema = z.object({
   form_id: z.string().optional(),
-  title: z.string().trim().min(1, "Webform title is required").max(191, "Title is too long"),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Webform title is required")
+    .max(191, "Title is too long")
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: "Webform title cannot consist of only special characters or numbers",
+    })
+    .refine((val) => /[a-zA-Z]/.test(val), {
+      message: "Webform title must contain at least one letter",
+    }),
   description: z.string().trim().optional().or(z.literal("")).nullable(),
   submit_button_label: z.string().trim().optional().or(z.literal("")).nullable(),
   submit_success_action: z.enum(["message", "redirect"]).default("message"),

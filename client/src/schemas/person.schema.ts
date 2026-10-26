@@ -1,9 +1,22 @@
 import { z } from "zod";
 import { zodResolver } from "@/utils/zodResolver";
 
+export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+
 export const emailItemSchema = z.object({
   label: z.string().optional().default("work"),
-  value: z.string().trim().email("Invalid email format").or(z.literal("")),
+  value: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      if (!STRICT_EMAIL_REGEX.test(val)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Please enter a valid email address without trailing dots (e.g. name@domain.com).",
+        });
+      }
+    }),
 });
 
 export const contactItemSchema = z.object({
@@ -42,7 +55,7 @@ export const contactItemSchema = z.object({
         return;
       }
       const digitsOnly = val.replace(/[^0-9]/g, "");
-      if (/^0+$/.test(digitsOnly)) {
+      if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Contact number cannot consist of only zeros.",
@@ -63,8 +76,7 @@ export const contactItemSchema = z.object({
         });
         return;
       }
-    })
-    .or(z.literal("")),
+    }),
 });
 
 export const personSchema = z.object({
@@ -73,6 +85,12 @@ export const personSchema = z.object({
     .trim()
     .min(1, "Person name is required")
     .max(191, "Name is too long")
+    .refine((val) => !/^[0-9\W_]+$/.test(val), {
+      message: "Person name cannot consist of only numbers or special characters.",
+    })
+    .refine((val) => /^[a-zA-Z\s.'-]+$/.test(val), {
+      message: "Person name can only contain letters, spaces, hyphens, and apostrophes.",
+    })
     .refine((val) => /[a-zA-Z]/.test(val), {
       message: "Person name must contain at least one letter.",
     }),
@@ -81,6 +99,42 @@ export const personSchema = z.object({
   organization_id: z.coerce.number().optional().nullable(),
   job_title: z.string().trim().max(191, "Job title is too long").optional().or(z.literal("")).nullable(),
   user_id: z.coerce.number().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (Array.isArray(data.emails)) {
+    const seenEmails = new Set<string>();
+    for (let i = 0; i < data.emails.length; i++) {
+      const email = data.emails[i]?.value?.trim().toLowerCase();
+      if (!email) continue;
+      if (seenEmails.has(email)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["emails"],
+          message: `Duplicate email address "${email}" is not allowed. Each email must be unique.`,
+        });
+        break;
+      }
+      seenEmails.add(email);
+    }
+  }
+
+  if (Array.isArray(data.contact_numbers)) {
+    const seenPhones = new Set<string>();
+    for (let i = 0; i < data.contact_numbers.length; i++) {
+      const raw = data.contact_numbers[i]?.value?.trim();
+      if (!raw) continue;
+      const digits = raw.replace(/[^0-9]/g, "");
+      if (!digits) continue;
+      if (seenPhones.has(digits)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contact_numbers"],
+          message: `Duplicate mobile number "${raw}" is not allowed. Each mobile number must be unique.`,
+        });
+        break;
+      }
+      seenPhones.add(digits);
+    }
+  }
 });
 
 export const personSchemaResolver = zodResolver(personSchema);
