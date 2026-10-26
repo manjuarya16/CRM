@@ -261,8 +261,22 @@ const EditPersonPage: React.FC = () => {
     }
   };
 
-  const checkDuplicateEmail = async (val: string) => {
+  const checkDuplicateEmail = async (val: string, currentIndex?: number) => {
     if (!val || !val.trim().includes("@")) return;
+    const cleanVal = val.trim().toLowerCase();
+
+    // Check intra-form duplicates
+    const isLocalDuplicate = formData.emails.some(
+      (e, idx) => (currentIndex === undefined || idx !== currentIndex) && e.value.trim().toLowerCase() === cleanVal
+    );
+    if (isLocalDuplicate) {
+      setErrors((prev) => ({
+        ...prev,
+        emails: `Duplicate email address "${cleanVal}" is already entered. Each email must be unique.`,
+      }));
+      return;
+    }
+
     try {
       const data = await usePersonStore.getState().checkDuplicate(val.trim(), undefined, id);
       if (data?.isDuplicate) {
@@ -273,7 +287,7 @@ const EditPersonPage: React.FC = () => {
     }
   };
 
-  const checkDuplicateContact = async (val: string) => {
+  const checkDuplicateContact = async (val: string, currentIndex?: number) => {
     if (!val || val.trim() === "") return;
     const cleanVal = val.trim();
     const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
@@ -298,6 +312,21 @@ const EditPersonPage: React.FC = () => {
       }));
       return;
     }
+
+    // Check intra-form duplicates
+    const isLocalDuplicate = formData.contact_numbers.some((c, idx) => {
+      if (currentIndex !== undefined && idx === currentIndex) return false;
+      const otherDigits = c.value.replace(/[^0-9]/g, "");
+      return otherDigits.length >= 7 && otherDigits === digitsOnly;
+    });
+    if (isLocalDuplicate) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: `Duplicate mobile number "${cleanVal}" is already entered. Each mobile number must be unique.`,
+      }));
+      return;
+    }
+
     try {
       const data = await usePersonStore.getState().checkDuplicate(undefined, cleanVal, id);
       if (data?.isDuplicate) {
@@ -548,7 +577,7 @@ const EditPersonPage: React.FC = () => {
                         onChange={(e) =>
                           handleEmailChange(index, "value", e.target.value)
                         }
-                        onBlur={() => checkDuplicateEmail(emailItem.value)}
+                        onBlur={() => checkDuplicateEmail(emailItem.value, index)}
                         placeholder="john@example.com"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />
@@ -611,7 +640,7 @@ const EditPersonPage: React.FC = () => {
                         onChange={(e) =>
                           handleContactChange(index, "value", e.target.value)
                         }
-                        onBlur={() => checkDuplicateContact(contactItem.value)}
+                        onBlur={() => checkDuplicateContact(contactItem.value, index)}
                         placeholder="+91 98765 43210"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />

@@ -283,8 +283,9 @@ export class DashboardService {
           }
         });
       } else {
-        const curr = new Date(startDateObj);
-        while (curr <= endDateObj) {
+        const curr = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+        const endDay = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate());
+        while (curr <= endDay) {
           const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, "0")}-${String(curr.getDate()).padStart(2, "0")}`;
           const label = curr.toLocaleString("en-US", { month: "short", day: "numeric" });
           dateSeriesMap[dStr] = { date: dStr, label, won_revenue: 0, lost_revenue: 0, leads_count: 0, won_count: 0, lost_count: 0 };

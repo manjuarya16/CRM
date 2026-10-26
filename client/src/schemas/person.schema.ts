@@ -99,6 +99,42 @@ export const personSchema = z.object({
   organization_id: z.coerce.number().optional().nullable(),
   job_title: z.string().trim().max(191, "Job title is too long").optional().or(z.literal("")).nullable(),
   user_id: z.coerce.number().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (Array.isArray(data.emails)) {
+    const seenEmails = new Set<string>();
+    for (let i = 0; i < data.emails.length; i++) {
+      const email = data.emails[i]?.value?.trim().toLowerCase();
+      if (!email) continue;
+      if (seenEmails.has(email)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["emails"],
+          message: `Duplicate email address "${email}" is not allowed. Each email must be unique.`,
+        });
+        break;
+      }
+      seenEmails.add(email);
+    }
+  }
+
+  if (Array.isArray(data.contact_numbers)) {
+    const seenPhones = new Set<string>();
+    for (let i = 0; i < data.contact_numbers.length; i++) {
+      const raw = data.contact_numbers[i]?.value?.trim();
+      if (!raw) continue;
+      const digits = raw.replace(/[^0-9]/g, "");
+      if (!digits) continue;
+      if (seenPhones.has(digits)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contact_numbers"],
+          message: `Duplicate mobile number "${raw}" is not allowed. Each mobile number must be unique.`,
+        });
+        break;
+      }
+      seenPhones.add(digits);
+    }
+  }
 });
 
 export const personSchemaResolver = zodResolver(personSchema);

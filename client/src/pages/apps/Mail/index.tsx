@@ -9,7 +9,7 @@ const FOLDERS = [
   { id: "inbox", label: "Inbox", icon: "mgc_inbox_line" },
   { id: "important", label: "Important", icon: "mgc_bookmark_line" },
   { id: "starred", label: "Starred", icon: "mgc_star_line" },
-  { id: "draft", label: "Draft", icon: "mgc_draft_line" },
+  { id: "draft", label: "Draft", icon: "mgc_edit_line" },
   { id: "outbox", label: "Outbox", icon: "mgc_send_line" },
   { id: "sent", label: "Sent", icon: "mgc_check_circle_line" },
   { id: "spam", label: "Spam", icon: "mgc_alert_octagon_line" },
