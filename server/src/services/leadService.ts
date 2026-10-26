@@ -262,20 +262,32 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
     if (lead && Array.isArray(products) && products.length > 0) {
       for (const p of products) {
         if (!p.product_id) continue;
+        const pQty = Math.max(1, parseInt(String(p.quantity), 10) || 1);
+        const pPrice = p.price !== undefined && p.price !== null && p.price !== "" ? Number(p.price) : null;
+        const pWarehouse = p.warehouse_id ? Number(p.warehouse_id) : null;
+        const pWarehouseLoc = p.warehouse_location_id ? Number(p.warehouse_location_id) : null;
+        const pRecurring = Boolean(p.is_recurring === true || p.is_recurring === "true" || p.is_recurring === 1 || p.is_recurring === "1");
+        const pBilling = pRecurring && p.billing_cycle ? String(p.billing_cycle).trim() : null;
+        const pDuration = pRecurring ? Math.max(1, parseInt(String(p.contract_duration), 10) || 12) : 1;
+        const rawStart = p.contract_start_date || p.start_date;
+        const rawEnd = p.contract_end_date || p.end_date;
+        const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
+        const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             lead.id,
             Number(p.product_id),
-            Number(p.quantity) || 1,
-            p.price ? Number(p.price) : null,
-            p.warehouse_id ? Number(p.warehouse_id) : null,
-            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
-            p.is_recurring === true || p.is_recurring === "true",
-            p.billing_cycle || null,
-            p.contract_duration ? Number(p.contract_duration) : 1,
-            p.contract_start_date || p.start_date || null,
-            p.contract_end_date || p.end_date || null,
+            pQty,
+            pPrice,
+            pWarehouse,
+            pWarehouseLoc,
+            pRecurring,
+            pBilling,
+            pDuration,
+            pStartDate,
+            pEndDate,
           ]
         );
       }
@@ -426,20 +438,32 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       await connection.query("SELECT public.fn_clear_lead_products($1)", [id]);
       for (const p of products) {
         if (!p.product_id) continue;
+        const pQty = Math.max(1, parseInt(String(p.quantity), 10) || 1);
+        const pPrice = p.price !== undefined && p.price !== null && p.price !== "" ? Number(p.price) : null;
+        const pWarehouse = p.warehouse_id ? Number(p.warehouse_id) : null;
+        const pWarehouseLoc = p.warehouse_location_id ? Number(p.warehouse_location_id) : null;
+        const pRecurring = Boolean(p.is_recurring === true || p.is_recurring === "true" || p.is_recurring === 1 || p.is_recurring === "1");
+        const pBilling = pRecurring && p.billing_cycle ? String(p.billing_cycle).trim() : null;
+        const pDuration = pRecurring ? Math.max(1, parseInt(String(p.contract_duration), 10) || 12) : 1;
+        const rawStart = p.contract_start_date || p.start_date;
+        const rawEnd = p.contract_end_date || p.end_date;
+        const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
+        const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             id,
             Number(p.product_id),
-            Number(p.quantity) || 1,
-            p.price ? Number(p.price) : null,
-            p.warehouse_id ? Number(p.warehouse_id) : null,
-            p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
-            p.is_recurring === true || p.is_recurring === "true",
-            p.billing_cycle || null,
-            p.contract_duration ? Number(p.contract_duration) : 1,
-            p.contract_start_date || p.start_date || null,
-            p.contract_end_date || p.end_date || null,
+            pQty,
+            pPrice,
+            pWarehouse,
+            pWarehouseLoc,
+            pRecurring,
+            pBilling,
+            pDuration,
+            pStartDate,
+            pEndDate,
           ]
         );
       }

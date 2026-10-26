@@ -311,11 +311,9 @@ export const DashboardPage: React.FC = () => {
     stroke: { show: true, width: 2, colors: ["transparent"] },
     xaxis: {
       categories: timelinePoints.map((t) => t.label || t.date),
-      tickAmount: timelinePoints.length > 10 ? 6 : undefined,
       labels: {
         rotate: -45,
         rotateAlways: false,
-        hideOverlappingLabels: true,
         style: { colors: "#64748b", fontSize: "10px" },
       },
     },
@@ -801,8 +799,8 @@ export const DashboardPage: React.FC = () => {
             <div className="flex flex-col">
               {(data.top_persons || []).slice(0, 5).map((person, idx) => {
                 const avatarStyle = pastelAvatarStyles[idx % pastelAvatarStyles.length];
-                const contactNum = formatContactNumber(person.contact_number || (person as any).contact_numbers);
-                const emailVal = formatEmail(person.email || (person as any).emails);
+                const contactNum = formatContactNumber((person as any).contact_number || (person as any).contact_numbers);
+                const emailVal = formatEmail((person as any).email || (person as any).emails);
 
                 return (
                   <div
