@@ -15,22 +15,20 @@ declare global {
  * Extracts the tenant slug from header, origin, or host.
  */
 export function extractTenantSlug(req: Request): string | null {
-  // 1. Explicit custom header from API client (highest precedence)
+  // 1. Explicit custom header from API client (if provided)
   const headerSlug = req.headers['x-tenant-slug'];
   if (typeof headerSlug === 'string' && headerSlug.trim()) {
     return headerSlug.trim().toLowerCase();
   }
 
-  const nonTenantSubdomains = ['localhost', 'www', 'admin', 'crm', 'crmsrv', 'app', 'api', 'staging', 'mail'];
-
-  // 2. From Origin or Referer header
+  // 2. From Origin or Referer header (e.g. https://acme.imorse.digital)
   const origin = (req.headers.origin as string) || (req.headers.referer as string) || '';
   if (origin) {
     try {
       const url = new URL(origin);
       const host = url.hostname;
       const parts = host.split('.');
-      if (parts.length > 1 && !nonTenantSubdomains.includes(parts[0].toLowerCase())) {
+      if (parts.length > 2) {
         return parts[0].toLowerCase();
       }
     } catch {
@@ -43,7 +41,7 @@ export function extractTenantSlug(req: Request): string | null {
   if (host) {
     const hostname = host.split(':')[0];
     const parts = hostname.split('.');
-    if (parts.length > 1 && !nonTenantSubdomains.includes(parts[0].toLowerCase())) {
+    if (parts.length > 2) {
       return parts[0].toLowerCase();
     }
   }

@@ -5,7 +5,6 @@ import {
   getToken,
   isTokenExpired,
 } from "@/lib/auth-utils";
-import { getSubdomain } from "@/utils/subdomain";
 
 // Simple notification function (no external dependency)
 const showNotification = (
@@ -86,13 +85,6 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       // Add standard headers
       config.headers["Content-Type"] =
         config.headers["Content-Type"] || "application/json";
-
-      // Attach tenant / organization context headers only for dedicated tenant workspaces
-      const subInfo = getSubdomain();
-      const nonTenantSlugs = ['crm', 'www', 'app', 'api', 'crmsrv', 'staging', 'mail', 'default'];
-      if (subInfo.type === 'tenant' && subInfo.slug && !nonTenantSlugs.includes(subInfo.slug.toLowerCase())) {
-        config.headers["X-Tenant-Slug"] = subInfo.slug;
-      }
 
       return config;
     } catch (error) {
