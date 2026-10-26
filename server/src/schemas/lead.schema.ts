@@ -20,6 +20,7 @@ export const leadSchema = z.object({
   status: z.union([z.boolean(), z.number()]).optional().nullable(),
   user_id: z.coerce.number().optional().nullable(),
   person_id: z.coerce.number().optional().nullable(),
+  organization_id: z.coerce.number().optional().nullable(),
   lead_source_id: z.coerce.number().optional().nullable(),
   lead_type_id: z.coerce.number().optional().nullable(),
   lead_pipeline_id: z.coerce.number().optional().nullable(),

@@ -87,10 +87,11 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       config.headers["Content-Type"] =
         config.headers["Content-Type"] || "application/json";
 
-      // Attach tenant / organization context headers if slug exists
-      const { slug } = getSubdomain();
-      if (slug) {
-        config.headers["X-Tenant-Slug"] = slug;
+      // Attach tenant / organization context headers only for dedicated tenant workspaces
+      const subInfo = getSubdomain();
+      const nonTenantSlugs = ['crm', 'www', 'app', 'api', 'crmsrv', 'staging', 'mail', 'default'];
+      if (subInfo.type === 'tenant' && subInfo.slug && !nonTenantSlugs.includes(subInfo.slug.toLowerCase())) {
+        config.headers["X-Tenant-Slug"] = subInfo.slug;
       }
 
       return config;

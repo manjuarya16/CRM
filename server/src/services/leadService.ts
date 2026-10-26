@@ -408,6 +408,22 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     const updatedLead = result.rows[0];
 
+    // Persist organization_id if explicitly provided or resolved via person
+    const rawOrgId = req.body.organization_id !== undefined ? req.body.organization_id : (person?.organization_id);
+    const organizationId = rawOrgId !== undefined && rawOrgId !== null && rawOrgId !== "" && !isNaN(Number(rawOrgId))
+      ? Number(rawOrgId)
+      : (rawOrgId === null ? null : undefined);
+
+    if (organizationId !== undefined) {
+      await connection.query(
+        "UPDATE public.leads SET organization_id = $1 WHERE id = $2",
+        [organizationId, id]
+      );
+      if (updatedLead) {
+        updatedLead.organization_id = organizationId;
+      }
+    }
+
     if (id && custom_attributes !== undefined) {
       const customAttrsJson = JSON.stringify(custom_attributes || {});
       await connection.query(
@@ -815,27 +831,15 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const uploadDir = path.join(process.cwd(), "uploads", "leads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const destPath = path.join(uploadDir, uniqueName);
+    const uniqueName = file.filename || path.basename(file.path);
+    const fileUrl = `/uploads/leads/${uniqueName}`;
 
     let fileBuffer: Buffer | null = null;
     if (file.path && fs.existsSync(file.path)) {
-      fileBuffer = fs.readFileSync(file.path);
-      fs.copyFileSync(file.path, destPath);
-      try { fs.unlinkSync(file.path); } catch (e) {}
+      fileBuffer = await fs.promises.readFile(file.path);
     } else if (file.buffer) {
       fileBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
-      if (fileBuffer) {
-        fs.writeFileSync(destPath, fileBuffer);
-      }
     }
-
-    const fileUrl = `/uploads/leads/${uniqueName}`;
 
     // 1. Extract text and parse structured data from the document
     let parsed: ExtractedLeadData = {};
@@ -1120,25 +1124,7 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const uploadDir = path.join(process.cwd(), "uploads", "leads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const destPath = path.join(uploadDir, uniqueName);
-
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.renameSync(file.path, destPath);
-      } catch {
-        fs.copyFileSync(file.path, destPath);
-        try { fs.unlinkSync(file.path); } catch (e) {}
-      }
-    } else if (file.buffer) {
-      fs.writeFileSync(destPath, file.buffer);
-    }
-
+    const uniqueName = file.filename || path.basename(file.path);
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
     const safeTitle = (file.originalname || "Attached File").substring(0, 200);

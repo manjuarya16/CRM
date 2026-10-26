@@ -21,6 +21,8 @@ export function extractTenantSlug(req: Request): string | null {
     return headerSlug.trim().toLowerCase();
   }
 
+  const nonTenantSubdomains = ['localhost', 'www', 'admin', 'crm', 'crmsrv', 'app', 'api', 'staging', 'mail'];
+
   // 2. From Origin or Referer header
   const origin = (req.headers.origin as string) || (req.headers.referer as string) || '';
   if (origin) {
@@ -28,7 +30,7 @@ export function extractTenantSlug(req: Request): string | null {
       const url = new URL(origin);
       const host = url.hostname;
       const parts = host.split('.');
-      if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== 'www' && parts[0] !== 'admin') {
+      if (parts.length > 1 && !nonTenantSubdomains.includes(parts[0].toLowerCase())) {
         return parts[0].toLowerCase();
       }
     } catch {
@@ -41,7 +43,7 @@ export function extractTenantSlug(req: Request): string | null {
   if (host) {
     const hostname = host.split(':')[0];
     const parts = hostname.split('.');
-    if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== 'www' && parts[0] !== 'admin') {
+    if (parts.length > 1 && !nonTenantSubdomains.includes(parts[0].toLowerCase())) {
       return parts[0].toLowerCase();
     }
   }
