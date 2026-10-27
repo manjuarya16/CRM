@@ -136,6 +136,7 @@ export class UserService {
         WHERE LOWER(u.email) = LOWER($1)
         LIMIT 1
       `;
+      await pool.query("SELECT set_config('app.is_super_admin', 'true', true)").catch(() => {});
       const { rows } = await pool.query<IUser>(query, [email.trim().toLowerCase()]);
       if (!rows[0]) return null;
 
@@ -162,6 +163,7 @@ export class UserService {
         WHERE u.id = $1
         LIMIT 1
       `;
+      await pool.query("SELECT set_config('app.is_super_admin', 'true', true)").catch(() => {});
       const { rows } = await pool.query<IUser>(query, [userId]);
       if (!rows[0]) return null;
 

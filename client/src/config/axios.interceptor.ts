@@ -117,6 +117,11 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
 
     // 401 UNAUTHORIZED - Token Invalid/Expired
     if (status === 401) {
+      const isLoginRequest = error.config?.url?.includes('/login') || error.config?.url?.includes('/auth');
+      if (isLoginRequest) {
+        showNotification(errorMessage || 'Invalid email or password', 'error');
+        return Promise.reject(error);
+      }
       console.warn("401 Unauthorized - Invalid or expired token");
       // Clear all auth data
       try {
