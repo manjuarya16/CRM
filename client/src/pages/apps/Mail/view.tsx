@@ -8,7 +8,7 @@ import { formatFileSize, stripHtmlToText, cleanEmailAddress } from "@/utils/form
 const MailViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { fetchEmailDetails, counts, fetchCounts, sendEmail, linkEmailEntities, removeEmail, markAsRead } = useMailStore();
+  const { fetchEmailDetails, counts, fetchCounts, sendEmail, linkEmailEntities, removeEmail, markAsRead, toggleStarEmail } = useMailStore();
   const { leads, fetchLeads } = useLeadStore();
 
   const [email, setEmail] = useState<EmailItem | null>(null);
@@ -242,6 +242,19 @@ const MailViewPage: React.FC = () => {
     setEmail({ ...email, is_read: !email.is_read });
   };
 
+  const isStarred = email?.folders?.includes("starred") ?? false;
+
+  const handleToggleStar = async () => {
+    if (!email) return;
+    const nextStarred = !isStarred;
+    await toggleStarEmail(email.id, nextStarred);
+    const currentFolders = Array.isArray(email.folders) ? [...email.folders] : [];
+    const newFolders = nextStarred
+      ? Array.from(new Set([...currentFolders, "starred"]))
+      : currentFolders.filter((f) => f !== "starred");
+    setEmail({ ...email, folders: newFolders });
+  };
+
   if (loading) {
     return (
       <div className="p-16 flex flex-col items-center justify-center space-y-3 text-gray-400">
@@ -323,6 +336,19 @@ const MailViewPage: React.FC = () => {
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleToggleStar}
+            className={`px-3.5 py-2 text-xs sm:text-sm font-medium border rounded-xl shadow-2xs flex items-center gap-1.5 transition ${
+              isStarred
+                ? "text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60"
+                : "text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+            }`}
+            title={isStarred ? "Starred" : "Not starred"}
+          >
+            <i className={isStarred ? "mgc_star_fill text-amber-500 text-base" : "mgc_star_line text-gray-400 text-base"}></i>
+            <span>{isStarred ? "Starred" : "Star"}</span>
+          </button>
+
           <button
             onClick={handleToggleRead}
             className="px-3.5 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl shadow-2xs flex items-center gap-1.5 transition"

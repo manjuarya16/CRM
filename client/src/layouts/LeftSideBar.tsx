@@ -35,7 +35,7 @@ const SideBarContent = () => {
   // for admin: role_id===1 is instantly known, no need to wait for roles
   const isAdmin = useMemo(() => {
     if (!user?.role_id) return false;
-    if (Number(user.role_id) === 1) return true;
+    if (Number(user.role_id) === 1 || user?.role?.toLowerCase().includes('admin') || (user as any)?.role_name?.toLowerCase().includes('admin')) return true;
 
     const userRole = roles.find(
       (role) => Number(role.id) === Number(user.role_id),

@@ -6,8 +6,6 @@ import { tagSchema } from "@/schemas";
 import { usePermission } from "@/hooks/usePermission";
 import { useTagStore } from "@/store";
 import { ITag } from "@/interface";
-import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
-import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const PRESET_COLORS = [
   "#0088cc",
@@ -33,7 +31,7 @@ const TagsPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedColor, setSelectedColor] = useState<string>("all");
-  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table");
 
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -210,13 +208,13 @@ const TagsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
           <button
             type="button"
             onClick={fetchTags}
             disabled={loading}
             title="Refresh tags list"
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors disabled:opacity-60 shrink-0 whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg shadow-xs transition-colors disabled:opacity-60"
           >
             <i className={`mgc_refresh_2_line text-base ${loading ? "animate-spin" : ""}`}></i>
             <span>Refresh</span>
@@ -226,7 +224,7 @@ const TagsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => handleOpenModal()}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white rounded-lg text-xs sm:text-sm font-semibold shadow-xs transition-all"
             >
               <i className="mgc_add_line text-base"></i>
               <span>Create Tag</span>
@@ -309,14 +307,35 @@ const TagsPage: React.FC = () => {
               />
             </div>
 
-            {/* View Toggle Buttons */}
-            <ViewModeSwitcher
-              viewMode={viewMode}
-              onViewModeChange={(m) => {
-                setHasUserToggled(true);
-                setViewMode(m);
-              }}
-            />
+            {/* View Toggle Buttons matching Leads */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                title="Cards View"
+                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                }`}
+              >
+                <i className="mgc_layout_grid_line text-base"></i>
+                <span className="hidden sm:inline text-xs font-bold">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                title="Table View"
+                className={`p-1.5 rounded-md text-sm font-semibold transition-colors flex items-center gap-1.5 px-2.5 ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                }`}
+              >
+                <i className="mgc_list_check_line text-base"></i>
+                <span className="hidden sm:inline text-xs font-bold">Table</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -460,13 +479,9 @@ const TagsPage: React.FC = () => {
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => canEdit && handleOpenModal(tag)}
-                                className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:text-[#0088cc] truncate leading-tight transition-colors text-left"
-                              >
+                              <p className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-[#0088cc] truncate leading-tight transition-colors">
                                 {tag.name}
-                              </button>
+                              </p>
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5 flex items-center gap-1.5">
                               <span
@@ -630,15 +645,15 @@ const TagsPage: React.FC = () => {
         {/* Pagination Controls Bar */}
         {totalRecords > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600 dark:text-gray-300">
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
+            <div className="flex items-center gap-2">
+              <span>Per Page</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                className="pl-2.5 pr-8 min-w-[74px] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -650,12 +665,12 @@ const TagsPage: React.FC = () => {
               {totalRecords === 0 ? "0 - 0 of 0" : `${startIndex} - ${endIndex} of ${totalRecords}`}
             </span>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 aria-label="Previous page"
               >
                 <i className="mgc_chevron_left_line text-base"></i>
@@ -667,7 +682,7 @@ const TagsPage: React.FC = () => {
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 aria-label="Next page"
               >
                 <i className="mgc_chevron_right_line text-base"></i>

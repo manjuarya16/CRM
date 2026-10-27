@@ -28,7 +28,6 @@ import { WinLossReport } from './components/WinLossReport';
 import { ProductServiceMixReport } from './components/ProductServiceMixReport';
 import { StaleLeadsReport } from './components/StaleLeadsReport';
 import { RecurringContractsReport } from './components/RecurringContractsReport';
-import { DataSetupReport } from './components/DataSetupReport';
 
 const ReportsPage: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
@@ -168,7 +167,6 @@ const ReportsPage: React.FC = () => {
       'product-service-mix',
       'stale-leads',
       'recurring-contracts',
-      'setup',
     ];
 
     const prodParam = searchParams.get('product') || searchParams.get('productId');
@@ -241,8 +239,6 @@ const ReportsPage: React.FC = () => {
         break;
       case 'recurring-contracts':
         fetchRecurringContractsReport();
-        break;
-      case 'setup':
         break;
       default:
         fetchReportOverview();
@@ -392,11 +388,6 @@ const ReportsPage: React.FC = () => {
       title: 'Recurring Contracts & Renewals',
       subtitle: 'Track active recurring contracts, subscription cycles, renewals due, and expiring agreements over time.',
       basis: 'Contract start & end date',
-    },
-    setup: {
-      title: 'Data Setup & Database Functions',
-      subtitle: 'Setup script definitions and SQL functions for reports.',
-      basis: 'System Configuration',
     },
   };
 
@@ -720,7 +711,6 @@ const ReportsPage: React.FC = () => {
             { key: 'product-service-mix', label: 'Product vs Service', icon: 'mgc_shuffle_line' },
             { key: 'stale-leads', label: 'Stale Leads', icon: 'mgc_alarm_line' },
             { key: 'recurring-contracts', label: 'Recurring & Contracts', icon: 'mgc_repeat_line' },
-            { key: 'setup', label: 'Data Setup', icon: 'mgc_settings_3_line' },
           ].map((tabItem) => {
             const isActive = activeTab === tabItem.key;
             return (
@@ -743,7 +733,7 @@ const ReportsPage: React.FC = () => {
       </div>
 
       {/* Filter Box (.fb) matching Sales CRM · Reports 1.html */}
-      {activeTab !== 'overview' && activeTab !== 'setup' && (
+      {activeTab !== 'overview' && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-2xs space-y-3.5">
           {/* 1. Quick Views Chips */}
           {currentQuickViews.length > 0 && (
@@ -1851,6 +1841,19 @@ const ReportsPage: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Organization</label>
+                  <select
+                    value={filterState.selectedOrg}
+                    onChange={(e) => setFilterState({ selectedOrg: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="">All Organizations</option>
+                    {filterOptions?.organizations.map((org) => (
+                      <option key={org.id} value={org.name}>{org.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
                   <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Search</label>
                   <input
                     type="text"
@@ -2454,8 +2457,6 @@ const ReportsPage: React.FC = () => {
               onOpenDrawer={(leadId, leadTitle) => handleOpenLeadDrawerById(leadId, leadTitle)}
             />
           )}
-
-          {activeTab === 'setup' && <DataSetupReport />}
         </div>
       )}
 

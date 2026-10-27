@@ -51,6 +51,7 @@ const MailPage: React.FC = () => {
     removeEmail,
     bulkMoveToFolder,
     bulkDelete,
+    toggleStarEmail,
   } = useMailStore();
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -496,6 +497,25 @@ const MailPage: React.FC = () => {
                             />
                           </div>
 
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const isStarred = email.folders?.includes("starred") ?? false;
+                              toggleStarEmail(email.id, !isStarred);
+                            }}
+                            className="p-1 -ml-1 text-gray-400 hover:text-amber-400 transition-colors shrink-0"
+                            title={email.folders?.includes("starred") ? "Starred" : "Not starred"}
+                          >
+                            <i
+                              className={
+                                email.folders?.includes("starred")
+                                  ? "mgc_star_fill text-amber-400 text-base"
+                                  : "mgc_star_line text-gray-300 dark:text-gray-600 hover:text-amber-400 text-base"
+                              }
+                            ></i>
+                          </button>
+
                           <div
                             className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${avatarColor}`}
                           >
@@ -616,6 +636,25 @@ const MailPage: React.FC = () => {
                             className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] w-3.5 h-3.5 cursor-pointer"
                           />
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const isStarred = email.folders?.includes("starred") ?? false;
+                            toggleStarEmail(email.id, !isStarred);
+                          }}
+                          className="p-1 -ml-1 text-gray-400 hover:text-amber-400 transition-colors shrink-0"
+                          title={email.folders?.includes("starred") ? "Starred" : "Not starred"}
+                        >
+                          <i
+                            className={
+                              email.folders?.includes("starred")
+                                ? "mgc_star_fill text-amber-400 text-sm"
+                                : "mgc_star_line text-gray-300 dark:text-gray-600 hover:text-amber-400 text-sm"
+                            }
+                          ></i>
+                        </button>
 
                         <div className="w-2 flex justify-center shrink-0">
                           {isUnread && (

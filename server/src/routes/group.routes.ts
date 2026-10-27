@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { GroupService } from '@/services/group.service';
 import { groupSchema } from '@/schemas/group.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
+router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {

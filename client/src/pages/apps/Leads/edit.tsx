@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useLeadStore, useUserStore, usePersonStore, useOrganizationStore, useProductStore, useWarehouseStore, useTagStore } from "@/store";
+import {
+  useLeadStore,
+  useUserStore,
+  usePersonStore,
+  useOrganizationStore,
+  useProductStore,
+  useWarehouseStore,
+  useTagStore,
+} from "@/store";
 import API from "@/config";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { leadSchema } from "@/schemas";
@@ -23,13 +31,18 @@ const getPersonEmail = (person: any): string => {
   if (person.email) return person.email;
   if (!person.emails) return "";
   try {
-    const emails = typeof person.emails === "string" ? JSON.parse(person.emails) : person.emails;
+    const emails =
+      typeof person.emails === "string"
+        ? JSON.parse(person.emails)
+        : person.emails;
     if (Array.isArray(emails) && emails.length > 0) {
       const first = emails[0];
-      return typeof first === "object" ? (first.value || first.email || "") : String(first);
+      return typeof first === "object"
+        ? first.value || first.email || ""
+        : String(first);
     }
     if (typeof emails === "string") return emails;
-  } catch (e) { }
+  } catch (e) {}
   return "";
 };
 
@@ -37,9 +50,12 @@ const getPersonOrg = (person: any, orgList: any[] = []): string => {
   if (!person) return "";
   if (person.organization_name) return person.organization_name;
   if (person.organization?.name) return person.organization.name;
-  if (typeof person.organization === "string" && person.organization.trim()) return person.organization;
+  if (typeof person.organization === "string" && person.organization.trim())
+    return person.organization;
   if (person.organization_id && orgList.length > 0) {
-    const found = orgList.find((org: any) => String(org.id) === String(person.organization_id));
+    const found = orgList.find(
+      (org: any) => String(org.id) === String(person.organization_id),
+    );
     if (found?.name) return found.name;
   }
   return "";
@@ -50,17 +66,25 @@ const getPersonPhone = (person: any): string => {
   if (person.phone) return person.phone;
   if (!person.contact_numbers) return "";
   try {
-    const phones = typeof person.contact_numbers === "string" ? JSON.parse(person.contact_numbers) : person.contact_numbers;
+    const phones =
+      typeof person.contact_numbers === "string"
+        ? JSON.parse(person.contact_numbers)
+        : person.contact_numbers;
     if (Array.isArray(phones) && phones.length > 0) {
       const first = phones[0];
-      return typeof first === "object" ? (first.value || first.number || first.phone || "") : String(first);
+      return typeof first === "object"
+        ? first.value || first.number || first.phone || ""
+        : String(first);
     }
     if (typeof phones === "string") return phones;
-  } catch (e) { }
+  } catch (e) {}
   return "";
 };
 
-const parseContactItems = (data: any, defaultLabel: string = "Work"): ILeadContactItem[] => {
+const parseContactItems = (
+  data: any,
+  defaultLabel: string = "Work",
+): ILeadContactItem[] => {
   if (!data) return [{ label: defaultLabel, value: "" }];
   let parsed = data;
   if (typeof data === "string") {
@@ -127,13 +151,16 @@ const getDurationOptionsForCycle = (cycle?: string) => {
   }
 };
 
-const getAdjustedDurationForCycle = (newCycle: string, currentDuration?: string | number) => {
+const getAdjustedDurationForCycle = (
+  newCycle: string,
+  currentDuration?: string | number,
+) => {
   const options = getDurationOptionsForCycle(newCycle);
   const curStr = String(currentDuration || "12");
   const exists = options.some((opt) => opt.value === curStr);
   if (exists) return curStr;
   const has12 = options.find((opt) => opt.value === "12");
-  return has12 ? "12" : (options[0]?.value || "12");
+  return has12 ? "12" : options[0]?.value || "12";
 };
 
 const formatCycleDuration = (cycle?: string, duration?: number | string) => {
@@ -146,12 +173,14 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   }
   if (c === "half-yearly") {
     const periods = Math.max(1, Math.round(months / 6));
-    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    const yearEquiv =
+      months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
     return `${periods} Half-Yr${periods === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
   }
   if (c === "quarterly") {
     const quarters = Math.max(1, Math.round(months / 3));
-    const yearEquiv = months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
+    const yearEquiv =
+      months >= 12 ? ` · ${months / 12} ${months === 12 ? "Yr" : "Yrs"}` : "";
     return `${quarters} Quarter${quarters === 1 ? "" : "s"} (${months} mo${yearEquiv})`;
   }
   if (months >= 12 && months % 12 === 0) {
@@ -161,10 +190,19 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   return `${months} ${months === 1 ? "Month" : "Months"}`;
 };
 
-const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
+const computeContractEndDate = (
+  startDateStr?: string,
+  durationMonthsStr?: string,
+): string => {
   if (!startDateStr) return "";
   const parts = startDateStr.split("-").map(Number);
-  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
+  if (
+    parts.length !== 3 ||
+    isNaN(parts[0]) ||
+    isNaN(parts[1]) ||
+    isNaN(parts[2])
+  )
+    return "";
   const [y, m, d] = parts;
   const months = parseInt(durationMonthsStr || "12", 10) || 12;
   const date = new Date(y, m - 1, d);
@@ -180,9 +218,16 @@ const EditLeadPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
-    fetchLeadById, updateLead,
-    sources, types, pipelines, stages,
-    fetchSources, fetchTypes, fetchPipelines, fetchStages,
+    fetchLeadById,
+    updateLead,
+    sources,
+    types,
+    pipelines,
+    stages,
+    fetchSources,
+    fetchTypes,
+    fetchPipelines,
+    fetchStages,
   } = useLeadStore();
 
   const [activeTab, setActiveTab] = useState("lead-details");
@@ -208,14 +253,18 @@ const EditLeadPage: React.FC = () => {
     expected_close_date: "",
   });
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
-  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>({});
+  const [customAttributes, setCustomAttributes] = useState<Record<string, any>>(
+    {},
+  );
   const [hasCustomAttributes, setHasCustomAttributes] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const tabs = [
     { id: "lead-details", label: "Lead Details" },
     { id: "contact-person", label: "Contact Person" },
-    ...(hasCustomAttributes ? [{ id: "custom-attributes", label: "Custom Fields" }] : []),
+    ...(hasCustomAttributes
+      ? [{ id: "custom-attributes", label: "Custom Fields" }]
+      : []),
     { id: "products", label: "Products" },
   ];
 
@@ -225,8 +274,12 @@ const EditLeadPage: React.FC = () => {
   const [personName, setPersonName] = useState("");
   const [personSearch, setPersonSearch] = useState("");
   const [isPersonDropdownOpen, setIsPersonDropdownOpen] = useState(false);
-  const [contactEmails, setContactEmails] = useState<ILeadContactItem[]>([{ label: "Work", value: "" }]);
-  const [contactPhones, setContactPhones] = useState<ILeadContactItem[]>([{ label: "Work", value: "" }]);
+  const [contactEmails, setContactEmails] = useState<ILeadContactItem[]>([
+    { label: "Work", value: "" },
+  ]);
+  const [contactPhones, setContactPhones] = useState<ILeadContactItem[]>([
+    { label: "Work", value: "" },
+  ]);
   const [organizationId, setOrganizationId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
   const personDropdownRef = useRef<HTMLDivElement>(null);
@@ -254,37 +307,69 @@ const EditLeadPage: React.FC = () => {
     fetchSources();
     fetchTypes();
     fetchPipelines();
-    useUserStore.getState().fetchUsers(1, 200).then((res: any) => { if (res?.rows || res) setUsers(res?.rows || res || []); }).catch(() => { });
-    usePersonStore.getState().fetchPersons({ limit: 500, per_page: 500 }).then(() => {
-      const statePersons = usePersonStore.getState().persons;
-      if (statePersons) {
-        const sorted = [...statePersons].sort((a: any, b: any) =>
-          (a.name || "").localeCompare(b.name || "")
-        );
-        setPersons(sorted);
-      }
-    }).catch(() => { });
-    useOrganizationStore.getState().fetchOrganizations(1, 500).then((res: any) => {
-      const orgList = res?.data || res?.rows || [];
-      if (Array.isArray(orgList) && orgList.length > 0) {
-        setOrganizations(orgList);
-      } else {
-        useOrganizationStore.getState().getOrganization().then(() => {
-          const org = useOrganizationStore.getState().organization;
-          if (org) setOrganizations([org]);
-        }).catch(() => { });
-      }
-    }).catch(() => { });
-    useProductStore.getState().fetchProducts(1, 500).then(() => {
-      const prods = useProductStore.getState().products;
-      if (prods) setProducts(prods);
-    }).catch(() => { });
-    useWarehouseStore.getState().fetchWarehouses().then((list) => { if (list) setWarehouses(list); }).catch(() => { });
+    useUserStore
+      .getState()
+      .fetchUsers(1, 200)
+      .then((res: any) => {
+        if (res?.rows || res) setUsers(res?.rows || res || []);
+      })
+      .catch(() => {});
+    usePersonStore
+      .getState()
+      .fetchPersons({ limit: 500, per_page: 500 })
+      .then(() => {
+        const statePersons = usePersonStore.getState().persons;
+        if (statePersons) {
+          const sorted = [...statePersons].sort((a: any, b: any) =>
+            (a.name || "").localeCompare(b.name || ""),
+          );
+          setPersons(sorted);
+        }
+      })
+      .catch(() => {});
+    useOrganizationStore
+      .getState()
+      .fetchOrganizations(1, 500)
+      .then((res: any) => {
+        const orgList = res?.data || res?.rows || [];
+        if (Array.isArray(orgList) && orgList.length > 0) {
+          setOrganizations(orgList);
+        } else {
+          useOrganizationStore
+            .getState()
+            .getOrganization()
+            .then(() => {
+              const org = useOrganizationStore.getState().organization;
+              if (org) setOrganizations([org]);
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+    useProductStore
+      .getState()
+      .fetchProducts(1, 500)
+      .then(() => {
+        const prods = useProductStore.getState().products;
+        if (prods) setProducts(prods);
+      })
+      .catch(() => {});
+    useWarehouseStore
+      .getState()
+      .fetchWarehouses()
+      .then((list) => {
+        if (list) setWarehouses(list);
+      })
+      .catch(() => {});
 
     if (id) {
-      useTagStore.getState().fetchEntityTags("lead", id).then((tags) => {
-        if (tags) setSelectedTagIds(tags.map((t: any) => t.id));
-      }).catch(() => { });
+      useTagStore
+        .getState()
+        .fetchEntityTags("lead", id)
+        .then((tags) => {
+          if (tags) setSelectedTagIds(tags.map((t: any) => t.id));
+        })
+        .catch(() => {});
       setLoading(true);
       fetchLeadById(Number(id)).then((lead) => {
         if (lead) {
@@ -295,11 +380,19 @@ const EditLeadPage: React.FC = () => {
             user_id: lead.user_id ? String(lead.user_id) : "",
             status: lead.status !== false ? "true" : "false",
             lost_reason: lead.lost_reason || "",
-            lead_source_id: lead.lead_source_id ? String(lead.lead_source_id) : "",
+            lead_source_id: lead.lead_source_id
+              ? String(lead.lead_source_id)
+              : "",
             lead_type_id: lead.lead_type_id ? String(lead.lead_type_id) : "",
-            lead_pipeline_id: lead.lead_pipeline_id ? String(lead.lead_pipeline_id) : "",
-            lead_pipeline_stage_id: lead.lead_pipeline_stage_id ? String(lead.lead_pipeline_stage_id) : "",
-            expected_close_date: lead.expected_close_date ? lead.expected_close_date.substring(0, 10) : "",
+            lead_pipeline_id: lead.lead_pipeline_id
+              ? String(lead.lead_pipeline_id)
+              : "",
+            lead_pipeline_stage_id: lead.lead_pipeline_stage_id
+              ? String(lead.lead_pipeline_stage_id)
+              : "",
+            expected_close_date: lead.expected_close_date
+              ? lead.expected_close_date.substring(0, 10)
+              : "",
           });
           if (lead.organization_id) {
             setOrganizationId(String(lead.organization_id));
@@ -323,68 +416,82 @@ const EditLeadPage: React.FC = () => {
         setLoading(false);
       });
 
-      useLeadStore.getState().fetchLeadProducts(Number(id)).then(async () => {
-        const prods = useLeadStore.getState().leadProducts;
-        if (Array.isArray(prods) && prods.length > 0) {
-          const rowsWithInvs = await Promise.all(
-            prods.map(async (lp: any) => {
-              let inventories: any[] = [];
-              let prodName = lp.product_name || "";
-              let prodPrice = lp.price !== undefined && lp.price !== null ? String(lp.price) : "0";
-              if (lp.product_id) {
-                try {
-                  const pData = await useProductStore.getState().fetchProductById(Number(lp.product_id));
-                  if (pData) {
-                    if (Array.isArray(pData.inventories)) {
-                      inventories = pData.inventories;
-                    }
-                    if (!prodName && pData.name) {
-                      prodName = pData.name;
-                    }
-                    if ((!prodPrice || prodPrice === "0") && pData.price) {
-                      prodPrice = String(pData.price);
-                    }
-                    setProducts((prev) => {
-                      if (!prev.some((p) => String(p.id) === String(lp.product_id))) {
-                        return [...prev, pData];
-                      }
-                      return prev;
-                    });
-                  }
-                } catch (e) {}
-              }
-              return {
+      useLeadStore
+        .getState()
+        .fetchLeadProducts(Number(id))
+        .then(() => {
+          const prods = useLeadStore.getState().leadProducts;
+          if (Array.isArray(prods) && prods.length > 0) {
+            setProductRows(
+              prods.map((lp: any) => ({
                 id: lp.id,
-                product_id: String(lp.product_id || ""),
-                product_name: prodName,
+                product_id: String(lp.product_id || lp.id || ""),
+                product_name: lp.product_name || lp.name || "",
                 quantity: String(lp.quantity || 1),
-                price: prodPrice,
+                price: String(lp.price || 0),
                 warehouse_id: lp.warehouse_id ? String(lp.warehouse_id) : "",
-                warehouse_location_id: lp.warehouse_location_id ? String(lp.warehouse_location_id) : "",
-                inventories,
+                warehouse_location_id: lp.warehouse_location_id
+                  ? String(lp.warehouse_location_id)
+                  : "",
                 is_recurring: Boolean(lp.is_recurring),
                 billing_cycle: lp.billing_cycle || "monthly",
-                contract_duration: lp.contract_duration ? String(lp.contract_duration) : "12",
-                contract_start_date: lp.contract_start_date ? String(lp.contract_start_date).substring(0, 10) : "",
-                contract_end_date: lp.contract_end_date ? String(lp.contract_end_date).substring(0, 10) : "",
-              };
-            })
-          );
-          setProductRows(rowsWithInvs);
-        } else {
+                contract_duration: lp.contract_duration
+                  ? String(lp.contract_duration)
+                  : "12",
+                contract_start_date: lp.contract_start_date
+                  ? String(lp.contract_start_date).substring(0, 10)
+                  : "",
+                contract_end_date: lp.contract_end_date
+                  ? String(lp.contract_end_date).substring(0, 10)
+                  : "",
+              })),
+            );
+          } else {
+            const todayStr = new Date().toISOString().split("T")[0];
+            setProductRows([
+              {
+                product_id: "",
+                product_name: "",
+                quantity: "1",
+                price: "0",
+                warehouse_id: "",
+                warehouse_location_id: "",
+                is_recurring: false,
+                billing_cycle: "monthly",
+                contract_duration: "12",
+                contract_start_date: todayStr,
+                contract_end_date: computeContractEndDate(todayStr, "12"),
+              },
+            ]);
+          }
+        })
+        .catch(() => {
           const todayStr = new Date().toISOString().split("T")[0];
-          setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [], is_recurring: false, billing_cycle: "monthly", contract_duration: "12", contract_start_date: todayStr, contract_end_date: computeContractEndDate(todayStr, "12") }]);
-        }
-      }).catch(() => {
-        const todayStr = new Date().toISOString().split("T")[0];
-        setProductRows([{ product_id: "", product_name: "", quantity: "1", price: "0", warehouse_id: "", warehouse_location_id: "", inventories: [], is_recurring: false, billing_cycle: "monthly", contract_duration: "12", contract_start_date: todayStr, contract_end_date: computeContractEndDate(todayStr, "12") }]);
-      });
+          setProductRows([
+            {
+              product_id: "",
+              product_name: "",
+              quantity: "1",
+              price: "0",
+              warehouse_id: "",
+              warehouse_location_id: "",
+              is_recurring: false,
+              billing_cycle: "monthly",
+              contract_duration: "12",
+              contract_start_date: todayStr,
+              contract_end_date: computeContractEndDate(todayStr, "12"),
+            },
+          ]);
+        });
     }
   }, [id]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (personDropdownRef.current && !personDropdownRef.current.contains(e.target as Node)) {
+      if (
+        personDropdownRef.current &&
+        !personDropdownRef.current.contains(e.target as Node)
+      ) {
         setIsPersonDropdownOpen(false);
       }
     };
@@ -461,7 +568,11 @@ const EditLeadPage: React.FC = () => {
     setContactEmails((prev) => [...prev, { label: "Work", value: "" }]);
   };
 
-  const handleEmailChange = (index: number, field: "label" | "value", val: string) => {
+  const handleEmailChange = (
+    index: number,
+    field: "label" | "value",
+    val: string,
+  ) => {
     setContactEmails((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: val };
@@ -481,8 +592,13 @@ const EditLeadPage: React.FC = () => {
     setContactPhones((prev) => [...prev, { label: "Work", value: "" }]);
   };
 
-  const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
-    const cleanVal = field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
+  const handlePhoneChange = (
+    index: number,
+    field: "label" | "value",
+    val: string,
+  ) => {
+    const cleanVal =
+      field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
     setContactPhones((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: cleanVal };
@@ -508,9 +624,6 @@ const EditLeadPage: React.FC = () => {
         product_name: "",
         quantity: "1",
         price: "0",
-        warehouse_id: "",
-        warehouse_location_id: "",
-        inventories: [],
         is_recurring: false,
         billing_cycle: "monthly",
         contract_duration: "12",
@@ -522,19 +635,29 @@ const EditLeadPage: React.FC = () => {
 
   const removeProductRow = (index: number) => {
     setProductRows((rows) => rows.filter((_, i) => i !== index));
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
-  const updateProductRow = (index: number, field: keyof ProductRow, value: any) => {
+  const updateProductRow = (
+    index: number,
+    field: keyof ProductRow,
+    value: any,
+  ) => {
     setProductRows((rows) => {
       const updated = [...rows];
       updated[index] = { ...updated[index], [field]: value };
 
       if (field === "billing_cycle") {
-        const adjustedDuration = getAdjustedDurationForCycle(value, updated[index].contract_duration);
+        const adjustedDuration = getAdjustedDurationForCycle(
+          value,
+          updated[index].contract_duration,
+        );
         updated[index].contract_duration = adjustedDuration;
         if (updated[index].contract_start_date) {
-          updated[index].contract_end_date = computeContractEndDate(updated[index].contract_start_date, adjustedDuration);
+          updated[index].contract_end_date = computeContractEndDate(
+            updated[index].contract_start_date,
+            adjustedDuration,
+          );
         }
       }
 
@@ -547,45 +670,59 @@ const EditLeadPage: React.FC = () => {
           updated[index].contract_duration = "12";
         }
         if (!updated[index].contract_end_date) {
-          updated[index].contract_end_date = computeContractEndDate(updated[index].contract_start_date, updated[index].contract_duration);
+          updated[index].contract_end_date = computeContractEndDate(
+            updated[index].contract_start_date,
+            updated[index].contract_duration,
+          );
         }
       }
 
       if (field === "contract_start_date") {
-        updated[index].contract_end_date = computeContractEndDate(value, updated[index].contract_duration || "12");
+        updated[index].contract_end_date = computeContractEndDate(
+          value,
+          updated[index].contract_duration || "12",
+        );
       }
 
       if (field === "contract_duration") {
         if (updated[index].contract_start_date) {
-          updated[index].contract_end_date = computeContractEndDate(updated[index].contract_start_date, value);
+          updated[index].contract_end_date = computeContractEndDate(
+            updated[index].contract_start_date,
+            value,
+          );
         }
       }
 
       return updated;
     });
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
   const selectProduct = (index: number, productId: string) => {
     const product = products.find((p) => String(p.id) === productId);
-    const isService = product?.type === "Service" || product?.type?.toLowerCase() === "service";
+    const isService =
+      product?.type === "Service" || product?.type?.toLowerCase() === "service";
     setProductRows((rows) => {
       const updated = [...rows];
       const todayStr = new Date().toISOString().split("T")[0];
       const duration = updated[index]?.contract_duration || "12";
       const startDate = updated[index]?.contract_start_date || todayStr;
-      const endDate = updated[index]?.contract_end_date || computeContractEndDate(startDate, duration);
+      const endDate =
+        updated[index]?.contract_end_date ||
+        computeContractEndDate(startDate, duration);
 
       updated[index] = {
         ...updated[index],
         product_id: productId,
         product_name: product?.name || "",
         price: String(product?.price ?? 0),
-        quantity: isService ? "1" : (updated[index]?.quantity || "1"),
+        quantity: isService ? "1" : updated[index]?.quantity || "1",
         warehouse_id: "",
         warehouse_location_id: "",
         inventories: [],
-        is_recurring: isService ? true : (updated[index]?.is_recurring ?? false),
+        is_recurring: isService
+          ? true
+          : (updated[index]?.is_recurring ?? false),
         billing_cycle: updated[index]?.billing_cycle || "monthly",
         contract_duration: duration,
         contract_start_date: startDate,
@@ -595,26 +732,35 @@ const EditLeadPage: React.FC = () => {
     });
 
     if (productId) {
-      useProductStore.getState().fetchProductById(Number(productId))
+      useProductStore
+        .getState()
+        .fetchProductById(Number(productId))
         .then((productData) => {
           if (productData && Array.isArray(productData.inventories)) {
             const invs = productData.inventories;
             setProductRows((rows) => {
               const next = [...rows];
-              if (next[index] && String(next[index].product_id) === String(productId)) {
+              if (
+                next[index] &&
+                String(next[index].product_id) === String(productId)
+              ) {
                 next[index] = { ...next[index], inventories: invs };
               }
               return next;
             });
           }
         })
-        .catch(() => { });
+        .catch(() => {});
     }
 
-    clearError(`product_${index}`, `quantity_${index}`, `price_${index}`);
+    clearError("products", `product_${index}`, `quantity_${index}`, `price_${index}`);
   };
 
-  const handleSplitProductRow = (idx: number, maxQty: number, remainingQty: number) => {
+  const handleSplitProductRow = (
+    idx: number,
+    maxQty: number,
+    remainingQty: number,
+  ) => {
     setProductRows((rows) => {
       const next = [...rows];
       const currentRow = next[idx];
@@ -640,7 +786,11 @@ const EditLeadPage: React.FC = () => {
     });
   };
 
-  const triggerStockShortagePopup = (idx: number, locStock: number, shortageQty: number) => {
+  const triggerStockShortagePopup = (
+    idx: number,
+    locStock: number,
+    shortageQty: number,
+  ) => {
     Swal.fire({
       title: "Stock Shortage Warning",
       html: `
@@ -663,7 +813,7 @@ const EditLeadPage: React.FC = () => {
   };
 
   const calculateRowTotal = (row: ProductRow, isService: boolean = false) => {
-    const qty = isService ? 1 : (parseFloat(row.quantity) || 0);
+    const qty = isService ? 1 : parseFloat(row.quantity) || 0;
     const price = parseFloat(row.price) || 0;
     if (!row.is_recurring) {
       return qty * price;
@@ -684,23 +834,35 @@ const EditLeadPage: React.FC = () => {
   };
 
   const totalLeadValue = productRows.reduce((runningTotal, row) => {
-    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
-    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+    const selectedProd = products.find(
+      (prod) => String(prod.id) === String(row.product_id),
+    );
+    const isService =
+      selectedProd?.type?.toLowerCase() === "service" ||
+      selectedProd?.type === "Service";
     return runningTotal + calculateRowTotal(row, isService);
   }, 0);
 
   const oneTimeTotal = productRows.reduce((sum, row) => {
     if (row.is_recurring) return sum;
-    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
-    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+    const selectedProd = products.find(
+      (prod) => String(prod.id) === String(row.product_id),
+    );
+    const isService =
+      selectedProd?.type?.toLowerCase() === "service" ||
+      selectedProd?.type === "Service";
     return sum + calculateRowTotal(row, isService);
   }, 0);
 
   const mrrTotal = productRows.reduce((sum, row) => {
     if (!row.is_recurring) return sum;
-    const selectedProd = products.find((prod) => String(prod.id) === String(row.product_id));
-    const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-    const qty = isService ? 1 : (parseFloat(row.quantity) || 0);
+    const selectedProd = products.find(
+      (prod) => String(prod.id) === String(row.product_id),
+    );
+    const isService =
+      selectedProd?.type?.toLowerCase() === "service" ||
+      selectedProd?.type === "Service";
+    const qty = isService ? 1 : parseFloat(row.quantity) || 0;
     const price = parseFloat(row.price) || 0;
     const cycleRate = qty * price;
     const cycle = (row.billing_cycle || "monthly").toLowerCase();
@@ -710,90 +872,27 @@ const EditLeadPage: React.FC = () => {
     return sum + cycleRate;
   }, 0);
 
-  const uniqueSources = useMemo(() => {
-    const seen = new Set<string>();
-    return (sources || []).filter((s) => {
-      const nameKey = (s.name || "").trim().toLowerCase();
-      if (!nameKey || seen.has(nameKey) || seen.has(String(s.id))) return false;
-      seen.add(nameKey);
-      seen.add(String(s.id));
+  const filteredPersons = persons.filter((person) => {
+    if (!personSearch) return true;
+    if (
+      personId &&
+      personSearch ===
+        (persons.find((item) => String(item.id) === String(personId))?.name ||
+          "")
+    )
       return true;
-    });
-  }, [sources]);
-
-  const uniqueTypes = useMemo(() => {
-    const seen = new Set<string>();
-    return (types || []).filter((t) => {
-      const nameKey = (t.name || "").trim().toLowerCase();
-      if (!nameKey || seen.has(nameKey) || seen.has(String(t.id))) return false;
-      seen.add(nameKey);
-      seen.add(String(t.id));
-      return true;
-    });
-  }, [types]);
-
-  const uniquePipelines = useMemo(() => {
-    const seen = new Set<string>();
-    return (pipelines || []).filter((p) => {
-      const nameKey = (p.name || "").trim().toLowerCase();
-      if (!nameKey || seen.has(nameKey) || seen.has(String(p.id))) return false;
-      seen.add(nameKey);
-      seen.add(String(p.id));
-      return true;
-    });
-  }, [pipelines]);
-
-  const uniqueStages = useMemo(() => {
-    const seen = new Set<string>();
-    return (stages || []).filter((st) => {
-      const nameKey = (st.name || "").trim().toLowerCase();
-      if (!nameKey || seen.has(nameKey) || seen.has(String(st.id))) return false;
-      seen.add(nameKey);
-      seen.add(String(st.id));
-      return true;
-    });
-  }, [stages]);
-
-  const uniqueUsers = useMemo(() => {
-    const seen = new Set<string>();
-    return (users || []).filter((u) => {
-      const key = `${u.id}-${(u.email || u.name || "").trim().toLowerCase()}`;
-      if (seen.has(key) || seen.has(String(u.id))) return false;
-      seen.add(key);
-      seen.add(String(u.id));
-      return true;
-    });
-  }, [users]);
-
-  const uniqueOrganizations = useMemo(() => {
-    const seen = new Set<string>();
-    return (organizations || []).filter((o) => {
-      const nameKey = (o.name || "").trim().toLowerCase();
-      if (!nameKey || seen.has(nameKey) || seen.has(String(o.id))) return false;
-      seen.add(nameKey);
-      seen.add(String(o.id));
-      return true;
-    });
-  }, [organizations]);
-
-  const filteredPersons = useMemo(() => {
-    const seen = new Set<string>();
-    return (persons || []).filter((person) => {
-      if (!person) return false;
-      const key = String(person.id || person.name || "");
-      if (seen.has(key)) return false;
-      seen.add(key);
-
-      if (!personSearch) return true;
-      if (personId && personSearch === (persons.find((item) => String(item.id) === String(personId))?.name || "")) return true;
-      const query = personSearch.toLowerCase().trim();
-      const name = (person.name || "").toLowerCase();
-      const email = getPersonEmail(person).toLowerCase();
-      const phone = getPersonPhone(person).toLowerCase();
-      const organizationName = getPersonOrg(person, organizations).toLowerCase();
-      return name.includes(query) || email.includes(query) || phone.includes(query) || organizationName.includes(query);
-    });
-  }, [persons, personSearch, personId, organizations]);
+    const query = personSearch.toLowerCase().trim();
+    const name = (person.name || "").toLowerCase();
+    const email = getPersonEmail(person).toLowerCase();
+    const phone = getPersonPhone(person).toLowerCase();
+    const organizationName = getPersonOrg(person, organizations).toLowerCase();
+    return (
+      name.includes(query) ||
+      email.includes(query) ||
+      phone.includes(query) ||
+      organizationName.includes(query)
+    );
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -808,32 +907,49 @@ const EditLeadPage: React.FC = () => {
       fieldErrors.personName = "Contact Person Name is required";
     }
 
+    const strictEmailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     const firstEmail = contactEmails[0]?.value?.trim();
     if (!firstEmail) {
       fieldErrors.contactEmail = "Contact Person Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
-      fieldErrors.contactEmail = "Please enter a valid email address";
+    } else if (!strictEmailRegex.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address without trailing dots (e.g. name@domain.com)";
     }
 
-    // Product rows validation
+    contactEmails.forEach((ce, idx) => {
+      const val = ce.value?.trim();
+      if (val && !strictEmailRegex.test(val)) {
+        fieldErrors[`contactEmail_${idx}`] = "Please enter a valid email address (e.g. name@domain.com)";
+      }
+    });
+
+    // Product rows validation - At least one product is required
+    const hasAnyValidProduct = productRows.some((r) => r.product_id);
+    if (!hasAnyValidProduct) {
+      fieldErrors.products = "At least one product is required";
+      if (productRows.length > 0) {
+        fieldErrors.product_0 = "Please select a product";
+      }
+    }
+
     productRows.forEach((row, idx) => {
-      const hasAnyInput = row.product_id || (row.quantity && row.quantity !== "1") || (row.price && row.price !== "0") || productRows.length > 1;
-      if (hasAnyInput) {
-        if (!row.product_id) {
-          fieldErrors[`product_${idx}`] = "Please select a product";
+      if (!row.product_id) {
+        fieldErrors[`product_${idx}`] = "Please select a product";
+      }
+      const selectedProd = products.find(
+        (p) => String(p.id) === String(row.product_id),
+      );
+      const isService =
+        selectedProd?.type?.toLowerCase() === "service" ||
+        selectedProd?.type === "Service";
+      if (!isService) {
+        const qty = Number(row.quantity);
+        if (isNaN(qty) || qty <= 0) {
+          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
         }
-        const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
-        const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-        if (!isService) {
-          const qty = Number(row.quantity);
-          if (isNaN(qty) || qty <= 0) {
-            fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
-          }
-        }
-        const price = Number(row.price);
-        if (isNaN(price) || price < 0) {
-          fieldErrors[`price_${idx}`] = "Price cannot be negative";
-        }
+      }
+      const price = Number(row.price);
+      if (isNaN(price) || price < 0) {
+        fieldErrors[`price_${idx}`] = "Price cannot be negative";
       }
     });
 
@@ -855,27 +971,48 @@ const EditLeadPage: React.FC = () => {
       const validProducts = productRows
         .filter((r) => r.product_id)
         .map((r) => {
-          const selectedProd = products.find((p) => String(p.id) === String(r.product_id));
-          const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+          const selectedProd = products.find(
+            (p) => String(p.id) === String(r.product_id),
+          );
+          const isService =
+            selectedProd?.type?.toLowerCase() === "service" ||
+            selectedProd?.type === "Service";
           return {
             product_id: Number(r.product_id),
             quantity: isService ? 1 : Number(r.quantity) || 1,
             price: parseFloat(r.price) || 0,
-            warehouse_id: isService ? undefined : (r.warehouse_id ? Number(r.warehouse_id) : undefined),
-            warehouse_location_id: isService ? undefined : (r.warehouse_location_id ? Number(r.warehouse_location_id) : undefined),
+            warehouse_id: isService
+              ? undefined
+              : r.warehouse_id
+                ? Number(r.warehouse_id)
+                : undefined,
+            warehouse_location_id: isService
+              ? undefined
+              : r.warehouse_location_id
+                ? Number(r.warehouse_location_id)
+                : undefined,
             is_recurring: Boolean(r.is_recurring),
-            billing_cycle: r.is_recurring ? (r.billing_cycle || "monthly") : undefined,
-            contract_duration: r.is_recurring ? (Number(r.contract_duration) || 12) : 1,
-            contract_start_date: r.is_recurring ? (r.contract_start_date || undefined) : undefined,
-            contract_end_date: r.is_recurring ? (r.contract_end_date || undefined) : undefined,
+            billing_cycle: r.is_recurring
+              ? r.billing_cycle || "monthly"
+              : undefined,
+            contract_duration: r.is_recurring
+              ? Number(r.contract_duration) || 12
+              : 1,
+            contract_start_date: r.is_recurring
+              ? r.contract_start_date || undefined
+              : undefined,
+            contract_end_date: r.is_recurring
+              ? r.contract_end_date || undefined
+              : undefined,
           };
         });
 
-      const leadValue = validProducts.length > 0
-        ? totalLeadValue
-        : details.lead_value
-          ? Number(details.lead_value)
-          : undefined;
+      const leadValue =
+        validProducts.length > 0
+          ? totalLeadValue
+          : details.lead_value
+            ? Number(details.lead_value)
+            : undefined;
 
       const payload: any = {
         title: details.title.trim(),
@@ -884,10 +1021,18 @@ const EditLeadPage: React.FC = () => {
         status: details.status === "true",
         lost_reason: details.lost_reason || undefined,
         user_id: details.user_id ? Number(details.user_id) : undefined,
-        lead_source_id: details.lead_source_id ? Number(details.lead_source_id) : undefined,
-        lead_type_id: details.lead_type_id ? Number(details.lead_type_id) : undefined,
-        lead_pipeline_id: details.lead_pipeline_id ? Number(details.lead_pipeline_id) : undefined,
-        lead_pipeline_stage_id: details.lead_pipeline_stage_id ? Number(details.lead_pipeline_stage_id) : undefined,
+        lead_source_id: details.lead_source_id
+          ? Number(details.lead_source_id)
+          : undefined,
+        lead_type_id: details.lead_type_id
+          ? Number(details.lead_type_id)
+          : undefined,
+        lead_pipeline_id: details.lead_pipeline_id
+          ? Number(details.lead_pipeline_id)
+          : undefined,
+        lead_pipeline_stage_id: details.lead_pipeline_stage_id
+          ? Number(details.lead_pipeline_stage_id)
+          : undefined,
         expected_close_date: details.expected_close_date || undefined,
         organization_id: organizationId ? Number(organizationId) : undefined,
         products: validProducts,
@@ -910,7 +1055,9 @@ const EditLeadPage: React.FC = () => {
       await updateLead(Number(id), payload);
 
       if (id) {
-        await useTagStore.getState().saveEntityTags("lead", Number(id), selectedTagIds);
+        await useTagStore
+          .getState()
+          .saveEntityTags("lead", Number(id), selectedTagIds);
       }
 
       navigate("/leads");
@@ -923,13 +1070,16 @@ const EditLeadPage: React.FC = () => {
 
   const inputCls =
     "w-full px-3.5 py-2.5 bg-gray-50/70 hover:bg-gray-50 focus:bg-white dark:bg-gray-900/60 dark:hover:bg-gray-900 dark:focus:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-[#0088cc] dark:focus:border-[#0088cc] rounded-xl text-xs sm:text-sm font-medium transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-100 placeholder-gray-400";
-  const labelCls = "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
+  const labelCls =
+    "block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5";
 
   if (loading) {
     return (
       <div className="p-16 text-center space-y-3">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-[#0088cc] border-t-transparent"></div>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading lead details...</p>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          Loading lead details...
+        </p>
       </div>
     );
   }
@@ -938,7 +1088,10 @@ const EditLeadPage: React.FC = () => {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* 🧭 Top Breadcrumb Navigation */}
       <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 gap-1.5">
-        <Link to="/dashboard" className="text-[#0e90d9] hover:underline flex items-center gap-1">
+        <Link
+          to="/dashboard"
+          className="text-[#0e90d9] hover:underline flex items-center gap-1"
+        >
           <i className="mgc_home_3_line text-xs"></i>
           <span>Dashboard</span>
         </Link>
@@ -947,7 +1100,9 @@ const EditLeadPage: React.FC = () => {
           Leads
         </Link>
         <span>/</span>
-        <span className="text-gray-700 dark:text-gray-300 font-medium">Edit Lead #{id}</span>
+        <span className="text-gray-700 dark:text-gray-300 font-medium">
+          Edit Lead #{id}
+        </span>
       </div>
 
       {/* 🏷️ Page Header with Actions & Live Total */}
@@ -979,9 +1134,15 @@ const EditLeadPage: React.FC = () => {
 
         <div className="flex items-center gap-3 justify-end shrink-0">
           <div className="hidden md:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Value</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              Total Value
+            </span>
             <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-              {fmtCurrency(totalLeadValue > 0 ? totalLeadValue : (parseFloat(details.lead_value) || 0))}
+              {fmtCurrency(
+                totalLeadValue > 0
+                  ? totalLeadValue
+                  : parseFloat(details.lead_value) || 0,
+              )}
             </span>
           </div>
 
@@ -1012,7 +1173,9 @@ const EditLeadPage: React.FC = () => {
         {/* 📋 CARD 1: LEAD INFORMATION */}
         <div
           id="lead-details"
-          ref={(el) => { sectionRefs.current["lead-details"] = el; }}
+          ref={(el) => {
+            sectionRefs.current["lead-details"] = el;
+          }}
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
         >
           <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
@@ -1023,7 +1186,9 @@ const EditLeadPage: React.FC = () => {
               <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
                 Lead Information
               </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Basic opportunity details, pipeline, and valuation</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Basic opportunity details, pipeline, and valuation
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -1041,7 +1206,11 @@ const EditLeadPage: React.FC = () => {
                 }}
                 className={`${inputCls} ${errors.title ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
               />
-              {errors.title && <p className="mt-1 text-xs text-red-500 font-medium">{errors.title}</p>}
+              {errors.title && (
+                <p className="mt-1 text-xs text-red-500 font-medium">
+                  {errors.title}
+                </p>
+              )}
             </div>
 
             {/* Sales Owner Dropdown */}
@@ -1049,11 +1218,13 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Sales Owner</label>
               <select
                 value={details.user_id}
-                onChange={(e) => setDetails({ ...details, user_id: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, user_id: e.target.value })
+                }
                 className={inputCls}
               >
                 <option value="">-- Select Sales Owner --</option>
-                {uniqueUsers.map((u) => (
+                {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.email})
                   </option>
@@ -1068,7 +1239,9 @@ const EditLeadPage: React.FC = () => {
                 type="number"
                 step="0.01"
                 value={details.lead_value}
-                onChange={(e) => setDetails({ ...details, lead_value: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, lead_value: e.target.value })
+                }
                 className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
               />
               {totalLeadValue > 0 && (
@@ -1084,7 +1257,12 @@ const EditLeadPage: React.FC = () => {
               <input
                 type="date"
                 value={details.expected_close_date}
-                onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
+                onChange={(e) =>
+                  setDetails({
+                    ...details,
+                    expected_close_date: e.target.value,
+                  })
+                }
                 className={inputCls}
               />
             </div>
@@ -1094,12 +1272,16 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Lead Source</label>
               <select
                 value={details.lead_source_id}
-                onChange={(e) => setDetails({ ...details, lead_source_id: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, lead_source_id: e.target.value })
+                }
                 className={inputCls}
               >
                 <option value="">Select Source</option>
-                {uniqueSources.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1109,12 +1291,16 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Lead Type</label>
               <select
                 value={details.lead_type_id}
-                onChange={(e) => setDetails({ ...details, lead_type_id: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, lead_type_id: e.target.value })
+                }
                 className={inputCls}
               >
                 <option value="">Select Type</option>
-                {uniqueTypes.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                {types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1124,12 +1310,16 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Pipeline</label>
               <select
                 value={details.lead_pipeline_id}
-                onChange={(e) => setDetails({ ...details, lead_pipeline_id: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, lead_pipeline_id: e.target.value })
+                }
                 className={inputCls}
               >
                 <option value="">Select Pipeline</option>
-                {uniquePipelines.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1139,13 +1329,20 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Stage</label>
               <select
                 value={details.lead_pipeline_stage_id}
-                onChange={(e) => setDetails({ ...details, lead_pipeline_stage_id: e.target.value })}
+                onChange={(e) =>
+                  setDetails({
+                    ...details,
+                    lead_pipeline_stage_id: e.target.value,
+                  })
+                }
                 className={inputCls}
                 disabled={!details.lead_pipeline_id}
               >
                 <option value="">Select Stage</option>
-                {uniqueStages.map((st) => (
-                  <option key={st.id} value={st.id}>{st.name}</option>
+                {stages.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1156,7 +1353,9 @@ const EditLeadPage: React.FC = () => {
               <textarea
                 rows={4}
                 value={details.description}
-                onChange={(e) => setDetails({ ...details, description: e.target.value })}
+                onChange={(e) =>
+                  setDetails({ ...details, description: e.target.value })
+                }
                 className={inputCls}
               />
             </div>
@@ -1175,7 +1374,9 @@ const EditLeadPage: React.FC = () => {
         {/* 👤 CARD 2: CONTACT PERSON */}
         <div
           id="contact-person"
-          ref={(el) => { sectionRefs.current["contact-person"] = el; }}
+          ref={(el) => {
+            sectionRefs.current["contact-person"] = el;
+          }}
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
         >
           <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100 dark:border-gray-700">
@@ -1186,7 +1387,9 @@ const EditLeadPage: React.FC = () => {
               <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
                 Contact Person
               </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Information about the primary contact person and organization</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Information about the primary contact person and organization
+              </p>
             </div>
           </div>
 
@@ -1220,11 +1423,15 @@ const EditLeadPage: React.FC = () => {
                     ✕
                   </button>
                 ) : (
-                  <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
+                  <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">
+                    ▼
+                  </span>
                 )}
               </div>
               {errors.personName && (
-                <p className="mt-1 text-xs text-red-500 font-medium">{errors.personName}</p>
+                <p className="mt-1 text-xs text-red-500 font-medium">
+                  {errors.personName}
+                </p>
               )}
 
               {/* Dropdown popup */}
@@ -1244,7 +1451,12 @@ const EditLeadPage: React.FC = () => {
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                               {p.name}
-                              {org && <span className="text-gray-500 dark:text-gray-400 font-normal"> • {org}</span>}
+                              {org && (
+                                <span className="text-gray-500 dark:text-gray-400 font-normal">
+                                  {" "}
+                                  • {org}
+                                </span>
+                              )}
                             </span>
                           </div>
                           {(email || phone) && (
@@ -1275,8 +1487,10 @@ const EditLeadPage: React.FC = () => {
                 className={inputCls}
               >
                 <option value="">Click to add</option>
-                {uniqueOrganizations.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1288,8 +1502,13 @@ const EditLeadPage: React.FC = () => {
               </label>
               {contactEmails.map((em, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactEmail ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
-                    }`}>
+                  <div
+                    className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${
+                      errors.contactEmail
+                        ? "border-red-500 focus-within:ring-red-500"
+                        : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"
+                    }`}
+                  >
                     <input
                       type="email"
                       value={em.value}
@@ -1302,7 +1521,9 @@ const EditLeadPage: React.FC = () => {
                     />
                     <select
                       value={em.label}
-                      onChange={(e) => handleEmailChange(idx, "label", e.target.value)}
+                      onChange={(e) =>
+                        handleEmailChange(idx, "label", e.target.value)
+                      }
                       className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
                     >
                       <option value="Work">Work</option>
@@ -1323,7 +1544,9 @@ const EditLeadPage: React.FC = () => {
                 </div>
               ))}
               {errors.contactEmail && (
-                <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactEmail}</p>
+                <p className="mt-1 text-xs text-red-500 font-medium">
+                  {errors.contactEmail}
+                </p>
               )}
               <button
                 type="button"
@@ -1343,13 +1566,17 @@ const EditLeadPage: React.FC = () => {
                     <input
                       type="tel"
                       value={pn.value}
-                      onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                      onChange={(e) =>
+                        handlePhoneChange(idx, "value", e.target.value)
+                      }
                       placeholder=""
                       className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                     />
                     <select
                       value={pn.label}
-                      onChange={(e) => handlePhoneChange(idx, "label", e.target.value)}
+                      onChange={(e) =>
+                        handlePhoneChange(idx, "label", e.target.value)
+                      }
                       className="w-20 sm:w-24 px-2 sm:px-3 py-2 bg-gray-50 dark:bg-gray-800 border-l border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer shrink-0"
                     >
                       <option value="Work">Work</option>
@@ -1379,13 +1606,34 @@ const EditLeadPage: React.FC = () => {
               </button>
             </div>
 
+            {/* Organization */}
+            <div>
+              <label className={labelCls}>Organization</label>
+              <select
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Click to add</option>
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Organization Contacts List */}
             {(() => {
               const orgContacts = organizationId
-                ? persons.filter((p) => String(p.organization_id) === String(organizationId))
+                ? persons.filter(
+                    (p) => String(p.organization_id) === String(organizationId),
+                  )
                 : [];
               if (orgContacts.length === 0) return null;
-              const orgObj = organizations.find((o) => String(o.id) === String(organizationId));
+              const orgObj = organizations.find(
+                (o) => String(o.id) === String(organizationId),
+              );
 
               return (
                 <div className="mt-2 p-3.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
@@ -1396,7 +1644,9 @@ const EditLeadPage: React.FC = () => {
                         Organization Contacts ({orgContacts.length})
                       </h4>
                       <p className="text-[11px] text-gray-500">
-                        {orgObj?.name ? `Contacts associated with ${orgObj.name}` : "Contacts associated with this organization"}
+                        {orgObj?.name
+                          ? `Contacts associated with ${orgObj.name}`
+                          : "Contacts associated with this organization"}
                       </p>
                     </div>
                   </div>
@@ -1410,15 +1660,21 @@ const EditLeadPage: React.FC = () => {
                       return (
                         <div
                           key={contact.id}
-                          className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${isPrimary
-                            ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
-                            : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                            }`}
+                          className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all ${
+                            isPrimary
+                              ? "bg-blue-50/80 border-[#0088cc] dark:bg-blue-900/20 dark:border-blue-700 shadow-sm"
+                              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isPrimary ? "bg-[#0088cc] text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                }`}>
+                              <div
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  isPrimary
+                                    ? "bg-[#0088cc] text-white"
+                                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                }`}
+                              >
                                 {contact.name?.substring(0, 2).toUpperCase()}
                               </div>
                               <div>
@@ -1475,13 +1731,19 @@ const EditLeadPage: React.FC = () => {
         {/* ⚙️ CARD 3: CUSTOM FIELDS */}
         <div
           id="custom-attributes"
-          ref={(el) => { sectionRefs.current["custom-attributes"] = el; }}
+          ref={(el) => {
+            sectionRefs.current["custom-attributes"] = el;
+          }}
         >
           <DynamicAttributeFields
             entityType="leads"
             values={customAttributes}
-            onChange={(code, val) => setCustomAttributes((prev) => ({ ...prev, [code]: val }))}
-            onAttributesLoaded={(attrs) => setHasCustomAttributes(attrs.length > 0)}
+            onChange={(code, val) =>
+              setCustomAttributes((prev) => ({ ...prev, [code]: val }))
+            }
+            onAttributesLoaded={(attrs) =>
+              setHasCustomAttributes(attrs.length > 0)
+            }
             containerClassName="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
           />
         </div>
@@ -1489,7 +1751,9 @@ const EditLeadPage: React.FC = () => {
         {/* 📦 CARD 4: PRODUCTS */}
         <div
           id="products"
-          ref={(el) => { sectionRefs.current["products"] = el; }}
+          ref={(el) => {
+            sectionRefs.current["products"] = el;
+          }}
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-5"
         >
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
@@ -1502,7 +1766,8 @@ const EditLeadPage: React.FC = () => {
                   Products ({productRows.filter((r) => r.product_id).length})
                 </h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Attach products to automatically calculate the total deal value
+                  Attach products to automatically calculate the total deal
+                  value
                 </p>
               </div>
             </div>
@@ -1516,26 +1781,52 @@ const EditLeadPage: React.FC = () => {
             </button>
           </div>
 
+          {errors.products && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 rounded-xl flex items-center gap-2 text-xs text-red-600 dark:text-red-400 font-medium">
+              <i className="mgc_alert_line text-base shrink-0"></i>
+              <span>{errors.products}</span>
+            </div>
+          )}
+
           {(() => {
             const hasPhysicalProduct = productRows.some((r) => {
               if (!r.product_id) return true;
-              const prod = products.find((p) => String(p.id) === String(r.product_id));
-              return prod && prod.type !== "Service" && prod.type?.toLowerCase() !== "service";
+              const prod = products.find(
+                (p) => String(p.id) === String(r.product_id),
+              );
+              return (
+                prod &&
+                prod.type !== "Service" &&
+                prod.type?.toLowerCase() !== "service"
+              );
             });
 
             const getRowData = (row: any, index: number) => {
-              const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
-              const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-              const effectiveQty = isService ? 1 : (parseFloat(row.quantity) || 0);
+              const selectedProd = products.find(
+                (p) => String(p.id) === String(row.product_id),
+              );
+              const isService =
+                selectedProd?.type?.toLowerCase() === "service" ||
+                selectedProd?.type === "Service";
+              const effectiveQty = isService
+                ? 1
+                : parseFloat(row.quantity) || 0;
               const unitPrice = parseFloat(row.price) || 0;
               const cycleAmount = effectiveQty * unitPrice;
-              const durationMonths = parseInt(row.contract_duration || "12", 10) || 1;
+              const rowAmount = calculateRowTotal(row, isService);
+
               const cycle = (row.billing_cycle || "monthly").toLowerCase();
+              const durationMonths =
+                parseInt(row.contract_duration || "12", 10) || 1;
               let cyclesCount = durationMonths;
-              if (cycle === "yearly" || cycle === "annually") cyclesCount = Math.max(1, Math.round(durationMonths / 12));
-              else if (cycle === "half-yearly") cyclesCount = Math.max(1, Math.round(durationMonths / 6));
-              else if (cycle === "quarterly") cyclesCount = Math.max(1, Math.round(durationMonths / 3));
-              const rowAmount = row.is_recurring ? cycleAmount * cyclesCount : cycleAmount;
+              if (cycle === "yearly" || cycle === "annually") {
+                cyclesCount = Math.max(1, Math.round(durationMonths / 12));
+              } else if (cycle === "half-yearly") {
+                cyclesCount = Math.max(1, Math.round(durationMonths / 6));
+              } else if (cycle === "quarterly") {
+                cyclesCount = Math.max(1, Math.round(durationMonths / 3));
+              }
+
               const prodErr = errors[`product_${index}`];
               const qtyErr = errors[`quantity_${index}`];
               const priceErr = errors[`price_${index}`];
@@ -1544,16 +1835,25 @@ const EditLeadPage: React.FC = () => {
               const productInventories = row.inventories || [];
               const hasInvRecords = productInventories.length > 0;
               const validWarehouseIds = new Set(
-                productInventories.map((inv: any) => Number(inv.warehouse_id)).filter(Boolean)
+                productInventories
+                  .map((inv: any) => Number(inv.warehouse_id))
+                  .filter(Boolean),
               );
 
               // Helper: calculate quantity already used in OTHER rows for same product & location/warehouse
-              const getUsedQtyInOtherRows = (locId?: string | number, wId?: string | number) => {
+              const getUsedQtyInOtherRows = (
+                locId?: string | number,
+                wId?: string | number,
+              ) => {
                 if (!row.product_id) return 0;
                 return productRows.reduce((sum, r, rIdx) => {
                   if (rIdx === index) return sum;
-                  if (String(r.product_id) !== String(row.product_id)) return sum;
-                  if (locId && String(r.warehouse_location_id) === String(locId)) {
+                  if (String(r.product_id) !== String(row.product_id))
+                    return sum;
+                  if (
+                    locId &&
+                    String(r.warehouse_location_id) === String(locId)
+                  ) {
                     return sum + (parseFloat(r.quantity) || 0);
                   }
                   if (!locId && wId && String(r.warehouse_id) === String(wId)) {
@@ -1564,53 +1864,95 @@ const EditLeadPage: React.FC = () => {
               };
 
               const availableWarehouses = warehouses.filter((w) => {
-                if (row.warehouse_id && String(w.id) === String(row.warehouse_id)) return true;
-                if (!row.product_id || !hasInvRecords || validWarehouseIds.size === 0) return true;
+                if (
+                  !row.product_id ||
+                  !hasInvRecords ||
+                  validWarehouseIds.size === 0
+                )
+                  return true;
                 return validWarehouseIds.has(Number(w.id));
               });
 
               const getWarehouseLabel = (w: any) => {
                 if (!row.product_id || !hasInvRecords) return w.name;
-                const invsForW = productInventories.filter((inv: any) => Number(inv.warehouse_id) === Number(w.id));
-                const dbTotalStock = invsForW.reduce((sum: number, inv: any) => sum + (Number(inv.in_stock) || 0), 0);
+                const invsForW = productInventories.filter(
+                  (inv: any) => Number(inv.warehouse_id) === Number(w.id),
+                );
+                const dbTotalStock = invsForW.reduce(
+                  (sum: number, inv: any) => sum + (Number(inv.in_stock) || 0),
+                  0,
+                );
                 const usedOther = getUsedQtyInOtherRows(undefined, w.id);
                 const availStock = Math.max(0, dbTotalStock - usedOther);
-                return availStock > 0 ? `${w.name} (Stock: ${availStock})` : `${w.name} (Out of Stock)`;
+                return availStock > 0
+                  ? `${w.name} (Stock: ${availStock})`
+                  : `${w.name} (Out of Stock)`;
               };
 
               // Dependent Locations for selected warehouse
-              const selectedW = warehouses.find((w) => String(w.id) === String(row.warehouse_id));
+              const selectedW = warehouses.find(
+                (w) => String(w.id) === String(row.warehouse_id),
+              );
               const allLocations = selectedW?.locations || [];
               const locInvsForW = productInventories.filter(
-                (inv: any) => Number(inv.warehouse_id) === Number(row.warehouse_id)
+                (inv: any) =>
+                  Number(inv.warehouse_id) === Number(row.warehouse_id),
               );
               const validLocationIds = new Set(
-                locInvsForW.map((inv: any) => Number(inv.warehouse_location_id)).filter(Boolean)
+                locInvsForW
+                  .map((inv: any) => Number(inv.warehouse_location_id))
+                  .filter(Boolean),
               );
 
               const availableLocations = allLocations.filter((loc: any) => {
-                if (row.warehouse_location_id && String(loc.id) === String(row.warehouse_location_id)) return true;
-                if (!row.product_id || !hasInvRecords || validLocationIds.size === 0) return true;
+                if (
+                  !row.product_id ||
+                  !hasInvRecords ||
+                  validLocationIds.size === 0
+                )
+                  return true;
                 return validLocationIds.has(Number(loc.id));
               });
 
               const getLocationLabel = (loc: any) => {
                 if (!row.product_id || !hasInvRecords) return loc.name;
-                const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(loc.id));
+                const invForLoc = locInvsForW.find(
+                  (inv: any) =>
+                    Number(inv.warehouse_location_id) === Number(loc.id),
+                );
                 if (!invForLoc) return loc.name;
                 const dbLocStock = Number(invForLoc.in_stock) || 0;
                 const usedOther = getUsedQtyInOtherRows(loc.id);
                 const availStock = Math.max(0, dbLocStock - usedOther);
-                return availStock > 0 ? `${loc.name} (Stock: ${availStock})` : `${loc.name} (Out of Stock - 0 left)`;
+                return availStock > 0
+                  ? `${loc.name} (Stock: ${availStock})`
+                  : `${loc.name} (Out of Stock - 0 left)`;
               };
 
-              const invForLoc = locInvsForW.find((inv: any) => Number(inv.warehouse_location_id) === Number(row.warehouse_location_id));
-              const dbLocStock = invForLoc ? (Number(invForLoc.in_stock) || 0) : null;
-              const usedOtherLoc = dbLocStock !== null && row.warehouse_location_id ? getUsedQtyInOtherRows(row.warehouse_location_id) : 0;
-              const locStock = dbLocStock !== null ? Math.max(0, dbLocStock - usedOtherLoc) : null;
+              const invForLoc = locInvsForW.find(
+                (inv: any) =>
+                  Number(inv.warehouse_location_id) ===
+                  Number(row.warehouse_location_id),
+              );
+              const dbLocStock = invForLoc
+                ? Number(invForLoc.in_stock) || 0
+                : null;
+              const usedOtherLoc =
+                dbLocStock !== null && row.warehouse_location_id
+                  ? getUsedQtyInOtherRows(row.warehouse_location_id)
+                  : 0;
+              const locStock =
+                dbLocStock !== null
+                  ? Math.max(0, dbLocStock - usedOtherLoc)
+                  : null;
               const reqQty = Number(row.quantity || 0);
-              const isStockShortage = !isService && Boolean(row.warehouse_location_id) && locStock !== null && reqQty > locStock;
-              const shortageQty = isStockShortage && locStock !== null ? reqQty - locStock : 0;
+              const isStockShortage =
+                !isService &&
+                Boolean(row.warehouse_location_id) &&
+                locStock !== null &&
+                reqQty > locStock;
+              const shortageQty =
+                isStockShortage && locStock !== null ? reqQty - locStock : 0;
 
               return {
                 selectedProd,
@@ -1642,11 +1984,18 @@ const EditLeadPage: React.FC = () => {
                     <thead>
                       <tr className="bg-gray-50/80 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
                         <th className="py-2.5 px-3 min-w-[220px]">
-                          Product / Service <span className="text-red-500">*</span>
+                          Product / Service{" "}
+                          <span className="text-red-500">*</span>
                         </th>
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 w-44">Warehouse</th>}
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 w-44">Location</th>}
-                        {hasPhysicalProduct && <th className="py-2.5 px-3 w-24">Qty</th>}
+                        {hasPhysicalProduct && (
+                          <th className="py-2.5 px-3 w-44">Warehouse</th>
+                        )}
+                        {hasPhysicalProduct && (
+                          <th className="py-2.5 px-3 w-44">Location</th>
+                        )}
+                        {hasPhysicalProduct && (
+                          <th className="py-2.5 px-3 w-24">Qty</th>
+                        )}
                         <th className="py-2.5 px-3 w-32">Price (₹)</th>
                         <th className="py-2.5 px-3 w-36 text-right">Amount</th>
                         <th className="py-2.5 px-2 w-10 text-center"></th>
@@ -1682,43 +2031,55 @@ const EditLeadPage: React.FC = () => {
                               <td className="py-2.5 px-3 align-top">
                                 <select
                                   value={row.product_id}
-                                  onChange={(e) => selectProduct(index, e.target.value)}
+                                  onChange={(e) =>
+                                    selectProduct(index, e.target.value)
+                                  }
                                   className={`${inputCls} pr-7 truncate ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                                 >
                                   <option value="">Select an item...</option>
                                   {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
-                                    <option value={row.product_id}>
+                                    <option key={row.product_id} value={row.product_id}>
                                       {row.product_name || `Product #${row.product_id}`}
                                     </option>
                                   )}
                                   {products.map((p) => (
                                     <option key={p.id} value={p.id}>
-                                      {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                      {p.name} {p.sku ? `(${p.sku})` : ""}{" "}
+                                      {p.type === "Service" ? "[Service]" : ""}
                                     </option>
                                   ))}
                                 </select>
-                                {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                                {prodErr && (
+                                  <p className="mt-1 text-xs text-red-500 font-medium">
+                                    {prodErr}
+                                  </p>
+                                )}
                               </td>
 
                               {hasPhysicalProduct && (
                                 <td className="py-2.5 px-3 align-top">
                                   {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">
+                                      -
+                                    </span>
                                   ) : (
                                     <select
                                       value={row.warehouse_id || ""}
                                       onChange={(e) => {
-                                        updateProductRow(index, "warehouse_id", e.target.value);
-                                        updateProductRow(index, "warehouse_location_id", "");
+                                        updateProductRow(
+                                          index,
+                                          "warehouse_id",
+                                          e.target.value,
+                                        );
+                                        updateProductRow(
+                                          index,
+                                          "warehouse_location_id",
+                                          "",
+                                        );
                                       }}
                                       className={`${inputCls} pr-7 truncate`}
                                     >
                                       <option value="">Select Warehouse</option>
-                                      {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
-                                        <option value={row.warehouse_id}>
-                                          {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
-                                        </option>
-                                      )}
                                       {availableWarehouses.map((w) => (
                                         <option key={w.id} value={w.id}>
                                           {getWarehouseLabel(w)}
@@ -1732,20 +2093,23 @@ const EditLeadPage: React.FC = () => {
                               {hasPhysicalProduct && (
                                 <td className="py-2.5 px-3 align-top">
                                   {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">
+                                      -
+                                    </span>
                                   ) : (
                                     <select
                                       value={row.warehouse_location_id || ""}
-                                      onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                      onChange={(e) =>
+                                        updateProductRow(
+                                          index,
+                                          "warehouse_location_id",
+                                          e.target.value,
+                                        )
+                                      }
                                       disabled={!row.warehouse_id}
                                       className={`${inputCls} pr-7 truncate disabled:opacity-50`}
                                     >
                                       <option value="">Select Location</option>
-                                      {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
-                                        <option value={row.warehouse_location_id}>
-                                          {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
-                                        </option>
-                                      )}
                                       {availableLocations.map((loc: any) => (
                                         <option key={loc.id} value={loc.id}>
                                           {getLocationLabel(loc)}
@@ -1759,37 +2123,59 @@ const EditLeadPage: React.FC = () => {
                               {hasPhysicalProduct && (
                                 <td className="py-2.5 px-3 align-top">
                                   {isService ? (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">-</span>
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic block pt-2 text-center">
+                                      -
+                                    </span>
                                   ) : (
                                     <>
                                       <input
                                         type="number"
                                         min="1"
                                         value={row.quantity}
-                                        onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                        onChange={(e) =>
+                                          updateProductRow(
+                                            index,
+                                            "quantity",
+                                            e.target.value,
+                                          )
+                                        }
                                         className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                                           qtyErr || isStockShortage
                                             ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
                                             : ""
                                         }`}
                                       />
-                                      {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
-                                      {isStockShortage && locStock !== null && (
-                                        locStock > 0 ? (
+                                      {qtyErr && (
+                                        <p className="mt-1 text-xs text-red-500 font-medium">
+                                          {qtyErr}
+                                        </p>
+                                      )}
+                                      {isStockShortage &&
+                                        locStock !== null &&
+                                        (locStock > 0 ? (
                                           <button
                                             type="button"
-                                            onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                                            onClick={() =>
+                                              triggerStockShortagePopup(
+                                                index,
+                                                locStock,
+                                                shortageQty,
+                                              )
+                                            }
                                             className="mt-1.5 w-full text-left p-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
                                           >
-                                            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} in stock</span>
-                                            <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from other</span>
+                                            <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                                              ⚠️ Only {locStock} in stock
+                                            </span>
+                                            <span className="text-[#0088cc] hover:underline font-bold text-[11px]">
+                                              + Deduct {shortageQty} from other
+                                            </span>
                                           </button>
                                         ) : (
                                           <div className="mt-1.5 p-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded text-xs font-medium text-red-700 dark:text-red-300">
                                             ⚠️ Out of stock
                                           </div>
-                                        )
-                                      )}
+                                        ))}
                                     </>
                                   )}
                                 </td>
@@ -1800,18 +2186,29 @@ const EditLeadPage: React.FC = () => {
                                   type="number"
                                   step="0.01"
                                   value={row.price}
-                                  onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                                  onChange={(e) =>
+                                    updateProductRow(
+                                      index,
+                                      "price",
+                                      e.target.value,
+                                    )
+                                  }
                                   disabled
                                   className={`${inputCls} bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                                 />
-                                {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                                {priceErr && (
+                                  <p className="mt-1 text-xs text-red-500 font-medium">
+                                    {priceErr}
+                                  </p>
+                                )}
                               </td>
 
                               <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 align-top text-right pt-3">
                                 <div>{fmtCurrency(rowAmount)}</div>
                                 {row.is_recurring && (
                                   <div className="text-[11px] text-blue-600 dark:text-blue-400 font-normal">
-                                    {fmtCurrency(cycleAmount)} / {row.billing_cycle || "monthly"}
+                                    {fmtCurrency(cycleAmount)} /{" "}
+                                    {row.billing_cycle || "monthly"}
                                   </div>
                                 )}
                               </td>
@@ -1832,7 +2229,10 @@ const EditLeadPage: React.FC = () => {
 
                             {/* Tier 2: Billing & Contract Details Sub-bar */}
                             <tr className="bg-slate-50/70 dark:bg-slate-800/40 border-b border-gray-200 dark:border-gray-700">
-                              <td colSpan={colSpanTotal} className="px-3.5 py-2">
+                              <td
+                                colSpan={colSpanTotal}
+                                className="px-3.5 py-2"
+                              >
                                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
                                   <div className="flex flex-wrap items-center gap-3">
                                     <div className="flex items-center gap-2">
@@ -1844,7 +2244,12 @@ const EditLeadPage: React.FC = () => {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            if (row.is_recurring) updateProductRow(index, "is_recurring", false);
+                                            if (row.is_recurring)
+                                              updateProductRow(
+                                                index,
+                                                "is_recurring",
+                                                false,
+                                              );
                                           }}
                                           className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
                                             !row.is_recurring
@@ -1857,7 +2262,12 @@ const EditLeadPage: React.FC = () => {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            if (!row.is_recurring) updateProductRow(index, "is_recurring", true);
+                                            if (!row.is_recurring)
+                                              updateProductRow(
+                                                index,
+                                                "is_recurring",
+                                                true,
+                                              );
                                           }}
                                           className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
                                             row.is_recurring
@@ -1874,48 +2284,101 @@ const EditLeadPage: React.FC = () => {
                                     {row.is_recurring ? (
                                       <div className="flex flex-wrap items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Cycle:</span>
+                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                            Cycle:
+                                          </span>
                                           <select
-                                            value={row.billing_cycle || "monthly"}
-                                            onChange={(e) => updateProductRow(index, "billing_cycle", e.target.value)}
+                                            value={
+                                              row.billing_cycle || "monthly"
+                                            }
+                                            onChange={(e) =>
+                                              updateProductRow(
+                                                index,
+                                                "billing_cycle",
+                                                e.target.value,
+                                              )
+                                            }
                                             className="py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
                                           >
-                                            <option value="monthly">Monthly</option>
-                                            <option value="quarterly">Quarterly (3 Mo)</option>
-                                            <option value="half-yearly">Half-Yearly (6 Mo)</option>
-                                            <option value="yearly">Yearly (12 Mo)</option>
+                                            <option value="monthly">
+                                              Monthly
+                                            </option>
+                                            <option value="quarterly">
+                                              Quarterly (3 Mo)
+                                            </option>
+                                            <option value="half-yearly">
+                                              Half-Yearly (6 Mo)
+                                            </option>
+                                            <option value="yearly">
+                                              Yearly (12 Mo)
+                                            </option>
                                           </select>
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Duration:</span>
+                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                            Duration:
+                                          </span>
                                           <select
-                                            value={row.contract_duration || "12"}
-                                            onChange={(e) => updateProductRow(index, "contract_duration", e.target.value)}
+                                            value={
+                                              row.contract_duration || "12"
+                                            }
+                                            onChange={(e) =>
+                                              updateProductRow(
+                                                index,
+                                                "contract_duration",
+                                                e.target.value,
+                                              )
+                                            }
                                             className="py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
                                           >
-                                            {getDurationOptionsForCycle(row.billing_cycle).map((opt) => (
-                                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            {getDurationOptionsForCycle(
+                                              row.billing_cycle,
+                                            ).map((opt) => (
+                                              <option
+                                                key={opt.value}
+                                                value={opt.value}
+                                              >
+                                                {opt.label}
+                                              </option>
                                             ))}
                                           </select>
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Start:</span>
+                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                            Start:
+                                          </span>
                                           <input
                                             type="date"
-                                            value={row.contract_start_date || ""}
-                                            onChange={(e) => updateProductRow(index, "contract_start_date", e.target.value)}
+                                            value={
+                                              row.contract_start_date || ""
+                                            }
+                                            onChange={(e) =>
+                                              updateProductRow(
+                                                index,
+                                                "contract_start_date",
+                                                e.target.value,
+                                              )
+                                            }
                                             className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
                                           />
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
+                                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                            End:
+                                          </span>
                                           <input
                                             type="date"
                                             value={row.contract_end_date || ""}
-                                            onChange={(e) => updateProductRow(index, "contract_end_date", e.target.value)}
+                                            onChange={(e) =>
+                                              updateProductRow(
+                                                index,
+                                                "contract_end_date",
+                                                e.target.value,
+                                              )
+                                            }
                                             className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
                                           />
                                         </div>
@@ -1931,7 +2394,22 @@ const EditLeadPage: React.FC = () => {
                                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200/80 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-medium">
                                       <i className="mgc_calendar_line text-sm text-blue-500"></i>
                                       <span>
-                                        Contract: <strong>{fmtCurrency(cycleAmount)}</strong> / {row.billing_cycle || "monthly"} &times; {cyclesCount} {cyclesCount === 1 ? "cycle" : "cycles"} ({formatCycleDuration(row.billing_cycle, durationMonths)}) = <span className="font-bold text-blue-800 dark:text-blue-200">{fmtCurrency(rowAmount)}</span>
+                                        Contract:{" "}
+                                        <strong>
+                                          {fmtCurrency(cycleAmount)}
+                                        </strong>{" "}
+                                        / {row.billing_cycle || "monthly"}{" "}
+                                        &times; {cyclesCount}{" "}
+                                        {cyclesCount === 1 ? "cycle" : "cycles"}{" "}
+                                        (
+                                        {formatCycleDuration(
+                                          row.billing_cycle,
+                                          durationMonths,
+                                        )}
+                                        ) ={" "}
+                                        <span className="font-bold text-blue-800 dark:text-blue-200">
+                                          {fmtCurrency(rowAmount)}
+                                        </span>
                                       </span>
                                     </div>
                                   )}
@@ -1973,7 +2451,12 @@ const EditLeadPage: React.FC = () => {
                       >
                         <div className="flex items-center justify-between border-b border-gray-200/70 dark:border-gray-700 pb-2">
                           <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Item #{index + 1} {isService && <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">Service</span>}
+                            Item #{index + 1}{" "}
+                            {isService && (
+                              <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
+                                Service
+                              </span>
+                            )}
                           </span>
                           {productRows.length > 1 && (
                             <button
@@ -1981,46 +2464,64 @@ const EditLeadPage: React.FC = () => {
                               onClick={() => removeProductRow(index)}
                               className="text-xs font-medium text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1"
                             >
-                              <i className="mgc_delete_2_line text-sm"></i> Remove
+                              <i className="mgc_delete_2_line text-sm"></i>{" "}
+                              Remove
                             </button>
                           )}
                         </div>
 
                         <div>
                           <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                            Product / Service <span className="text-red-500">*</span>
+                            Product / Service{" "}
+                            <span className="text-red-500">*</span>
                           </label>
                           <select
                             value={row.product_id}
-                            onChange={(e) => selectProduct(index, e.target.value)}
+                            onChange={(e) =>
+                              selectProduct(index, e.target.value)
+                            }
                             className={`${inputCls} pr-7 truncate text-xs ${prodErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                           >
                             <option value="">Select an item...</option>
                             {row.product_id && !products.some((p) => String(p.id) === String(row.product_id)) && (
-                              <option value={row.product_id}>
+                              <option key={row.product_id} value={row.product_id}>
                                 {row.product_name || `Product #${row.product_id}`}
                               </option>
                             )}
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
-                                {p.name} {p.sku ? `(${p.sku})` : ""} {p.type === "Service" ? "[Service]" : ""}
+                                {p.name} {p.sku ? `(${p.sku})` : ""}{" "}
+                                {p.type === "Service" ? "[Service]" : ""}
                               </option>
                             ))}
                           </select>
-                          {prodErr && <p className="mt-1 text-xs text-red-500 font-medium">{prodErr}</p>}
+                          {prodErr && (
+                            <p className="mt-1 text-xs text-red-500 font-medium">
+                              {prodErr}
+                            </p>
+                          )}
                         </div>
 
                         {/* Mobile Billing Segmented Switch */}
                         <div>
-                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Billing Type</label>
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Billing Type
+                          </label>
                           <div className="inline-flex p-0.5 rounded-lg bg-gray-200/80 dark:bg-gray-700 w-full border border-gray-300/40 dark:border-gray-600">
                             <button
                               type="button"
                               onClick={() => {
-                                if (row.is_recurring) updateProductRow(index, "is_recurring", false);
+                                if (row.is_recurring)
+                                  updateProductRow(
+                                    index,
+                                    "is_recurring",
+                                    false,
+                                  );
                               }}
                               className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all text-center ${
-                                !row.is_recurring ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-xs" : "text-gray-500 dark:text-gray-400"
+                                !row.is_recurring
+                                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-xs"
+                                  : "text-gray-500 dark:text-gray-400"
                               }`}
                             >
                               One-Time
@@ -2028,10 +2529,13 @@ const EditLeadPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                if (!row.is_recurring) updateProductRow(index, "is_recurring", true);
+                                if (!row.is_recurring)
+                                  updateProductRow(index, "is_recurring", true);
                               }}
                               className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all text-center flex items-center justify-center gap-1.5 ${
-                                row.is_recurring ? "bg-blue-600 text-white shadow-xs" : "text-gray-500 dark:text-gray-400"
+                                row.is_recurring
+                                  ? "bg-blue-600 text-white shadow-xs"
+                                  : "text-gray-500 dark:text-gray-400"
                               }`}
                             >
                               <i className="mgc_refresh_2_line text-xs"></i>
@@ -2042,45 +2546,85 @@ const EditLeadPage: React.FC = () => {
                           {row.is_recurring && (
                             <div className="grid grid-cols-2 gap-2 pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
                               <div>
-                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Billing Cycle</label>
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                  Billing Cycle
+                                </label>
                                 <select
                                   value={row.billing_cycle || "monthly"}
-                                  onChange={(e) => updateProductRow(index, "billing_cycle", e.target.value)}
+                                  onChange={(e) =>
+                                    updateProductRow(
+                                      index,
+                                      "billing_cycle",
+                                      e.target.value,
+                                    )
+                                  }
                                   className={`${inputCls} !py-1 text-xs`}
                                 >
                                   <option value="monthly">Monthly</option>
-                                  <option value="quarterly">Quarterly (3 Mo)</option>
-                                  <option value="half-yearly">Half-Yearly (6 Mo)</option>
+                                  <option value="quarterly">
+                                    Quarterly (3 Mo)
+                                  </option>
+                                  <option value="half-yearly">
+                                    Half-Yearly (6 Mo)
+                                  </option>
                                   <option value="yearly">Yearly (12 Mo)</option>
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Contract Duration</label>
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                  Contract Duration
+                                </label>
                                 <select
                                   value={row.contract_duration || "12"}
-                                  onChange={(e) => updateProductRow(index, "contract_duration", e.target.value)}
+                                  onChange={(e) =>
+                                    updateProductRow(
+                                      index,
+                                      "contract_duration",
+                                      e.target.value,
+                                    )
+                                  }
                                   className={`${inputCls} !py-1 text-xs`}
                                 >
-                                  {getDurationOptionsForCycle(row.billing_cycle).map((opt) => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  {getDurationOptionsForCycle(
+                                    row.billing_cycle,
+                                  ).map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
                                   ))}
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Start Date</label>
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                  Start Date
+                                </label>
                                 <input
                                   type="date"
                                   value={row.contract_start_date || ""}
-                                  onChange={(e) => updateProductRow(index, "contract_start_date", e.target.value)}
+                                  onChange={(e) =>
+                                    updateProductRow(
+                                      index,
+                                      "contract_start_date",
+                                      e.target.value,
+                                    )
+                                  }
                                   className={`${inputCls} !py-1 text-xs`}
                                 />
                               </div>
                               <div>
-                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                  End Date
+                                </label>
                                 <input
                                   type="date"
                                   value={row.contract_end_date || ""}
-                                  onChange={(e) => updateProductRow(index, "contract_end_date", e.target.value)}
+                                  onChange={(e) =>
+                                    updateProductRow(
+                                      index,
+                                      "contract_end_date",
+                                      e.target.value,
+                                    )
+                                  }
                                   className={`${inputCls} !py-1 text-xs`}
                                 />
                               </div>
@@ -2097,17 +2641,20 @@ const EditLeadPage: React.FC = () => {
                               <select
                                 value={row.warehouse_id || ""}
                                 onChange={(e) => {
-                                  updateProductRow(index, "warehouse_id", e.target.value);
-                                  updateProductRow(index, "warehouse_location_id", "");
+                                  updateProductRow(
+                                    index,
+                                    "warehouse_id",
+                                    e.target.value,
+                                  );
+                                  updateProductRow(
+                                    index,
+                                    "warehouse_location_id",
+                                    "",
+                                  );
                                 }}
                                 className={`${inputCls} pr-7 truncate text-xs`}
                               >
                                 <option value="">Select Warehouse</option>
-                                {row.warehouse_id && !availableWarehouses.some((w) => String(w.id) === String(row.warehouse_id)) && (
-                                  <option value={row.warehouse_id}>
-                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.name || `Warehouse #${row.warehouse_id}`}
-                                  </option>
-                                )}
                                 {availableWarehouses.map((w) => (
                                   <option key={w.id} value={w.id}>
                                     {getWarehouseLabel(w)}
@@ -2122,16 +2669,17 @@ const EditLeadPage: React.FC = () => {
                               </label>
                               <select
                                 value={row.warehouse_location_id || ""}
-                                onChange={(e) => updateProductRow(index, "warehouse_location_id", e.target.value)}
+                                onChange={(e) =>
+                                  updateProductRow(
+                                    index,
+                                    "warehouse_location_id",
+                                    e.target.value,
+                                  )
+                                }
                                 disabled={!row.warehouse_id}
                                 className={`${inputCls} pr-7 truncate text-xs disabled:opacity-50`}
                               >
                                 <option value="">Select Location</option>
-                                {row.warehouse_location_id && !availableLocations.some((loc: any) => String(loc.id) === String(row.warehouse_location_id)) && (
-                                  <option value={row.warehouse_location_id}>
-                                    {warehouses.find((w) => String(w.id) === String(row.warehouse_id))?.locations?.find((l: any) => String(l.id) === String(row.warehouse_location_id))?.name || `Location #${row.warehouse_location_id}`}
-                                  </option>
-                                )}
                                 {availableLocations.map((loc: any) => (
                                   <option key={loc.id} value={loc.id}>
                                     {getLocationLabel(loc)}
@@ -2152,18 +2700,30 @@ const EditLeadPage: React.FC = () => {
                                 type="number"
                                 min="1"
                                 value={row.quantity}
-                                onChange={(e) => updateProductRow(index, "quantity", e.target.value)}
+                                onChange={(e) =>
+                                  updateProductRow(
+                                    index,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
                                 className={`${inputCls} text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                                   qtyErr || isStockShortage
                                     ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500"
                                     : ""
                                 }`}
                               />
-                              {qtyErr && <p className="mt-1 text-xs text-red-500 font-medium">{qtyErr}</p>}
+                              {qtyErr && (
+                                <p className="mt-1 text-xs text-red-500 font-medium">
+                                  {qtyErr}
+                                </p>
+                              )}
                             </div>
                           ) : (
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Type
+                              </label>
                               <div className="py-2 px-3 bg-gray-100 dark:bg-gray-800/60 rounded-lg text-xs text-gray-600 dark:text-gray-400 font-medium">
                                 Service (Fixed)
                               </div>
@@ -2178,38 +2738,61 @@ const EditLeadPage: React.FC = () => {
                               type="number"
                               step="0.01"
                               value={row.price}
-                              onChange={(e) => updateProductRow(index, "price", e.target.value)}
+                              onChange={(e) =>
+                                updateProductRow(index, "price", e.target.value)
+                              }
                               disabled
                               className={`${inputCls} text-xs bg-gray-100 dark:bg-gray-800/60 cursor-not-allowed text-gray-500 dark:text-gray-400 ${priceErr ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                             />
-                            {priceErr && <p className="mt-1 text-xs text-red-500 font-medium">{priceErr}</p>}
+                            {priceErr && (
+                              <p className="mt-1 text-xs text-red-500 font-medium">
+                                {priceErr}
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {isStockShortage && locStock !== null && (
-                          locStock > 0 ? (
+                        {isStockShortage &&
+                          locStock !== null &&
+                          (locStock > 0 ? (
                             <button
                               type="button"
-                              onClick={() => triggerStockShortagePopup(index, locStock, shortageQty)}
+                              onClick={() =>
+                                triggerStockShortagePopup(
+                                  index,
+                                  locStock,
+                                  shortageQty,
+                                )
+                              }
                               className="w-full text-left p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex flex-col gap-0.5"
                             >
-                              <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">⚠️ Only {locStock} in stock</span>
-                              <span className="text-[#0088cc] hover:underline font-bold text-[11px]">+ Deduct {shortageQty} from other</span>
+                              <span className="text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                                ⚠️ Only {locStock} in stock
+                              </span>
+                              <span className="text-[#0088cc] hover:underline font-bold text-[11px]">
+                                + Deduct {shortageQty} from other
+                              </span>
                             </button>
                           ) : (
                             <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs font-medium text-red-700 dark:text-red-300">
                               ⚠️ Out of stock. Please select another location.
                             </div>
-                          )
-                        )}
+                          ))}
 
                         <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-gray-700/60 text-xs">
-                          <span className="font-medium text-gray-500 dark:text-gray-400">Line Amount:</span>
+                          <span className="font-medium text-gray-500 dark:text-gray-400">
+                            Line Amount:
+                          </span>
                           <div className="text-right">
-                            <span className="font-bold text-gray-800 dark:text-white text-sm block">{fmtCurrency(rowAmount)}</span>
+                            <span className="font-bold text-gray-800 dark:text-white text-sm block">
+                              {fmtCurrency(rowAmount)}
+                            </span>
                             {row.is_recurring && (
                               <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium block">
-                                {fmtCurrency(cycleAmount)} / {row.billing_cycle || "monthly"} &times; {cyclesCount} {cyclesCount === 1 ? "cycle" : "cycles"}
+                                {fmtCurrency(cycleAmount)} /{" "}
+                                {row.billing_cycle || "monthly"} &times;{" "}
+                                {cyclesCount}{" "}
+                                {cyclesCount === 1 ? "cycle" : "cycles"}
                               </span>
                             )}
                           </div>
@@ -2226,8 +2809,12 @@ const EditLeadPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/50 dark:from-slate-800/80 dark:via-slate-800/60 dark:to-slate-900 border border-gray-200/80 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-6">
               <div>
-                <span className="text-xs text-gray-500 dark:text-gray-400 block font-medium">One-Time Revenue</span>
-                <span className="text-base font-bold text-gray-800 dark:text-gray-100">{fmtCurrency(oneTimeTotal)}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 block font-medium">
+                  One-Time Revenue
+                </span>
+                <span className="text-base font-bold text-gray-800 dark:text-gray-100">
+                  {fmtCurrency(oneTimeTotal)}
+                </span>
               </div>
 
               {mrrTotal > 0 && (
@@ -2235,22 +2822,33 @@ const EditLeadPage: React.FC = () => {
                   <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block"></div>
                   <div>
                     <span className="text-xs text-blue-600 dark:text-blue-400 block font-semibold flex items-center gap-1">
-                      <i className="mgc_refresh_2_line text-sm"></i> Monthly Recurring (MRR)
+                      <i className="mgc_refresh_2_line text-sm"></i> Monthly
+                      Recurring (MRR)
                     </span>
-                    <span className="text-base font-bold text-blue-700 dark:text-blue-300">{fmtCurrency(mrrTotal)} / mo</span>
+                    <span className="text-base font-bold text-blue-700 dark:text-blue-300">
+                      {fmtCurrency(mrrTotal)} / mo
+                    </span>
                   </div>
                   <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block"></div>
                   <div>
-                    <span className="text-xs text-indigo-600 dark:text-indigo-400 block font-semibold">Annual Recurring (ARR)</span>
-                    <span className="text-base font-bold text-indigo-700 dark:text-indigo-300">{fmtCurrency(mrrTotal * 12)} / yr</span>
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 block font-semibold">
+                      Annual Recurring (ARR)
+                    </span>
+                    <span className="text-base font-bold text-indigo-700 dark:text-indigo-300">
+                      {fmtCurrency(mrrTotal * 12)} / yr
+                    </span>
                   </div>
                 </>
               )}
             </div>
 
             <div className="text-right ml-auto">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block">Total Deal Value</span>
-              <span className="text-2xl font-black text-[#0088cc]">{fmtCurrency(totalLeadValue)}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block">
+                Total Deal Value
+              </span>
+              <span className="text-2xl font-black text-[#0088cc]">
+                {fmtCurrency(totalLeadValue)}
+              </span>
             </div>
           </div>
 

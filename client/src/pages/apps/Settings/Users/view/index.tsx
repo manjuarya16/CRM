@@ -164,6 +164,24 @@ const ViewUserPage: React.FC = () => {
         });
         Swal.fire("Success", "Note saved", "success");
       } else if (activeModal === "activity") {
+        if (/^[0-9\W_]+$/.test(modalForm.title.trim()) || !/[a-zA-Z]/.test(modalForm.title)) {
+          Swal.fire("Validation Error", "Title must contain at least one letter and cannot be only special characters or numbers.", "warning");
+          return;
+        }
+        if (modalForm.schedule_to) {
+          const toDate = new Date(modalForm.schedule_to);
+          if (toDate.getTime() < Date.now() - 60000) {
+            Swal.fire("Validation Error", "Schedule To date/time cannot be in the past.", "warning");
+            return;
+          }
+          if (modalForm.schedule_from) {
+            const fromDate = new Date(modalForm.schedule_from);
+            if (toDate.getTime() < fromDate.getTime()) {
+              Swal.fire("Validation Error", "Schedule To must be after Schedule From.", "warning");
+              return;
+            }
+          }
+        }
         await addActivity({
           title: modalForm.title,
           type: (modalForm.type || "call").toLowerCase(),
@@ -658,6 +676,7 @@ const ViewUserPage: React.FC = () => {
                       <input
                         type="datetime-local"
                         required
+                        min={modalForm.schedule_from || new Date().toISOString().slice(0, 16)}
                         value={modalForm.schedule_to}
                         onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
                         className="w-full px-3.5 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs focus:outline-none focus:border-[#0088cc] dark:bg-gray-900"

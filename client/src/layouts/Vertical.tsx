@@ -43,7 +43,7 @@ const VerticalLayout = ({ children }: VerticalLayoutProps) => {
   useEffect(() => {
     if (!user?.role_id || roles.length === 0) return;
     const isAdmin =
-      Number(user.role_id) === 1 ||
+      Number(user.role_id) === 1 || user?.role?.toLowerCase().includes('admin') || (user as any)?.role_name?.toLowerCase().includes('admin') ||
       (roles.find((r) => Number(r.id) === Number(user.role_id))
         ?.name?.toLowerCase()
         .includes("admin") ?? false);

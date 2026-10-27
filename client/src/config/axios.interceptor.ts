@@ -1,12 +1,11 @@
 import axios from "axios";
+import { getSubdomain } from "@/utils/subdomain";
 import {
   getTokenFromCookie,
   getTokenFromLocalStorageAuthStore,
   getToken,
-  getSuperAdminToken,
   isTokenExpired,
 } from "@/lib/auth-utils";
-import { getSubdomain } from "@/utils/subdomain";
 
 // Simple notification function (no external dependency)
 const showNotification = (
@@ -47,29 +46,6 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
   // REQUEST INTERCEPTOR - Add Authorization Token
   const attachToken = (config: any) => {
     try {
-      const url = (config.url || "").toLowerCase();
-      const isSuperAdminRoute = url.includes("/super-admin");
-
-      if (isSuperAdminRoute) {
-        // Only attach Super Admin token to super admin endpoints - never tenant user tokens!
-        const superAdminToken = getSuperAdminToken();
-        if (superAdminToken) {
-          config.headers = config.headers || {};
-          config.headers.Authorization = `Bearer ${superAdminToken}`;
-          config.headers["X-Authorization"] = `Bearer ${superAdminToken}`;
-        }
-        config.headers["Content-Type"] =
-          config.headers["Content-Type"] || "application/json";
-        return config;
-      }
-
-      // If headers already have an Authorization header explicitly passed, respect it
-      if (config.headers?.Authorization) {
-        config.headers["Content-Type"] =
-          config.headers["Content-Type"] || "application/json";
-        return config;
-      }
-
       // Get token from sessionStorage or cookie
       let token = sessionStorage.getItem("token");
 
@@ -111,12 +87,11 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       config.headers["Content-Type"] =
         config.headers["Content-Type"] || "application/json";
 
-      // Inject tenant slug header if available and not explicitly provided
-      if (!config.headers["X-Tenant-Slug"]) {
-        const { slug } = getSubdomain();
-        if (slug) {
-          config.headers["X-Tenant-Slug"] = slug;
-        }
+      // Attach tenant / organization context headers only for dedicated tenant workspaces
+      const subInfo = getSubdomain();
+      const nonTenantSlugs = ['crm', 'www', 'app', 'api', 'crmsrv', 'staging', 'mail', 'default'];
+      if (subInfo.type === 'tenant' && subInfo.slug && !nonTenantSlugs.includes(subInfo.slug.toLowerCase())) {
+        config.headers["X-Tenant-Slug"] = subInfo.slug;
       }
 
       return config;
@@ -134,9 +109,14 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
   // RESPONSE INTERCEPTOR - Handle Authorization Errors
   const handleResponseError = (error: any) => {
     if (!error || !error.response) {
-      console.error("Network error / connection failure:", error?.message);
-      showNotification("Network error: Unable to connect to the backend server. Please verify the server is running on port 3040.", "error");
-      return Promise.reject(error);
+      console.error("Network error:", error?.message);
+  //  showNotification("Network error. Please check your connection.", "error");
+  //     return Promise.reject(error);
+      error.response = {
+        status: 500,
+        statusText: "Internal Server Error",
+        data: { message: "Internal Server Error" },
+      };
     }
 
     const status = error.response.status;
@@ -145,20 +125,12 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
 
     // 401 UNAUTHORIZED - Token Invalid/Expired
     if (status === 401) {
-      console.warn("401 Unauthorized - Invalid or expired token");
-      const isSuperAdminRoute = error.config?.url?.includes("/super-admin");
-
-      if (isSuperAdminRoute) {
-        try {
-          sessionStorage.removeItem("super_admin_token");
-          localStorage.removeItem("saas_super_admin_session");
-        } catch (e) {
-          console.warn("Error clearing super admin token:", e);
-        }
-        showNotification("Super Admin session expired. Please sign in again.", "error");
+      const isLoginRequest = error.config?.url?.includes('/login') || error.config?.url?.includes('/auth');
+      if (isLoginRequest) {
+        showNotification(errorMessage || 'Invalid email or password', 'error');
         return Promise.reject(error);
       }
-
+      console.warn("401 Unauthorized - Invalid or expired token");
       // Clear all auth data
       try {
         sessionStorage.removeItem("token");
@@ -205,22 +177,6 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
     // 403 FORBIDDEN - User Not Authorized
     if (status === 403) {
       console.warn("403 Forbidden - User not authorized for this resource");
-      const isSuperAdminRoute = error.config?.url?.includes("/super-admin");
-
-      if (isSuperAdminRoute) {
-        try {
-          sessionStorage.removeItem("super_admin_token");
-          localStorage.removeItem("saas_super_admin_session");
-        } catch (e) {
-          console.warn("Error clearing super admin token:", e);
-        }
-        showNotification(
-          "Super Admin privileges required. Please sign in with a Super Admin account.",
-          "warning",
-        );
-        return Promise.reject(error);
-      }
-
       showNotification(
         "You don't have permission to access this resource",
         "warning",

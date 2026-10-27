@@ -43,7 +43,9 @@ export class RoleService {
         'SELECT get_role($1) as result',
         [roleId]
       );
-      return rows[0]?.result || null;
+      if (rows[0]?.result) return rows[0].result;
+      const direct = await pool.query('SELECT * FROM roles WHERE id = $1 LIMIT 1', [roleId]);
+      return direct.rows[0] || null;
     } catch (error: any) {
       logger.error({ error, id }, 'RoleService.getById failed');
       throw error;

@@ -1,3 +1,6 @@
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { Router } from 'express';
 import { OrganizationService } from '@/services/organization.service';
 import { createOrganizationSchema, updateOrganizationSchema } from '@/schemas/organization.schema';
@@ -9,6 +12,44 @@ import { pool } from '@/config/db';
 
 const router = Router();
 
+const orgUploadDir = path.join(process.cwd(), 'uploads', 'organizations');
+if (!fs.existsSync(orgUploadDir)) {
+  fs.mkdirSync(orgUploadDir, { recursive: true });
+}
+const orgStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, orgUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `org-logo-${uniqueSuffix}${ext}`);
+  },
+});
+const uploadOrgLogo = multer({
+  storage: orgStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+});
+
+router.post('/logo', requireAuth, uploadOrgLogo.single('logo'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw new ApiError(400, 'Please upload a logo file');
+    }
+    const relativeUrl = `/uploads/organizations/${req.file.filename}`;
+    res.json({ success: true, logo_url: relativeUrl });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/public/branding', async (_req, res, next) => {
   try {
     const branding = await OrganizationService.getPublicBranding();
@@ -19,9 +60,9 @@ router.get('/public/branding', async (_req, res, next) => {
 });
 
 // Profile endpoints for the logged-in tenant organization
-router.get('/current', requireAuth, async (req, res, next) => {
+router.get(['/current', '/profile', '/company-profile'], requireAuth, async (req, res, next) => {
   try {
-    const tenantId = (req as any).user?.tenant_id || req.tenant?.id;
+    const tenantId = req.tenant?.id || (req as any).user?.tenant_id;
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;
@@ -37,9 +78,9 @@ router.get('/current', requireAuth, async (req, res, next) => {
   }
 });
 
-router.put('/current', requireAuth, async (req, res, next) => {
+router.put(['/current', '/profile', '/company-profile'], requireAuth, async (req, res, next) => {
   try {
-    const tenantId = (req as any).user?.tenant_id || req.tenant?.id;
+    const tenantId = req.tenant?.id || (req as any).user?.tenant_id;
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;

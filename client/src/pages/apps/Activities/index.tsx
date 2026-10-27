@@ -5,8 +5,6 @@ import { useActivityStore } from "@/store";
 import { IActivity } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { stripHtmlToText } from "@/utils/formatters";
-import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
-import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const fmtDateTime = (dt?: string) => {
   if (!dt) return "-";
@@ -23,17 +21,21 @@ const fmtDateTime = (dt?: string) => {
 const TYPE_BADGE: Record<string, string> = {
   call: "text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
   meeting: "text-purple-700 bg-purple-50 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
-  task: "text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
   email: "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
-  lunch: "text-orange-700 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-300 border border-orange-200 dark:border-orange-800",
+  lunch: "text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
+  task: "text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+  note: "text-slate-700 bg-slate-50 dark:bg-slate-950/50 dark:text-slate-300 border border-slate-200 dark:border-slate-800",
+  file: "text-cyan-700 bg-cyan-50 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800",
 };
 
 const TYPE_ICONS: Record<string, string> = {
   call: "mgc_phone_line",
   meeting: "mgc_calendar_line",
-  task: "mgc_task_line",
   email: "mgc_mail_line",
   lunch: "mgc_restaurant_line",
+  task: "mgc_checkbox_line",
+  note: "mgc_file_text_line",
+  file: "mgc_attachment_line",
 };
 
 const AVATAR_COLORS = [
@@ -67,7 +69,9 @@ const ActivitiesPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
 
   useEffect(() => {
     fetchActivities(page, perPage, search);
@@ -357,13 +361,34 @@ const ActivitiesPage: React.FC = () => {
           {/* Right side: View Mode, Per Page & Pagination controls */}
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <ViewModeSwitcher
-              viewMode={viewMode}
-              onViewModeChange={(m) => {
-                setHasUserToggled(true);
-                setViewMode(m);
-              }}
-            />
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
@@ -373,7 +398,7 @@ const ActivitiesPage: React.FC = () => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                className="h-8 pl-3 pr-8 min-w-[72px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -381,21 +406,19 @@ const ActivitiesPage: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1">
               <button
-                type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-base"></i>
               </button>
               <button
-                type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-base"></i>
@@ -431,9 +454,16 @@ const ActivitiesPage: React.FC = () => {
             {activities.map((act: IActivity, idx: number) => renderActivityCard(act, idx))}
           </div>
         ) : (
-          /* 📋 TABLE VIEW */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
+          /* 📋 TABLE VIEW (With Full-Detail Mobile Cards Fallback) */
+          <>
+            {/* Mobile Fallback Cards for Table View */}
+            <div className="block md:hidden p-3 space-y-3">
+              {activities.map((act: IActivity, idx: number) => renderActivityCard(act, idx))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-wide">
                     <th className="py-3 px-4">
@@ -563,6 +593,7 @@ const ActivitiesPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </>
         )}
 
         {/* Bottom Pagination */}

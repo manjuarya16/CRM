@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { UserService } from '@/services/user.service';
 import { userSaveSchema } from '@/schemas/user.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
+router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
@@ -55,18 +57,6 @@ router.post('/', handleSaveUser);
 router.put('/update', handleSaveUser);
 router.put('/update/:id', handleSaveUser);
 router.put('/:id', handleSaveUser);
-
-router.delete('/delete/:id', async (req, res, next) => {
-  try {
-    const deleted = await UserService.delete(String(req.params.id));
-    if (!deleted) {
-      throw new ApiError(404, 'User not found');
-    }
-    res.json({ success: true, message: 'User deleted successfully' });
-  } catch (err) {
-    next(err);
-  }
-});
 
 router.delete(['/:id', '/delete/:id'], async (req, res, next) => {
   try {

@@ -53,15 +53,8 @@ export function getSubdomain(): SubdomainInfo {
 
   // Production domain: e.g. "acme.yourcrm.com" or "admin.yourcrm.com"
   const parts = hostname.split('.');
-  if (parts.length >= 3) {
-    const sub = parts[0];
-    if (sub === 'www') {
-      return { type: 'root', host: hostname };
-    }
-    if (sub === 'admin') {
-      return { type: 'admin', host: hostname };
-    }
-    return { type: 'tenant', slug: sub, host: hostname };
+  if (parts.length >= 3 && parts[0] === 'admin') {
+    return { type: 'admin', host: hostname };
   }
 
   return { type: 'root', host: hostname };

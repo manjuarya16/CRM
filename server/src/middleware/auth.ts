@@ -17,8 +17,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       return;
     }
 
-    // Security: Verify user tenant belongs to current resolved tenant workspace
-    if (user.tenant_id && req.tenant && req.tenant.id !== user.tenant_id) {
+    const isPlatformAdmin =
+      user.role_id === 1 ||
+      user.role === 'Administrator' ||
+      user.tenant_id === 1 ||
+      (user as any).is_super_admin === true;
+
+    // Security: Verify user tenant belongs to current resolved tenant workspace (unless platform admin)
+    if (!isPlatformAdmin && user.tenant_id && req.tenant && req.tenant.id !== user.tenant_id) {
       res.status(403).json({
         success: false,
         message: 'Forbidden: You do not have access to this organization workspace.',
@@ -27,12 +33,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     }
 
     req.user = user;
-    const activeTenantId = user.tenant_id || req.tenant?.id;
+    const activeTenantId = (req.tenant?.id || user.tenant_id) ?? undefined;
     const activeSlug = req.tenant?.slug;
 
-    runWithTenantContext({ tenantId: activeTenantId, tenantSlug: activeSlug }, () => {
-      next();
-    });
+    runWithTenantContext(
+      {
+        tenantId: activeTenantId,
+        tenantSlug: activeSlug,
+        isSuperAdmin: isPlatformAdmin ? true : undefined,
+      },
+      () => {
+        next();
+      },
+    );
   })(req, res, next);
 }
 

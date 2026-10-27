@@ -181,6 +181,7 @@ const LeadsPage: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Filter Drawer & Options
   const [showFilterDrawer, setShowFilterDrawer] = useState<boolean>(false);
@@ -408,18 +409,25 @@ const LeadsPage: React.FC = () => {
       return;
     }
     setUploading(true);
+    setUploadProgress(0);
     try {
       const formData = new FormData();
       formData.append("file", uploadFile);
 
       const response = await API.post("/leads/create-by-ai", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percent);
+          }
+        },
       });
 
       const msg = response.data?.message || `Lead created from "${uploadFile.name}"`;
       Swal.fire("Success", msg, "success");
       setShowUploadModal(false);
       setUploadFile(null);
+      setUploadProgress(0);
       if (viewMode === "kanban") {
         fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search);
       } else {
@@ -1327,6 +1335,20 @@ const LeadsPage: React.FC = () => {
                   className="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#e0f2fe] file:text-[#0284c7] hover:file:bg-[#bae6fd]"
                 />
                 <p className="text-[11px] text-gray-400 mt-2">Only pdf, doc, bmp, jpeg, jpg, png format files are accepted.</p>
+                {uploading && (
+                  <div className="w-full space-y-1.5 pt-3">
+                    <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+                      <span>Uploading document...</span>
+                      <span className="font-bold text-[#0088cc]">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-[#0088cc] h-2 rounded-full transition-all duration-150"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">
@@ -1342,7 +1364,7 @@ const LeadsPage: React.FC = () => {
                   disabled={uploading}
                   className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold disabled:opacity-50"
                 >
-                  {uploading ? "Uploading..." : "Upload & Create Lead"}
+                  {uploading ? (uploadProgress > 0 ? `Uploading (${uploadProgress}%)...` : "Uploading...") : "Upload & Create Lead"}
                 </button>
               </div>
             </form>

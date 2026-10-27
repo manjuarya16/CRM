@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '@/schemas/auth.schema';
 import { AuthService } from '@/services/auth.service';
 import { requireAuth } from '@/middleware/auth';
+import { runWithTenantContext, getTenantContext } from '@/context/tenantContext';
 
 const router = Router();
 
 router.post('/register', async (req, res, next) => {
   try {
     const validatedInput = registerSchema.parse(req.body);
-    const result = await AuthService.register(validatedInput);
+    const result = await runWithTenantContext(
+      { ...(getTenantContext() || {}), isSuperAdmin: true },
+      () => AuthService.register(validatedInput)
+    );
     res.status(201).json({ success: true, ...result });
   } catch (err) {
     next(err);
@@ -18,7 +22,10 @@ router.post('/register', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const validatedInput = loginSchema.parse(req.body);
-    const result = await AuthService.login(validatedInput, req.tenant?.id);
+    const result = await runWithTenantContext(
+      { ...(getTenantContext() || {}), isSuperAdmin: true },
+      () => AuthService.login(validatedInput)
+    );
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);
@@ -28,7 +35,10 @@ router.post('/login', async (req, res, next) => {
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const validatedInput = forgotPasswordSchema.parse(req.body);
-    await AuthService.forgotPassword(validatedInput.email);
+    await runWithTenantContext(
+      { ...(getTenantContext() || {}), isSuperAdmin: true },
+      () => AuthService.forgotPassword(validatedInput.email)
+    );
     res.json({ success: true, message: 'Email verified. You may proceed to reset your password.' });
   } catch (err) {
     next(err);
@@ -38,7 +48,10 @@ router.post('/forgot-password', async (req, res, next) => {
 router.post('/reset-password', async (req, res, next) => {
   try {
     const validatedInput = resetPasswordSchema.parse(req.body);
-    await AuthService.resetPassword(validatedInput);
+    await runWithTenantContext(
+      { ...(getTenantContext() || {}), isSuperAdmin: true },
+      () => AuthService.resetPassword(validatedInput)
+    );
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
     next(err);

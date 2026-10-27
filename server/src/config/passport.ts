@@ -3,6 +3,7 @@ import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { env } from '@/config/env';
 import { UserService } from '@/services/user.service';
 import { toPublicUser } from '@/interfaces';
+import { runWithTenantContext, getTenantContext } from '@/context/tenantContext';
 
 passport.use(
   new JwtStrategy(
@@ -13,9 +14,12 @@ passport.use(
       ]),
       secretOrKey: env.JWT_SECRET,
     },
-    async (payload: { sub: string; tenant_id?: number }, done) => {
+    async (payload: { sub: string }, done) => {
       try {
-        const user = await UserService.findById(payload.sub, payload.tenant_id);
+        const user = await runWithTenantContext(
+          { ...(getTenantContext() || {}), isSuperAdmin: true },
+          () => UserService.findById(payload.sub)
+        );
         if (!user) return done(null, false);
         return done(null, toPublicUser(user));
       } catch (err) {

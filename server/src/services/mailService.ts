@@ -164,6 +164,31 @@ export class MailService {
     try {
       await client.query('BEGIN');
 
+      // Verify and sanitize foreign key references (lead_id, person_id, user_id)
+      let validLeadId: number | null = null;
+      if (data.lead_id && Number(data.lead_id) > 0) {
+        const checkLead = await client.query('SELECT id FROM leads WHERE id = $1', [Number(data.lead_id)]);
+        if (checkLead.rows.length > 0) {
+          validLeadId = Number(data.lead_id);
+        }
+      }
+
+      let validPersonId: number | null = null;
+      if (data.person_id && Number(data.person_id) > 0) {
+        const checkPerson = await client.query('SELECT id FROM persons WHERE id = $1', [Number(data.person_id)]);
+        if (checkPerson.rows.length > 0) {
+          validPersonId = Number(data.person_id);
+        }
+      }
+
+      let validUserId: number | null = null;
+      if (user?.id && Number(user.id) > 0) {
+        const checkUser = await client.query('SELECT id FROM users WHERE id = $1', [Number(user.id)]);
+        if (checkUser.rows.length > 0) {
+          validUserId = Number(user.id);
+        }
+      }
+
       const emailInsertResult = await client.query(
         `SELECT * FROM public.fn_save_email(
           $1, $2, $3, $4, $5, $6, $7::jsonb,
@@ -185,10 +210,10 @@ export class MailService {
           JSON.stringify(data.bcc || []),
           uniqueId,
           messageId,
-          data.person_id || null,
-          data.lead_id || null,
+          validPersonId,
+          validLeadId,
           data.parent_id || null,
-          user?.id || null,
+          validUserId,
           null,
         ]
       );
@@ -207,23 +232,30 @@ export class MailService {
         }
       }
 
-      // If linked to lead and sent (not draft), log activity on lead timeline
-      if (data.lead_id && !isDraft) {
-        await client.query(
-          `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            `Email: ${parsedSubject}`,
-            'email',
-            cleanReplyText,
-            null,
-            null,
-            true,
-            user?.id || null,
-            null,
-            data.lead_id,
-            data.person_id || null,
-          ]
-        );
+      // If linked to lead and sent (not draft), safely log activity on lead timeline
+      if (validLeadId && !isDraft) {
+        try {
+          await client.query('SAVEPOINT email_activity_sp');
+          await client.query(
+            `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              `Email: ${parsedSubject}`,
+              'email',
+              cleanReplyText,
+              null,
+              null,
+              true,
+              validUserId,
+              null,
+              validLeadId,
+              validPersonId,
+            ]
+          );
+          await client.query('RELEASE SAVEPOINT email_activity_sp');
+        } catch (actErr) {
+          await client.query('ROLLBACK TO SAVEPOINT email_activity_sp').catch(() => {});
+          logger.warn({ actErr, leadId: validLeadId }, '[MailService] Could not record lead activity for sent email, proceeding');
+        }
       }
 
       // If not a draft, dispatch real external email via SMTP
@@ -294,6 +326,32 @@ export class MailService {
       const parsedReply = rawReply ? parsePlaceholders(rawReply, templateContext) : rawReply;
       const cleanReplyText = stripHtmlToText(parsedReply);
 
+      // Verify and sanitize foreign key references (lead_id, person_id, user_id)
+      let validTargetLeadId: number | null = null;
+      if (targetLeadId && Number(targetLeadId) > 0) {
+        const checkLead = await client.query('SELECT id FROM leads WHERE id = $1', [Number(targetLeadId)]);
+        if (checkLead.rows.length > 0) {
+          validTargetLeadId = Number(targetLeadId);
+        }
+      }
+
+      let validTargetPersonId: number | null = null;
+      if (targetPersonId && Number(targetPersonId) > 0) {
+        const checkPerson = await client.query('SELECT id FROM persons WHERE id = $1', [Number(targetPersonId)]);
+        if (checkPerson.rows.length > 0) {
+          validTargetPersonId = Number(targetPersonId);
+        }
+      }
+
+      let validUserId: number | null = null;
+      const targetUserId = user?.id || existingEmail.user_id;
+      if (targetUserId && Number(targetUserId) > 0) {
+        const checkUser = await client.query('SELECT id FROM users WHERE id = $1', [Number(targetUserId)]);
+        if (checkUser.rows.length > 0) {
+          validUserId = Number(targetUserId);
+        }
+      }
+
       await client.query(
         `SELECT * FROM public.fn_save_email(
           $1, $2, $3, $4, $5, $6, $7::jsonb,
@@ -315,10 +373,10 @@ export class MailService {
           data.bcc ? JSON.stringify(data.bcc) : null,
           existingEmail.unique_id,
           existingEmail.message_id,
-          targetPersonId || null,
-          targetLeadId || null,
+          validTargetPersonId,
+          validTargetLeadId,
           existingEmail.parent_id || null,
-          existingEmail.user_id || null,
+          validUserId,
           emailId,
         ]
       );
@@ -335,22 +393,29 @@ export class MailService {
       }
 
       // If draft was converted to sent and is linked to a lead, log activity on lead timeline
-      if (targetLeadId && data.is_draft === false) {
-        await client.query(
-          `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            `Email: ${parsedSubject || 'No Subject'}`,
-            'email',
-            cleanReplyText,
-            null,
-            null,
-            true,
-            user?.id || null,
-            null,
-            targetLeadId,
-            targetPersonId || null,
-          ]
-        );
+      if (validTargetLeadId && data.is_draft === false) {
+        try {
+          await client.query('SAVEPOINT email_update_activity_sp');
+          await client.query(
+            `SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              `Email: ${parsedSubject || 'No Subject'}`,
+              'email',
+              cleanReplyText,
+              null,
+              null,
+              true,
+              validUserId,
+              null,
+              validTargetLeadId,
+              validTargetPersonId,
+            ]
+          );
+          await client.query('RELEASE SAVEPOINT email_update_activity_sp');
+        } catch (actErr) {
+          await client.query('ROLLBACK TO SAVEPOINT email_update_activity_sp').catch(() => {});
+          logger.warn({ actErr, leadId: validTargetLeadId }, '[MailService] Could not record lead activity for updated email, proceeding');
+        }
       }
 
       // If draft was published, dispatch real email via SMTP
@@ -387,6 +452,35 @@ export class MailService {
   async toggleReadStatus(emailId: number, isRead: boolean) {
     await pool.query('SELECT public.fn_update_email_read_status($1, $2)', [emailId, isRead]);
     return { success: true, is_read: isRead };
+  }
+
+  /**
+   * Toggle starred status
+   */
+  async toggleStarStatus(emailId: number, isStarred?: boolean) {
+    const existing = await this.getEmailById(emailId);
+    if (!existing) {
+      throw new Error('Email not found');
+    }
+
+    let folders: string[] = Array.isArray(existing.folders) ? [...existing.folders] : [];
+    const currentlyStarred = folders.includes('starred');
+    const targetStarred = isStarred !== undefined ? Boolean(isStarred) : !currentlyStarred;
+
+    if (targetStarred) {
+      if (!folders.includes('starred')) {
+        folders.push('starred');
+      }
+    } else {
+      folders = folders.filter((f) => f !== 'starred');
+    }
+
+    await pool.query(
+      'UPDATE public.emails SET folders = $1::jsonb, updated_at = NOW() WHERE id = $2',
+      [JSON.stringify(folders), emailId]
+    );
+
+    return { success: true, id: emailId, is_starred: targetStarred, folders };
   }
 
   /**

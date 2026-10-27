@@ -141,6 +141,33 @@ const ViewPersonPage: React.FC = () => {
         });
         Swal.fire("Success", "Note saved", "success");
       } else if (activeModal === "activity") {
+        const titleTrimmed = (modalForm.title || "").trim();
+        if (!titleTrimmed) {
+          Swal.fire("Validation Error", "Activity title is required.", "warning");
+          return;
+        }
+        if (/^[0-9\W_]+$/.test(titleTrimmed)) {
+          Swal.fire("Validation Error", "Title cannot consist of only special characters or numbers.", "warning");
+          return;
+        }
+        if (!/[a-zA-Z]/.test(titleTrimmed)) {
+          Swal.fire("Validation Error", "Title must contain at least one letter.", "warning");
+          return;
+        }
+        if (modalForm.schedule_to) {
+          const toDate = new Date(modalForm.schedule_to);
+          if (toDate.getTime() < Date.now() - 60000) {
+            Swal.fire("Validation Error", "Schedule To date/time cannot be in the past.", "warning");
+            return;
+          }
+          if (modalForm.schedule_from) {
+            const fromDate = new Date(modalForm.schedule_from);
+            if (toDate.getTime() < fromDate.getTime()) {
+              Swal.fire("Validation Error", "Schedule To date/time must be after Schedule From.", "warning");
+              return;
+            }
+          }
+        }
         await addActivity({
           title: modalForm.title,
           type: (modalForm.type || "call").toLowerCase(),
@@ -699,6 +726,7 @@ const ViewPersonPage: React.FC = () => {
                       <input
                         type="datetime-local"
                         required
+                        min={modalForm.schedule_from || new Date().toISOString().slice(0, 16)}
                         value={modalForm.schedule_to}
                         onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
                         className="w-full px-3.5 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs focus:outline-none focus:border-[#0088cc] dark:bg-gray-900"

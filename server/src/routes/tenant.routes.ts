@@ -95,7 +95,7 @@ export async function getTenantProfile(tenantId: number) {
  */
 router.get(['/current', '/me'], requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tenantId = req.user?.tenant_id || req.tenant?.id;
+    const tenantId = req.tenant?.id || req.user?.tenant_id;
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;
@@ -120,7 +120,7 @@ router.get(['/current', '/me'], requireAuth, async (req: Request, res: Response,
  */
 router.put(['/current', '/me'], requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tenantId = req.user?.tenant_id || req.tenant?.id;
+    const tenantId = req.tenant?.id || req.user?.tenant_id;
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;

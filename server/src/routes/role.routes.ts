@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { RoleService } from '@/services/role.service';
 import { roleSchema } from '@/schemas/role.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
+router.use(requireAuth);
 
 router.get('/permissions', (_req, res) => {
   const permissions = RoleService.getPermissionsTree();
