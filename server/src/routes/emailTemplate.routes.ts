@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { EmailTemplateService } from '@/services/emailTemplate.service';
 import { saveEmailTemplateSchema } from '@/schemas/emailTemplate.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
 
-router.get('/', async (req, res, next) => {
+router.get('/', requireAuth, async (req, res, next) => {
   try {
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const templates = await EmailTemplateService.getAll(search);

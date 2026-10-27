@@ -6,8 +6,6 @@ import { useOrganizationStore } from "@/store";
 
 import { IOrganization } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
-import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
-import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 
 const OrganizationsPage: React.FC = () => {
   const { hasPermission } = usePermission();
@@ -22,7 +20,9 @@ const OrganizationsPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [total, setTotal] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+  );
 
   const AVATAR_COLORS = [
     "bg-blue-600 text-white",
@@ -330,23 +330,11 @@ const OrganizationsPage: React.FC = () => {
               Contacts
             </Link>
             <span className="text-gray-400">/</span>
-            <span className="text-gray-600 dark:text-gray-300 font-medium">Customer Organizations</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">Organizations</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
-              Customer Organizations
-            </h1>
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/60 px-2 py-0.5 rounded-full font-medium">
-              Client Accounts
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Client and customer organizations for your leads. To view or edit your company profile, visit{" "}
-            <Link to="/organization" className="text-[#0088cc] font-semibold hover:underline">
-              Organization Profile
-            </Link>
-            .
-          </p>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">
+            Organizations
+          </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -398,13 +386,34 @@ const OrganizationsPage: React.FC = () => {
           {/* Right side: View Mode, Per Page & Pagination controls */}
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <ViewModeSwitcher
-              viewMode={viewMode}
-              onViewModeChange={(m) => {
-                setHasUserToggled(true);
-                setViewMode(m);
-              }}
-            />
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
@@ -414,7 +423,7 @@ const OrganizationsPage: React.FC = () => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                className="h-8 pl-3 pr-8 min-w-[72px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -422,12 +431,12 @@ const OrganizationsPage: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-base"></i>
@@ -436,7 +445,7 @@ const OrganizationsPage: React.FC = () => {
                 type="button"
                 disabled={filteredOrganizations.length < perPage || page * perPage >= totalCount}
                 onClick={() => setPage((p) => p + 1)}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors shadow-2xs"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 transition-colors"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-base"></i>
@@ -471,9 +480,16 @@ const OrganizationsPage: React.FC = () => {
             {filteredOrganizations.map((org, idx) => renderOrganizationCard(org, idx))}
           </div>
         ) : (
-          /* 📋 TABLE VIEW */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
+          /* 📋 TABLE VIEW (With Full-Detail Mobile Cards Fallback) */
+          <>
+            {/* Mobile Fallback Cards for Table View */}
+            <div className="block md:hidden p-3 space-y-3">
+              {filteredOrganizations.map((org, idx) => renderOrganizationCard(org, idx))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium">
                     <th className="py-3.5 px-4 w-10 text-center">
@@ -552,6 +568,7 @@ const OrganizationsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </>
         )}
       </div>
     </div>

@@ -68,6 +68,8 @@ const PLACEHOLDER_CATEGORIES: PlaceholderCategory[] = [
   },
 ];
 
+export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+
 export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   isOpen,
   onClose,
@@ -129,9 +131,11 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       fetchTemplates();
 
       if (initialData) {
-        setToList(initialData.to || []);
-        setCcList(initialData.cc || []);
-        setBccList(initialData.bcc || []);
+        const rawTo = initialData.to || [];
+        const validInitialTo = rawTo.filter((em) => isValidEmail(em));
+        setToList(validInitialTo);
+        setCcList((initialData.cc || []).filter((em) => isValidEmail(em)));
+        setBccList((initialData.bcc || []).filter((em) => isValidEmail(em)));
         if (initialData.cc && initialData.cc.length > 0) setShowCc(true);
         if (initialData.bcc && initialData.bcc.length > 0) setShowBcc(true);
         setSubject(initialData.subject || "");
@@ -227,10 +231,13 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     setShowMoreTools(false);
   };
 
-  const isValidEmail = (email: string) => /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email.trim());
+  const isValidEmail = (email: string) => STRICT_EMAIL_REGEX.test(email.trim());
 
   const handleAddEmail = (type: "to" | "cc" | "bcc", value: string) => {
-    const rawTokens = value
+    const trimmed = value.trim();
+    if (!trimmed) return;
+
+    const rawTokens = trimmed
       .split(/[,;\s]+/)
       .map((e) => e.trim())
       .filter(Boolean);
@@ -239,7 +246,7 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     const invalidEmails = rawTokens.filter((e) => !isValidEmail(e));
 
     if (invalidEmails.length > 0) {
-      setErrorMsg(`Invalid email format: "${invalidEmails.join(", ")}". Please enter a valid email (e.g. name@domain.com).`);
+      setErrorMsg(`Invalid email format: "${invalidEmails.join(", ")}". Please enter a valid email without trailing dots (e.g. name@domain.com).`);
     } else {
       setErrorMsg(null);
     }
@@ -247,13 +254,13 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     if (validEmails.length > 0) {
       if (type === "to") {
         setToList((prev) => Array.from(new Set([...prev, ...validEmails])));
-        setToInput("");
+        setToInput(invalidEmails.join(", "));
       } else if (type === "cc") {
         setCcList((prev) => Array.from(new Set([...prev, ...validEmails])));
-        setCcInput("");
+        setCcInput(invalidEmails.join(", "));
       } else {
         setBccList((prev) => Array.from(new Set([...prev, ...validEmails])));
-        setBccInput("");
+        setBccInput(invalidEmails.join(", "));
       }
     }
   };
@@ -267,12 +274,33 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
+      const duplicateNames: string[] = [];
+
       setAttachments((prev) => {
-        const uniqueNew = newFiles.filter(
-          (nf) => !prev.some((pf) => pf.name === nf.name && pf.size === nf.size)
-        );
+        const uniqueNew: File[] = [];
+        for (const nf of newFiles) {
+          const isDuplicate = prev.some((pf) => pf.name.toLowerCase() === nf.name.toLowerCase()) ||
+                              uniqueNew.some((uf) => uf.name.toLowerCase() === nf.name.toLowerCase());
+          if (isDuplicate) {
+            duplicateNames.push(nf.name);
+          } else {
+            uniqueNew.push(nf);
+          }
+        }
         return [...prev, ...uniqueNew];
       });
+
+      if (duplicateNames.length > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Duplicate Attachment",
+          text: `File "${duplicateNames.join(", ")}" is already attached.`,
+          timer: 3000,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+        });
+      }
       e.target.value = "";
     }
   };
@@ -309,12 +337,14 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
     const template = templates.find((t) => String(t.id) === String(templateId));
     if (!template) return;
 
-    const currentContent = editorRef.current?.innerHTML?.trim() || "";
-    const hasContent =
-      (currentContent && currentContent !== "<br>" && currentContent !== "<p><br></p>") ||
-      subject.trim().length > 0;
+    setSelectedTemplateId(String(template.id));
 
-    if (hasContent) {
+    const currentContent = editorRef.current?.innerHTML?.trim() || "";
+    const hasMeaningfulContent =
+      (currentContent && currentContent !== "<br>" && currentContent !== "<p><br></p>" && currentContent.length > 20) ||
+      (subject.trim().length > 0 && !subject.startsWith("Regarding "));
+
+    if (hasMeaningfulContent) {
       const result = await Swal.fire({
         title: "Apply Template?",
         text: "Applying this template will replace your current subject and message body. Do you want to proceed?",
@@ -327,11 +357,11 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       });
 
       if (!result.isConfirmed) {
+        setSelectedTemplateId("");
         return;
       }
     }
 
-    setSelectedTemplateId(String(template.id));
     if (template.subject) {
       setSubject(template.subject);
     }
@@ -444,29 +474,59 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
         finalTo.push(toInput.trim());
         setToInput("");
       } else {
-        setErrorMsg(`Invalid recipient email address: "${toInput.trim()}". Please enter a valid email.`);
+        setErrorMsg(`Invalid recipient email address: "${toInput.trim()}". Please enter a valid email format.`);
         return;
       }
     }
 
     if (showCc && ccInput.trim()) {
-      if (!isValidEmail(ccInput.trim())) {
-        setErrorMsg(`Invalid CC email address: "${ccInput.trim()}".`);
+      if (isValidEmail(ccInput.trim())) {
+        setCcList((prev) => Array.from(new Set([...prev, ccInput.trim()])));
+        setCcInput("");
+      } else {
+        setErrorMsg(`Invalid CC email address: "${ccInput.trim()}". Please enter a valid email format.`);
         return;
       }
     }
 
     if (showBcc && bccInput.trim()) {
-      if (!isValidEmail(bccInput.trim())) {
-        setErrorMsg(`Invalid BCC email address: "${bccInput.trim()}".`);
+      if (isValidEmail(bccInput.trim())) {
+        setBccList((prev) => Array.from(new Set([...prev, bccInput.trim()])));
+        setBccInput("");
+      } else {
+        setErrorMsg(`Invalid BCC email address: "${bccInput.trim()}". Please enter a valid email format.`);
         return;
       }
+    }
+
+    // Validate all recipients against strict email pattern (no trailing dots or broken domains)
+    const invalidRecipients = finalTo.filter((em) => !isValidEmail(em));
+    if (invalidRecipients.length > 0) {
+      setErrorMsg(`Invalid recipient email format: "${invalidRecipients.join(", ")}". Please enter valid email addresses.`);
+      return;
+    }
+
+    const invalidCcs = ccList.filter((em) => !isValidEmail(em));
+    if (invalidCcs.length > 0) {
+      setErrorMsg(`Invalid CC email format: "${invalidCcs.join(", ")}". Please enter valid email addresses.`);
+      return;
+    }
+
+    const invalidBccs = bccList.filter((em) => !isValidEmail(em));
+    if (invalidBccs.length > 0) {
+      setErrorMsg(`Invalid BCC email format: "${invalidBccs.join(", ")}". Please enter valid email addresses.`);
+      return;
     }
 
     const currentContent = editorRef.current?.innerHTML || reply;
 
     if (!isDraft && finalTo.length === 0) {
       setErrorMsg("Please specify at least one valid recipient email address.");
+      return;
+    }
+
+    if (!subject.trim()) {
+      setErrorMsg("Subject is required. Please enter an email subject.");
       return;
     }
 
@@ -578,7 +638,9 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
           {/* TO Recipients */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">To *</label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                To <span className="text-red-500 font-bold">*</span>
+              </label>
               <div className="flex items-center gap-2 text-xs">
                 {!showCc && (
                   <button type="button" onClick={() => setShowCc(true)} className="text-[#0088cc] hover:underline">
@@ -716,13 +778,24 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
 
           {/* Subject */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Subject *</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              Subject <span className="text-red-500 font-bold">*</span>
+            </label>
             <input
               type="text"
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (errorMsg && errorMsg.toLowerCase().includes("subject")) {
+                  setErrorMsg(null);
+                }
+              }}
               placeholder="Subject"
-              className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc]"
+              className={`w-full px-3 py-2 text-xs rounded-lg border bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 transition ${
+                errorMsg && errorMsg.toLowerCase().includes("subject")
+                  ? "border-red-500 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                  : "border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc]"
+              }`}
             />
           </div>
 
@@ -818,7 +891,11 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
                       title="Select Email Template"
                     >
                       <option value="">
-                        {loadingTemplates && templates.length === 0 ? "Loading templates..." : "-- Select Template --"}
+                        {loadingTemplates && templates.length === 0
+                          ? "Loading templates..."
+                          : templates.length === 0
+                          ? "No templates available"
+                          : "-- Select Template --"}
                       </option>
                       {templates.map((t) => (
                         <option key={t.id} value={String(t.id)} title={t.subject ? `Subject: ${t.subject}` : undefined}>
@@ -826,6 +903,9 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
                         </option>
                       ))}
                     </select>
+                    {loadingTemplates && (
+                      <i className="mgc_loading_2_line animate-spin text-xs text-[#0088cc]" title="Loading templates..."></i>
+                    )}
                   </div>
 
                   <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-600 mx-0.5 hidden sm:block"></div>

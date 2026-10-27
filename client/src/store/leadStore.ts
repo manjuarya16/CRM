@@ -3,22 +3,6 @@ import { API } from "@/config";
 import { handleErrorResponse, handleSuccessResponse } from "@/utils/swalAlert";
 import { ILead, LeadStore } from "@/interface/leadInterface";
 
-const dedupeList = <T extends { id?: any; name?: string }>(items: T[]): T[] => {
-  if (!Array.isArray(items)) return [];
-  const seenIds = new Set();
-  const seenNames = new Set();
-  return items.filter((item) => {
-    if (!item) return false;
-    const idKey = item.id !== undefined && item.id !== null ? String(item.id) : null;
-    const nameKey = (item.name || "").trim().toLowerCase();
-    if (idKey && seenIds.has(idKey)) return false;
-    if (nameKey && seenNames.has(nameKey)) return false;
-    if (idKey) seenIds.add(idKey);
-    if (nameKey) seenNames.add(nameKey);
-    return true;
-  });
-};
-
 export const useLeadStore = create<LeadStore>((set, get) => ({
   leads: [],
   total: 0,
@@ -243,7 +227,12 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     quantity = 1,
     price?: number,
     warehouseId?: number,
-    warehouseLocationId?: number
+    warehouseLocationId?: number,
+    isRecurring?: boolean,
+    billingCycle?: string,
+    contractDuration?: number,
+    contractStartDate?: string,
+    contractEndDate?: string
   ) => {
     try {
       const res = await API.post(`/leads/${leadId}/products`, {
@@ -252,6 +241,11 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
         price,
         warehouse_id: warehouseId,
         warehouse_location_id: warehouseLocationId,
+        is_recurring: isRecurring,
+        billing_cycle: billingCycle,
+        contract_duration: contractDuration,
+        contract_start_date: contractStartDate,
+        contract_end_date: contractEndDate,
       });
       if (res.data?.success) {
         const fresh = await API.get(`/leads/${leadId}/products`);
@@ -283,21 +277,21 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
   fetchSources: async () => {
     try {
       const res = await API.get("/leads/sources");
-      if (res.data?.success) set({ sources: dedupeList(res.data.data || []) });
+      if (res.data?.success) set({ sources: res.data.data || [] });
     } catch (err) {}
   },
 
   fetchTypes: async () => {
     try {
       const res = await API.get("/leads/types");
-      if (res.data?.success) set({ types: dedupeList(res.data.data || []) });
+      if (res.data?.success) set({ types: res.data.data || [] });
     } catch (err) {}
   },
 
   fetchPipelines: async () => {
     try {
       const res = await API.get("/leads/pipelines");
-      if (res.data?.success) set({ pipelines: dedupeList(res.data.data || []) });
+      if (res.data?.success) set({ pipelines: res.data.data || [] });
     } catch (err) {}
   },
 
@@ -305,7 +299,7 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     try {
       const url = pipelineId ? `/leads/stages?pipeline_id=${pipelineId}` : "/leads/stages";
       const res = await API.get(url);
-      if (res.data?.success) set({ stages: dedupeList(res.data.data || []) });
+      if (res.data?.success) set({ stages: res.data.data || [] });
     } catch (err) {}
   },
 

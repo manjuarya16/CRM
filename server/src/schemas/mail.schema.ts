@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+const emailRegex = STRICT_EMAIL_REGEX;
 
 export const createMailSchema = z.object({
   subject: z.string().optional().default(''),
@@ -38,6 +39,13 @@ export const createMailSchema = z.object({
         code: z.ZodIssueCode.custom,
         message: 'At least one recipient email address is required',
         path: ['reply_to'],
+      });
+    }
+    if (!data.subject || !data.subject.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email subject is required',
+        path: ['subject'],
       });
     }
   }

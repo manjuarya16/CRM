@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { ViewModeSwitcher } from "@/components";
 import { IEmailTemplate } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
-import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { useEmailTemplateStore } from "@/store";
 import { stripHtmlToText } from "@/utils/formatters";
 
@@ -21,7 +19,7 @@ const EmailTemplatesPage: React.FC = () => {
   const [perPage, setPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table");
   const [previewTemplate, setPreviewTemplate] = useState<IEmailTemplate | null>(null);
 
   const AVATAR_COLORS = [
@@ -305,31 +303,31 @@ const EmailTemplatesPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
           {selectedIds.length > 0 && canDelete && (
             <button
               type="button"
               onClick={handleBulkDelete}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
+              className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_delete_line text-base"></i>
+              <i className="mgc_delete_line text-sm"></i>
               <span>Delete ({selectedIds.length})</span>
             </button>
           )}
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+            className="h-8 px-2.5 sm:px-3 inline-flex items-center justify-center gap-1 bg-white dark:bg-gray-800 hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors shrink-0 whitespace-nowrap"
           >
-            <i className="mgc_download_line text-base text-gray-500 dark:text-gray-400"></i>
+            <i className="mgc_download_line text-sm text-gray-500 dark:text-gray-400"></i>
             <span>Export</span>
           </button>
           {canCreate && (
             <Link
               to="/settings/email-templates/create"
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors shrink-0 whitespace-nowrap"
+              className="h-8 px-3 sm:px-3.5 inline-flex items-center justify-center gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors active:scale-98 shrink-0 whitespace-nowrap"
             >
-              <i className="mgc_add_line text-base"></i>
+              <i className="mgc_add_line text-sm"></i>
               <span>Create Template</span>
             </Link>
           )}
@@ -358,23 +356,44 @@ const EmailTemplatesPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
             {/* View Mode Switcher */}
-            <ViewModeSwitcher
-              viewMode={viewMode}
-              onViewModeChange={(m) => {
-                setHasUserToggled(true);
-                setViewMode(m);
-              }}
-            />
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-0.5 rounded-xl border border-gray-200/80 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "cards"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Cards View"
+              >
+                <i className="mgc_grid_2_line text-sm"></i>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-gray-800 text-[#0088cc] shadow-xs"
+                    : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+                title="Table View"
+              >
+                <i className="mgc_table_line text-sm"></i>
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-xs text-gray-500 whitespace-nowrap">Per Page:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Per Page:</span>
               <select
                 value={perPage}
                 onChange={(e) => {
                   setPerPage(Number(e.target.value));
                   setPage(1);
                 }}
-                className="h-8 pl-2.5 pr-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#0088cc] cursor-pointer shadow-2xs"
+                className="pl-2.5 pr-8 min-w-[74px] py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 dark:text-gray-200 cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -383,12 +402,11 @@ const EmailTemplatesPage: React.FC = () => {
             </div>
 
             {/* Quick pagination arrows in toolbar */}
-            <div className="h-8 flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-2xs shrink-0">
+            <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
-                type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Previous Page"
               >
                 <i className="mgc_left_line text-xs"></i>
@@ -397,10 +415,9 @@ const EmailTemplatesPage: React.FC = () => {
                 {page}/{totalPages}
               </span>
               <button
-                type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                className="h-full px-2 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
                 title="Next Page"
               >
                 <i className="mgc_right_line text-xs"></i>
@@ -441,9 +458,16 @@ const EmailTemplatesPage: React.FC = () => {
             {paginated.map((item, idx) => renderEmailTemplateCard(item, idx))}
           </div>
         ) : (
-          /* Table View */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
+          /* Table View with Mobile Card Fallback */
+          <div>
+            {/* Mobile Fallback: Cards */}
+            <div className="block md:hidden p-4 space-y-3">
+              {paginated.map((item, idx) => renderEmailTemplateCard(item, idx))}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-xs">
                     {canDelete && (
@@ -538,6 +562,7 @@ const EmailTemplatesPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
         )}
 
         {/* Pagination Footer */}

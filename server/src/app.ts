@@ -49,6 +49,8 @@ export function createApp(): express.Express {
         "x-authorization",
         "X-Tenant-Slug",
         "x-tenant-slug",
+        "X-Tenant-Id",
+        "x-tenant-id",
         "X-Requested-With",
         "Accept",
         "Origin",

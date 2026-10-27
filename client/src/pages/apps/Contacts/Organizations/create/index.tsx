@@ -89,6 +89,7 @@ const CreateOrganizationPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!validate()) return;
 
     setSaving(true);
@@ -109,18 +110,21 @@ const CreateOrganizationPage: React.FC = () => {
       const res = await useOrganizationStore.getState().createOrganization(payload);
       const createdOrgId = res?.data?.id || res?.id;
       if (createdOrgId && selectedTagIds.length > 0) {
-        await useTagStore.getState().saveEntityTags("organization", createdOrgId, selectedTagIds);
+        try {
+          await useTagStore.getState().saveEntityTags("organization", createdOrgId, selectedTagIds);
+        } catch (tagErr) {
+          console.warn("Failed to attach tags to organization:", tagErr);
+        }
       }
-      if (res?.success || res?.data?.id || res?.id || res?.status === 200 || res?.status === 201) {
-        Swal.fire({
-          icon: "success",
-          title: "Success",
-          text: "Organization created successfully",
-          timer: 1500,
-          showConfirmButton: false,
-        });
-        navigate("/contacts/organizations");
-      }
+
+      await Swal.fire({
+        icon: "success",
+        title: "Success",
+        text: "Organization created successfully",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      navigate("/contacts/organizations");
     } catch (err: any) {
       console.error(err);
       Swal.fire({

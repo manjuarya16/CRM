@@ -263,7 +263,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             lead.id,
             Number(p.product_id),
@@ -271,6 +271,11 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -422,7 +427,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
       for (const p of products) {
         if (!p.product_id) continue;
         await connection.query(
-          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+          "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
           [
             id,
             Number(p.product_id),
@@ -430,6 +435,11 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
             p.price ? Number(p.price) : null,
             p.warehouse_id ? Number(p.warehouse_id) : null,
             p.warehouse_location_id ? Number(p.warehouse_location_id) : null,
+            p.is_recurring === true || p.is_recurring === "true",
+            p.billing_cycle || null,
+            p.contract_duration ? Number(p.contract_duration) : 1,
+            p.contract_start_date || p.start_date || null,
+            p.contract_end_date || p.end_date || null,
           ]
         );
       }
@@ -609,10 +619,23 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     connection = await pool.connect();
     const leadId = Number(req.params.id);
-    const { product_id, quantity, price, warehouse_id, warehouse_location_id } = req.body;
+    const {
+      product_id,
+      quantity,
+      price,
+      warehouse_id,
+      warehouse_location_id,
+      is_recurring,
+      billing_cycle,
+      contract_duration,
+      contract_start_date,
+      contract_end_date,
+      start_date,
+      end_date,
+    } = req.body;
 
     const result = await connection.query(
-      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6)",
+      "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
       [
         leadId,
         product_id,
@@ -620,6 +643,11 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
         price || null,
         warehouse_id ? Number(warehouse_id) : null,
         warehouse_location_id ? Number(warehouse_location_id) : null,
+        is_recurring === true || is_recurring === "true",
+        billing_cycle || null,
+        contract_duration ? Number(contract_duration) : 1,
+        contract_start_date || start_date || null,
+        contract_end_date || end_date || null,
       ]
     );
 
@@ -1089,26 +1117,56 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
 
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
-    const actRes = await connection.query(
-      "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-      [
-        file.originalname,
-        "file",
-        fileUrl,
-        null,
-        null,
-        true,
-        (req as any).user?.id || null,
-        null,
-        leadId,
-        null,
-      ]
-    );
+    const safeTitle = (file.originalname || "Attached File").substring(0, 200);
+
+    let validUserId = (req as any).user?.id ? Number((req as any).user.id) : null;
+    if (validUserId) {
+      try {
+        const uCheck = await connection.query("SELECT id FROM users WHERE id = $1", [validUserId]);
+        if (uCheck.rows.length === 0) validUserId = null;
+      } catch {
+        validUserId = null;
+      }
+    }
+
+    let actData: any = null;
+    try {
+      const actRes = await connection.query(
+        "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        [
+          safeTitle,
+          "file",
+          fileUrl,
+          null,
+          null,
+          true,
+          validUserId,
+          null,
+          leadId,
+          null,
+        ]
+      );
+      actData = actRes.rows[0];
+    } catch (fnErr: any) {
+      logger.warn(`fn_create_activity fallback for file: ${fnErr.message}`);
+      const insRes = await connection.query(
+        `INSERT INTO activities (title, type, comment, is_done, user_id, created_at, updated_at)
+         VALUES ($1, 'file', $2, true, $3, NOW(), NOW()) RETURNING *`,
+        [safeTitle, fileUrl, validUserId]
+      );
+      actData = insRes.rows[0];
+      if (actData && leadId) {
+        await connection.query(
+          "INSERT INTO lead_activities (activity_id, lead_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [actData.id, leadId]
+        );
+      }
+    }
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
       message: "File attached successfully to lead.",
-      data: actRes.rows[0],
+      data: actData,
     });
   } catch (error: any) {
     logger.error(error);
