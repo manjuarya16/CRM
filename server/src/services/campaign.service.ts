@@ -1,7 +1,7 @@
 import { pool } from '@/config/db';
 import { ICampaign } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
-import { sendRealMail } from '@/utils/mailer';
+import { sendRealMail, getSmtpConfig, createTransporterFromConfig } from '@/utils/mailer';
 import { fetchTemplateContext, parsePlaceholders } from '@/utils/templateParser';
 
 const toNumberParam = (v: any): number | null => {
@@ -119,21 +119,43 @@ export class CampaignService {
 
     const uniqueRecipients = [...new Set(recipientEmails)];
     let sentCount = 0;
-    const BATCH_SIZE = 5;
+
+    // Pre-fetch shared SMTP transporter once for the entire broadcast batch
+    const smtpConfig = await getSmtpConfig();
+    const transporter = createTransporterFromConfig(smtpConfig);
+
+    // Pre-check if template contains recipient-specific placeholder tags
+    const rawSubject = campaign.subject || tmpl.subject || '';
+    const rawContent = tmpl.content || '';
+    const hasPerRecipientTags = /\{%(lead|person|contact|to_email)\./i.test(rawSubject + rawContent);
+    const genericCtx = !hasPerRecipientTags ? await fetchTemplateContext({}) : null;
+    const genericSubject = genericCtx ? parsePlaceholders(rawSubject, genericCtx) : '';
+    const genericBody = genericCtx ? parsePlaceholders(rawContent, genericCtx) : '';
+
+    const BATCH_SIZE = 20;
 
     for (let i = 0; i < uniqueRecipients.length; i += BATCH_SIZE) {
       const chunk = uniqueRecipients.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         chunk.map(async (email) => {
-          const ctx = await fetchTemplateContext({ to_email: email });
-          const parsedSubject = parsePlaceholders(campaign.subject || tmpl.subject, ctx);
-          const parsedBody = parsePlaceholders(tmpl.content, ctx);
+          let parsedSubject = genericSubject;
+          let parsedBody = genericBody;
 
-          await sendRealMail({
-            to: email,
-            subject: parsedSubject,
-            html: parsedBody,
-          });
+          if (hasPerRecipientTags || !genericCtx) {
+            const ctx = await fetchTemplateContext({ to_email: email });
+            parsedSubject = parsePlaceholders(rawSubject, ctx);
+            parsedBody = parsePlaceholders(rawContent, ctx);
+          }
+
+          await sendRealMail(
+            {
+              to: email,
+              subject: parsedSubject,
+              html: parsedBody,
+            },
+            transporter,
+            smtpConfig
+          );
         })
       );
 

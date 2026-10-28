@@ -7,7 +7,7 @@ import type { IActivityCreateInput, IActivityUpdateInput } from "@/interfaces/ac
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
-import { activitySchema } from "@/schemas/activity.schema";
+import { activitySchema, activityUpdateSchema } from "@/schemas/activity.schema";
 
 const logger = pino();
 
@@ -168,7 +168,7 @@ const createActivity = async (req: Request, res: Response): Promise<void> => {
 const updateActivity = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    const validation = activitySchema.partial().safeParse(req.body);
+    const validation = activityUpdateSchema.safeParse(req.body);
     if (!validation.success) {
       res.status(HttpStatusCodes.BAD_REQUEST).json({
         success: false,

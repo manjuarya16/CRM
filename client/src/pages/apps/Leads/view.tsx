@@ -1873,6 +1873,12 @@ const getPersonEmail = (person: any): string => {
                   )}
 
 
+                  {activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim()) && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <i className="mgc_information_line text-xs"></i>
+                      <span>Title and Note Content are required.</span>
+                    </p>
+                  )}
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     <button
                       type="button"
@@ -1884,8 +1890,9 @@ const getPersonEmail = (person: any): string => {
                     </button>
                     <button
                       type="submit"
-                      disabled={submittingAction || (activeModal === "note" && !modalForm.comment?.trim())}
-                      className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
+                      disabled={submittingAction || (activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim())) || (activeModal === "file" && !selectedFile) || (activeModal === "activity" && !modalForm.title?.trim())}
+                      className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 transition-all"
+                      title={(activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim())) ? "Please enter both title and note content" : undefined}
                     >
                       {submittingAction ? (
                         <>

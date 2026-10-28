@@ -3,12 +3,15 @@
     "rootDir": "./src",
     "module": "commonjs",
     "target": "es2020",
+    "baseUrl": ".",
     "paths": {
       "@src/*": [
-        "./src/*"
+        "src/*",
+        "dist/*"
       ],
       "@/*": [
-        "./src/*"
+        "src/*",
+        "dist/*"
       ]
     },
     "resolveJsonModule": true,
@@ -33,6 +36,9 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "dist/**/*",
+    "src/dist",
+    "src/dist/**/*"
   ]
 }

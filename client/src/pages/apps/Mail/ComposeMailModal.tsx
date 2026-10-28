@@ -291,14 +291,17 @@ export const ComposeMailModal: React.FC<ComposeMailModalProps> = ({
       });
 
       if (duplicateNames.length > 0) {
+        const fileMsg =
+          duplicateNames.length === 1
+            ? `The file "${duplicateNames[0]}" has already been attached. Duplicate files cannot be added again.`
+            : `The following files have already been attached and cannot be added again: ${duplicateNames.join(", ")}`;
+
         Swal.fire({
           icon: "warning",
           title: "Duplicate Attachment",
-          text: `File "${duplicateNames.join(", ")}" is already attached.`,
-          timer: 3000,
-          toast: true,
-          position: "top-end",
-          showConfirmButton: false,
+          text: fileMsg,
+          confirmButtonColor: "#0088cc",
+          confirmButtonText: "OK",
         });
       }
       e.target.value = "";

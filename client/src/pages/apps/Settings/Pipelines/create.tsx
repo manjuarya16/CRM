@@ -187,7 +187,7 @@ const CreatePipelinePage: React.FC = () => {
               />
               {errors.name && (
                 <p className="mt-1.5 text-xs text-red-500 italic font-medium">
-                  The Name field is required
+                  {errors.name}
                 </p>
               )}
             </div>
