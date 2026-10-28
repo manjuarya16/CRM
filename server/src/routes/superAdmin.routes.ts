@@ -5,6 +5,14 @@ import { getTenantProfile } from '@/routes/tenant.routes';
 
 const router = Router();
 
+const parseTenantId = (value: string | string[]): number | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+
 // Public: Super Admin Login
 router.post('/login', async (req, res, next) => {
   try {
@@ -101,7 +109,11 @@ router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
 // Protected: Get single Tenant Organization full details
 router.get('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
     const profile = await getTenantProfile(id);
     if (!profile) {
       res.status(404).json({ success: false, message: 'Tenant organization not found' });
@@ -116,7 +128,11 @@ router.get('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
 // Protected: Update existing Tenant Organization
 router.put('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
     const result = await SuperAdminService.updateTenant(id, req.body);
     const updatedProfile = await getTenantProfile(id);
     res.json({
@@ -133,7 +149,11 @@ router.put('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
 // Protected: Update Tenant Status (activate/suspend)
 router.patch('/tenants/:id/status', requireSuperAdmin, async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
     const { status } = req.body;
     if (!['active', 'suspended'].includes(status)) {
       res.status(400).json({ success: false, message: "Status must be 'active' or 'suspended'" });

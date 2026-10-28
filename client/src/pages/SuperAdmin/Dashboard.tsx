@@ -28,7 +28,54 @@ const CURRENCIES = [
 
 type ModalTab = "company" | "address" | "workspace" | "admin";
 
-export const SuperAdminDashboard: React.FC = () => {
+// ─── Detail Field component ──────────────────────────────────────────────────
+const DetailField: React.FC<{
+  label: string;
+  value?: string | null;
+  link?: boolean;
+  span?: boolean;
+}> = ({ label, value, link, span }) => (
+  <div className={span ? "md:col-span-2 min-w-0" : "min-w-0"}>
+    <p className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider mb-1">
+      {label}
+    </p>
+    {link && value ? (
+      <a
+        href={value}
+        target="_blank"
+        rel="noreferrer"
+        className="text-indigo-400 hover:underline text-sm font-medium break-all"
+        style={{ overflowWrap: "anywhere", wordBreak: "break-all" }}
+      >
+        {value}
+      </a>
+    ) : (
+      <p
+        className="text-sm text-slate-200 font-medium break-words"
+        style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+      >
+        {value || "-"}
+      </p>
+    )}
+  </div>
+);
+
+// ─── Section heading ─────────────────────────────────────────────────────────
+const DetailSection: React.FC<{ title: string; icon: string; children: React.ReactNode }> = ({
+  title,
+  icon,
+  children,
+}) => (
+  <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5 space-y-4">
+    <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
+      <i className={`${icon} text-indigo-400 text-base`}></i>
+      <h4 className="text-sm font-bold text-white">{title}</h4>
+    </div>
+    <div className="grid md:grid-cols-2 gap-4">{children}</div>
+  </div>
+);
+
+export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showMetrics = true }) => {
   const {
     admin,
     tenants,
@@ -45,23 +92,39 @@ export const SuperAdminDashboard: React.FC = () => {
   } = useSuperAdminStore();
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantRecord | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+
+  // ── View Detail Panel ──────────────────────────────────────────────────────
+  const [viewingTenant, setViewingTenant] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<ModalTab>("company");
 
   // Tab 1: Company Details state
   const [formName, setFormName] = useState("");
+  const [formDescription, setFormDescription] = useState("");
   const [formRegistrationNo, setFormRegistrationNo] = useState("");
+  const [formRegisteredUnderAct, setFormRegisteredUnderAct] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formWebsite, setFormWebsite] = useState("");
+  const [formSocialMediaLinks, setFormSocialMediaLinks] = useState("");
   const [formEstablishedDate, setFormEstablishedDate] = useState("");
   const [formCurrency, setFormCurrency] = useState("INR");
   const [formTimezone, setFormTimezone] = useState("Asia/Kolkata");
   const [formLogoUrl, setFormLogoUrl] = useState("");
+
+  // Key Persons state
+  const [formCeoName, setFormCeoName] = useState("");
+  const [formCeoContact, setFormCeoContact] = useState("");
+  const [formChairpersonName, setFormChairpersonName] = useState("");
+  const [formChairpersonContact, setFormChairpersonContact] = useState("");
 
   // Tab 2: Address & Location state
   const [formStreet, setFormStreet] = useState("");
@@ -156,7 +219,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
     setShowModal(true);
 
-    // Fetch full tenant details to pre-fill admin user information
+    // Fetch full tenant details to pre-fill all fields
     const details = await getTenantDetails(t.id);
     if (details) {
       if (details.admin?.name) setFormAdminName(details.admin.name);
@@ -197,7 +260,38 @@ export const SuperAdminDashboard: React.FC = () => {
       if (details.address?.pincode || details.settings?.address?.pincode) {
         setFormPincode(details.address?.pincode || details.settings?.address?.pincode);
       }
+      // New fields
+      if (details.description || details.settings?.description) {
+        setFormDescription(details.description || details.settings?.description || "");
+      }
+      if (details.registered_under_act || details.settings?.registered_under_act) {
+        setFormRegisteredUnderAct(details.registered_under_act || details.settings?.registered_under_act || "");
+      }
+      if (details.social_media_links || details.settings?.social_media_links) {
+        setFormSocialMediaLinks(details.social_media_links || details.settings?.social_media_links || "");
+      }
+      if (details.ceo_name || details.settings?.ceo_name) {
+        setFormCeoName(details.ceo_name || details.settings?.ceo_name || "");
+      }
+      if (details.ceo_contact || details.settings?.ceo_contact) {
+        setFormCeoContact(details.ceo_contact || details.settings?.ceo_contact || "");
+      }
+      if (details.chairperson_name || details.settings?.chairperson_name) {
+        setFormChairpersonName(details.chairperson_name || details.settings?.chairperson_name || "");
+      }
+      if (details.chairperson_contact || details.settings?.chairperson_contact) {
+        setFormChairpersonContact(details.chairperson_contact || details.settings?.chairperson_contact || "");
+      }
     }
+  };
+
+  // ── View Detail Handler ────────────────────────────────────────────────────
+  const handleViewDetail = async (t: TenantRecord) => {
+    setDetailLoading(true);
+    setViewingTenant({ ...t, _loading: true });
+    const details = await getTenantDetails(t.id);
+    setViewingTenant(details ? { ...t, ...details } : t);
+    setDetailLoading(false);
   };
 
   const handleModalSubmit = async (e: React.FormEvent) => {
@@ -239,32 +333,40 @@ export const SuperAdminDashboard: React.FC = () => {
 
     setSubmitting(true);
 
+    const commonPayload: any = {
+      name: formName.trim(),
+      slug: formSlug.trim(),
+      plan: formPlan,
+      registration_no: formRegistrationNo.trim(),
+      email: formEmail.trim(),
+      phone: formPhone.trim(),
+      website: formWebsite.trim(),
+      established_date: formEstablishedDate,
+      currency: formCurrency,
+      timezone: formTimezone,
+      logo_url: formLogoUrl.trim(),
+      street: formStreet.trim(),
+      city: formCity.trim(),
+      state: formState.trim(),
+      country: formCountry.trim(),
+      pincode: formPincode.trim(),
+      // New fields
+      description: formDescription.trim(),
+      registered_under_act: formRegisteredUnderAct.trim(),
+      social_media_links: formSocialMediaLinks.trim(),
+      ceo_name: formCeoName.trim(),
+      ceo_contact: formCeoContact.trim(),
+      chairperson_name: formChairpersonName.trim(),
+      chairperson_contact: formChairpersonContact.trim(),
+    };
+
     if (editingTenant) {
       // EDIT MODE
-      const payload: any = {
-        name: formName.trim(),
-        slug: formSlug.trim(),
-        plan: formPlan,
-        registration_no: formRegistrationNo.trim(),
-        email: formEmail.trim(),
-        phone: formPhone.trim(),
-        website: formWebsite.trim(),
-        established_date: formEstablishedDate,
-        currency: formCurrency,
-        timezone: formTimezone,
-        logo_url: formLogoUrl.trim(),
-        street: formStreet.trim(),
-        city: formCity.trim(),
-        state: formState.trim(),
-        country: formCountry.trim(),
-        pincode: formPincode.trim(),
-      };
+      if (formAdminName.trim()) commonPayload.admin_name = formAdminName.trim();
+      if (formAdminEmail.trim()) commonPayload.admin_email = formAdminEmail.trim();
+      if (formAdminPassword.trim()) commonPayload.admin_password = formAdminPassword.trim();
 
-      if (formAdminName.trim()) payload.admin_name = formAdminName.trim();
-      if (formAdminEmail.trim()) payload.admin_email = formAdminEmail.trim();
-      if (formAdminPassword.trim()) payload.admin_password = formAdminPassword.trim();
-
-      const res = await updateTenant(editingTenant.id, payload);
+      const res = await updateTenant(editingTenant.id, commonPayload);
       setSubmitting(false);
 
       if (res.success) {
@@ -275,25 +377,10 @@ export const SuperAdminDashboard: React.FC = () => {
     } else {
       // CREATE MODE
       const res = await createTenant({
-        name: formName.trim(),
-        slug: formSlug.trim(),
-        plan: formPlan,
+        ...commonPayload,
         admin_name: formAdminName.trim(),
         admin_email: formAdminEmail.trim(),
         admin_password: formAdminPassword,
-        registration_no: formRegistrationNo.trim(),
-        email: formEmail.trim(),
-        phone: formPhone.trim(),
-        website: formWebsite.trim(),
-        established_date: formEstablishedDate,
-        currency: formCurrency,
-        timezone: formTimezone,
-        logo_url: formLogoUrl.trim(),
-        street: formStreet.trim(),
-        city: formCity.trim(),
-        state: formState.trim(),
-        country: formCountry.trim(),
-        pincode: formPincode.trim(),
       });
 
       setSubmitting(false);
@@ -311,14 +398,21 @@ export const SuperAdminDashboard: React.FC = () => {
     setEditingTenant(null);
     setActiveTab("company");
     setFormName("");
+    setFormDescription("");
     setFormRegistrationNo("");
+    setFormRegisteredUnderAct("");
     setFormEmail("");
     setFormPhone("");
     setFormWebsite("");
+    setFormSocialMediaLinks("");
     setFormEstablishedDate("");
     setFormCurrency("INR");
     setFormTimezone("Asia/Kolkata");
     setFormLogoUrl("");
+    setFormCeoName("");
+    setFormCeoContact("");
+    setFormChairpersonName("");
+    setFormChairpersonContact("");
     setFormStreet("");
     setFormCity("");
     setFormState("");
@@ -356,16 +450,38 @@ export const SuperAdminDashboard: React.FC = () => {
   };
 
   const handleToggleStatus = async (tenant: TenantRecord) => {
+    setStatusError(null);
     setActionLoadingId(tenant.id);
-    await toggleTenantStatus(tenant.id, tenant.status);
-    setActionLoadingId(null);
+    try {
+      const updated = await toggleTenantStatus(tenant.id, tenant.status);
+      if (!updated) {
+        setStatusError(`Could not update ${tenant.name}. Please refresh and try again.`);
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
   const filteredTenants = tenants.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.slug.toLowerCase().includes(search.toLowerCase())
+    (t) => {
+      const normalizedSearch = search.trim().toLowerCase();
+      const matchesSearch =
+        t.name.toLowerCase().includes(normalizedSearch) ||
+        t.slug.toLowerCase().includes(normalizedSearch);
+      return matchesSearch && (statusFilter === "all" || t.status === statusFilter);
+    }
   );
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredTenants.length / pageSize));
+  const paginatedTenants = filteredTenants.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -378,9 +494,11 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-base sm:text-lg leading-tight text-white">
-                SaaS Super Admin
+                {showMetrics ? "SaaS Super Admin" : "Organizations"}
               </h1>
-              <p className="text-xs text-slate-400">Multi-Tenant Management Console</p>
+              <p className="text-xs text-slate-400">
+                {showMetrics ? "Multi-Tenant Management Console" : "Manage tenant workspaces and status"}
+              </p>
             </div>
           </div>
 
@@ -402,7 +520,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
-        {/* Metric Cards */}
+        {showMetrics && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm flex items-center justify-between">
             <div>
@@ -460,6 +578,7 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
 
         {/* Toolbar & Filter */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
@@ -475,6 +594,16 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <select
+              aria-label="Filter organizations by status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "suspended")}
+              className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-800 text-xs font-medium text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
             <button
               onClick={() => {
                 fetchTenants();
@@ -495,6 +624,15 @@ export const SuperAdminDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {(statusError || error) && (
+          <div
+            role="alert"
+            className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300"
+          >
+            {statusError || error}
+          </div>
+        )}
 
         {/* Organizations Table Card */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
@@ -523,16 +661,20 @@ export const SuperAdminDashboard: React.FC = () => {
                   <tr>
                     <td colSpan={7} className="text-center py-12 text-slate-400">
                       <i className="mgc_ghost_line text-4xl mb-2 text-slate-600 block"></i>
-                      <p>No organizations found matching your search.</p>
+                      <p>No organizations match the current search and status filters.</p>
                     </td>
                   </tr>
                 ) : (
-                  filteredTenants.map((t) => {
+                  paginatedTenants.map((t) => {
                     const workspaceUrl = buildTenantUrl(t.slug, "/login");
                     const isDefault = t.slug === "default";
 
                     return (
-                      <tr key={t.id} className="hover:bg-slate-800/30 transition-colors">
+                      <tr
+                        key={t.id}
+                        className="hover:bg-slate-800/30 transition-colors cursor-pointer"
+                        onClick={() => handleViewDetail(t)}
+                      >
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             {t.logo_url ? (
@@ -566,6 +708,7 @@ export const SuperAdminDashboard: React.FC = () => {
                               rel="noreferrer"
                               className="text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1 transition-colors"
                               title="Open Login Workspace"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <i className="mgc_external_link_line text-sm"></i>
                             </a>
@@ -599,7 +742,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => handleOpenEditModal(t)}
@@ -648,10 +791,318 @@ export const SuperAdminDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {filteredTenants.length > 0 && (
+            <div className="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-3 text-xs text-slate-400">
+              <span>
+                Showing {(currentPage - 1) * pageSize + 1}–
+                {Math.min(currentPage * pageSize, filteredTenants.length)} of {filteredTenants.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 font-medium text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span aria-live="polite">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 font-medium text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
-      {/* Modal: Create Organization */}
+      {/* ── Organization Detail Side Panel ──────────────────────────────────── */}
+      {viewingTenant && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-2xl bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col h-full overflow-hidden">
+            {/* Panel Header */}
+            <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
+              {/* Logo / Avatar */}
+              {viewingTenant.logo_url ? (
+                <img
+                  src={viewingTenant.logo_url}
+                  alt={viewingTenant.name}
+                  className="w-14 h-14 rounded-xl object-contain bg-slate-800 p-1.5 border border-slate-700 shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xl flex items-center justify-center shrink-0">
+                  {viewingTenant.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white truncate">{viewingTenant.name}</h2>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span className="font-mono text-xs text-indigo-300 bg-indigo-950/40 border border-indigo-800/50 px-2 py-0.5 rounded-md">
+                    {viewingTenant.slug}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                      viewingTenant.status === "active"
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        viewingTenant.status === "active" ? "bg-emerald-400" : "bg-rose-400"
+                      }`}
+                    ></span>
+                    <span className="capitalize">{viewingTenant.status}</span>
+                  </span>
+                  <span className="capitalize px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {viewingTenant.plan || "pro"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditModal(viewingTenant)}
+                  className="h-8 px-3 rounded-lg border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition-colors"
+                >
+                  <i className="mgc_edit_line text-sm"></i>
+                  <span className="hidden sm:inline">Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingTenant(null)}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  <i className="mgc_close_line text-xl"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Panel Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-20 text-slate-400">
+                  <div className="text-center">
+                    <div className="inline-block w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <p className="text-sm">Loading organization details...</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Stats Row */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 text-center">
+                      <p className="text-xs text-slate-400 mb-1">Users</p>
+                      <p className="text-2xl font-extrabold text-white">{viewingTenant.user_count ?? 0}</p>
+                    </div>
+                    <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 text-center">
+                      <p className="text-xs text-slate-400 mb-1">Leads</p>
+                      <p className="text-2xl font-extrabold text-amber-400">{viewingTenant.lead_count ?? 0}</p>
+                    </div>
+                    <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 text-center">
+                      <p className="text-xs text-slate-400 mb-1">Member Since</p>
+                      <p className="text-sm font-bold text-slate-200">
+                        {viewingTenant.created_at
+                          ? new Date(viewingTenant.created_at).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+                          : "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Basic Information */}
+                  <DetailSection title="Basic Information" icon="mgc_building_2_line">
+                    <DetailField label="Organization Name" value={viewingTenant.name} span />
+                    <DetailField
+                      label="Description / Purpose"
+                      value={
+                        viewingTenant.description ||
+                        viewingTenant.settings?.description ||
+                        viewingTenant.purpose
+                      }
+                      span
+                    />
+                    <DetailField
+                      label="Currency"
+                      value={viewingTenant.currency || viewingTenant.settings?.currency}
+                    />
+                    <DetailField
+                      label="Timezone"
+                      value={viewingTenant.timezone || viewingTenant.settings?.timezone}
+                    />
+                    <DetailField
+                      label="Date of Establishment"
+                      value={
+                        (viewingTenant.established_date || viewingTenant.settings?.established_date)
+                          ?.split("T")[0]
+                      }
+                    />
+                    <DetailField label="Subscription Plan" value={viewingTenant.plan} />
+                  </DetailSection>
+
+                  {/* Legal & Compliance */}
+                  <DetailSection title="Legal & Compliance" icon="mgc_certificate_line">
+                    <DetailField
+                      label="Registration / Tax Number"
+                      value={
+                        viewingTenant.registration_no ||
+                        viewingTenant.settings?.registration_no
+                      }
+                    />
+                    <DetailField
+                      label="Registered Under Act"
+                      value={
+                        viewingTenant.registered_under_act ||
+                        viewingTenant.settings?.registered_under_act
+                      }
+                    />
+                  </DetailSection>
+
+                  {/* Contact */}
+                  <DetailSection title="Contact" icon="mgc_phone_line">
+                    <DetailField
+                      label="Email"
+                      value={viewingTenant.email || viewingTenant.settings?.email}
+                    />
+                    <DetailField
+                      label="Phone"
+                      value={viewingTenant.phone || viewingTenant.settings?.phone}
+                    />
+                    <DetailField
+                      label="Website"
+                      value={viewingTenant.website || viewingTenant.settings?.website}
+                      link
+                    />
+                    <DetailField
+                      label="Social Media"
+                      value={
+                        viewingTenant.social_media_links ||
+                        viewingTenant.settings?.social_media_links
+                      }
+                      link
+                    />
+                  </DetailSection>
+
+                  {/* Address */}
+                  <DetailSection title="Address" icon="mgc_map_pin_line">
+                    <DetailField
+                      label="Street Address"
+                      value={
+                        viewingTenant.street ||
+                        viewingTenant.address?.street ||
+                        viewingTenant.settings?.address?.street
+                      }
+                      span
+                    />
+                    <DetailField
+                      label="City"
+                      value={
+                        viewingTenant.city ||
+                        viewingTenant.address?.city ||
+                        viewingTenant.settings?.address?.city
+                      }
+                    />
+                    <DetailField
+                      label="State"
+                      value={
+                        viewingTenant.state ||
+                        viewingTenant.address?.state ||
+                        viewingTenant.settings?.address?.state
+                      }
+                    />
+                    <DetailField
+                      label="Country"
+                      value={
+                        viewingTenant.country ||
+                        viewingTenant.address?.country ||
+                        viewingTenant.settings?.address?.country
+                      }
+                    />
+                    <DetailField
+                      label="PIN / Postal Code"
+                      value={
+                        viewingTenant.pincode ||
+                        viewingTenant.address?.pincode ||
+                        viewingTenant.settings?.address?.pincode
+                      }
+                    />
+                  </DetailSection>
+
+                  {/* Key Persons */}
+                  <DetailSection title="Key Persons" icon="mgc_user_star_line">
+                    <DetailField
+                      label="CEO / Director Name"
+                      value={
+                        viewingTenant.ceo_name || viewingTenant.settings?.ceo_name
+                      }
+                    />
+                    <DetailField
+                      label="CEO / Director Contact"
+                      value={
+                        viewingTenant.ceo_contact || viewingTenant.settings?.ceo_contact
+                      }
+                    />
+                    <DetailField
+                      label="Chairperson Name"
+                      value={
+                        viewingTenant.chairperson_name || viewingTenant.settings?.chairperson_name
+                      }
+                    />
+                    <DetailField
+                      label="Chairperson Contact"
+                      value={
+                        viewingTenant.chairperson_contact ||
+                        viewingTenant.settings?.chairperson_contact
+                      }
+                    />
+                  </DetailSection>
+
+                  {/* Administrator */}
+                  {(viewingTenant.admin?.name || viewingTenant.admin?.email) && (
+                    <DetailSection title="Primary Administrator" icon="mgc_user_security_line">
+                      <DetailField label="Name" value={viewingTenant.admin?.name} />
+                      <DetailField label="Email" value={viewingTenant.admin?.email} />
+                    </DetailSection>
+                  )}
+
+                  {/* Workspace */}
+                  <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
+                      <i className="mgc_server_line text-indigo-400 text-base"></i>
+                      <h4 className="text-sm font-bold text-white">Workspace</h4>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">
+                        Login URL
+                      </p>
+                      <a
+                        href={buildTenantUrl(viewingTenant.slug, "/login")}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-indigo-400 hover:underline font-mono text-xs flex items-center gap-1.5 break-all bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/60"
+                      >
+                        <span>{buildTenantUrl(viewingTenant.slug, "/login")}</span>
+                        <i className="mgc_external_link_line text-sm shrink-0"></i>
+                      </a>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Create / Edit Organization ──────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -826,6 +1277,44 @@ export const SuperAdminDashboard: React.FC = () => {
                           />
                         </div>
 
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                            Description / Purpose
+                          </label>
+                          <textarea
+                            value={formDescription}
+                            onChange={(e) => setFormDescription(e.target.value)}
+                            placeholder="Brief description of the company's purpose, mission, or services..."
+                            rows={3}
+                            className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                            Registered Under Act
+                          </label>
+                          <input
+                            type="text"
+                            value={formRegisteredUnderAct}
+                            onChange={(e) => setFormRegisteredUnderAct(e.target.value)}
+                            placeholder="e.g. Companies Act 2013"
+                            className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                            Date of Establishment
+                          </label>
+                          <input
+                            type="date"
+                            value={formEstablishedDate}
+                            onChange={(e) => setFormEstablishedDate(e.target.value)}
+                            className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+
                         <div>
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
                             Primary Email
@@ -867,12 +1356,13 @@ export const SuperAdminDashboard: React.FC = () => {
 
                         <div>
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
-                            Date of Establishment
+                            Social Media Links
                           </label>
                           <input
-                            type="date"
-                            value={formEstablishedDate}
-                            onChange={(e) => setFormEstablishedDate(e.target.value)}
+                            type="url"
+                            value={formSocialMediaLinks}
+                            onChange={(e) => setFormSocialMediaLinks(e.target.value)}
+                            placeholder="https://linkedin.com/company/..."
                             className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                           />
                         </div>
@@ -909,6 +1399,88 @@ export const SuperAdminDashboard: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                            Logo URL
+                          </label>
+                          <input
+                            type="url"
+                            value={formLogoUrl}
+                            onChange={(e) => setFormLogoUrl(e.target.value)}
+                            placeholder="https://cdn.example.com/logo.png"
+                            className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                          {formLogoUrl && (
+                            <div className="mt-2 flex items-center gap-3">
+                              <img
+                                src={formLogoUrl}
+                                alt="Logo Preview"
+                                className="h-10 w-10 object-contain rounded-lg bg-slate-800 border border-slate-700 p-1"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                              <span className="text-[11px] text-slate-400">Logo preview</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Key Persons sub-section */}
+                      <div className="pt-2">
+                        <div className="flex items-center gap-2 mb-3">
+                          <i className="mgc_user_star_line text-indigo-400"></i>
+                          <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Key Persons</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-800/40 rounded-xl border border-slate-700/60">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                              CEO / Director Name
+                            </label>
+                            <input
+                              type="text"
+                              value={formCeoName}
+                              onChange={(e) => setFormCeoName(e.target.value)}
+                              placeholder="e.g. Rajesh Kumar"
+                              className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                              CEO / Director Contact
+                            </label>
+                            <input
+                              type="text"
+                              value={formCeoContact}
+                              onChange={(e) => setFormCeoContact(e.target.value)}
+                              placeholder="e.g. +91 98765 43210"
+                              className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                              Chairperson Name
+                            </label>
+                            <input
+                              type="text"
+                              value={formChairpersonName}
+                              onChange={(e) => setFormChairpersonName(e.target.value)}
+                              placeholder="e.g. Priya Sharma"
+                              className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                              Chairperson Contact
+                            </label>
+                            <input
+                              type="text"
+                              value={formChairpersonContact}
+                              onChange={(e) => setFormChairpersonContact(e.target.value)}
+                              placeholder="e.g. +91 87654 32109"
+                              className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1052,8 +1624,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           <div>
                             <span className="font-semibold text-white block mb-0.5">Automated Tenant Isolation</span>
                             <span className="text-slate-400 text-[11px]">
-                              Every organization receives an isolated database partition with dedicated sales stages,
-                              roles, and custom lead sources.
+                              Organization data is tenant-scoped, with dedicated sales stages, roles, and lead sources.
                             </span>
                           </div>
                         </div>

@@ -23,6 +23,15 @@ export interface CreateTenantInput {
   currency?: string;
   timezone?: string;
   logo_url?: string;
+  description?: string;
+  registered_under_act?: string;
+  social_media_links?: string;
+
+  // Key Persons
+  ceo_name?: string;
+  ceo_contact?: string;
+  chairperson_name?: string;
+  chairperson_contact?: string;
 
   // Address & Location
   street?: string;
@@ -54,6 +63,15 @@ export interface UpdateTenantInput {
   established_date?: string;
   currency?: string;
   timezone?: string;
+  description?: string;
+  registered_under_act?: string;
+  social_media_links?: string;
+
+  // Key Persons
+  ceo_name?: string;
+  ceo_contact?: string;
+  chairperson_name?: string;
+  chairperson_contact?: string;
 
   // Address
   street?: string;
@@ -162,10 +180,32 @@ export class SuperAdminService {
    * Create a new Tenant Organization and automatically seed initial data
    */
   public static async createTenant(input: CreateTenantInput): Promise<{ tenant: ITenant; adminUser: any }> {
+    if (
+      typeof input.name !== 'string' || !input.name.trim() ||
+      typeof input.slug !== 'string' || !input.slug.trim() ||
+      typeof input.admin_name !== 'string' || !input.admin_name.trim() ||
+      typeof input.admin_email !== 'string' || !input.admin_email.trim() ||
+      typeof input.admin_password !== 'string'
+    ) {
+      throw new ApiError(400, 'Organization name, subdomain, administrator name, email, and password are required');
+    }
+
+    if (input.admin_password.length < 6 || input.admin_password.length > 50) {
+      throw new ApiError(400, 'Administrator password must be between 6 and 50 characters');
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(input.admin_email.trim())) {
+      throw new ApiError(400, 'Administrator email must be valid');
+    }
+    if (input.email?.trim() && !emailPattern.test(input.email.trim())) {
+      throw new ApiError(400, 'Organization email must be valid');
+    }
+
     const slug = input.slug.toLowerCase().trim();
 
     // Validate slug format
-    if (!/^[a-z0-9-]+$/.test(slug)) {
+    if (slug.length > 100 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
       throw new ApiError(400, 'Subdomain slug must contain only lowercase letters, numbers, and hyphens (e.g. acme-corp)');
     }
 
@@ -204,6 +244,13 @@ export class SuperAdminService {
         timezone: input.timezone || 'Asia/Kolkata',
         address,
         logo_url: logoUrl || '',
+        description: input.description?.trim() || '',
+        registered_under_act: input.registered_under_act?.trim() || '',
+        social_media_links: input.social_media_links?.trim() || '',
+        ceo_name: input.ceo_name?.trim() || '',
+        ceo_contact: input.ceo_contact?.trim() || '',
+        chairperson_name: input.chairperson_name?.trim() || '',
+        chairperson_contact: input.chairperson_contact?.trim() || '',
       };
 
       // 1. Insert Tenant Record
@@ -302,6 +349,14 @@ export class SuperAdminService {
    * Update Tenant Organization details, settings, plan, and admin credentials
    */
   public static async updateTenant(id: number, input: UpdateTenantInput): Promise<ITenant> {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (input.admin_email !== undefined && !emailPattern.test(input.admin_email.trim())) {
+      throw new ApiError(400, 'Administrator email must be valid');
+    }
+    if (input.admin_password !== undefined && (input.admin_password.length < 6 || input.admin_password.length > 50)) {
+      throw new ApiError(400, 'Administrator password must be between 6 and 50 characters');
+    }
+
     const existing = await pool.query('SELECT * FROM public.saas_tenants WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       throw new ApiError(404, 'Organization not found');
@@ -312,7 +367,7 @@ export class SuperAdminService {
     let slug = current.slug;
     if (input.slug && input.slug.trim()) {
       const candidateSlug = input.slug.toLowerCase().trim();
-      if (!/^[a-z0-9-]+$/.test(candidateSlug)) {
+      if (candidateSlug.length > 100 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidateSlug)) {
         throw new ApiError(400, 'Subdomain slug must contain only lowercase letters, numbers, and hyphens');
       }
       if (['admin', 'api', 'www', 'mail', 'app', 'public', 'superadmin', 'root'].includes(candidateSlug)) {
@@ -347,6 +402,13 @@ export class SuperAdminService {
       ...(input.currency !== undefined ? { currency: input.currency } : {}),
       ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
       ...(input.logo_url !== undefined ? { logo_url: input.logo_url ? input.logo_url.trim() : null } : {}),
+      ...(input.description !== undefined ? { description: input.description.trim() } : {}),
+      ...(input.registered_under_act !== undefined ? { registered_under_act: input.registered_under_act.trim() } : {}),
+      ...(input.social_media_links !== undefined ? { social_media_links: input.social_media_links.trim() } : {}),
+      ...(input.ceo_name !== undefined ? { ceo_name: input.ceo_name.trim() } : {}),
+      ...(input.ceo_contact !== undefined ? { ceo_contact: input.ceo_contact.trim() } : {}),
+      ...(input.chairperson_name !== undefined ? { chairperson_name: input.chairperson_name.trim() } : {}),
+      ...(input.chairperson_contact !== undefined ? { chairperson_contact: input.chairperson_contact.trim() } : {}),
       address: updatedAddress,
     };
 

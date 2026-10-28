@@ -3,9 +3,11 @@ import { logger } from '@/utils/logger';
 import { checkDbConnection } from '@/config/db';
 import { connectRedis } from '@/config/redis';
 import { createApp } from '@/app';
+import { initializePlatformModuleTables } from '@/services/platformModulesInitializer';
 
 async function bootstrap(): Promise<void> {
   await checkDbConnection();
+  await initializePlatformModuleTables();
   await connectRedis();
 
   const app = createApp();

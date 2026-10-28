@@ -18,7 +18,7 @@ import { useAuthStore } from "../store";
 import { getSubdomain } from "../utils/subdomain";
 import { useSuperAdminStore } from "../store/superAdminStore";
 import SuperAdminLogin from "../pages/SuperAdmin/Login";
-import SuperAdminDashboard from "../pages/SuperAdmin/Dashboard";
+import SuperAdminPortal from "../pages/SuperAdmin/Portal";
 import WorkspaceFinder from "../pages/other/Auth/WorkspaceFinder";
 
 // Wrapper component to check module access
@@ -44,7 +44,7 @@ const AllRoutes = (props: RouteProps) => {
 
   // 1. Super Admin Subdomain (e.g. admin.localhost:5173 or admin.yourcrm.com)
   if (subdomain.type === "admin") {
-    return isSuperAdminAuthenticated ? <SuperAdminDashboard /> : <SuperAdminLogin />;
+    return isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />;
   }
 
   // 2. Root domain without tenant subdomain (e.g. localhost:5173 or yourcrm.com)
@@ -61,8 +61,8 @@ const AllRoutes = (props: RouteProps) => {
       return (
         <Routes>
           <Route
-            path="/super-admin"
-            element={isSuperAdminAuthenticated ? <SuperAdminDashboard /> : <SuperAdminLogin />}
+            path="/super-admin/*"
+            element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}
           />
           <Route path="*" element={<WorkspaceFinder />} />
         </Routes>

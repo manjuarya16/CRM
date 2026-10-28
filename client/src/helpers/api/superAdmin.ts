@@ -18,6 +18,15 @@ export interface CreateTenantPayload {
   currency?: string;
   timezone?: string;
   logo_url?: string;
+  description?: string;
+  registered_under_act?: string;
+  social_media_links?: string;
+
+  // Key Persons
+  ceo_name?: string;
+  ceo_contact?: string;
+  chairperson_name?: string;
+  chairperson_contact?: string;
 
   // Address & Location
   street?: string;
