@@ -10,19 +10,20 @@ const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) => {
   useEffect(() => {
     window.scrollTo(0, 0);
 
-    const linkId = "morse-marketing-stylesheet";
-    let link = document.getElementById(linkId) as HTMLLinkElement | null;
-    if (!link) {
-      link = document.createElement("link");
-      link.id = linkId;
-      link.rel = "stylesheet";
-      link.href = "/css/marketing.css";
-      document.head.appendChild(link);
-    }
+  //  const linkId = "morse-marketing-stylesheet";
+  //   let link = document.getElementById(linkId) as HTMLLinkElement | null;
+  //   if (!link) {
+  //     link = document.createElement("link");
+  //     link.id = linkId;
+  //     link.rel = "stylesheet";
+  //     link.href = "/css/marketing.css";
+  //     document.head.appendChild(link);
+  //   }
 
-    return () => {
-      // Optional: keep or remove when switching to CRM admin app
-    };
+  //   return () => {
+  //     // Optional: keep or remove when switching to CRM admin app
+  //   };
+    
   }, []);
 
   return (

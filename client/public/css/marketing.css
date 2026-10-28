@@ -3154,16 +3154,16 @@ p {
 }
 .hero-flow {
   position: relative;
-  width: min(100%, 960px);
+  width: min(100%, 800px);
   margin-right: auto;
   margin-left: auto;
-  margin-top: 36px;
+  margin-top: 28px;
 }
 .hero-flow-nodes {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
 }
 .hero-flow-rail {
   position: absolute;
@@ -3219,12 +3219,12 @@ p {
   position: relative;
   z-index: 1;
   min-width: 0;
-  padding: 18px 18px;
+  padding: 12px;
   border: 1px solid var(--border);
   @supports (color: color-mix(in lab, red, red)) {
     border: 1px solid color-mix(in oklab, var(--border) 80%, white);
   }
-  border-radius: 22px;
+  border-radius: 16px;
   background: color-mix(in oklab, white 76%, transparent);
   box-shadow: 0 8px 24px oklch(0.3 0.07 270 / 0.055);
   text-align: left;
@@ -3244,20 +3244,20 @@ p {
 }
 .hero-flow-node > span {
   color: oklch(0.52 0.16 255);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
 }
 .hero-flow-node > strong {
   display: block;
-  margin: 6px 0 4px;
+  margin: 5px 0 3px;
   color: var(--foreground);
-  font-size: 17px;
+  font-size: 14px;
   letter-spacing: -0.01em;
 }
 .hero-flow-node > p {
   margin: 0;
   color: var(--muted-foreground);
-  font-size: 14px;
+  font-size: 12px;
 }
 @keyframes hero-flow-node-highlight {
   0%,
