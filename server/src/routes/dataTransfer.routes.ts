@@ -2,8 +2,11 @@ import { Router } from 'express';
 import { DataTransferService } from '@/services/dataTransfer.service';
 import { importRequestSchema } from '@/schemas/dataTransfer.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
+
+router.use(requireAuth);
 
 router.get('/imports', async (_req, res, next) => {
   try {

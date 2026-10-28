@@ -159,10 +159,7 @@ const ActivitiesPage: React.FC = () => {
               onChange={() => toggleSelect(act.id)}
               className="mt-1 rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc] cursor-pointer shrink-0"
             />
-            <Link
-              to={canEdit ? `/activities/edit/${act.id}` : "#"}
-              className="flex items-start gap-2.5 min-w-0 flex-1 group"
-            >
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
               <span className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${avatarColor}`}>
                 {getInitials(act.title || act.type, "AC")}
               </span>
@@ -184,7 +181,7 @@ const ActivitiesPage: React.FC = () => {
                   <span className="text-[11px] font-mono text-gray-400">#ACT-{act.id}</span>
                 </div>
               </div>
-            </Link>
+            </div>
           </div>
 
           <div className="text-right shrink-0">
@@ -280,16 +277,7 @@ const ActivitiesPage: React.FC = () => {
               )}
             </button>
 
-            {/* Edit */}
-            {canEdit && (
-              <Link
-                to={`/activities/edit/${act.id}`}
-                className="p-1.5 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
-                title="Edit Activity"
-              >
-                <i className="mgc_edit_line text-sm"></i>
-              </Link>
-            )}
+            
 
             {/* Delete */}
             {canDelete && (
@@ -324,16 +312,7 @@ const ActivitiesPage: React.FC = () => {
           </h1>
         </div>
 
-        {canCreate && (
-          <div className="flex items-center gap-x-2.5">
-            <Link
-              to="/activities/create"
-              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
-            >
-              Create Activity
-            </Link>
-          </div>
-        )}
+        
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -501,16 +480,11 @@ const ActivitiesPage: React.FC = () => {
                           />
                           <div className="space-y-0.5">
                             <div className="text-xs text-gray-400 font-mono">{act.id}</div>
-                            <Link
-                              to={`/activities/edit/${act.id}`}
-                              className={`block text-sm font-medium hover:underline leading-snug ${
+                            <span className={`block text-sm font-medium leading-snug ${
                                 act.is_done
                                   ? "line-through text-gray-400"
                                   : "text-gray-800 dark:text-gray-200"
-                              }`}
-                            >
-                              {act.title || `(${act.type})`}
-                            </Link>
+                              }`}>{act.title || `(${act.type})`}</span>
                             {act.user_name && (
                               <span className="text-xs text-[#0088cc] font-medium">{act.user_name}</span>
                             )}
@@ -572,13 +546,7 @@ const ActivitiesPage: React.FC = () => {
 
                       <td className="py-3 px-4 text-right align-top">
                         <div className="flex items-center justify-end gap-1">
-                          <Link
-                            to={`/activities/edit/${act.id}`}
-                            className="p-1.5 text-gray-500 hover:text-[#0088cc] hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition"
-                            title="Edit Activity"
-                          >
-                            <i className="mgc_edit_line text-base"></i>
-                          </Link>
+                          
                           <button
                             onClick={() => handleDelete(act)}
                             className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition"

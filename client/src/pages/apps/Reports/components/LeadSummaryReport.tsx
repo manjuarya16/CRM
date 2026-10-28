@@ -106,8 +106,44 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
     ];
   }, [kpis]);
 
-  // Weekly Creation Columns Data
+  // Leads Creation Timeline Columns Data (grouped by exact lead creation date)
   const weeklyColumnItems = useMemo(() => {
+    if (reportData?.weeks && reportData.weeks.length > 0 && !reportData.weeks.some((w) => w.label.includes("-"))) {
+      return reportData.weeks.map((weekItem) => ({
+        label: weekItem.label,
+        value: weekItem.count,
+        displayText: String(weekItem.count),
+        color: '#0e90d9',
+      }));
+    }
+
+    if (leads && leads.length > 0) {
+      const dateCounts: Record<string, { count: number; dateSort: string; label: string }> = {};
+      leads.forEach((l) => {
+        if (!l.created_at) return;
+        const d = new Date(l.created_at);
+        if (isNaN(d.getTime())) return;
+        const sortKey = d.toISOString().slice(0, 10);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = d.toLocaleString('en-US', { month: 'short' });
+        const label = `${day} ${month}`;
+        if (!dateCounts[sortKey]) {
+          dateCounts[sortKey] = { count: 0, dateSort: sortKey, label };
+        }
+        dateCounts[sortKey].count += 1;
+      });
+
+      const sortedDates = Object.values(dateCounts).sort((a, b) => a.dateSort.localeCompare(b.dateSort));
+      if (sortedDates.length > 0) {
+        return sortedDates.map((item) => ({
+          label: item.label,
+          value: item.count,
+          displayText: String(item.count),
+          color: '#0e90d9',
+        }));
+      }
+    }
+
     if (!reportData?.weeks) return [];
     return reportData.weeks.map((weekItem) => ({
       label: weekItem.label,
@@ -115,7 +151,7 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
       displayText: String(weekItem.count),
       color: '#0e90d9',
     }));
-  }, [reportData?.weeks]);
+  }, [reportData?.weeks, leads]);
 
   // Owner Open Value Bars Data
   const ownerBarsItems = useMemo(() => {
@@ -261,8 +297,8 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
       {/* Analytics Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ReportPanel
-          title={reportData?.weeks && reportData.weeks.length > 0 && reportData.weeks[0].label.includes("-") ? "Leads Created Per Week" : "Leads Created Timeline"}
-          subtitle={reportData?.weeks && reportData.weeks.length > 0 && reportData.weeks[0].label.includes("-") ? "Weekly creation (Monday - Sunday) · Date basis: Created date" : "Daily creation · Date basis: Created date"}
+          title="Leads Created Timeline"
+          subtitle="Daily creation · Date basis: Created date"
           className="lg:col-span-2"
         >
           <VerticalColumnsChart items={weeklyColumnItems} emptyMessage="No leads created in this period" />

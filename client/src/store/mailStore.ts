@@ -159,7 +159,16 @@ export const useMailStore = create<MailState>((set, get) => ({
             : currentEmail,
       });
 
-      await API.patch(`/mail/${id}/star`, { is_starred: nextStarred });
+      try {
+        await API.patch(`/mail/${id}/star`, { is_starred: nextStarred });
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          const targetFolders = (get().emails.find((e) => e.id === id)?.folders) || [];
+          await API.post("/mail/mass-update", { indices: [id], folders: targetFolders });
+        } else {
+          throw err;
+        }
+      }
       get().fetchCounts();
 
       // If user is inside the Starred folder and just unstarred an email, refresh the list
