@@ -78,6 +78,7 @@ const UsersPage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
   useEffect(() => {
     fetchUsers();
@@ -1288,7 +1289,7 @@ const UsersPage: React.FC = () => {
                   <div className="relative flex items-center">
                     <input
                       type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
+                      placeholder={editingUser ? "Enter new password (leave blank to keep)" : "Enter password"}
                       value={formData.password}
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
@@ -1302,8 +1303,12 @@ const UsersPage: React.FC = () => {
                     <button
                       type="button"
                       tabIndex={-1}
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowPassword((prev) => !prev);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none z-10"
                       title={showPassword ? "Hide password" : "Show password"}
                     >
                       <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
@@ -1320,8 +1325,8 @@ const UsersPage: React.FC = () => {
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder={editingUser ? "Confirm new password" : "Confirm password"}
                       value={formData.confirm_password}
                       onChange={(e) =>
                         setFormData({
@@ -1338,11 +1343,15 @@ const UsersPage: React.FC = () => {
                     <button
                       type="button"
                       tabIndex={-1}
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
-                      title={showPassword ? "Hide password" : "Show password"}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowConfirmPassword((prev) => !prev);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none z-10"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
                     >
-                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                      <i className={`mgc_${showConfirmPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
                     </button>
                   </div>
                   {errors.confirm_password && (

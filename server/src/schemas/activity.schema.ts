@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const activitySchema = z.object({
+export const baseActivitySchema = z.object({
   title: z
     .string()
     .trim()
@@ -19,7 +19,11 @@ export const activitySchema = z.object({
   is_done: z.boolean().optional().default(false),
   user_id: z.coerce.number().optional().nullable(),
   location: z.string().optional().nullable(),
-}).superRefine((data, ctx) => {
+  lead_id: z.coerce.number().optional().nullable(),
+  person_id: z.coerce.number().optional().nullable(),
+});
+
+export const activitySchema = baseActivitySchema.superRefine((data, ctx) => {
   if (data.type === 'note' && (!data.comment || !data.comment.trim())) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -53,4 +57,37 @@ export const activitySchema = z.object({
   }
 });
 
+export const activityUpdateSchema = baseActivitySchema.partial().superRefine((data, ctx) => {
+  if (data.type === 'note' && data.comment !== undefined && (!data.comment || !data.comment.trim())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Note content cannot be empty',
+      path: ['comment'],
+    });
+  }
+  if (
+    data.schedule_to &&
+    typeof data.schedule_to === 'string' &&
+    data.schedule_to.trim() &&
+    data.schedule_from &&
+    typeof data.schedule_from === 'string' &&
+    data.schedule_from.trim()
+  ) {
+    const toDate = new Date(data.schedule_to);
+    const fromDate = new Date(data.schedule_from);
+    if (
+      !isNaN(toDate.getTime()) &&
+      !isNaN(fromDate.getTime()) &&
+      toDate.getTime() < fromDate.getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Schedule To date/time must be after Schedule From',
+        path: ['schedule_to'],
+      });
+    }
+  }
+});
+
 export type ActivityInput = z.infer<typeof activitySchema>;
+export type ActivityUpdateInput = z.infer<typeof activityUpdateSchema>;

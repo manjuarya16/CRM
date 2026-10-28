@@ -448,7 +448,7 @@ const QuotesPage: React.FC = () => {
               <i className="mgc_wallet_line text-base"></i>
             </div>
           </div>
-          <p className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2 truncate">
+          <p className="text-lg sm:text-xl lg:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2 break-all sm:break-normal">
             {formatAmount(stats.pipelineTotal)}
           </p>
           <p className="text-[11px] text-gray-400 mt-0.5">Sum of current page quotes</p>
@@ -1174,7 +1174,7 @@ const QuotesPage: React.FC = () => {
                     <th className="py-3 px-4 min-w-[160px]">Customer</th>
                     <th className="py-3 px-4 min-w-[120px]">Sales Rep</th>
                     <th className="py-3 px-4 min-w-[150px]">Validity & Status</th>
-                    <th className="py-3 px-4 text-right min-w-[160px]">Total Amount</th>
+                    <th className="py-3 px-4 text-right min-w-[180px] whitespace-nowrap">Total Amount</th>
                     <th className="py-3 px-4 text-right min-w-[110px]">Actions</th>
                   </tr>
                 </thead>
@@ -1275,9 +1275,9 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Grand Total & Financial Breakdown */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[160px]">
-                            <div className="flex flex-col items-end">
-                              <span className="text-sm font-black text-gray-900 dark:text-white">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[180px]">
+                            <div className="flex flex-col items-end leading-normal">
+                              <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white leading-tight">
                                 {formatAmount(quote.grand_total)}
                               </span>
                               <div className="text-[11px] text-gray-400 flex items-center justify-end gap-1 flex-wrap">

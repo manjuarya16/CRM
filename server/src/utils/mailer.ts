@@ -196,10 +196,14 @@ function parseEmailList(val: any): string[] {
  * Sends a real email via SMTP if transporter is configured and enabled.
  * Does NOT throw errors - logs warnings so database recording is unaffected.
  */
-export async function sendRealMail(options: SendMailOptions): Promise<boolean> {
+export async function sendRealMail(
+  options: SendMailOptions,
+  existingTransporter?: any,
+  cachedConfig?: SmtpSettingsConfig
+): Promise<boolean> {
   try {
-    const config = await getSmtpConfig();
-    const transporter = createTransporterFromConfig(config);
+    const config = cachedConfig || (await getSmtpConfig());
+    const transporter = existingTransporter || createTransporterFromConfig(config);
     if (!transporter) {
       return false;
     }

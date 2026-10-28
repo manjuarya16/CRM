@@ -453,7 +453,7 @@ const CreateQuotePage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 justify-end shrink-0">
-          <div className="hidden md:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
+          <div className="hidden md:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 min-w-max">
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Grand Total</span>
             <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
               {fmtCurrency(grandTotal)}
@@ -1088,7 +1088,7 @@ const CreateQuotePage: React.FC = () => {
                   </span>
                   <span className="text-[10px] text-gray-400">Net Payable Amount</span>
                 </div>
-                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 shrink-0 whitespace-nowrap">
+                <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 shrink-0 break-words leading-tight">
                   {fmtCurrency(grandTotal)}
                 </span>
               </div>
