@@ -43,7 +43,9 @@ const Login = () => {
   };
 
   const location = useLocation();
-  const redirectUrl = location?.search?.slice(6) || "/";
+  //  const redirectUrl = location?.search?.slice(6) || "/";
+  const nextParam = location?.search?.slice(6);
+  const redirectUrl = nextParam && nextParam !== "/" ? nextParam : "/dashboard";
 
   const displayTitle = tenantInfo?.name ? `Sign in to ${tenantInfo.name}` : "Sign In";
   const displayHelp = subdomain.slug

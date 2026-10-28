@@ -2,6 +2,33 @@
 import React from "react";
 import { Navigate, Route, RouteProps } from "react-router-dom";
 
+// marketing pages
+import {
+  LandingPage,
+  FeaturesPage,
+  FeatureDetailPage,
+  ProductPage,
+  IntegrationsPage,
+  SolutionsPage,
+  SolutionDetailPage,
+  PricingPage,
+  BookDemoPage,
+  StartTrialPage,
+  ContactPage,
+  ResourcesPage,
+  CrmGuidePage,
+  BlogPage,
+  HelpCenterPage,
+  DocumentationPage,
+  ProductUpdatesPage,
+  BlogArticlePage,
+  AboutPage,
+  SecurityPage,
+  PrivacyPage,
+  TermsPage,
+  CareersPage,
+} from "../pages/marketing";
+
 // components
 import PrivateRoute from "./PrivateRoute";
 
@@ -201,6 +228,125 @@ export interface RoutesProps {
   route?: any;
 }
 
+// marketing routes
+const marketingRoutes: RoutesProps[] = [
+  {
+    path: "/",
+    name: "Home",
+    element: <LandingPage />,
+  },
+  {
+    path: "/product",
+    name: "Product",
+    element: <ProductPage />,
+  },
+  {
+    path: "/features",
+    name: "Features",
+    element: <FeaturesPage />,
+  },
+  {
+    path: "/features/:feature",
+    name: "Feature Detail",
+    element: <FeatureDetailPage />,
+  },
+  {
+    path: "/solutions",
+    name: "Solutions",
+    element: <SolutionsPage />,
+  },
+  {
+    path: "/solutions/:solution",
+    name: "Solution Detail",
+    element: <SolutionDetailPage />,
+  },
+  {
+    path: "/pricing",
+    name: "Pricing",
+    element: <PricingPage />,
+  },
+  {
+    path: "/book-demo",
+    name: "Book a Demo",
+    element: <BookDemoPage />,
+  },
+  {
+    path: "/start-free-trial",
+    name: "Start Free Trial",
+    element: <StartTrialPage />,
+  },
+  {
+    path: "/contact",
+    name: "Contact",
+    element: <ContactPage />,
+  },
+  {
+    path: "/resources",
+    name: "Resources",
+    element: <ResourcesPage />,
+  },
+  {
+    path: "/resources/crm-guide",
+    name: "CRM Guide",
+    element: <CrmGuidePage />,
+  },
+  {
+    path: "/blog",
+    name: "Blog",
+    element: <BlogPage />,
+  },
+  {
+    path: "/blog/:slug",
+    name: "Blog Article",
+    element: <BlogArticlePage />,
+  },
+  {
+    path: "/about",
+    name: "About Us",
+    element: <AboutPage />,
+  },
+  {
+    path: "/security",
+    name: "Security",
+    element: <SecurityPage />,
+  },
+  {
+    path: "/privacy",
+    name: "Privacy Policy",
+    element: <PrivacyPage />,
+  },
+  {
+    path: "/terms",
+    name: "Terms of Service",
+    element: <TermsPage />,
+  },
+  {
+    path: "/careers",
+    name: "Careers",
+    element: <CareersPage />,
+  },
+  {
+    path: "/integrations",
+    name: "Integrations",
+    element: <IntegrationsPage />,
+  },
+  {
+    path: "/documentation",
+    name: "Documentation",
+    element: <DocumentationPage />,
+  },
+  {
+    path: "/help-center",
+    name: "Help Center",
+    element: <HelpCenterPage />,
+  },
+  {
+    path: "/product-updates",
+    name: "Product Updates",
+    element: <ProductUpdatesPage />,
+  },
+];
+
 // public routes
 const publicRoutes: RoutesProps[] = [
   {
@@ -232,11 +378,11 @@ const publicRoutes: RoutesProps[] = [
 
 // auth protected routes
 const authProtectedRoutes: RoutesProps[] = [
-  {
-    path: "/",
-    name: "Root",
-    element: <Navigate to="/dashboard" />,
-  },
+  //  {
+  //   path: "/",
+  //   name: "Root",
+  //   element: <Navigate to="/dashboard" />,
+  // },
   {
     path: "/dashboard",
     name: "Dashboard",
@@ -783,5 +929,13 @@ const flattenRoutes = (routes: any[]) => {
 
 const authProtectedFlattenRoutes = flattenRoutes(authProtectedRoutes);
 const publicProtectedFlattenRoutes = flattenRoutes(publicRoutes);
+const marketingFlattenRoutes = flattenRoutes(marketingRoutes);
 
-export { authProtectedRoutes, publicRoutes, authProtectedFlattenRoutes, publicProtectedFlattenRoutes };
+export {
+  authProtectedRoutes,
+  publicRoutes,
+  marketingRoutes,
+  authProtectedFlattenRoutes,
+  publicProtectedFlattenRoutes,
+  marketingFlattenRoutes,
+};

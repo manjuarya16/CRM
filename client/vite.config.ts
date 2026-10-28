@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
+        "next/link": path.resolve(__dirname, "./src/compat/next/link.tsx"),
+        "next/image": path.resolve(__dirname, "./src/compat/next/image.tsx"),
+        "next/navigation": path.resolve(__dirname, "./src/compat/next/navigation.ts"),
         "@/config": path.resolve(__dirname, "./src/config.ts"),
         "@": path.resolve(__dirname, "./src"),
       },
