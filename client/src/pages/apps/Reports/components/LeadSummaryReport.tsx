@@ -108,23 +108,17 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
 
   // Leads Creation Timeline Columns Data (grouped by exact lead creation date)
   const weeklyColumnItems = useMemo(() => {
-    if (reportData?.weeks && reportData.weeks.length > 0 && !reportData.weeks.some((w) => w.label.includes("-"))) {
-      return reportData.weeks.map((weekItem) => ({
-        label: weekItem.label,
-        value: weekItem.count,
-        displayText: String(weekItem.count),
-        color: '#0e90d9',
-      }));
-    }
-
+    // 1. Group directly by leads' exact creation dates for accurate daily timeline
     if (leads && leads.length > 0) {
       const dateCounts: Record<string, { count: number; dateSort: string; label: string }> = {};
       leads.forEach((l) => {
         if (!l.created_at) return;
         const d = new Date(l.created_at);
         if (isNaN(d.getTime())) return;
-        const sortKey = d.toISOString().slice(0, 10);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
+        const sortKey = `${y}-${m}-${day}`;
         const month = d.toLocaleString('en-US', { month: 'short' });
         const label = `${day} ${month}`;
         if (!dateCounts[sortKey]) {
@@ -144,14 +138,20 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
       }
     }
 
-    if (!reportData?.weeks) return [];
-    return reportData.weeks.map((weekItem) => ({
-      label: weekItem.label,
-      value: weekItem.count,
-      displayText: String(weekItem.count),
-      color: '#0e90d9',
-    }));
-  }, [reportData?.weeks, leads]);
+    // 2. Fallback to reportData.weeks (ignoring any weekly range strings)
+    if (reportData?.weeks && reportData.weeks.length > 0) {
+      return reportData.weeks
+        .filter((w) => !w.label.includes('-'))
+        .map((weekItem) => ({
+          label: weekItem.label,
+          value: weekItem.count,
+          displayText: String(weekItem.count),
+          color: '#0e90d9',
+        }));
+    }
+
+    return [];
+  }, [leads, reportData?.weeks]);
 
   // Owner Open Value Bars Data
   const ownerBarsItems = useMemo(() => {
