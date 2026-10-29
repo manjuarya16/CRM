@@ -119,7 +119,7 @@ export async function getTenantProfile(tenantId?: number) {
  * GET /api/tenant/current (and /me)
  * Returns the currently authenticated tenant organization's profile
  */
-router.get(['/current', '/me'], requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+const getCurrentTenantHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = (req as any).user?.tenant_id || (req as any).tenant?.id || 1;
     const profile = await getTenantProfile(tenantId);
@@ -133,13 +133,13 @@ router.get(['/current', '/me'], requireAuth, async (req: Request, res: Response,
     logger.error({ err }, 'Failed to fetch current tenant organization profile');
     next(err);
   }
-});
+};
 
-/**
- * PUT /api/tenant/current (and /me)
- * Updates the currently authenticated tenant organization's profile
- */
-router.put(['/current', '/me'], requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/current', requireAuth, getCurrentTenantHandler);
+router.get('/me', requireAuth, getCurrentTenantHandler);
+router.get('/', requireAuth, getCurrentTenantHandler);
+
+const updateCurrentTenantHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = (req as any).user?.tenant_id || (req as any).tenant?.id || 1;
 
@@ -235,6 +235,10 @@ router.put(['/current', '/me'], requireAuth, async (req: Request, res: Response,
     logger.error({ err }, 'Failed to update current tenant organization profile');
     next(err);
   }
-});
+};
+
+router.put('/current', requireAuth, updateCurrentTenantHandler);
+router.put('/me', requireAuth, updateCurrentTenantHandler);
+router.put('/', requireAuth, updateCurrentTenantHandler);
 
 export default router;
