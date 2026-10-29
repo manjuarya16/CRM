@@ -1,7 +1,9 @@
+import { createDecipheriv, createHash } from 'crypto';
 import nodemailer from 'nodemailer';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 import { configService } from '@/services/configService';
+import { pool } from '@/config/db';
 import path from 'path';
 
 export interface SendMailOptions {
@@ -28,8 +30,26 @@ export interface SmtpSettingsConfig {
   fromEmail: string;
 }
 
+function decryptPlatformSmtpPassword(value: string): string {
+  const [version, ivText, tagText, encryptedText] = value.split(':');
+  if (version !== 'v1' || !ivText || !tagText || !encryptedText) {
+    throw new Error('Stored platform SMTP credential has an unsupported format');
+  }
+  if (!env.PLATFORM_SETTINGS_ENCRYPTION_KEY) {
+    throw new Error('PLATFORM_SETTINGS_ENCRYPTION_KEY is required to use the saved platform SMTP credential');
+  }
+
+  const key = createHash('sha256').update(env.PLATFORM_SETTINGS_ENCRYPTION_KEY, 'utf8').digest();
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagText, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedText, 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
 /**
- * Fetches dynamic SMTP configuration from database (core_config), with fallback to .env
+ * Fetches SMTP settings from tenant configuration, platform configuration, then environment.
  */
 export async function getSmtpConfig(): Promise<SmtpSettingsConfig> {
   let dbConfigs: Record<string, any> = {};
@@ -39,15 +59,24 @@ export async function getSmtpConfig(): Promise<SmtpSettingsConfig> {
     logger.warn('[Mailer] Could not load DB configs, falling back to env variables');
   }
 
+  const { rows: platformRows } = await pool.query(
+    `SELECT host, port, secure, username, password_encrypted, from_email, from_name
+       FROM public.platform_smtp_config WHERE id=1`
+  );
+  const platformSmtp = platformRows[0];
+  const platformPassword = platformSmtp?.password_encrypted
+    ? decryptPlatformSmtpPassword(platformSmtp.password_encrypted)
+    : '';
+
   const dbEnable = dbConfigs['email.smtp.account.enable'];
   const enabled = dbEnable !== undefined ? dbEnable === '1' || dbEnable === 'true' : true;
 
-  const host = (dbConfigs['email.smtp.account.host'] || env.SMTP_HOST || process.env.SMTP_HOST || '').trim();
-  const portStr = dbConfigs['email.smtp.account.port'] || env.SMTP_PORT || process.env.SMTP_PORT || '587';
+  const host = (dbConfigs['email.smtp.account.host'] || platformSmtp?.host || env.SMTP_HOST || process.env.SMTP_HOST || '').trim();
+  const portStr = dbConfigs['email.smtp.account.port'] || platformSmtp?.port || env.SMTP_PORT || process.env.SMTP_PORT || '587';
   const port = Number(portStr) || 587;
   const encryption = dbConfigs['email.smtp.account.encryption'] || 'tls';
-  const user = (dbConfigs['email.smtp.account.username'] || env.SMTP_USER || process.env.SMTP_USER || '').trim();
-  let pass = (dbConfigs['email.smtp.account.password'] || env.SMTP_PASS || process.env.SMTP_PASS || '').trim();
+  const user = (dbConfigs['email.smtp.account.username'] || platformSmtp?.username || env.SMTP_USER || process.env.SMTP_USER || '').trim();
+  let pass = (dbConfigs['email.smtp.account.password'] || platformPassword || env.SMTP_PASS || process.env.SMTP_PASS || '').trim();
 
   // Dynamic fallback: If SMTP password is not set or empty, and IMAP credentials exist for same account, reuse dynamically
   if (!pass && dbConfigs['email.imap.account.password']) {
@@ -56,10 +85,12 @@ export async function getSmtpConfig(): Promise<SmtpSettingsConfig> {
       pass = (dbConfigs['email.imap.account.password'] || '').trim();
     }
   }
-  const fromName = dbConfigs['email.smtp.account.from_name'] || env.SMTP_FROM_NAME || process.env.SMTP_FROM_NAME || 'CRM Admin';
-  const fromEmail = dbConfigs['email.smtp.account.from_email'] || env.SMTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || user || 'no-reply@crm.local';
+  const fromName = dbConfigs['email.smtp.account.from_name'] || platformSmtp?.from_name || env.SMTP_FROM_NAME || process.env.SMTP_FROM_NAME || 'CRM Admin';
+  const fromEmail = dbConfigs['email.smtp.account.from_email'] || platformSmtp?.from_email || env.SMTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || user || 'no-reply@crm.local';
 
-  const secure = encryption === 'ssl' || port === 465;
+  const secure = dbConfigs['email.smtp.account.encryption']
+    ? encryption === 'ssl' || port === 465
+    : platformSmtp?.secure ?? port === 465;
 
   return {
     enabled,

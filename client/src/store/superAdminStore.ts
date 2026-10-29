@@ -9,6 +9,9 @@ export interface SuperAdminUser {
   name: string;
   email: string;
   status: string;
+  platform_role_id?: number | null;
+  role_name?: string | null;
+  permissions?: string[];
 }
 
 export interface TenantRecord {
@@ -43,6 +46,7 @@ interface SuperAdminState {
   error: string | null;
 
   login: (email: string, password: string) => Promise<boolean>;
+  refreshAdminProfile: () => Promise<SuperAdminUser | null>;
   logout: () => void;
   fetchTenants: () => Promise<void>;
   fetchMetrics: () => Promise<void>;
@@ -89,6 +93,25 @@ export const useSuperAdminStore = create<SuperAdminState>()(
           const msg = err.response?.data?.message || err.message || "Login failed";
           set({ loading: false, error: msg });
           return false;
+        }
+      },
+
+      refreshAdminProfile: async () => {
+        const token = get().token || getSuperAdminToken();
+        if (!token || isTokenExpired(token)) {
+          get().logout();
+          return null;
+        }
+        try {
+          const res = await superAdminApi.getProfile(token);
+          const admin = res.data?.superAdmin as SuperAdminUser | undefined;
+          if (!res.data?.success || !admin) throw new Error("Could not load Super Admin access.");
+          set({ admin, token, isAuthenticated: true, error: null });
+          return admin;
+        } catch (error: any) {
+          const status = error.response?.status;
+          if (status === 401 || status === 403) get().logout();
+          throw new Error(error.response?.data?.message || error.message || "Could not load Super Admin access.");
         }
       },
 

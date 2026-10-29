@@ -33,6 +33,10 @@ const envSchema = z
     SMTP_PASS: z.string().optional(),
     SMTP_FROM_EMAIL: z.string().optional(),
     SMTP_FROM_NAME: z.string().optional(),
+    PLATFORM_SETTINGS_ENCRYPTION_KEY: z.string().min(16).optional(),
+    RAZORPAY_KEY_ID: z.string().optional(),
+    RAZORPAY_KEY_SECRET: z.string().optional(),
+    RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   })
   .transform((data) => ({
     ...data,

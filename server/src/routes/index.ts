@@ -31,6 +31,7 @@ import whatsappRoutes from '@/routes/whatsapp.routes';
 import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
 import superAdminRoutes from '@/routes/superAdmin.routes';
+import superAdminModulesRoutes from '@/routes/superAdminModules.routes';
 import tenantPublicRoutes from '@/routes/tenantPublic.routes';
 import tenantRoutes from '@/routes/tenant.routes';
 import { resolveTenant } from '@/middleware/tenant.middleware';
@@ -44,6 +45,7 @@ router.get('/health', (_req, res) => {
 
 // SaaS Super Admin Management (global platform scope)
 router.use('/super-admin', superAdminRoutes);
+router.use('/super-admin/modules', superAdminModulesRoutes);
 
 // Public Tenant Metadata (for subdomain verification and login branding)
 router.use('/public', tenantPublicRoutes);

@@ -1,5 +1,21 @@
 import { MatrixModule } from "@/interface";
 
+const PLATFORM_MODULES = [
+  { id: "roles", name: "Roles", key: "roles" },
+  { id: "users", name: "Users", key: "users" },
+  { id: "payments", name: "Payment Details", key: "payments" },
+  { id: "dashboard", name: "Platform Dashboard", key: "dashboard" },
+  { id: "organizations", name: "Organizations", key: "organizations" },
+  { id: "domains", name: "Domains", key: "domains" },
+  { id: "subscriptions", name: "Subscriptions", key: "subscriptions" },
+  { id: "access-management", name: "Platform Access Management", key: "access_management" },
+  { id: "demos", name: "Demo Requests", key: "demos" },
+  { id: "pricing", name: "Pricing Tiers", key: "pricing" },
+  { id: "email-templates", name: "Platform Email Templates", key: "email_templates" },
+  { id: "smtp", name: "Platform SMTP", key: "smtp" },
+  { id: "notifications", name: "Platform Notifications", key: "notifications" },
+];
+
 export const MATRIX_MODULES: MatrixModule[] = [
   {
     id: "dashboard",
@@ -298,4 +314,15 @@ export const MATRIX_MODULES: MatrixModule[] = [
     updateKey: "settings.configuration.edit",
     deleteKey: "settings.configuration.delete",
   },
+  ...PLATFORM_MODULES.map((module): MatrixModule => ({
+    id: `platform-${module.id}`,
+    name: module.name,
+    slug: `platform-${module.id}`,
+    avatarChar: module.name.slice(0, 1),
+    avatarBg: "bg-slate-700",
+    viewKey: `platform.${module.key}.view`,
+    addKey: `platform.${module.key}.create`,
+    updateKey: `platform.${module.key}.edit`,
+    deleteKey: `platform.${module.key}.delete`,
+  })),
 ];

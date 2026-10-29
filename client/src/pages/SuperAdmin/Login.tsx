@@ -101,7 +101,7 @@ export const SuperAdminLogin: React.FC = () => {
 
           <div className="mt-6 pt-5 border-t border-slate-700/60 text-center">
             <p className="text-xs text-slate-400">
-              Default credentials: <span className="font-mono text-indigo-300">superadmin@crm.com</span> / <span className="font-mono text-indigo-300">admin123</span>
+              Use your assigned super administrator credentials.
             </p>
           </div>
         </div>
