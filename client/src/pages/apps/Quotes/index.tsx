@@ -260,13 +260,24 @@ const QuotesPage: React.FC = () => {
       return;
     }
 
+    // Clean up any old print iframe if present
+    const oldIframe = document.getElementById("quote-print-iframe");
+    if (oldIframe) {
+      try {
+        document.body.removeChild(oldIframe);
+      } catch {}
+    }
+
     const iframe = document.createElement("iframe");
+    iframe.id = "quote-print-iframe";
     iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "-9999px";
+    iframe.style.width = "850px";
+    iframe.style.height = "1100px";
     iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
@@ -275,42 +286,135 @@ const QuotesPage: React.FC = () => {
       return;
     }
 
-    doc.open();
+    // Filter out styles that hide elements during print
     const styleTags = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .filter((el) => !el.innerHTML.includes("body > *:not(.fixed)"))
       .map((el) => el.outerHTML)
       .join("\n");
 
+    doc.open();
     doc.write(`
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
         <head>
+          <meta charset="utf-8" />
           <title>Quotation #${previewQuote?.id || ""}</title>
           ${styleTags}
           <style>
-            html, body {
-              background: white !important;
-              color: black !important;
-              padding: 16px !important;
-              margin: 0 !important;
-              height: auto !important;
-              overflow: visible !important;
+            *, *::before, *::after {
+              box-sizing: border-box !important;
             }
-            #quote-printable-invoice {
-              border: none !important;
-              box-shadow: none !important;
+            @page {
+              size: A4 portrait;
+              margin: 10mm 12mm;
+            }
+            @media print {
+              html, body {
+                background: #ffffff !important;
+                color: #111827 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              body > * {
+                display: block !important;
+                visibility: visible !important;
+              }
+              #quote-printable-invoice {
+                position: static !important;
+                display: block !important;
+                visibility: visible !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: visible !important;
+              }
+              #quote-printable-invoice * {
+                visibility: visible !important;
+              }
+              .overflow-x-auto {
+                overflow: visible !important;
+              }
+              .-mx-2 {
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+              }
+              table {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                table-layout: auto !important;
+                border-collapse: collapse !important;
+              }
+              th, td {
+                border-bottom: 1px solid #e5e7eb !important;
+                padding: 6px 8px !important;
+                word-break: normal !important;
+              }
+              th {
+                background-color: #f3f4f6 !important;
+                color: #1f2937 !important;
+                font-weight: 700 !important;
+              }
+              .print\\:hidden, .print-hidden {
+                display: none !important;
+              }
+            }
+            html, body {
+              background: #ffffff !important;
+              color: #111827 !important;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
               padding: 0 !important;
               margin: 0 !important;
               width: 100% !important;
               max-width: 100% !important;
+              box-sizing: border-box !important;
             }
-            @page {
-              size: auto;
-              margin: 10mm 12mm;
+            body > * {
+              display: block !important;
+              visibility: visible !important;
+            }
+            #quote-printable-invoice {
+              position: static !important;
+              display: block !important;
+              visibility: visible !important;
+              background: #ffffff !important;
+              color: #111827 !important;
+              border: none !important;
+              box-shadow: none !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              box-sizing: border-box !important;
+            }
+            table {
+              width: 100% !important;
+              max-width: 100% !important;
+              min-width: 0 !important;
+              border-collapse: collapse !important;
+            }
+            th, td {
+              border-bottom: 1px solid #e5e7eb !important;
+            }
+            th {
+              background-color: #f9fafb !important;
+              color: #374151 !important;
             }
           </style>
         </head>
-        <body>
-          <div id="quote-printable-invoice">
+        <body class="bg-white text-gray-900">
+          <div id="quote-printable-invoice" class="p-0 m-0 space-y-5">
             ${invoiceEl.innerHTML}
           </div>
         </body>
@@ -318,15 +422,22 @@ const QuotesPage: React.FC = () => {
     `);
     doc.close();
 
-    iframe.contentWindow?.focus();
-    setTimeout(() => {
-      iframe.contentWindow?.print();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(iframe);
-        } catch {}
-      }, 1500);
-    }, 400);
+    const triggerPrint = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch {
+        window.print();
+      } finally {
+        setTimeout(() => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 2000);
+      }
+    };
+
+    setTimeout(triggerPrint, 300);
   };
 
   const handleOpenSendEmail = async (quote: IQuote) => {
@@ -1589,18 +1700,19 @@ const QuotesPage: React.FC = () => {
                 background: white !important;
                 color: black !important;
               }
-              body > *:not(.fixed) {
-                display: none !important;
-              }
               #quote-printable-invoice {
+                position: static !important;
+                display: block !important;
+                visibility: visible !important;
                 border: none !important;
                 box-shadow: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
                 width: 100% !important;
+                max-width: 100% !important;
               }
               @page {
-                size: auto;
+                size: A4 portrait;
                 margin: 10mm 12mm;
               }
             }
