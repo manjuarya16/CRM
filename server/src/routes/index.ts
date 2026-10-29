@@ -52,6 +52,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/dashboards', dashboardRoutes);
 router.use('/auth', authRoutes);
 router.use('/tenant', tenantRoutes);
+router.use('/tenants', tenantRoutes);
 router.use('/organizations', organizationRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/quotes', quoteRoutes);

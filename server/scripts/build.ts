@@ -24,7 +24,7 @@ const logger = {
       await remove("./src/dist");
       logger.info("Cleaned legacy ./src/dist directory.");
     }
-    await exec("tsc -p tsconfig.json", "./");
+    await exec("npx tsc -p tsconfig.json", "./");
     await exec("npx tsc-alias -p tsconfig.json", "./");
 
     // Copy public / assets if exist
