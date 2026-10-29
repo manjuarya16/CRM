@@ -1,42 +1,90 @@
-import React, { useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSuperAdminStore } from "@/store/superAdminStore";
 import SuperAdminDashboard from "@/pages/SuperAdmin/Dashboard";
 import SuperAdminModulePage from "@/pages/SuperAdmin/ModulePage.tsx";
 
 const menuItems = [
-  { key: "dashboard", label: "Dashboard", icon: "mgc_home_3_line" },
-  { key: "organizations", label: "Organizations", icon: "mgc_building_1_line" },
-  { key: "domains", label: "Domains & Subdomains", icon: "mgc_world_line" },
-  { key: "subscriptions", label: "Subscriptions", icon: "mgc_diamond_line" },
-  { key: "payments", label: "Payment Details", icon: "mgc_bill_line" },
-  { key: "users", label: "Users", icon: "mgc_group_line" },
-  { key: "roles", label: "Roles", icon: "mgc_safe_shield_line" },
-  { key: "access-management", label: "Access Management", icon: "mgc_lock_key_line" },
-  { key: "demos", label: "Demo Requests", icon: "mgc_calendar_line" },
-  { key: "pricing", label: "Pricing Tiers", icon: "mgc_tag_2_line" },
-  { key: "email-templates", label: "Email Templates", icon: "mgc_document_line" },
-  { key: "smtp", label: "SMTP Configuration", icon: "mgc_mail_send_line" },
-  { key: "notifications", label: "Notifications", icon: "mgc_notification_line" },
+  { key: "dashboard", permission: "platform.dashboard.view", label: "Dashboard", icon: "mgc_home_3_line" },
+  { key: "organizations", permission: "platform.organizations.view", label: "Organizations", icon: "mgc_building_1_line" },
+  { key: "domains", permission: "platform.domains.view", label: "Domains & Subdomains", icon: "mgc_world_line" },
+  { key: "subscriptions", permission: "platform.subscriptions.view", label: "Subscriptions", icon: "mgc_diamond_line" },
+  { key: "payments", permission: "platform.payments.view", label: "Payment Details", icon: "mgc_bill_line" },
+  { key: "users", permission: "platform.users.view", label: "Users", icon: "mgc_group_line" },
+  { key: "roles", permission: "platform.roles.view", label: "Roles", icon: "mgc_safe_shield_line" },
+  { key: "access-management", permission: "platform.access_management.view", label: "Access Management", icon: "mgc_lock_key_line" },
+  { key: "demos", permission: "platform.demos.view", label: "Demo Requests", icon: "mgc_calendar_line" },
+  { key: "pricing", permission: "platform.pricing.view", label: "Pricing Tiers", icon: "mgc_tag_2_line" },
+  { key: "email-templates", permission: "platform.email_templates.view", label: "Email Templates", icon: "mgc_document_line" },
+  { key: "smtp", permission: "platform.smtp.view", label: "SMTP Configuration", icon: "mgc_mail_send_line" },
+  { key: "notifications", permission: "platform.notifications.view", label: "Notifications", icon: "mgc_notification_line" },
 ];
 
 const SuperAdminPortal: React.FC = () => {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const [moduleRefreshKey, setModuleRefreshKey] = useState(0);
   const admin = useSuperAdminStore((state) => state.admin);
   const logout = useSuperAdminStore((state) => state.logout);
+  const refreshAdminProfile = useSuperAdminStore((state) => state.refreshAdminProfile);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState("");
+  const permissions = admin?.permissions || [];
+  const accessibleMenuItems = useMemo(
+    () => menuItems.filter((item) => permissions.includes(item.permission)),
+    [permissions]
+  );
   const section = pathname
     .replace(/^\/super-admin(?:\/|$)/i, "")
     .replace(/^\/+/, "")
     .split("/")[0]
     .toLowerCase() || "dashboard";
-  const activeSection = menuItems.some((item) => item.key === section) ? section : "dashboard";
-  const activeItem = menuItems.find((item) => item.key === activeSection) || menuItems[0];
+  const activeItem = menuItems.find((item) => item.key === section);
+  const activeSection = activeItem?.key || "dashboard";
   const isPathBasedPortal = pathname.toLowerCase().startsWith("/super-admin");
   const portalBasePath = isPathBasedPortal ? "/super-admin" : "";
 
   useEffect(() => {
+    let active = true;
+    setProfileLoading(true);
+    refreshAdminProfile()
+      .then(() => setProfileError(""))
+      .catch((error: Error) => setProfileError(error.message))
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => { active = false; };
+  }, [refreshAdminProfile]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshOnFocus = () => {
+      void refreshAdminProfile()
+        .then(() => {
+          if (active) setProfileError("");
+        })
+        .catch((error: Error) => {
+          if (active) setProfileError(error.message);
+        });
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [refreshAdminProfile]);
+
+  useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (profileLoading || profileError || accessibleMenuItems.length === 0) return;
+    if (!activeItem || !permissions.includes(activeItem.permission)) {
+      const next = accessibleMenuItems[0];
+      navigate(`${portalBasePath}/${next.key === "dashboard" ? "" : next.key}`, { replace: true });
+    }
+  }, [accessibleMenuItems, activeItem, navigate, permissions, portalBasePath, profileError, profileLoading]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 xl:flex">
@@ -55,12 +103,15 @@ const SuperAdminPortal: React.FC = () => {
           <p className="hidden px-3 pb-2 pt-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500 xl:block">
             Super Admin Suite
           </p>
-          {menuItems.map((item) => {
+          {accessibleMenuItems.map((item) => {
             const active = activeSection === item.key;
             return (
               <Link
                 key={item.key}
                 to={`${portalBasePath}/${item.key === "dashboard" ? "" : item.key}`}
+                onClick={() => {
+                  if (active) setModuleRefreshKey((current) => current + 1);
+                }}
                 aria-current={active ? "page" : undefined}
                 className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors xl:w-full ${
                   active
@@ -90,10 +141,25 @@ const SuperAdminPortal: React.FC = () => {
       </aside>
 
       <main className="min-w-0 flex-1 xl:pl-64">
-        {activeSection === "dashboard" || activeSection === "organizations" ? (
-          <SuperAdminDashboard key={activeSection} showMetrics={activeSection === "dashboard"} />
+        {profileLoading ? (
+          <div role="status" className="p-8 text-sm text-slate-400">Loading role access…</div>
+        ) : profileError ? (
+          <div role="alert" className="m-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">{profileError}</div>
+        ) : accessibleMenuItems.length === 0 ? (
+          <div role="status" className="m-6 rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <h1 className="font-semibold text-white">No platform access assigned</h1>
+            <p className="mt-1 text-sm text-slate-400">Ask a Super Admin to assign permissions to your role.</p>
+          </div>
+        ) : activeSection === "dashboard" || activeSection === "organizations" ? (
+          <SuperAdminDashboard
+            key={activeSection}
+            showMetrics={activeSection === "dashboard"}
+            canViewOrganizations={permissions.includes("platform.organizations.view")}
+            canCreateOrganizations={permissions.includes("platform.organizations.create")}
+            canEditOrganizations={permissions.includes("platform.organizations.edit")}
+          />
         ) : (
-          <SuperAdminModulePage key={activeItem.key} moduleKey={activeItem.key} title={activeItem.label} />
+          activeItem && <SuperAdminModulePage key={`${activeItem.key}-${moduleRefreshKey}`} moduleKey={activeItem.key} title={activeItem.label} />
         )}
       </main>
     </div>

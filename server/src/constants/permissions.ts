@@ -579,5 +579,14 @@ export const ALL_CRM_PERMISSION_KEYS: string[] = Array.from(
   new Set([
     ...CRM_PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key)),
     ...extractTreeKeys(CRM_PERMISSION_TREE),
+    ...[
+      "dashboard", "organizations", "domains", "subscriptions", "payments", "users",
+      "roles", "access_management", "demos", "pricing", "email_templates", "smtp", "notifications",
+    ].flatMap((module) => [
+      `platform.${module}.view`,
+      `platform.${module}.create`,
+      `platform.${module}.edit`,
+      `platform.${module}.delete`,
+    ]),
   ])
 );

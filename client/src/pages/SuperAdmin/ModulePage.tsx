@@ -2,6 +2,8 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "rea
 import { API } from "@/config";
 import { getSuperAdminToken } from "@/lib/auth-utils";
 import { useSuperAdminStore } from "@/store/superAdminStore";
+import { MATRIX_MODULES } from "@/constants/matrixModules";
+import { showConfirmDialog, showSuccessAlert } from "@/utils/swalAlert";
 
 type RecordValue = Record<string, unknown>;
 type Field = { name: string; label: string; type?: "text" | "number" | "email" | "textarea" | "select"; options?: string[]; required?: boolean; secret?: boolean };
@@ -59,8 +61,9 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
     listPath: "",
     scoped: true,
     fields: [
-      { name: "pricing_tier_id", label: "Pricing tier ID", type: "number" },
+      { name: "pricing_tier_id", label: "Plan", type: "select" },
       { name: "status", label: "Status", type: "select", options: ["trialing", "active", "past_due", "cancelled", "expired"] },
+      { name: "trial_days", label: "Trial period (days)", type: "number" },
       { name: "starts_at", label: "Starts at", type: "text" },
       { name: "ends_at", label: "Ends at", type: "text" },
       { name: "auto_renew", label: "Auto renew", type: "select", options: ["true", "false"] },
@@ -80,26 +83,25 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
     ],
   },
   users: {
-    listPath: "/super-admin/tenants",
-    scoped: true,
+    listPath: "/platform-users",
     fields: [
-      { name: "name", label: "Full name" },
-      { name: "email", label: "Email", type: "email" },
-      { name: "status", label: "Active", type: "select", options: ["true", "false"] },
-      { name: "view_permission", label: "Data visibility", type: "select", options: ["global", "group", "individual"] },
-      { name: "role_id", label: "Role ID", type: "number" },
+      { name: "name", label: "Full name", required: true },
+      { name: "email", label: "Email", type: "email", required: true },
+      { name: "password", label: "Password", type: "text", required: true, secret: true },
+      { name: "platform_role_id", label: "Role", type: "select", required: true },
+      { name: "status", label: "Account status", type: "select", options: ["active", "suspended"], required: true },
     ],
   },
   roles: {
-    listPath: "/super-admin/tenants",
-    scoped: true,
+    listPath: "/platform-roles",
     fields: [
+      { name: "parent_role_id", label: "Parent role", type: "select", required: true },
       { name: "name", label: "Role name", required: true },
       { name: "description", label: "Description" },
       { name: "permission_type", label: "Permission type", type: "select", options: ["all", "custom"] },
     ],
   },
-  "access-management": { listPath: "/super-admin/tenants", scoped: true },
+  "access-management": { listPath: "/platform-roles" },
   demos: { listPath: "/demo-requests" },
   pricing: {
     listPath: "/pricing-tiers",
@@ -109,6 +111,7 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
       { name: "amount_cents", label: "Amount (cents)", type: "number", required: true },
       { name: "currency", label: "Currency", required: true },
       { name: "billing_interval", label: "Billing interval", type: "select", options: ["monthly", "yearly", "one_time"] },
+      { name: "trial_days", label: "Trial period (days)", type: "number", required: true },
       { name: "features", label: "Features (JSON array)", type: "textarea" },
       { name: "limits", label: "Limits (JSON object)", type: "textarea" },
       { name: "active", label: "Active", type: "select", options: ["true", "false"] },
@@ -141,12 +144,34 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
       { name: "title", label: "Title", required: true },
       { name: "message", label: "Message", type: "textarea", required: true },
       { name: "type", label: "Type", type: "select", options: ["info", "success", "warning", "error"] },
+      { name: "email_to", label: "Also email (optional)", type: "email" },
     ],
   },
 };
 
-const TENANT_SCOPED = new Set(["subscriptions", "users", "roles", "access-management"]);
+const TENANT_SCOPED = new Set(["subscriptions"]);
 const SECRET_KEY = /password|secret|token|private.?key|api.?key/i;
+const PLATFORM_PERMISSION_MODULE: Record<string, string> = {
+  organizations: "organizations",
+  domains: "domains",
+  subscriptions: "subscriptions",
+  payments: "payments",
+  users: "users",
+  roles: "roles",
+  "access-management": "access_management",
+  demos: "demos",
+  pricing: "pricing",
+  "email-templates": "email_templates",
+  smtp: "smtp",
+  notifications: "notifications",
+};
+const PLATFORM_MATRIX_MODULES = MATRIX_MODULES.filter((module) => module.viewKey.startsWith("platform."));
+const ALL_PLATFORM_PERMISSION_KEYS = PLATFORM_MATRIX_MODULES.flatMap((module) => [
+  module.viewKey,
+  module.addKey,
+  module.updateKey,
+  module.deleteKey,
+]);
 
 const asObject = (value: unknown): RecordValue | null =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? (value as RecordValue) : null;
@@ -159,6 +184,39 @@ const asRecords = (value: unknown): RecordValue[] => {
     if (Array.isArray(object[key])) return asRecords(object[key]);
   }
   return [object];
+};
+
+const roleHierarchy = (roles: RecordValue[]) => {
+  const roleById = new Map(roles.map((role) => [String(role.id), role]));
+  const children = new Map<string, RecordValue[]>();
+  const roots: RecordValue[] = [];
+
+  for (const role of roles) {
+    const parentId = role.parent_role_id == null ? "" : String(role.parent_role_id);
+    if (!parentId || parentId === String(role.id) || !roleById.has(parentId)) {
+      roots.push(role);
+      continue;
+    }
+    const siblings = children.get(parentId) || [];
+    siblings.push(role);
+    children.set(parentId, siblings);
+  }
+
+  const byName = (left: RecordValue, right: RecordValue) =>
+    String(left.name || "").localeCompare(String(right.name || ""));
+  const ordered: Array<{ role: RecordValue; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (role: RecordValue, depth: number) => {
+    const id = String(role.id);
+    if (visited.has(id)) return;
+    visited.add(id);
+    ordered.push({ role, depth });
+    (children.get(id) || []).sort(byName).forEach((child) => visit(child, depth + 1));
+  };
+
+  roots.sort(byName).forEach((role) => visit(role, 0));
+  roles.slice().sort(byName).forEach((role) => visit(role, 0));
+  return ordered;
 };
 
 const displayValue = (value: unknown): string => {
@@ -192,7 +250,10 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const token = getSuperAdminToken();
   const tenants = useSuperAdminStore((state) => state.tenants);
   const fetchTenants = useSuperAdminStore((state) => state.fetchTenants);
+  const admin = useSuperAdminStore((state) => state.admin);
   const [records, setRecords] = useState<RecordValue[]>([]);
+  const [platformRoles, setPlatformRoles] = useState<RecordValue[]>([]);
+  const [planOptions, setPlanOptions] = useState<RecordValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
@@ -202,8 +263,10 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [tenantId, setTenantId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [editing, setEditing] = useState<RecordValue | null>(null);
+  const [viewing, setViewing] = useState<RecordValue | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [accessText, setAccessText] = useState("");
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [savedPermissions, setSavedPermissions] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [orderDetails, setOrderDetails] = useState<RecordValue | null>(null);
   const [orderTenantId, setOrderTenantId] = useState("");
@@ -220,10 +283,25 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     date_to: "",
   });
   const [appliedPaymentFilters, setAppliedPaymentFilters] = useState(paymentFilterDraft);
+  const [trialDemo, setTrialDemo] = useState<RecordValue | null>(null);
+  const [trialDays, setTrialDays] = useState("14");
+  const [trialPassword, setTrialPassword] = useState("");
+  const [trialPlanId, setTrialPlanId] = useState("");
 
   const config = ENDPOINTS[moduleKey];
   const scoped = TENANT_SCOPED.has(moduleKey);
   const tenantOptions = tenants;
+  const permissionModule = PLATFORM_PERMISSION_MODULE[moduleKey];
+  const hasPermission = (action: "view" | "create" | "edit" | "delete") =>
+    Boolean(permissionModule && admin?.permissions?.includes(`platform.${permissionModule}.${action}`));
+  const canEditSelectedRole = hasPermission("edit") && roleId !== String(admin?.platform_role_id ?? "");
+  const canEditRecord = (record: RecordValue) =>
+    hasPermission("edit") &&
+    !(moduleKey === "roles" && String(record.id) === String(admin?.platform_role_id));
+  const canDeleteRecord = (record: RecordValue) =>
+    hasPermission("delete") &&
+    !((moduleKey === "users" && String(record.id) === String(admin?.id)) ||
+      (moduleKey === "roles" && String(record.id) === String(admin?.platform_role_id)));
 
   const request = useCallback(async (method: "get" | "post" | "put" | "patch" | "delete", path: string, data?: unknown) => {
     const response = await API.request({
@@ -235,7 +313,14 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     const payload = response.data as unknown;
     const envelope = asObject(payload);
     if (envelope && envelope.success === false) throw new Error(String(envelope.message || "Request failed."));
-    return envelope && "data" in envelope ? envelope.data : payload;
+    if (envelope && "data" in envelope) {
+      const data = envelope.data;
+      if (envelope.email_sent !== undefined && data !== null && typeof data === "object") {
+        return { ...(data as RecordValue), email_sent: envelope.email_sent, response_message: envelope.message };
+      }
+      return data;
+    }
+    return payload;
   }, [token]);
 
   const load = useCallback(async () => {
@@ -256,8 +341,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     try {
       let path = config.listPath;
       if (moduleKey === "subscriptions") path = `/tenants/${encodeURIComponent(tenantId)}/subscriptions`;
-      if (moduleKey === "users") path = `/tenants/${encodeURIComponent(tenantId)}/users`;
-      if (moduleKey === "roles" || moduleKey === "access-management") path = `/tenants/${encodeURIComponent(tenantId)}/roles`;
+      if (moduleKey === "users") path = "/platform-users";
+      if (moduleKey === "access-management") path = "/platform-roles";
       if (moduleKey === "payments") {
         const params = new URLSearchParams();
         if (tenantId) params.set("tenant_id", tenantId);
@@ -269,8 +354,24 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
       const result = await request("get", path);
       const list = asRecords(result);
+      if (moduleKey === "subscriptions" || moduleKey === "demos") {
+        setPlanOptions(asRecords(await request("get", "/subscription-plans")));
+      }
+      if (moduleKey === "users") {
+        const roleList = asRecords(await request("get", "/platform-roles"));
+        setPlatformRoles(roleHierarchy(roleList).map(({ role, depth }) => ({ ...role, hierarchy_depth: depth })));
+      }
       if (moduleKey === "smtp" && list.length === 1) {
         setRecords(list.map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !SECRET_KEY.test(key)))));
+      } else if (moduleKey === "roles" || moduleKey === "access-management") {
+        const roleById = new Map(list.map((role) => [String(role.id), role]));
+        setRecords(roleHierarchy(list).map(({ role, depth }) => ({
+          ...role,
+          hierarchy_depth: depth,
+          parent_role_name: role.parent_role_id == null
+            ? null
+            : roleById.get(String(role.parent_role_id))?.name || null,
+        })));
       } else {
         setRecords(list);
       }
@@ -294,12 +395,20 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
 
   const beginCreate = () => {
     setEditing(null);
-    setForm({});
+    setViewing(null);
+    setForm(moduleKey === "users"
+      ? { status: "active", platform_role_id: "" }
+      : moduleKey === "subscriptions"
+        ? { status: "trialing", pricing_tier_id: "", trial_days: "14", auto_renew: "false" }
+      : moduleKey === "roles" && admin?.platform_role_id
+        ? { parent_role_id: String(admin.platform_role_id) }
+        : {});
     setShowForm(true);
     setNotice("");
   };
 
   const beginEdit = (record: RecordValue) => {
+    setViewing(null);
     setEditing(record);
     const next: Record<string, string> = {};
     for (const field of fields) {
@@ -310,12 +419,21 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setShowForm(true);
   };
 
+  const beginView = (record: RecordValue) => {
+    setEditing(null);
+    setShowForm(false);
+    setViewing(record);
+    setNotice("");
+    setError("");
+  };
+
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
     setSaving(true);
     setError("");
     setNotice("");
+    let actionResult: RecordValue | null = null;
     try {
       const payload: RecordValue = {};
       for (const field of fields) {
@@ -328,21 +446,29 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         }
       }
       if (moduleKey === "payments" && !tenantId) payload.tenant_id = Number(form.tenant_id);
+      if (moduleKey === "roles") {
+        payload.parent_role_id = form.parent_role_id ? Number(form.parent_role_id) : null;
+      }
+      if (moduleKey === "subscriptions") {
+        payload.pricing_tier_id = form.pricing_tier_id ? Number(form.pricing_tier_id) : null;
+      }
       if (moduleKey === "smtp") {
         if (form.password?.trim()) payload.password = form.password.trim();
         else delete payload.password;
       }
       const id = editing?.id;
       if (editing && id !== undefined) {
-        const path = moduleKey === "email-templates"
-          ? `/email-templates/${id}`
-          : moduleKey === "pricing"
-            ? `/pricing-tiers/${id}`
-            : moduleKey === "subscriptions"
-              ? `/tenants/${tenantId}/subscriptions/${id}`
-              : moduleKey === "users"
-                ? `/tenants/${tenantId}/users/${id}`
-                : `/tenants/${tenantId}/roles/${id}`;
+        const path = moduleKey === "users"
+          ? `/platform-users/${id}`
+          : moduleKey === "email-templates"
+            ? `/email-templates/${id}`
+            : moduleKey === "pricing"
+              ? `/pricing-tiers/${id}`
+              : moduleKey === "subscriptions"
+                ? `/tenants/${tenantId}/subscriptions/${id}`
+                : moduleKey === "roles"
+                  ? `/platform-roles/${id}`
+                  : `/tenants/${tenantId}/roles/${id}`;
         const method = ["subscriptions", "roles", "users"].includes(moduleKey) ? "patch" : "put";
         await request(method, path, payload);
       } else if (moduleKey === "smtp") {
@@ -359,17 +485,30 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         await request("post", "/pricing-tiers", payload);
       } else if (moduleKey === "email-templates") {
         await request("post", "/email-templates", payload);
+      } else if (moduleKey === "users") {
+        await request("post", "/platform-users", payload);
       } else if (moduleKey === "roles") {
-        await request("post", `/tenants/${tenantId}/roles`, payload);
+        await request("post", "/platform-roles", payload);
       } else if (moduleKey === "notifications") {
-        await request("post", "/notifications", payload);
+        actionResult = asObject(await request("post", "/notifications", payload));
       } else {
         throw new Error("Creating records is not supported for this module.");
       }
       setShowForm(false);
       setForm({});
-      setNotice(editing ? "Changes saved." : "Record created.");
+      const successMessage = moduleKey === "users"
+        ? editing ? "Super Admin user updated successfully." : "Super Admin user created successfully."
+        : editing ? "Role updated successfully." : "Role created successfully.";
+      const emailFailed = actionResult?.email_sent === false;
+      setNotice(emailFailed
+        ? String(actionResult?.response_message || "Notification saved, but email delivery failed. Check SMTP configuration.")
+        : moduleKey === "notifications" && actionResult?.email_sent === true
+          ? "Notification saved and email sent."
+          : moduleKey === "roles" ? "" : editing ? "Changes saved." : "Record created.");
       await load();
+      if (moduleKey === "roles" || moduleKey === "users") {
+        await showSuccessAlert("Success!", successMessage);
+      }
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -384,11 +523,21 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     try {
       setError("");
       setNotice("");
-      if (moduleKey === "users") {
-        await request("patch", `/tenants/${tenantId}/users/${id}`, { status: record.status !== true && currentStatus !== "active" });
-      } else if (moduleKey === "domains") {
+      if (moduleKey === "domains") {
         const status = currentStatus === "active" ? "suspended" : "active";
         await request("patch", `/super-admin/tenants/${id}/status`, { status });
+      } else if (moduleKey === "users" && action === "delete") {
+        if (String(id) === String(admin?.id)) {
+          setError("You cannot delete the Super Admin account you are currently using.");
+          return;
+        }
+        const confirmation = await showConfirmDialog(
+          "Delete Super Admin user?",
+          `Delete ${String(record.name || record.email || "this user")}? This action cannot be undone.`
+        );
+        if (!confirmation.isConfirmed) return;
+        await request("delete", `/platform-users/${id}`);
+        setNotice("Super Admin user deleted successfully.");
       } else if (moduleKey === "demos") {
         const status = ({ new: "contacted", contacted: "qualified", qualified: "closed", closed: "new" } as Record<string, string>)[currentStatus] || "contacted";
         await request("patch", `/demo-requests/${id}/status`, { status });
@@ -400,11 +549,36 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         await request("delete", `/email-templates/${id}`);
       } else if (moduleKey === "pricing" && action === "delete") {
         await request("delete", `/pricing-tiers/${id}`);
+      } else if (moduleKey === "roles" && action === "delete") {
+        await request("delete", `/platform-roles/${id}`);
       }
       setNotice("Action completed.");
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
+    }
+  };
+
+  const activateDemoTrial = async () => {
+    if (!trialDemo?.id) return;
+    try {
+      setSaving(true);
+      setError("");
+      const result = asObject(await request("post", `/demo-requests/${trialDemo.id}/activate-trial`, {
+        trial_days: Number(trialDays),
+        admin_password: trialPassword,
+        pricing_tier_id: trialPlanId ? Number(trialPlanId) : null,
+      }));
+      setTrialDemo(null);
+      setTrialPassword("");
+      setNotice(String(result?.response_message || (result?.email_sent === false
+        ? "Trial activated, but credentials email failed. Check SMTP settings."
+        : "Trial activated and credentials email sent.")));
+      await load();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -480,21 +654,41 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   };
 
   const saveAccess = async () => {
-    if (!tenantId || !roleId) return;
+    if (!roleId) return;
     try {
       setSaving(true);
-      const access = JSON.parse(accessText) as RecordValue;
-      await request("put", `/tenants/${tenantId}/roles/${roleId}/access`, {
-        permission_type: access.permission_type,
-        permissions: access.permissions,
+      const permissions = selectedPermissions.filter((permission) => ALL_PLATFORM_PERMISSION_KEYS.includes(permission));
+      const isAll = ALL_PLATFORM_PERMISSION_KEYS.every((permission) => permissions.includes(permission));
+      await request("patch", `/platform-roles/${roleId}`, {
+        permission_type: isAll ? "all" : "custom",
+        permissions,
       });
-      setNotice("Role access updated.");
+      setRecords((current) => current.map((role) => String(role.id) === roleId
+        ? { ...role, permission_type: isAll ? "all" : "custom", permissions }
+        : role));
+      setSelectedPermissions(permissions);
+      setSavedPermissions(permissions);
+      setNotice("Platform role access updated.");
       setError("");
     } catch (requestError) {
-      setError(requestError instanceof SyntaxError ? "Access must be valid JSON." : errorMessage(requestError));
+      setError(errorMessage(requestError));
     } finally {
       setSaving(false);
     }
+  };
+
+  const togglePermission = (permission: string) => {
+    setSelectedPermissions((current) => current.includes(permission)
+      ? current.filter((value) => value !== permission)
+      : [...current, permission]);
+  };
+
+  const toggleModulePermissions = (module: typeof MATRIX_MODULES[number]) => {
+    const keys = [module.viewKey, module.addKey, module.updateKey, module.deleteKey];
+    const hasAll = keys.every((key) => selectedPermissions.includes(key));
+    setSelectedPermissions((current) => hasAll
+      ? current.filter((key) => !keys.includes(key))
+      : Array.from(new Set([...current, ...keys])));
   };
 
   const testSmtp = async () => {
@@ -514,33 +708,57 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   };
 
   useEffect(() => {
-    if (moduleKey !== "access-management" || !tenantId || !roleId) {
-      setAccessText("");
+    if (moduleKey !== "access-management" || !roleId) {
+      setSelectedPermissions([]);
+      setSavedPermissions([]);
       return;
     }
-    let active = true;
-    const fetchAccess = async () => {
-      try {
-        const result = asObject(await request("get", `/tenants/${tenantId}/roles/${roleId}/access`));
-        if (active) setAccessText(JSON.stringify({
-          permission_type: result?.permission_type || "custom",
-          permissions: result?.permissions ?? {},
-        }, null, 2));
-      } catch (requestError) {
-        if (active) setError(errorMessage(requestError));
-      }
-    };
-    void fetchAccess();
-    return () => { active = false; };
-  }, [moduleKey, request, roleId, tenantId]);
+    const role = records.find((item) => String(item.id) === roleId);
+    const storedPermissions = role?.permission_type === "all"
+      ? [...ALL_PLATFORM_PERMISSION_KEYS]
+      : Array.isArray(role?.permissions)
+        ? role.permissions.filter((permission): permission is string =>
+            typeof permission === "string" && ALL_PLATFORM_PERMISSION_KEYS.includes(permission))
+        : role?.permissions && typeof role.permissions === "object"
+          ? Object.entries(role.permissions)
+              .filter(([permission, enabled]) => enabled === true && ALL_PLATFORM_PERMISSION_KEYS.includes(permission))
+              .map(([permission]) => permission)
+          : [];
+    setSelectedPermissions(storedPermissions);
+    setSavedPermissions(storedPermissions);
+  }, [moduleKey, records, roleId]);
 
   const visibleColumns = useMemo(() => {
+    if (moduleKey === "users") return ["name", "email", "role_name", "status", "created_at"];
+    if (moduleKey === "roles") return ["id", "name", "description", "parent_role_name", "permission_type", "created_at"];
+    if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "starts_at", "ends_at", "amount_cents", "currency"];
+    if (moduleKey === "demos") return ["name", "email", "company", "status", "trial_tenant_id", "created_at"];
     const first = records.find((item) => Object.keys(item).length > 0);
-    return first ? Object.keys(first).filter((key) => !SECRET_KEY.test(key)).slice(0, 6) : [];
-  }, [records]);
+    return first
+      ? Object.keys(first)
+          .filter((key) => !SECRET_KEY.test(key) && !(moduleKey === "roles" && key === "permissions"))
+          .slice(0, 6)
+      : [];
+  }, [moduleKey, records]);
 
-  const createLabel = moduleKey === "payments" ? "Create manual payment" : moduleKey === "smtp" ? "Edit SMTP settings" : "Add record";
-  const canCreate = Boolean(fields.length) && !["demos", "users"].includes(moduleKey);
+  const createLabel = moduleKey === "users"
+    ? "Add User"
+    : moduleKey === "payments"
+      ? "Create manual payment"
+      : moduleKey === "smtp"
+        ? "Edit SMTP settings"
+        : "Add record";
+  const userDetails: Array<[string, unknown]> = viewing
+    ? [
+          ["Name", viewing.name],
+          ["Email", viewing.email],
+          ["Role", viewing.role_name],
+          ["Status", viewing.status],
+          ["Created at", viewing.created_at],
+          ["Updated at", viewing.updated_at],
+        ]
+    : [];
+  const canCreate = Boolean(fields.length) && !["demos"].includes(moduleKey) && hasPermission("create");
 
   return (
     <section className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
@@ -583,6 +801,35 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       {moduleKey === "smtp" && <div className="mb-5 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-200">Saved SMTP credentials are never displayed. Credential writes only work when server-side encryption is configured; leave the credential blank to keep the current value.</div>}
       {moduleKey === "smtp" && smtpTestResult && <div role={smtpTestResult.success ? "status" : "alert"} className={`mb-4 rounded-lg border px-4 py-3 text-sm ${smtpTestResult.success ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>{smtpTestResult.message}</div>}
       {moduleKey === "demos" && <div className="mb-5 rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-300">Demo requests are listed here. New requests are collected by the public intake form, not this authenticated screen.</div>}
+      {trialDemo && moduleKey === "demos" && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-slate-900 p-4 sm:p-5">
+          <h2 className="font-semibold text-white">Activate trial for {String(trialDemo.company || trialDemo.name)}</h2>
+          <p className="mt-1 text-sm text-slate-400">This provisions an organization, assigns its trial plan, and emails login details if SMTP is configured.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <label className="text-xs font-medium text-slate-300">Trial plan
+              <select value={trialPlanId} onChange={(event) => {
+                const id = event.target.value;
+                setTrialPlanId(id);
+                const plan = planOptions.find((item) => String(item.id) === id);
+                if (plan?.trial_days) setTrialDays(String(plan.trial_days));
+              }} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                <option value="">No plan / trial only</option>
+                {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-slate-300">Trial duration (days)
+              <input type="number" min="1" max="365" required value={trialDays} onChange={(event) => setTrialDays(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            </label>
+            <label className="text-xs font-medium text-slate-300">Temporary admin password
+              <input type="password" minLength={8} maxLength={50} required value={trialPassword} onChange={(event) => setTrialPassword(event.target.value)} autoComplete="new-password" className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setTrialDemo(null)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+            <button type="button" disabled={saving || !trialPassword || Number(trialDays) < 1} onClick={() => void activateDemoTrial()} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Activating…" : "Activate trial and email access"}</button>
+          </div>
+        </div>
+      )}
       {notice && <div role="status" className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{notice}</div>}
       {error && <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"><span>{error}</span><button type="button" onClick={() => void load()} className="shrink-0 underline">Retry</button></div>}
 
@@ -656,6 +903,29 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </form>
       )}
 
+      {viewing && moduleKey === "users" && (
+        <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5" aria-labelledby="user-details-heading">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">Super Admin User</p>
+              <h2 id="user-details-heading" className="mt-1 text-lg font-semibold text-white">User details</h2>
+            </div>
+            <button type="button" onClick={() => setViewing(null)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800">Back to users</button>
+          </div>
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {userDetails.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
+                <dd className="mt-1 break-words text-sm text-slate-200">{displayValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-5 flex justify-end">
+            <button type="button" onClick={() => beginEdit(viewing)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Edit user</button>
+          </div>
+        </section>
+      )}
+
       {showForm && (
         <form onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between">
@@ -663,7 +933,10 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-400 hover:text-white">Close</button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {fields.filter((field) => !(moduleKey === "payments" && tenantId && field.name === "tenant_id")).map((field) => (
+            {fields.filter((field) =>
+              !(moduleKey === "payments" && tenantId && field.name === "tenant_id") &&
+              !(moduleKey === "subscriptions" && editing && field.name === "trial_days")
+            ).map((field) => (
               <label key={field.name} className={`text-xs font-medium text-slate-300 ${field.type === "textarea" ? "sm:col-span-2" : ""}`}>
                 {field.label}
                 {field.secret && <span className="ml-1 font-normal text-slate-500">(never shown after saving)</span>}
@@ -672,17 +945,42 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     <option value="">Select a tenant</option>
                     {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
                   </select>
+                ) : field.name === "parent_role_id" && moduleKey === "roles" ? (
+                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                    {records
+                      .filter((role) => !editing || String(role.id) !== String(editing.id))
+                      .map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name || `Role ${role.id}`)}`}</option>)}
+                  </select>
+                ) : field.name === "platform_role_id" && moduleKey === "users" ? (
+                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                    <option value="">Select a platform role</option>
+                    {platformRoles.map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name)}`}</option>)}
+                  </select>
+                ) : field.name === "pricing_tier_id" && moduleKey === "subscriptions" ? (
+                  <select value={form[field.name] || ""} onChange={(event) => {
+                    const pricingTierId = event.target.value;
+                    const selectedPlan = planOptions.find((plan) => String(plan.id) === pricingTierId);
+                    setForm((current) => ({
+                      ...current,
+                      [field.name]: pricingTierId,
+                      ...(selectedPlan && !editing ? { trial_days: String(selectedPlan.trial_days ?? 14) } : {}),
+                    }));
+                  }} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                    <option value="">No plan / trial only</option>
+                    {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)} — {String(plan.currency)} {Number(plan.amount_cents || 0) / 100} / {String(plan.billing_interval)}</option>)}
+                  </select>
                 ) : field.type === "textarea" ? (
-                  <textarea value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} rows={5} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
+                  <textarea value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} rows={5} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
                 ) : field.type === "select" ? (
                   <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
                     <option value="">Select…</option>{field.options?.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 ) : (
-                  <input type={field.secret ? "password" : field.type || "text"} value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} min={field.type === "number" ? 0 : undefined} autoComplete={field.secret ? "new-password" : undefined} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
+                  <input type={field.secret ? "password" : field.type || "text"} value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} min={field.type === "number" ? 0 : undefined} autoComplete={field.secret ? "new-password" : undefined} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
                 )}
               </label>
             ))}
+            {moduleKey === "users" && editing && <p className="text-xs text-slate-400 sm:col-span-2">Leave Password blank to keep the current password.</p>}
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
@@ -691,16 +989,69 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </form>
       )}
 
-      {moduleKey === "access-management" && !loading && records.length > 0 && (
-        <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="font-semibold text-white">Role access rules</h2><p className="text-xs text-slate-400">Edit the selected role’s access configuration as JSON.</p></div>
-            <select value={roleId} onChange={(event) => setRoleId(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-              {records.map((role) => <option key={String(role.id)} value={String(role.id)}>{String(role.name || `Role ${role.id}`)}</option>)}
-            </select>
+      {moduleKey === "access-management" && !loading && (
+        <section className="mb-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+          <div className="flex flex-col gap-4 border-b border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div>
+              <h2 className="font-semibold text-white">Role Access Management</h2>
+              <p className="mt-1 text-xs text-slate-400">Configure access for all {PLATFORM_MATRIX_MODULES.length} Super Admin modules.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label htmlFor="access-role" className="text-sm text-slate-300">Select role</label>
+              <select id="access-role" value={roleId} onChange={(event) => setRoleId(event.target.value)} disabled={records.length === 0} className="min-w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50">
+                {records.length === 0 && <option value="">No accessible roles</option>}
+                {records.map((role) => <option key={String(role.id)} value={String(role.id)}>{String(role.name || `Role ${role.id}`)}</option>)}
+              </select>
+              <button type="button" disabled={!canEditSelectedRole} onClick={() => setSelectedPermissions([...ALL_PLATFORM_PERMISSION_KEYS])} className="rounded-lg border border-indigo-500/40 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/10 disabled:opacity-50">Grant all</button>
+              <button type="button" disabled={!canEditSelectedRole} onClick={() => setSelectedPermissions(Array.from(new Set(PLATFORM_MATRIX_MODULES.map((module) => module.viewKey))))} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">Read only</button>
+              <button type="button" disabled={!canEditSelectedRole} onClick={() => setSelectedPermissions([])} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">Clear all</button>
+            </div>
           </div>
-          <textarea aria-label="Role access JSON" value={accessText} onChange={(event) => setAccessText(event.target.value)} rows={10} className="w-full rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-100" />
-          <div className="mt-3 flex justify-end"><button type="button" disabled={saving || !roleId} onClick={() => void saveAccess()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save access"}</button></div>
+          {records.length === 0 && <p role="status" className="border-b border-slate-800 px-5 py-3 text-sm text-amber-200">No platform roles are available in your role hierarchy. The module list is shown below, but permission changes require an accessible role.</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-5">
+            <p className="text-xs text-slate-400">
+              {selectedPermissions.length} permission{selectedPermissions.length === 1 ? "" : "s"} selected
+              {JSON.stringify([...selectedPermissions].sort()) !== JSON.stringify([...savedPermissions].sort()) && <span className="ml-2 font-semibold text-amber-300">Unsaved changes</span>}
+            </p>
+            <button type="button" disabled={saving || !roleId || !canEditSelectedRole} onClick={() => void saveAccess()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save permissions"}</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-sm">
+              <thead className="bg-slate-950/70 text-xs uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-5 py-3">Module</th>
+                  <th className="px-3 py-3 text-center">View</th>
+                  <th className="px-3 py-3 text-center">Add</th>
+                  <th className="px-3 py-3 text-center">Update</th>
+                  <th className="px-3 py-3 text-center">Delete</th>
+                  <th className="px-5 py-3 text-center">All</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {PLATFORM_MATRIX_MODULES.map((module) => {
+                  const keys = [module.viewKey, module.addKey, module.updateKey, module.deleteKey];
+                  const allSelected = keys.every((key) => selectedPermissions.includes(key));
+                  return (
+                    <tr key={module.id} className="hover:bg-slate-800/40">
+                      <td className="px-5 py-3">
+                        <div className="font-medium text-slate-100">{module.name}</div>
+                        <div className="text-xs text-slate-500">{module.slug}</div>
+                      </td>
+                      {keys.map((key, index) => (
+                        <td key={key} className="px-3 py-3 text-center">
+                          <input type="checkbox" checked={selectedPermissions.includes(key)} disabled={!canEditSelectedRole} onChange={() => togglePermission(key)} aria-label={`${module.name} ${["view", "add", "update", "delete"][index]}`} className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-500 focus:ring-indigo-500 disabled:opacity-50" />
+                        </td>
+                      ))}
+                      <td className="px-5 py-3 text-center">
+                        <input type="checkbox" checked={allSelected} disabled={!canEditSelectedRole} onChange={() => toggleModulePermissions(module)} aria-label={`${module.name} all permissions`} className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-500 focus:ring-indigo-500 disabled:opacity-50" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-slate-800 px-5 py-3 text-xs text-slate-500">Changes apply to this global Super Admin role and are saved when you select “Save permissions.”</p>
         </section>
       )}
 
@@ -718,7 +1069,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </section>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+      {moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
         {loading ? (
           <div role="status" className="space-y-3 p-5"><div className="h-4 w-40 animate-pulse rounded bg-slate-800" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><span className="sr-only">Loading {title.toLowerCase()}…</span></div>
         ) : scoped && !tenantId ? (
@@ -731,16 +1082,79 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-800">
-                  {records.map((record, index) => <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">{visibleColumns.map((column) => <td key={column} className="max-w-xs px-4 py-3 text-slate-300"><span className="block truncate">{displayValue(record[column])}</span></td>)}<td className="px-4 py-3"><div className="flex justify-end gap-2">{(moduleKey === "users" || moduleKey === "domains") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{moduleKey === "users" ? (record.status === true ? "Deactivate" : "Activate") : (String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate")}</button>}{moduleKey === "demos" && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}                  {(moduleKey === "roles" || moduleKey === "pricing" || moduleKey === "subscriptions" || moduleKey === "email-templates" || moduleKey === "smtp" || moduleKey === "users") && fields.length > 0 && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}{moduleKey === "notifications" && <><button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button><button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button></>}{(moduleKey === "email-templates" || moduleKey === "pricing") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}</div></td></tr>)}
+                  {records.map((record, index) => (
+                    <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">
+                      {visibleColumns.map((column) => (
+                        <td key={column} className="max-w-xs px-4 py-3 text-slate-300">
+                          <span className="block truncate">
+                            {moduleKey === "roles" && column === "name"
+                              ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
+                              : displayValue(record[column])}
+                          </span>
+                        </td>
+                      ))}
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          {moduleKey === "users" && <>
+                            <button type="button" onClick={() => beginView(record)} className="rounded border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200">View</button>
+                            {canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                            {canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                          </>}
+                          {moduleKey === "domains" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate"}</button>}
+                          {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="rounded border border-amber-500/40 px-2 py-1 text-xs text-amber-200">Activate trial</button>}
+                          {moduleKey === "demos" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}
+                          {moduleKey === "subscriptions" && ["trialing", "active", "past_due"].includes(String(record.status)) && Number(record.amount_cents) > 0 && admin?.permissions?.includes("platform.payments.create") && <button type="button" onClick={() => void startOrder({ ...record, amount_cents: Number(record.amount_cents), subscription_id: Number(record.id) })} className="rounded border border-emerald-500/40 px-2 py-1 text-xs text-emerald-200">Renew via Razorpay</button>}
+                          {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                          {moduleKey === "notifications" && <>
+                            {hasPermission("edit") && <button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button>}
+                            {hasPermission("delete") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                          </>}
+                          {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
             <div className="divide-y divide-slate-800 md:hidden">
-              {records.map((record, index) => <article key={String(record.id ?? index)} className="p-4"><div className="grid grid-cols-2 gap-x-3 gap-y-2">{visibleColumns.map((column) => <div key={column} className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-slate-500">{column.replace(/_/g, " ")}</p><p className="truncate text-sm text-slate-200">{displayValue(record[column])}</p></div>)}</div><div className="mt-3 flex flex-wrap gap-2">{(moduleKey === "users" || moduleKey === "domains") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{moduleKey === "users" ? (record.status === true ? "Deactivate" : "Activate") : (String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate")}</button>}{moduleKey === "demos" && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}{["roles", "pricing", "subscriptions", "email-templates", "smtp", "users"].includes(moduleKey) && fields.length > 0 && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}{moduleKey === "notifications" && <><button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button><button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button></>}{(moduleKey === "email-templates" || moduleKey === "pricing") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}</div></article>)}
+              {records.map((record, index) => (
+                <article key={String(record.id ?? index)} className="p-4">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    {visibleColumns.map((column) => (
+                      <div key={column} className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{column.replace(/_/g, " ")}</p>
+                        <p className="truncate text-sm text-slate-200">
+                          {moduleKey === "roles" && column === "name"
+                            ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
+                            : displayValue(record[column])}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {moduleKey === "users" && <>
+                      <button type="button" onClick={() => beginView(record)} className="rounded border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200">View</button>
+                      {canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                      {canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                    </>}
+                    {moduleKey === "domains" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate"}</button>}
+                    {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="rounded border border-amber-500/40 px-2 py-1 text-xs text-amber-200">Activate trial</button>}
+                    {moduleKey === "demos" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}
+                    {moduleKey === "subscriptions" && ["trialing", "active", "past_due"].includes(String(record.status)) && Number(record.amount_cents) > 0 && admin?.permissions?.includes("platform.payments.create") && <button type="button" onClick={() => void startOrder({ ...record, amount_cents: Number(record.amount_cents), subscription_id: Number(record.id) })} className="rounded border border-emerald-500/40 px-2 py-1 text-xs text-emerald-200">Renew via Razorpay</button>}
+                    {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                    {moduleKey === "notifications" && <>
+                      {hasPermission("edit") && <button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button>}
+                      {hasPermission("delete") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                    </>}
+                    {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                  </div>
+                </article>
+              ))}
             </div>
           </>
         )}
-      </div>
+      </div>}
       {moduleKey === "domains" && <p className="mt-3 text-xs text-slate-500">Domain management uses the platform tenant directory. Domain values are shown only when provided by the API.</p>}
     </section>
   );

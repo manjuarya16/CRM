@@ -75,7 +75,17 @@ const DetailSection: React.FC<{ title: string; icon: string; children: React.Rea
   </div>
 );
 
-export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showMetrics = true }) => {
+export const SuperAdminDashboard: React.FC<{
+  showMetrics?: boolean;
+  canViewOrganizations?: boolean;
+  canCreateOrganizations?: boolean;
+  canEditOrganizations?: boolean;
+}> = ({
+  showMetrics = true,
+  canViewOrganizations = true,
+  canCreateOrganizations = true,
+  canEditOrganizations = true,
+}) => {
   const {
     admin,
     tenants,
@@ -150,9 +160,9 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchTenants();
-    fetchMetrics();
-  }, [fetchTenants, fetchMetrics]);
+    if (canViewOrganizations) void fetchTenants();
+    if (showMetrics) void fetchMetrics();
+  }, [canViewOrganizations, fetchTenants, fetchMetrics, showMetrics]);
 
   // Auto-slugify organization name
   const handleNameChange = (name: string) => {
@@ -580,6 +590,7 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
         </div>
         )}
 
+        {canViewOrganizations && (<>
         {/* Toolbar & Filter */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
           <div className="relative flex-1 sm:max-w-md">
@@ -606,8 +617,8 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
             </select>
             <button
               onClick={() => {
-                fetchTenants();
-                fetchMetrics();
+                if (canViewOrganizations) void fetchTenants();
+                if (showMetrics) void fetchMetrics();
               }}
               className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors flex items-center gap-1.5"
               title="Refresh"
@@ -615,13 +626,13 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
               <i className="mgc_refresh_3_line text-sm"></i>
               <span className="hidden sm:inline">Refresh</span>
             </button>
-            <button
+            {canCreateOrganizations && <button
               onClick={handleOpenCreateModal}
               className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-1.5 shrink-0"
             >
               <i className="mgc_add_circle_line text-base"></i>
               <span>Create Organization</span>
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -743,7 +754,7 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                            <button
+                            {canEditOrganizations && <button
                               type="button"
                               onClick={() => handleOpenEditModal(t)}
                               className="h-8 px-2.5 rounded-lg border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition-colors"
@@ -751,7 +762,7 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
                             >
                               <i className="mgc_edit_line text-sm"></i>
                               <span>Edit</span>
-                            </button>
+                            </button>}
 
                             <a
                               href={workspaceUrl}
@@ -763,7 +774,7 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
                               <i className="mgc_external_link_line text-xs"></i>
                             </a>
 
-                            {!isDefault && (
+                            {canEditOrganizations && !isDefault && (
                               <button
                                 onClick={() => handleToggleStatus(t)}
                                 disabled={actionLoadingId === t.id}
@@ -821,6 +832,7 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
             </div>
           )}
         </div>
+        </>)}
       </main>
 
       {/* ── Organization Detail Side Panel ──────────────────────────────────── */}
@@ -870,14 +882,14 @@ export const SuperAdminDashboard: React.FC<{ showMetrics?: boolean }> = ({ showM
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button
+                {canEditOrganizations && <button
                   type="button"
                   onClick={() => handleOpenEditModal(viewingTenant)}
                   className="h-8 px-3 rounded-lg border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition-colors"
                 >
                   <i className="mgc_edit_line text-sm"></i>
                   <span className="hidden sm:inline">Edit</span>
-                </button>
+                </button>}
                 <button
                   type="button"
                   onClick={() => setViewingTenant(null)}
