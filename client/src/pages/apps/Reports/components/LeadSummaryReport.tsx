@@ -108,15 +108,7 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
 
   // Leads Creation Timeline Columns Data (grouped by exact lead creation date)
   const weeklyColumnItems = useMemo(() => {
-    if (reportData?.weeks && reportData.weeks.length > 0) {
-      return reportData.weeks.map((weekItem) => ({
-        label: weekItem.label,
-        value: weekItem.count,
-        displayText: String(weekItem.count),
-        color: '#0e90d9',
-      }));
-    }
-
+    // 1. Group directly by leads' exact creation dates for accurate daily timeline
     if (leads && leads.length > 0) {
       const dateCounts: Record<string, { count: number; dateSort: string; label: string }> = {};
       leads.forEach((l) => {
@@ -146,8 +138,20 @@ export const LeadSummaryReport: React.FC<LeadSummaryReportProps> = ({
       }
     }
 
+    // 2. Fallback to reportData.weeks (ignoring any weekly range strings)
+    if (reportData?.weeks && reportData.weeks.length > 0) {
+      return reportData.weeks
+        .filter((w) => !w.label.includes('-'))
+        .map((weekItem) => ({
+          label: weekItem.label,
+          value: weekItem.count,
+          displayText: String(weekItem.count),
+          color: '#0e90d9',
+        }));
+    }
+
     return [];
-  }, [reportData?.weeks, leads]);
+  }, [leads, reportData?.weeks]);
 
   // Owner Open Value Bars Data
   const ownerBarsItems = useMemo(() => {
