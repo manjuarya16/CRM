@@ -1,9 +1,17 @@
 import { Router } from 'express';
-import { SuperAdminService } from '@/services/superAdmin.service';
-import { requireSuperAdmin } from '@/middleware/superAdminAuth';
+import { superAdminService } from '@/services/superAdmin.service';
+import { requireSuperAdmin, requireSuperAdminPermission } from '@/middleware/superAdminAuth';
 import { getTenantProfile } from '@/routes/tenant.routes';
 
 const router = Router();
+
+const parseTenantId = (value: string | string[]): number | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
 
 // Public: Super Admin Login
 router.post('/login', async (req, res, next) => {
@@ -13,7 +21,7 @@ router.post('/login', async (req, res, next) => {
       res.status(400).json({ success: false, message: 'Email and password are required' });
       return;
     }
-    const result = await SuperAdminService.login(email, password);
+    const result = await superAdminService.login(email, password);
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);
@@ -26,9 +34,9 @@ router.get('/me', requireSuperAdmin, (req, res) => {
 });
 
 // Protected: List all Tenants
-router.get('/tenants', requireSuperAdmin, async (_req, res, next) => {
+router.get('/tenants', requireSuperAdmin, requireSuperAdminPermission('platform.organizations.view', 'platform.domains.view'), async (_req, res, next) => {
   try {
-    const tenants = await SuperAdminService.getTenants();
+    const tenants = await superAdminService.getTenants();
     res.json({ success: true, data: tenants });
   } catch (err) {
     next(err);
@@ -36,7 +44,7 @@ router.get('/tenants', requireSuperAdmin, async (_req, res, next) => {
 });
 
 // Protected: Create new Tenant Organization
-router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
+router.post('/tenants', requireSuperAdmin, requireSuperAdminPermission('platform.organizations.create'), async (req, res, next) => {
   try {
     const {
       name,
@@ -69,7 +77,7 @@ router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
       return;
     }
 
-    const result = await SuperAdminService.createTenant({
+    const result = await superAdminService.createTenant({
       name,
       slug,
       plan,
@@ -99,9 +107,13 @@ router.post('/tenants', requireSuperAdmin, async (req, res, next) => {
 });
 
 // Protected: Get single Tenant Organization full details
-router.get('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
+router.get('/tenants/:id', requireSuperAdmin, requireSuperAdminPermission('platform.organizations.view'), async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
     const profile = await getTenantProfile(id);
     if (!profile) {
       res.status(404).json({ success: false, message: 'Tenant organization not found' });
@@ -114,10 +126,14 @@ router.get('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
 });
 
 // Protected: Update existing Tenant Organization
-router.put('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
+router.put('/tenants/:id', requireSuperAdmin, requireSuperAdminPermission('platform.organizations.edit'), async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    const result = await SuperAdminService.updateTenant(id, req.body);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
+    const result = await superAdminService.updateTenant(id, req.body);
     const updatedProfile = await getTenantProfile(id);
     res.json({
       success: true,
@@ -131,16 +147,20 @@ router.put('/tenants/:id', requireSuperAdmin, async (req, res, next) => {
 });
 
 // Protected: Update Tenant Status (activate/suspend)
-router.patch('/tenants/:id/status', requireSuperAdmin, async (req, res, next) => {
+router.patch('/tenants/:id/status', requireSuperAdmin, requireSuperAdminPermission('platform.organizations.edit', 'platform.domains.edit'), async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseTenantId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ success: false, message: 'Tenant ID must be a positive integer' });
+      return;
+    }
     const { status } = req.body;
     if (!['active', 'suspended'].includes(status)) {
       res.status(400).json({ success: false, message: "Status must be 'active' or 'suspended'" });
       return;
     }
 
-    const tenant = await SuperAdminService.updateTenantStatus(id, status);
+    const tenant = await superAdminService.updateTenantStatus(id, status);
     res.json({ success: true, data: tenant });
   } catch (err) {
     next(err);
@@ -148,9 +168,9 @@ router.patch('/tenants/:id/status', requireSuperAdmin, async (req, res, next) =>
 });
 
 // Protected: Dashboard Metrics
-router.get('/metrics', requireSuperAdmin, async (_req, res, next) => {
+router.get('/metrics', requireSuperAdmin, requireSuperAdminPermission('platform.dashboard.view'), async (_req, res, next) => {
   try {
-    const metrics = await SuperAdminService.getMetrics();
+    const metrics = await superAdminService.getMetrics();
     res.json({ success: true, data: metrics });
   } catch (err) {
     next(err);
