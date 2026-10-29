@@ -381,6 +381,8 @@ const LeadViewPage: React.FC = () => {
     person_id: "",
   });
 
+  const [modalErrors, setModalErrors] = useState<{ title?: string; comment?: string; schedule_to?: string }>({});
+
   // Add Product form
   const [warehousesList, setWarehousesList] = useState<any[]>([]);
   const [newProd, setNewProd] = useState<{
@@ -613,44 +615,78 @@ const LeadViewPage: React.FC = () => {
           Swal.fire("Success", "File activity logged", "success");
         }
       } else if (activeModal === "note") {
-        const trimmedComment = modalForm.comment?.trim();
+        const errors: { title?: string; comment?: string } = {};
+        const trimmedTitle = modalForm.title?.trim() || "";
+        const trimmedComment = modalForm.comment?.trim() || "";
+
+        if (!trimmedTitle) {
+          errors.title = "Title is required.";
+        } else if (/^[0-9\W_]+$/.test(trimmedTitle) || !/[a-zA-Z]/.test(trimmedTitle)) {
+          errors.title = "Title must contain at least one letter and cannot be only special characters or numbers.";
+        }
+
         if (!trimmedComment) {
-          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
+          errors.comment = "Note content cannot be empty.";
+        }
+
+        if (Object.keys(errors).length > 0) {
+          setModalErrors(errors);
+          Swal.fire({
+            icon: "warning",
+            title: "Validation Error",
+            text: errors.title || errors.comment,
+            confirmButtonColor: "#0088cc",
+          });
           setSubmittingAction(false);
           return;
         }
+
+        setModalErrors({});
         await addActivity({
-          title: modalForm.title?.trim() || "Note",
+          title: trimmedTitle,
           type: "note",
           comment: trimmedComment,
           lead_id: leadId,
           person_id: selectedLead?.person_id,
         });
-        Swal.fire("Success", "Note saved", "success");
+        Swal.fire("Success", "Note saved successfully", "success");
       } else if (activeModal === "activity") {
-        if (/^[0-9\W_]+$/.test(modalForm.title.trim()) || !/[a-zA-Z]/.test(modalForm.title)) {
-          Swal.fire("Validation Error", "Title must contain at least one letter and cannot be only special characters or numbers.", "warning");
-          setSubmittingAction(false);
-          return;
+        const errors: { title?: string; schedule_to?: string } = {};
+        const trimmedTitle = modalForm.title?.trim() || "";
+
+        if (!trimmedTitle) {
+          errors.title = "Title is required.";
+        } else if (/^[0-9\W_]+$/.test(trimmedTitle) || !/[a-zA-Z]/.test(trimmedTitle)) {
+          errors.title = "Title must contain at least one letter and cannot be only special characters or numbers.";
         }
+
         if (modalForm.schedule_to) {
           const toDate = new Date(modalForm.schedule_to);
           if (toDate.getTime() < Date.now() - 60000) {
-            Swal.fire("Validation Error", "Schedule To date/time cannot be in the past.", "warning");
-            setSubmittingAction(false);
-            return;
-          }
-          if (modalForm.schedule_from) {
+            errors.schedule_to = "Schedule To date/time cannot be in the past.";
+          } else if (modalForm.schedule_from) {
             const fromDate = new Date(modalForm.schedule_from);
             if (toDate.getTime() < fromDate.getTime()) {
-              Swal.fire("Validation Error", "Schedule To must be after Schedule From.", "warning");
-              setSubmittingAction(false);
-              return;
+              errors.schedule_to = "Schedule To must be after Schedule From.";
             }
           }
         }
+
+        if (Object.keys(errors).length > 0) {
+          setModalErrors(errors);
+          Swal.fire({
+            icon: "warning",
+            title: "Validation Error",
+            text: errors.title || errors.schedule_to,
+            confirmButtonColor: "#0088cc",
+          });
+          setSubmittingAction(false);
+          return;
+        }
+
+        setModalErrors({});
         await addActivity({
-          title: modalForm.title,
+          title: trimmedTitle,
           type: modalForm.type,
           comment: modalForm.comment,
           schedule_from: modalForm.schedule_from || undefined,
@@ -659,13 +695,19 @@ const LeadViewPage: React.FC = () => {
           lead_id: leadId,
           person_id: modalForm.person_id ? Number(modalForm.person_id) : selectedLead?.person_id,
         });
-        Swal.fire("Success", "Activity logged", "success");
+        Swal.fire("Success", "Activity logged successfully", "success");
       }
       setActiveModal(null);
+      setModalErrors({});
       setModalForm({ title: "", comment: "", type: "call", email_to: "", email_subject: "", email_body: "", won_value: "", lost_reason: "", closed_at: "", schedule_from: "", schedule_to: "", location: "", person_id: "" });
       fetchActivities(1, 100, "", leadId);
     } catch (err: any) {
-      Swal.fire("Error", err.message || "Failed to process action", "error");
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to process action";
+      Swal.fire("Error", errorMsg, "error");
     } finally {
       setSubmittingAction(false);
     }
@@ -1782,11 +1824,30 @@ const getPersonEmail = (person: any): string => {
                         <input
                           type="text"
                           required
-                          placeholder="Title"
+                          placeholder={activeModal === "note" ? "e.g. Client Discussion, Follow-up" : "Title"}
                           value={modalForm.title}
-                          onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
-                          className="w-full px-3 py-1.5 border rounded text-xs"
+                          onChange={(e) => {
+                            setModalForm({ ...modalForm, title: e.target.value });
+                            if (modalErrors.title) {
+                              setModalErrors((prev) => ({ ...prev, title: undefined }));
+                            }
+                          }}
+                          className={`w-full px-3 py-1.5 border rounded text-xs transition-colors ${
+                            modalErrors.title
+                              ? "border-red-500 ring-1 ring-red-500/20 focus:border-red-500"
+                              : "border-gray-300 dark:border-gray-700 focus:border-[#0088cc]"
+                          }`}
                         />
+                        {modalErrors.title ? (
+                          <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                            <i className="mgc_alert_line text-xs shrink-0"></i>
+                            <span>{modalErrors.title}</span>
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Must contain at least one letter and cannot consist of only numbers or symbols.
+                          </p>
+                        )}
                       </div>
 
                       {activeModal === "activity" && (
@@ -1831,7 +1892,6 @@ const getPersonEmail = (person: any): string => {
                             </div>
                           </div>
 
-
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-xs font-semibold mb-1">Schedule From</label>
@@ -1848,9 +1908,24 @@ const getPersonEmail = (person: any): string => {
                                 type="datetime-local"
                                 min={modalForm.schedule_from || new Date().toISOString().slice(0, 16)}
                                 value={modalForm.schedule_to || ""}
-                                onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
-                                className="w-full px-3 py-1.5 border rounded text-xs"
+                                onChange={(e) => {
+                                  setModalForm({ ...modalForm, schedule_to: e.target.value });
+                                  if (modalErrors.schedule_to) {
+                                    setModalErrors((prev) => ({ ...prev, schedule_to: undefined }));
+                                  }
+                                }}
+                                className={`w-full px-3 py-1.5 border rounded text-xs ${
+                                  modalErrors.schedule_to
+                                    ? "border-red-500 ring-1 ring-red-500/20"
+                                    : "border-gray-300 dark:border-gray-700"
+                                }`}
                               />
+                              {modalErrors.schedule_to && (
+                                <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                                  <i className="mgc_alert_line text-xs shrink-0"></i>
+                                  <span>{modalErrors.schedule_to}</span>
+                                </p>
+                              )}
                             </div>
                           </div>
                         </>
@@ -1865,25 +1940,36 @@ const getPersonEmail = (person: any): string => {
                           rows={3}
                           placeholder={activeModal === "note" ? "Enter note content..." : "Details..."}
                           value={modalForm.comment}
-                          onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
-                          className="w-full px-3 py-1.5 border rounded text-xs"
+                          onChange={(e) => {
+                            setModalForm({ ...modalForm, comment: e.target.value });
+                            if (modalErrors.comment) {
+                              setModalErrors((prev) => ({ ...prev, comment: undefined }));
+                            }
+                          }}
+                          className={`w-full px-3 py-1.5 border rounded text-xs transition-colors ${
+                            modalErrors.comment
+                              ? "border-red-500 ring-1 ring-red-500/20 focus:border-red-500"
+                              : "border-gray-300 dark:border-gray-700 focus:border-[#0088cc]"
+                          }`}
                         />
+                        {modalErrors.comment && (
+                          <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                            <i className="mgc_alert_line text-xs shrink-0"></i>
+                            <span>{modalErrors.comment}</span>
+                          </p>
+                        )}
                       </div>
                     </>
                   )}
 
-
-                  {activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim()) && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                      <i className="mgc_information_line text-xs"></i>
-                      <span>Title and Note Content are required.</span>
-                    </p>
-                  )}
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     <button
                       type="button"
                       disabled={submittingAction}
-                      onClick={() => setActiveModal(null)}
+                      onClick={() => {
+                        setActiveModal(null);
+                        setModalErrors({});
+                      }}
                       className="px-3 py-1.5 border rounded text-xs font-semibold disabled:opacity-50"
                     >
                       Cancel
