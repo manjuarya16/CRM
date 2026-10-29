@@ -1267,11 +1267,11 @@ const QuotesPage: React.FC = () => {
             </div>
 
             {/* 💻 DESKTOP TABLE VIEW (>= md screens) with Expandable Separate Entries */}
-            <div className="hidden md:block overflow-x-auto no-scrollbar scroll-smooth">
-              <table className="w-full min-w-[1050px] text-left border-collapse text-sm">
+            <div className="hidden md:block overflow-x-auto scroll-smooth">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-gray-900/60 border-b border-gray-200/80 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-3 w-10 text-center">
+                    <th className="py-3 px-2 w-8 text-center">
                       <button
                         type="button"
                         onClick={toggleExpandAll}
@@ -1281,12 +1281,12 @@ const QuotesPage: React.FC = () => {
                         <i className={`mgc_down_line text-xs font-bold transition-transform ${allExpanded ? "rotate-180" : ""}`}></i>
                       </button>
                     </th>
-                    <th className="py-3 px-4 min-w-[200px]">Quote & Subject</th>
-                    <th className="py-3 px-4 min-w-[160px]">Customer</th>
-                    <th className="py-3 px-4 min-w-[120px]">Sales Rep</th>
-                    <th className="py-3 px-4 min-w-[150px]">Validity & Status</th>
-                    <th className="py-3 px-4 text-right min-w-[180px] whitespace-nowrap">Total Amount</th>
-                    <th className="py-3 px-4 text-right min-w-[110px]">Actions</th>
+                    <th className="py-3 px-3 min-w-[160px]">Quote & Subject</th>
+                    <th className="py-3 px-3 min-w-[130px]">Customer</th>
+                    <th className="py-3 px-3 min-w-[100px]">Sales Rep</th>
+                    <th className="py-3 px-3 min-w-[120px]">Validity & Status</th>
+                    <th className="py-3 px-3 text-right min-w-[130px] whitespace-nowrap">Total Amount</th>
+                    <th className="py-3 px-3 text-right min-w-[120px] pr-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1306,7 +1306,7 @@ const QuotesPage: React.FC = () => {
                           }`}
                         >
                           {/* Expand Toggle Chevron */}
-                          <td className="py-3.5 px-3 text-center">
+                          <td className="py-3 px-2 text-center w-8">
                             <button
                               type="button"
                               onClick={() => toggleExpandQuote(quote.id)}
@@ -1322,7 +1322,7 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Quote & Subject */}
-                          <td className="py-3.5 px-4 min-w-[200px] max-w-[320px]">
+                          <td className="py-3 px-3 min-w-[160px] max-w-[260px]">
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
@@ -1339,10 +1339,10 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Customer Info */}
-                          <td className="py-3.5 px-4 min-w-[180px]">
-                            <div className="flex items-center gap-2.5">
+                          <td className="py-3 px-3 min-w-[130px]">
+                            <div className="flex items-center gap-2">
                               <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border ${avatarCls} shrink-0`}
+                                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] border ${avatarCls} shrink-0`}
                               >
                                 {getInitials(quote.person_name)}
                               </div>
@@ -1358,16 +1358,16 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Sales Rep */}
-                          <td className="py-3.5 px-4 whitespace-nowrap text-xs text-gray-600 dark:text-gray-300">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100/80 dark:bg-gray-800/70 border border-gray-200/50 dark:border-gray-700/50 font-medium">
+                          <td className="py-3 px-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-300">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100/80 dark:bg-gray-800/70 border border-gray-200/50 dark:border-gray-700/50 font-medium text-xs">
                               <i className="mgc_user_star_line text-amber-500 text-xs"></i>
                               <span>{quote.user_name || "Admin"}</span>
                             </span>
                           </td>
 
                           {/* Validity & Status */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="space-y-1">
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <div className="space-y-0.5">
                               <span
                                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${statusInfo.badgeClass}`}
                               >
@@ -1386,12 +1386,12 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Grand Total & Financial Breakdown */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[180px]">
+                          <td className="py-3 px-3 text-right whitespace-nowrap min-w-[130px]">
                             <div className="flex flex-col items-end leading-normal">
-                              <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white leading-tight">
+                              <span className="text-sm font-black text-gray-900 dark:text-white leading-tight">
                                 {formatAmount(quote.grand_total)}
                               </span>
-                              <div className="text-[11px] text-gray-400 flex items-center justify-end gap-1 flex-wrap">
+                              <div className="text-[10px] text-gray-400 flex items-center justify-end gap-1 flex-wrap">
                                 <span>Sub: {formatAmount(quote.sub_total)}</span>
                                 {Number(quote.tax_amount) > 0 && <span>· Tax: +{formatAmount(quote.tax_amount)}</span>}
                                 {Number(quote.discount_amount) > 0 && (
@@ -1404,8 +1404,8 @@ const QuotesPage: React.FC = () => {
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-1">
+                          <td className="py-3 px-3 text-right whitespace-nowrap pr-4">
+                            <div className="inline-flex items-center justify-end gap-1">
                               {/* PDF Print Button */}
                               <button
                                 type="button"
