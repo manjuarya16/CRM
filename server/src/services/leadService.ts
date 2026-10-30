@@ -876,9 +876,10 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       if (existingOrgRes.rows.length > 0) {
         organizationId = existingOrgRes.rows[0].id;
       } else {
+        const addressParam = parsed.address ? JSON.stringify({ address: parsed.address }) : null;
         const newOrgRes = await connection.query(
           "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
-          [orgName, null, currentUserId, "{}"]
+          [orgName, addressParam, currentUserId, "{}"]
         );
         const newOrg = newOrgRes.rows[0]?.result;
         if (newOrg && newOrg.id) {
@@ -896,8 +897,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     if (parsed.email || parsed.phone || parsed.contactPerson) {
       const pFindRes = await connection.query(
-        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
-        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3, $4)",
+        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null, organizationId || null]
       );
       if (pFindRes.rows.length > 0) {
         personId = pFindRes.rows[0].id;
