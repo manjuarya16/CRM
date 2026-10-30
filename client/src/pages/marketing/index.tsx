@@ -32,8 +32,10 @@ export const SolutionDetailPage = () => {
   const { solution } = useParams();
   return <SolutionPage slug={solution || ""} />;
 };
+import BookDemo from "@/pages/public/BookDemo";
+
 export const PricingPage = () => <Pricing />;
-export const BookDemoPage = () => <BookingPage kind="demo" />;
+export const BookDemoPage = () => <BookDemo />;
 export const StartTrialPage = () => <BookingPage kind="trial" />;
 export const ContactPage = () => <Contact />;
 export const ResourcesPage = () => <Resources mode="resources" />;

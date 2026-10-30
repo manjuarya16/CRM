@@ -122,42 +122,42 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="relative rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"
+        className="relative rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-100 hover:text-[#040975] transition-colors"
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
       {open && (
-        <section className="absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-          <header className="flex items-center justify-between border-b border-slate-800 p-3">
+        <section className="absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+          <header className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 p-3">
             <div>
-              <h2 className="text-sm font-semibold text-white">Notifications</h2>
-              <p className="text-xs text-slate-400">{unreadCount} unread</p>
+              <h2 className="text-sm font-bold text-gray-800">Notifications</h2>
+              <p className="text-xs text-gray-500">{unreadCount} unread</p>
             </div>
             <div className="flex gap-2 text-xs">
-              <button type="button" onClick={() => setShowAll((current) => !current)} className="text-indigo-300 hover:text-indigo-200">
+              <button type="button" onClick={() => setShowAll((current) => !current)} className="font-semibold text-[#040975] hover:text-[#232894]">
                 {showAll ? "Unread" : "All"}
               </button>
               {canEdit && unreadCount > 0 && (
-                <button type="button" onClick={() => void markAllRead()} className="text-indigo-300 hover:text-indigo-200">
+                <button type="button" onClick={() => void markAllRead()} className="font-semibold text-[#040975] hover:text-[#232894]">
                   Mark all read
                 </button>
               )}
               {canDelete && notifications.length > 0 && (
-                <button type="button" onClick={() => void clearAll()} className="text-rose-300 hover:text-rose-200">
+                <button type="button" onClick={() => void clearAll()} className="font-semibold text-rose-600 hover:text-rose-700">
                   Clear
                 </button>
               )}
             </div>
           </header>
-          {error && <p role="alert" className="border-b border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+          {error && <p role="alert" className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
-              <p className="p-8 text-center text-sm text-slate-400">
+              <p className="p-8 text-center text-sm text-gray-400">
                 {showAll ? "No notifications yet." : "You’re all caught up."}
               </p>
             ) : notifications.map((notification) => (
@@ -165,22 +165,22 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
                 type="button"
                 key={notification.id}
                 onClick={() => void openNotification(notification)}
-                className={`block w-full border-b border-slate-800 p-3 text-left hover:bg-slate-800/70 ${notification.is_read ? "opacity-75" : "bg-indigo-500/5"}`}
+                className={`block w-full border-b border-gray-100 p-3 text-left transition-colors hover:bg-gray-50 ${notification.is_read ? "opacity-75" : "bg-blue-50/40"}`}
               >
                 <span className="flex items-start justify-between gap-3">
-                  <span className="text-sm font-medium text-slate-100">{notification.title}</span>
-                  <span className="shrink-0 text-[10px] text-slate-500">{relativeTime(notification.created_at)}</span>
+                  <span className="text-sm font-medium text-gray-900">{notification.title}</span>
+                  <span className="shrink-0 text-[10px] text-gray-400">{relativeTime(notification.created_at)}</span>
                 </span>
-                <span className="mt-1 block text-xs leading-relaxed text-slate-400">{notification.message}</span>
-                <span className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wide text-indigo-300">
+                <span className="mt-1 block text-xs leading-relaxed text-gray-600">{notification.message}</span>
+                <span className="mt-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#040975]">
                   {notification.type.replace(/_/g, " ")}
-                  {!notification.is_read && <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />}
+                  {!notification.is_read && <span className="h-1.5 w-1.5 rounded-full bg-[#040975]" />}
                 </span>
               </button>
             ))}
           </div>
-          <footer className="border-t border-slate-800 p-2 text-center">
-            <button type="button" onClick={() => { setOpen(false); navigate("/notifications"); }} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">
+          <footer className="border-t border-gray-100 bg-gray-50/60 p-2 text-center">
+            <button type="button" onClick={() => { setOpen(false); navigate("/notifications"); }} className="text-xs font-semibold text-[#040975] hover:text-[#232894]">
               See all notifications
             </button>
           </footer>

@@ -9,6 +9,7 @@ export interface SuperAdminUser {
   name: string;
   email: string;
   status: string;
+  is_platform_owner?: boolean;
   platform_role_id?: number | null;
   role_name?: string | null;
   permissions?: string[];

@@ -21,10 +21,11 @@ import { getToken, isTokenExpired } from "../lib/auth-utils";
 import useModuleAccess from "../hooks/useModuleAccess";
 import { useAuthStore } from "../store";
 import { getSubdomain } from "../utils/subdomain";
-import { useSuperAdminStore } from "../store/superAdminStore";
 import SuperAdminLogin from "../pages/SuperAdmin/Login";
 import SuperAdminPortal from "../pages/SuperAdmin/Portal";
 import WorkspaceFinder from "../pages/other/Auth/WorkspaceFinder";
+import BookDemo from "../pages/public/BookDemo";
+import { useSuperAdminStore } from "../store/superAdminStore";
 
 // Wrapper component to check module access
 const ModuleAccessWrapper = ({ element, moduleKey, ...props }: any) => {
@@ -69,11 +70,18 @@ const AllRoutes = (props: RouteProps) => {
             (route: RouteObject, idx: number) => (
               <Route
                 path={route.path}
-                element={<MarketingLayout>{route.element}</MarketingLayout>}
+                element={
+                  route.path === "/book-demo" ? (
+                    route.element
+                  ) : (
+                    <MarketingLayout>{route.element}</MarketingLayout>
+                  )
+                }
                 key={`marketing-${idx}`}
               />
             ),
           )}
+          <Route path="/book-demo" element={<BookDemo />} />
           <Route
             path="/super-admin/*"
             element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}
