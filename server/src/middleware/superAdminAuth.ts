@@ -13,8 +13,16 @@ type SuperAdminRequest = Request & { superAdmin?: NonNullable<SuperAdminIdentity
 const permissionCheck = (req: Request, permissions: string[]): boolean => {
   const identity = (req as SuperAdminRequest).superAdmin;
   if (!identity) return false;
-  const assigned = new Set(identity.permissions);
-  return permissions.some((permission) => assigned.has(permission));
+  if (identity.is_platform_owner) return true;
+  const assigned = new Set(identity.permissions || []);
+  return permissions.some((permission) => {
+    if (assigned.has(permission)) return true;
+    const stripped = permission.startsWith('platform.') ? permission.slice('platform.'.length) : null;
+    if (stripped && assigned.has(stripped)) return true;
+    const prefixed = !permission.startsWith('platform.') ? `platform.${permission}` : null;
+    if (prefixed && assigned.has(prefixed)) return true;
+    return false;
+  });
 };
 
 const deny = (res: Response, message = 'Access denied for this platform role'): void => {
@@ -82,6 +90,7 @@ const routeModule = (path: string): string | null => {
   if (/^\/email-templates(?:\/|$)/.test(path)) return 'email_templates';
   if (/^\/smtp-config(?:\/|$)/.test(path)) return 'smtp';
   if (/^\/demo-requests(?:\/|$)/.test(path)) return 'demos';
+  if (/^\/tenants(?:\/|$)/.test(path)) return 'organizations';
   return null;
 };
 

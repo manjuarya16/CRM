@@ -346,6 +346,254 @@ export class SuperAdminService {
       totalLeads: rows[0].total_leads,
     };
   }
+  /**
+   * Impersonate organization admin login
+   */
+  public async impersonateTenant(tenantId: number) {
+    const { rows: tenantRows } = await pool.query(
+      `SELECT id, name, slug, domain FROM public.saas_tenants WHERE id = $1`,
+      [tenantId]
+    );
+    if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
+    const tenant = tenantRows[0];
+
+    const { rows: users } = await pool.query(
+      `SELECT u.id, u.name, u.email, u.tenant_id, r.name as role_name
+         FROM public.users u
+         LEFT JOIN public.roles r ON r.id = u.role_id
+        WHERE u.tenant_id = $1 AND u.status = true
+        ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END, u.id ASC
+        LIMIT 1`,
+      [tenantId]
+    );
+    if (!users[0]) throw new ApiError(404, 'No active administrator found in this organization to impersonate');
+    const user = users[0];
+
+    const token = jwt.sign(
+      { sub: String(user.id), tenant_id: user.tenant_id, email: user.email, name: user.name },
+      env.JWT_SECRET,
+      { expiresIn: '2h' } as jwt.SignOptions
+    );
+
+    const origins = env.CLIENT_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+    const origin = new URL(origins[0] || 'http://localhost:5173');
+    const hostname = origin.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const redirectUrl = isLocal
+      ? `${origin.protocol}//${tenant.slug}.localhost${origin.port ? `:${origin.port}` : ''}/?token=${token}`
+      : `${origin.protocol}//${tenant.slug}.${hostname.split('.').slice(-2).join('.')}${origin.port ? `:${origin.port}` : ''}/?token=${token}`;
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role_name,
+        tenant_id: user.tenant_id,
+      },
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+      },
+      redirectUrl,
+    };
+  }
+
+  /**
+   * Update organization subscription expiry date manually
+   */
+  public async updateOrganizationExpiry(tenantId: number, expiryDate: string | Date) {
+    const expiry = new Date(expiryDate);
+    if (Number.isNaN(expiry.getTime())) throw new ApiError(400, 'Invalid expiry date format');
+
+    const now = new Date();
+    const isExpired = expiry <= now;
+    const statusUpdate = isExpired ? 'expired' : 'active';
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows: tenantRows } = await client.query(
+        `UPDATE public.saas_tenants
+            SET status = $2,
+                settings = jsonb_set(
+                  COALESCE(settings, '{}'::jsonb),
+                  '{subscription_expiry_date}',
+                  to_jsonb($3::text)
+                ),
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [tenantId, statusUpdate, expiry.toISOString()]
+      );
+      if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
+
+      await client.query(
+        `UPDATE public.platform_subscriptions
+            SET ends_at = $2,
+                status = $3,
+                updated_at = NOW()
+          WHERE id = (
+            SELECT id FROM public.platform_subscriptions
+             WHERE tenant_id = $1
+             ORDER BY id DESC
+             LIMIT 1
+          )`,
+        [tenantId, expiry, isExpired ? 'expired' : 'active']
+      );
+
+      await client.query('COMMIT');
+      return tenantRows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Delete an Organization and associated data
+   */
+  public async deleteTenant(tenantId: number) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM public.platform_payments WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM public.platform_subscriptions WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM public.leads WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM public.persons WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM public.users WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM public.roles WHERE tenant_id = $1`, [tenantId]);
+      const { rows } = await client.query(`DELETE FROM public.saas_tenants WHERE id = $1 RETURNING id, name, slug`, [tenantId]);
+      if (!rows[0]) throw new ApiError(404, 'Organization not found');
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get Super Admin sidebar live badge counts
+   */
+  public async getSidebarCounts() {
+    const [tenantsRes, subsRes, paymentsRes, demosRes, notifsRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int as count FROM public.saas_tenants`),
+      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_subscriptions WHERE status IN ('pending', 'trialing')`),
+      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_payments WHERE status = 'pending'`),
+      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_demo_requests WHERE status = 'new'`),
+      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_notifications WHERE is_read = FALSE`),
+    ]);
+
+    return {
+      organizations: tenantsRes.rows[0]?.count || 0,
+      subscriptions: subsRes.rows[0]?.count || 0,
+      payments: paymentsRes.rows[0]?.count || 0,
+      demos: demosRes.rows[0]?.count || 0,
+      notifications: notifsRes.rows[0]?.count || 0,
+    };
+  }
+
+  /**
+   * Trigger expiry reminders for organizations expiring within 7 days
+   */
+  public async triggerExpiryReminders() {
+    const { rows: expiring } = await pool.query<{
+      id: number;
+      name: string;
+      slug: string;
+      admin_email: string;
+      admin_name: string;
+      ends_at: string;
+      days_left: number;
+    }>(
+      `SELECT t.id, t.name, t.slug,
+              u.email AS admin_email, u.name AS admin_name,
+              s.ends_at,
+              EXTRACT(DAY FROM (s.ends_at - NOW()))::int AS days_left
+         FROM public.saas_tenants t
+         JOIN public.platform_subscriptions s ON s.tenant_id = t.id AND s.status = 'active'
+         JOIN LATERAL (
+           SELECT email, name FROM public.users
+            WHERE tenant_id = t.id AND status = true
+            ORDER BY id ASC LIMIT 1
+         ) u ON TRUE
+        WHERE s.ends_at IS NOT NULL
+          AND s.ends_at <= NOW() + INTERVAL '7 days'
+        ORDER BY s.ends_at ASC`
+    );
+
+    let sent = 0;
+    for (const item of expiring) {
+      try {
+        const isExpired = item.days_left <= 0;
+        await pool.query(
+          `INSERT INTO public.platform_notifications
+             (title, message, type, is_read, metadata, created_at)
+           VALUES ($1, $2, 'warning', FALSE, $3, NOW())`,
+          [
+            isExpired ? 'Subscription Expired' : 'Subscription Expiring Soon',
+            `Organization "${item.name}" subscription ${isExpired ? 'has expired' : `expires in ${item.days_left} day(s)`}.`,
+            JSON.stringify(item),
+          ]
+        );
+        sent++;
+      } catch (e) {
+        logger.warn({ e, tenantId: item.id }, 'Failed to process reminder for tenant');
+      }
+    }
+
+    return { checked: expiring.length, reminders_sent: sent, expiring };
+  }
+
+  /**
+   * Impersonate a specific user
+   */
+  public async impersonateUser(userId: number) {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.name, u.email, u.tenant_id, t.slug as tenant_slug, r.name as role_name
+         FROM public.users u
+         LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
+         LEFT JOIN public.roles r ON r.id = u.role_id
+        WHERE u.id = $1`,
+      [userId]
+    );
+    if (!rows[0]) throw new ApiError(404, 'User not found');
+    const user = rows[0];
+
+    const token = jwt.sign(
+      { sub: String(user.id), tenant_id: user.tenant_id, email: user.email, name: user.name },
+      env.JWT_SECRET,
+      { expiresIn: '2h' } as jwt.SignOptions
+    );
+
+    return {
+      token,
+      user,
+      tenant_slug: user.tenant_slug,
+    };
+  }
+
+  /**
+   * Change user password directly by Super Admin
+   */
+  public async changeUserPassword(userId: number, newPass: string) {
+    if (!newPass || newPass.length < 6) throw new ApiError(400, 'Password must be at least 6 characters');
+    const hash = await bcrypt.hash(newPass, 10);
+    const { rowCount } = await pool.query(
+      `UPDATE public.users SET password = $2, updated_at = NOW() WHERE id = $1`,
+      [userId, hash]
+    );
+    if (!rowCount) throw new ApiError(404, 'User not found');
+    return { success: true, message: 'Password updated successfully' };
+  }
 }
 
 export const superAdminService = new SuperAdminService();

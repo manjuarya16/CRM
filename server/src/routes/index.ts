@@ -50,6 +50,7 @@ router.use('/super-admin/modules', superAdminModulesRoutes);
 
 // Public Tenant Metadata (for subdomain verification and login branding)
 router.use('/public', tenantPublicRoutes);
+router.use(tenantPublicRoutes);
 
 // Tenant context resolution for all standard CRM operations
 router.use(resolveTenant);

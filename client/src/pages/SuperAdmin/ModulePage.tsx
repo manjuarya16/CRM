@@ -5,8 +5,11 @@ import { useSuperAdminStore } from "@/store/superAdminStore";
 import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { showConfirmDialog, showSuccessAlert } from "@/utils/swalAlert";
 import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
+import Swal from "sweetalert2";
 import {
+  Calendar,
   Check,
+  ExternalLink,
   Eye,
   Inbox,
   Mail,
@@ -27,6 +30,30 @@ type ModuleConfig = {
   scoped?: boolean;
 };
 const ENDPOINTS: Record<string, ModuleConfig> = {
+  organizations: {
+    listPath: "/super-admin/tenants",
+    fields: [
+      { name: "name", label: "Organization name", required: true },
+      { name: "slug", label: "Subdomain slug (e.g. acme)", required: true },
+      { name: "admin_name", label: "Administrator name", required: true },
+      { name: "admin_email", label: "Administrator email", type: "email", required: true },
+      { name: "admin_password", label: "Administrator password", type: "text", required: true, secret: true },
+      { name: "plan", label: "Subscription plan", type: "select" },
+      { name: "status", label: "Status", type: "select", options: ["active", "suspended"] },
+      { name: "registration_no", label: "Registration / Tax No." },
+      { name: "phone", label: "Phone number" },
+      { name: "email", label: "Organization official email", type: "email" },
+      { name: "website", label: "Website URL" },
+      { name: "currency", label: "Currency", type: "select", options: ["INR", "USD", "EUR", "GBP"] },
+      { name: "timezone", label: "Timezone", type: "select", options: ["Asia/Kolkata", "America/New_York", "Europe/London", "UTC"] },
+      { name: "street", label: "Street address" },
+      { name: "city", label: "City" },
+      { name: "state", label: "State / Province" },
+      { name: "country", label: "Country" },
+      { name: "pincode", label: "Postal / ZIP code" },
+      { name: "description", label: "Description / About", type: "textarea" },
+    ],
+  },
   domains: { listPath: "/super-admin/tenants" },
   subscriptions: {
     listPath: "",
@@ -237,7 +264,7 @@ const errorMessage = (error: unknown): string => {
 
 const apiPath = (path: string) => {
   const normalized = path.startsWith("/super-admin") ? path : `/super-admin${path}`;
-  if (normalized === "/super-admin/tenants" || /^\/super-admin\/tenants\/\d+\/status$/.test(normalized)) return normalized;
+  if (normalized.startsWith("/super-admin/tenants") || normalized.startsWith("/super-admin/users")) return normalized;
   return normalized.replace(/^\/super-admin/, "/super-admin/modules");
 };
 
@@ -279,9 +306,14 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const config = ENDPOINTS[moduleKey];
   const scoped = TENANT_SCOPED.has(moduleKey);
   const tenantOptions = tenants;
-  const permissionModule = PLATFORM_PERMISSION_MODULE[moduleKey];
+  const permissionModule = PLATFORM_PERMISSION_MODULE[moduleKey] ?? moduleKey;
   const hasPermission = (action: "view" | "create" | "edit" | "delete") =>
-    Boolean(permissionModule && admin?.permissions?.includes(`platform.${permissionModule}.${action}`));
+    Boolean(
+      admin?.is_platform_owner ||
+      (permissionModule &&
+        (admin?.permissions?.includes(`platform.${permissionModule}.${action}`) ||
+         admin?.permissions?.includes(`${permissionModule}.${action}`)))
+    );
   const canEditSelectedRole = hasPermission("edit") && roleId !== String(admin?.platform_role_id ?? "");
   const canEditRecord = (record: RecordValue) =>
     hasPermission("edit") &&
@@ -342,7 +374,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
       const result = await request("get", path);
       const list = asRecords(result);
-      if (moduleKey === "subscriptions" || moduleKey === "demos") {
+      if (moduleKey === "subscriptions" || moduleKey === "demos" || moduleKey === "organizations") {
         setPlanOptions(asRecords(await request("get", "/subscription-plans")));
       }
       if (moduleKey === "users") {
@@ -394,7 +426,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const beginCreate = () => {
     setEditing(null);
     setViewing(null);
-    setForm(moduleKey === "users"
+    setForm(moduleKey === "organizations"
+      ? { status: "active", plan: "pro", currency: "INR", timezone: "Asia/Kolkata" }
+      : moduleKey === "users"
       ? { status: "active", platform_role_id: "" }
       : moduleKey === "subscriptions"
         ? { pricing_tier_id: "" }
@@ -459,7 +493,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
       const id = editing?.id;
       if (editing && id !== undefined) {
-        const path = moduleKey === "users"
+        const path = moduleKey === "organizations"
+          ? `/super-admin/tenants/${id}`
+          : moduleKey === "users"
           ? `/platform-users/${id}`
           : moduleKey === "email-templates"
             ? `/email-templates/${id}`
@@ -472,6 +508,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                   : `/tenants/${tenantId}/roles/${id}`;
         const method = ["subscriptions", "roles", "users"].includes(moduleKey) ? "patch" : "put";
         await request(method, path, payload);
+      } else if (moduleKey === "organizations") {
+        await request("post", "/super-admin/tenants", payload);
       } else if (moduleKey === "smtp") {
         await request("put", "/smtp-config", payload);
       } else if (moduleKey === "payments") {
@@ -533,9 +571,19 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     try {
       setError("");
       setNotice("");
-      if (moduleKey === "domains") {
-        const status = currentStatus === "active" ? "suspended" : "active";
-        await request("patch", `/super-admin/tenants/${id}/status`, { status });
+      if (moduleKey === "organizations" || moduleKey === "domains") {
+        if (action === "status") {
+          const status = currentStatus === "active" ? "suspended" : "active";
+          await request("patch", `/super-admin/tenants/${id}/status`, { status });
+        } else if (action === "delete") {
+          const confirmation = await showConfirmDialog(
+            "Delete Organization?",
+            `Delete organization "${String(record.name || `Tenant ${id}`)}"? All users, data, and subscriptions will be permanently deleted.`
+          );
+          if (!confirmation.isConfirmed) return;
+          await request("delete", `/super-admin/tenants/${id}`);
+          setNotice("Organization deleted successfully.");
+        }
       } else if (moduleKey === "users" && action === "delete") {
         if (String(id) === String(admin?.id)) {
           setError("You cannot delete the Super Admin account you are currently using.");
@@ -566,6 +614,52 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       await load();
     } catch (requestError) {
       setError(errorMessage(requestError));
+    }
+  };
+
+  const impersonateTenant = async (record: RecordValue) => {
+    try {
+      const res = await request("post", `/super-admin/tenants/${record.id}/impersonate`);
+      const payload = res as any;
+      if (payload?.redirectUrl) {
+        window.open(payload.redirectUrl, "_blank");
+        await showSuccessAlert("Impersonating", `Redirecting to ${record.name} workspace...`);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const impersonateUser = async (record: RecordValue) => {
+    try {
+      const res = await request("post", `/super-admin/users/${record.id}/impersonate`);
+      const payload = res as any;
+      if (payload?.token) {
+        await showSuccessAlert("Token Generated", `Impersonation token ready for ${record.name || record.email}`);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const updateExpiry = async (record: RecordValue) => {
+    const { value: date } = await Swal.fire({
+      title: "Update Subscription Expiry",
+      input: "date",
+      inputLabel: `Enter new expiry date for ${record.name}`,
+      inputValue: record.ends_at ? String(record.ends_at).substring(0, 10) : new Date().toISOString().substring(0, 10),
+      showCancelButton: true,
+      confirmButtonText: "Update Expiry",
+      confirmButtonColor: "#4f46e5",
+    });
+    if (date) {
+      try {
+        await request("patch", `/super-admin/tenants/${record.id}/expiry`, { expiry_date: date });
+        await showSuccessAlert("Updated", `Expiry date updated for ${record.name}.`);
+        await load();
+      } catch (err) {
+        setError(errorMessage(err));
+      }
     }
   };
 
@@ -682,6 +776,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   }, [moduleKey, records, roleId]);
 
   const visibleColumns = useMemo(() => {
+    if (moduleKey === "organizations") return ["name", "slug", "plan", "status", "email", "created_at"];
     if (moduleKey === "users") return ["name", "email", "role_name", "status", "created_at"];
     if (moduleKey === "roles") return ["id", "name", "description", "parent_role_name", "permission_type", "created_at"];
     if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "payment_status", "starts_at", "ends_at", "amount_cents", "currency"];
@@ -709,7 +804,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     ? records.filter((record) => String(record.tenant_id) === tenantId)
     : records;
 
-  const createLabel = moduleKey === "users"
+  const createLabel = moduleKey === "organizations"
+    ? "Create Organization"
+    : moduleKey === "users"
     ? "Add User"
     : moduleKey === "payments"
       ? "Create manual payment"
@@ -719,7 +816,19 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         ? "Edit SMTP settings"
         : "Add record";
   const userDetails: Array<[string, unknown]> = viewing
-    ? [
+    ? moduleKey === "organizations"
+      ? [
+          ["Name", viewing.name],
+          ["Subdomain Slug", viewing.slug],
+          ["Plan", viewing.plan],
+          ["Status", viewing.status],
+          ["Admin Email", viewing.email || viewing.admin_email],
+          ["Phone", viewing.phone],
+          ["Registration No", viewing.registration_no],
+          ["Created at", viewing.created_at],
+          ["Updated at", viewing.updated_at],
+        ]
+      : [
           ["Name", viewing.name],
           ["Email", viewing.email],
           ["Role", viewing.role_name],
@@ -1203,8 +1312,18 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       ))}
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          {moduleKey === "organizations" && <>
+                            <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                            <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
+                            <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                            {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
+                            {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
+                            {hasPermission("delete") && <button type="button" aria-label="Delete organization" title="Delete organization" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
+                          </>}
                           {moduleKey === "users" && <>
                             <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                            <button type="button" aria-label="Impersonate user" title="Impersonate user" onClick={() => void impersonateUser(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
                             {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                             {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                           </>}
@@ -1244,8 +1363,18 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     ))}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {moduleKey === "organizations" && <>
+                    <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                    <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
+                    <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                    {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                    {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
+                    {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
+                    {hasPermission("delete") && <button type="button" aria-label="Delete organization" title="Delete organization" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
+                    </>}
                     {moduleKey === "users" && <>
                     <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                    <button type="button" aria-label="Impersonate user" title="Impersonate user" onClick={() => void impersonateUser(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
                     {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                     {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                     </>}

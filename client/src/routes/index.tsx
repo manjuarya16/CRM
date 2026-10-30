@@ -375,6 +375,11 @@ const publicRoutes: RoutesProps[] = [
     name: "Public Web Form",
     element: <PublicFormPage />,
   },
+  {
+    path: "/book-demo",
+    name: "Book a Demo",
+    element: <BookDemoPage />,
+  },
 ];
 
 // auth protected routes
