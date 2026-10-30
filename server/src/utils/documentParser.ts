@@ -654,13 +654,13 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   // 5. Organization / Company extraction
   const orgPatterns = [
     /(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*[:=-]\s*([A-Za-z0-9\s.,&'-]+)/i,
-    /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
+    /(?:at|for|from)\s+([A-Z][A-Za-z0-9.&'-]+(?:\s+[A-Z][A-Za-z0-9.&'-]+){0,3}\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt\s*Ltd|Pvt|Global|Services|Group|Systems))\b/i,
   ];
   for (const pat of orgPatterns) {
     const oMatch = text.match(pat);
     if (oMatch && oMatch[1]) {
       const val = oMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson) {
+      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson && !/^(?:quotation|proposal|request|rfq|invoice|order|requirement)/i.test(val)) {
         result.organization = val;
         break;
       }
@@ -688,8 +688,8 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
       if (companyKeywords.some((kw) => lower.includes(kw))) {
         let orgName = l
-          .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
-          .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+          .replace(/^[+\-*—_~|#\s:()'"\[\]{}]+|[+\-*—_~|#\s:()'"\[\]{}]+$/g, '')
+          .replace(/^(?:ls|te|es|an|re|no|a|z)\)?\s+/i, '')
           .replace(/pt\.?\s*ltd/i, 'Pvt Ltd')
           .trim();
         // Look backwards for a preceding brand prefix (e.g. "SunLine")
