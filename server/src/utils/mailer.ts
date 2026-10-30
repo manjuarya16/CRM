@@ -105,6 +105,32 @@ export async function getSmtpConfig(): Promise<SmtpSettingsConfig> {
 }
 
 /**
+ * Resolves only platform-wide SMTP settings for Super Admin mail.
+ * Unlike getSmtpConfig(), this intentionally does not fall back to tenant config or env.
+ */
+export async function getPlatformSmtpConfig(): Promise<SmtpSettingsConfig> {
+  const { rows } = await pool.query(
+    `SELECT host, port, secure, delivery_enabled, username, password_encrypted, from_email, from_name
+       FROM public.platform_smtp_config WHERE id=1`
+  );
+  const platformSmtp = rows[0];
+  const port = Number(platformSmtp?.port) || 587;
+
+  return {
+    enabled: platformSmtp?.delivery_enabled ?? true,
+    host: (platformSmtp?.host || '').trim(),
+    port,
+    secure: platformSmtp?.secure ?? port === 465,
+    user: (platformSmtp?.username || '').trim(),
+    pass: platformSmtp?.password_encrypted
+      ? decryptPlatformSmtpPassword(platformSmtp.password_encrypted).trim()
+      : '',
+    fromName: platformSmtp?.from_name || 'CRM Admin',
+    fromEmail: platformSmtp?.from_email || platformSmtp?.username || 'no-reply@crm.local',
+  };
+}
+
+/**
  * Helper to build nodemailer transporter options with auto-detection for Gmail
  */
 function buildTransporterOptions(config: SmtpSettingsConfig) {
@@ -167,36 +193,50 @@ export function createTransporterFromConfig(config: SmtpSettingsConfig) {
 /**
  * Tests SMTP connection using provided or database settings
  */
-export async function testSmtpConnection(customConfig?: Partial<SmtpSettingsConfig>): Promise<{ success: boolean; message: string }> {
+async function verifySmtpConnection(config: SmtpSettingsConfig): Promise<{ success: boolean; message: string }> {
   try {
-    const currentConfig = await getSmtpConfig();
-    
-    // Filter out undefined / null / empty override values from customConfig
-    const sanitizedCustom: Record<string, any> = {};
-    if (customConfig) {
-      for (const [k, v] of Object.entries(customConfig)) {
-        if (v !== undefined && v !== null && v !== '') {
-          sanitizedCustom[k] = v;
-        }
-      }
-    }
-
-    const config: SmtpSettingsConfig = {
-      ...currentConfig,
-      ...sanitizedCustom,
-    };
-
     if (!config.host) throw new Error('SMTP Host is required');
     if (!config.user) throw new Error('SMTP Username/Email is required');
     if (!config.pass) throw new Error('SMTP Password is required');
 
-    const transporterOptions = buildTransporterOptions(config);
-    const transporter = nodemailer.createTransport(transporterOptions);
-
+    const transporter = nodemailer.createTransport(buildTransporterOptions(config));
     await transporter.verify();
     return { success: true, message: 'SMTP connection verified successfully!' };
   } catch (error: any) {
     let msg = error?.message || 'Failed to connect to SMTP server';
+    if (msg.includes('535') || msg.includes('BadCredentials')) {
+      msg = 'Invalid login: Gmail rejected the username or App Password. Please verify your 16-character App Password (with 2-Step Verification enabled on your Google Account).';
+    }
+    return { success: false, message: msg };
+  }
+}
+
+/** Tests SMTP connection using tenant configuration and optional overrides. */
+export async function testSmtpConnection(customConfig?: Partial<SmtpSettingsConfig>): Promise<{ success: boolean; message: string }> {
+  try {
+    const currentConfig = await getSmtpConfig();
+    const sanitizedCustom: Record<string, any> = {};
+    if (customConfig) {
+      for (const [k, v] of Object.entries(customConfig)) {
+        if (v !== undefined && v !== null && v !== '') sanitizedCustom[k] = v;
+      }
+    }
+    return await verifySmtpConnection({ ...currentConfig, ...sanitizedCustom });
+  } catch (error: any) {
+    let msg = error?.message || 'Failed to connect to SMTP server';
+    if (msg.includes('535') || msg.includes('BadCredentials')) {
+      msg = 'Invalid login: Gmail rejected the username or App Password. Please verify your 16-character App Password (with 2-Step Verification enabled on your Google Account).';
+    }
+    return { success: false, message: msg };
+  }
+}
+
+/** Tests the platform SMTP settings used by Super Admin outbound email. */
+export async function testPlatformSmtpConnection(): Promise<{ success: boolean; message: string }> {
+  try {
+    return await verifySmtpConnection(await getPlatformSmtpConfig());
+  } catch (error: any) {
+    let msg = error?.message || 'Failed to load platform SMTP settings';
     if (msg.includes('535') || msg.includes('BadCredentials')) {
       msg = 'Invalid login: Gmail rejected the username or App Password. Please verify your 16-character App Password (with 2-Step Verification enabled on your Google Account).';
     }
@@ -227,39 +267,33 @@ function parseEmailList(val: any): string[] {
  * Sends a real email via SMTP if transporter is configured and enabled.
  * Does NOT throw errors - logs warnings so database recording is unaffected.
  */
-export async function sendRealMail(options: SendMailOptions): Promise<boolean> {
+async function sendMailWithConfig(
+  options: SendMailOptions,
+  resolveConfig: () => Promise<SmtpSettingsConfig>
+): Promise<boolean> {
   try {
-    const config = await getSmtpConfig();
+    const config = await resolveConfig();
     const transporter = createTransporterFromConfig(config);
-    if (!transporter) {
-      return false;
-    }
+    if (!transporter) return false;
 
     const fromEmail = config.fromEmail || config.user || 'no-reply@crm.local';
     const fromName = config.fromName || 'CRM Admin';
-
     const formattedAttachments = options.attachments?.map((att) => {
       const absolutePath = att.path.startsWith('/')
         ? path.join(process.cwd(), att.path)
         : att.path;
-
-      return {
-        filename: att.filename,
-        path: absolutePath,
-      };
+      return { filename: att.filename, path: absolutePath };
     });
-
     const toList = parseEmailList(options.to);
     const ccList = parseEmailList(options.cc);
     const bccList = parseEmailList(options.bcc);
-
     if (toList.length === 0) {
       logger.warn('[Mailer] No valid recipient email address specified in "to".');
       return false;
     }
 
-    const mailOptions = {
-      from: `"${fromName}" <${fromEmail}>`,
+    const info = await transporter.sendMail({
+      from: '"' + fromName + '" <' + fromEmail + '>',
       to: toList.join(', '),
       cc: ccList.length ? ccList.join(', ') : undefined,
       bcc: bccList.length ? bccList.join(', ') : undefined,
@@ -267,13 +301,21 @@ export async function sendRealMail(options: SendMailOptions): Promise<boolean> {
       text: options.text,
       html: options.html || options.text,
       attachments: formattedAttachments,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`[Mailer] Real email dispatched successfully via SMTP. MessageID: ${info.messageId}`);
+    });
+    logger.info('[Mailer] Real email dispatched successfully via SMTP. MessageID: ' + info.messageId);
     return true;
   } catch (error: any) {
-    logger.error(`[Mailer] Failed to send email via SMTP: ${error?.message || error}`);
+    logger.error('[Mailer] Failed to send email via SMTP: ' + (error?.message || error));
     return false;
   }
+}
+
+/** Sends using the existing tenant/configuration/environment SMTP resolution. */
+export async function sendRealMail(options: SendMailOptions): Promise<boolean> {
+  return sendMailWithConfig(options, getSmtpConfig);
+}
+
+/** Sends using only the platform-wide SMTP settings used by Super Admin. */
+export async function sendPlatformMail(options: SendMailOptions): Promise<boolean> {
+  return sendMailWithConfig(options, getPlatformSmtpConfig);
 }

@@ -88,6 +88,15 @@ const routeModule = (path: string): string | null => {
 export const requirePlatformModulePermission: RequestHandler = (req, res, next) => {
   const path = req.path;
   const method = req.method.toUpperCase();
+  const paymentLinkPath = /^\/tenants\/\d+\/subscriptions(?:\/\d+)?\/payment-link$/.test(path);
+  if (paymentLinkPath && method === 'POST') {
+    if (!permissionCheck(req, ['platform.payments.create'])) {
+      deny(res);
+      return;
+    }
+    next();
+    return;
+  }
   if (/^\/demo-requests\/\d+\/activate-trial$/.test(path) && method === 'POST') {
     if (!permissionCheck(req, ['platform.demos.edit'])) {
       deny(res);
@@ -97,7 +106,11 @@ export const requirePlatformModulePermission: RequestHandler = (req, res, next) 
     return;
   }
   if (path === '/subscription-plans' && method === 'GET') {
-    if (!permissionCheck(req, ['platform.subscriptions.view', 'platform.demos.edit'])) {
+    if (!permissionCheck(req, [
+      'platform.subscriptions.view',
+      'platform.demos.edit',
+      'platform.payments.create',
+    ])) {
       deny(res);
       return;
     }

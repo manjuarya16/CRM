@@ -10,8 +10,13 @@ import {
 // All layouts containers
 import DefaultLayout from "../layouts/Default";
 import VerticalLayout from "../layouts/Vertical";
+import MarketingLayout from "../layouts/MarketingLayout";
 
-import { authProtectedFlattenRoutes, publicProtectedFlattenRoutes } from ".";
+import {
+  authProtectedFlattenRoutes,
+  marketingFlattenRoutes,
+  publicProtectedFlattenRoutes,
+} from ".";
 import { getToken, isTokenExpired } from "../lib/auth-utils";
 import useModuleAccess from "../hooks/useModuleAccess";
 import { useAuthStore } from "../store";
@@ -60,6 +65,15 @@ const AllRoutes = (props: RouteProps) => {
     if (!isAuthRoute) {
       return (
         <Routes>
+          {(marketingFlattenRoutes || []).map(
+            (route: RouteObject, idx: number) => (
+              <Route
+                path={route.path}
+                element={<MarketingLayout>{route.element}</MarketingLayout>}
+                key={`marketing-${idx}`}
+              />
+            ),
+          )}
           <Route
             path="/super-admin/*"
             element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}

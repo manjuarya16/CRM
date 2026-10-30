@@ -6,6 +6,7 @@ export const requestSchema = z
     consent: z.boolean().optional(),
     first_name: z.string().trim().max(100).default(""),
     last_name: z.string().trim().max(100).default(""),
+    organization: z.string().trim().max(191).default(""),
     email: z
       .string()
       .trim()
@@ -47,6 +48,14 @@ export const requestSchema = z
           message: "Please agree to the Privacy Policy before submitting.",
         });
       }
+    }
+
+    if (v.kind === "demo" && !v.organization) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["organization"],
+        message: "Organization name is required.",
+      });
     }
 
     if (v.kind === "contact" && !v.message) {

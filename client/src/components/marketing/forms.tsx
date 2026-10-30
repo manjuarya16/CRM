@@ -88,6 +88,35 @@ export function RequestForm({ kind = "demo" }: { kind?: "demo" | "trial" | "cont
         </p>
       </div>
       <div className="form-grid">
+        {kind === "demo" && (
+          <label className="full-field">
+            Organization name <span>*</span>
+            <input
+              name="organization"
+              type="text"
+              required
+              maxLength={191}
+              placeholder="e.g. Acme Solutions"
+              autoComplete="organization"
+              aria-invalid={Boolean(errors.organization)}
+              aria-describedby={errors.organization ? "organization-error" : undefined}
+              onChange={() => {
+                if (errors.organization) {
+                  setErrors((current) => {
+                    const next = { ...current };
+                    delete next.organization;
+                    return next;
+                  });
+                }
+              }}
+            />
+            {errors.organization && (
+              <small id="organization-error" className="field-error">
+                {errors.organization}
+              </small>
+            )}
+          </label>
+        )}
         {[
           ["first_name", "First name", "text", true],
           ["last_name", "Last name", "text", false],

@@ -5845,6 +5845,29 @@ details[open] .faq-minus {
   margin-top: auto;
   font-size: 13px;
 }
+.pricing-plans-section.container-width {
+  width: min(1600px, calc(100% - 144px));
+}
+.pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.pricing-grid > [role="status"],
+.pricing-grid > [role="alert"] {
+  grid-column: 1 / -1;
+}
+.price-card {
+  padding: 32px 30px 28px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 12px 30px oklch(0.3 0.07 240 / 0.07);
+}
+.price-card:nth-child(3n + 2) {
+  border-color: #7898d5;
+}
+.price-card:nth-child(3n + 2):hover {
+  border-color: #597fc7;
+}
 .plan-comparison {
   padding: 75px 0;
 }
@@ -6635,6 +6658,16 @@ td svg {
     padding-top: 65px;
     padding-bottom: 65px;
   }
+  .pricing-plans-section.container-width {
+    width: calc(100% - 36px);
+  }
+  .pricing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .price-card {
+    padding: 24px 20px;
+  }
   h2,
   .section-heading h2,
   .faq-section h2 {
@@ -6936,6 +6969,11 @@ td svg {
   }
   .login-page h1 {
     font-size: 42px;
+  }
+}
+@media (max-width: 560px) {
+  .pricing-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .workflow-features-section {

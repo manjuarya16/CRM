@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useSuperAdminStore } from "@/store/superAdminStore";
+import "@/pages/SuperAdmin/superAdminTheme.css";
+import { AlertCircle, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 
 export const SuperAdminLogin: React.FC = () => {
   const { login, loading, error } = useSuperAdminStore();
@@ -14,12 +16,12 @@ export const SuperAdminLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 flex flex-col justify-center items-center p-4">
+    <div className="super-admin-theme min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         {/* Header Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mb-4 shadow-lg shadow-indigo-500/10">
-            <i className="mgc_shield_line text-3xl"></i>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 border border-white/40 text-indigo-50 mb-4 shadow-xl shadow-indigo-500/25">
+            <ShieldCheck aria-hidden="true" size={32} strokeWidth={1.8} />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             SaaS Platform Admin
@@ -33,7 +35,7 @@ export const SuperAdminLogin: React.FC = () => {
         <div className="bg-slate-800/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-6 sm:p-8 shadow-2xl">
           {error && (
             <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-center gap-2.5">
-              <i className="mgc_alert_line text-lg shrink-0 text-rose-400"></i>
+              <AlertCircle aria-hidden="true" className="text-rose-500 shrink-0" size={19} />
               <span>{error}</span>
             </div>
           )}
@@ -44,7 +46,7 @@ export const SuperAdminLogin: React.FC = () => {
                 Super Admin Email
               </label>
               <div className="relative">
-                <i className="mgc_mail_line absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base"></i>
+                <Mail aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-500" size={17} />
                 <input
                   type="email"
                   value={email}
@@ -61,7 +63,7 @@ export const SuperAdminLogin: React.FC = () => {
                 Password
               </label>
               <div className="relative">
-                <i className="mgc_key_line absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base"></i>
+                <KeyRound aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-500" size={17} />
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -75,7 +77,7 @@ export const SuperAdminLogin: React.FC = () => {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                 >
-                  <i className={showPassword ? "mgc_eye_close_line" : "mgc_eye_line"}></i>
+                  {showPassword ? <EyeOff aria-hidden="true" size={17} /> : <Eye aria-hidden="true" size={17} />}
                 </button>
               </div>
             </div>
@@ -92,7 +94,7 @@ export const SuperAdminLogin: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <i className="mgc_lock_line text-base"></i>
+                  <LockKeyhole aria-hidden="true" size={17} />
                   <span>Sign In as Super Admin</span>
                 </>
               )}

@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { formatINR, industries, modules, pricingPlans } from "@/data/marketing";
+import { industries, modules } from "@/data/marketing";
 
 import {
   ProductPreview,
@@ -45,6 +45,7 @@ import {
   Reveal,
 } from "./product-preview";
 import { SectionTitle, FinalCTA, FAQ } from "./shared";
+import { billingIntervalLabel, formatPricingAmount, usePricingPlans } from "./usePricingPlans";
 
 const heroLeadActivity = [
   ["PS", "Priya S.", "New lead assigned"],
@@ -942,6 +943,8 @@ function LeadManagementSection() {
 }
 
 function HomePricingSection() {
+  const { plans, loading, error, reload } = usePricingPlans();
+
   return (
     <section className="home-pricing-section" aria-labelledby="home-pricing-title">
       <div className="container-width">
@@ -954,28 +957,39 @@ function HomePricingSection() {
         </div>
 
         <div className="home-pricing-grid">
-          {pricingPlans.map((plan) => (
-            <article className="home-pricing-card" key={plan.name}>
-              <p className="home-pricing-plan-name">{plan.name}</p>
-              <h3>{plan.name}</h3>
-              <div className="home-pricing-price">
-                <strong>{formatINR(plan.price)}</strong>
-                <span>/per year</span>
-              </div>
-              <p className="home-pricing-description">{plan.description}</p>
-              <ul>
-                {plan.features.map((feature) => (
-                  <li key={feature}>
-                    <Check size={17} aria-hidden="true" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <Button asChild className="home-pricing-cta">
-                <Link href="/book-demo">Talk to sales</Link>
-              </Button>
-            </article>
-          ))}
+          {loading ? (
+            <p role="status">Loading pricing plans…</p>
+          ) : error ? (
+            <p role="alert">
+              {error}{" "}
+              <button type="button" onClick={() => void reload()}>Try again</button>
+            </p>
+          ) : plans.length === 0 ? (
+            <p role="status">No pricing plans are currently available.</p>
+          ) : (
+            plans.map((plan) => (
+              <article className="home-pricing-card" key={plan.id}>
+                <p className="home-pricing-plan-name">{plan.name}</p>
+                <h3>{plan.name}</h3>
+                <div className="home-pricing-price">
+                  <strong>{formatPricingAmount(plan.amount_cents, plan.currency)}</strong>
+                  <span>/{billingIntervalLabel(plan.billing_interval)}</span>
+                </div>
+                <p className="home-pricing-description">{plan.description}</p>
+                <ul>
+                  {plan.features.map((feature) => (
+                    <li key={feature}>
+                      <Check size={17} aria-hidden="true" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button asChild className="home-pricing-cta">
+                  <Link href="/book-demo">Talk to sales</Link>
+                </Button>
+              </article>
+            ))
+          )}
         </div>
       </div>
     </section>

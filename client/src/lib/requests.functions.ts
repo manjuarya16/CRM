@@ -1,4 +1,5 @@
 import { z } from "zod";
+import API from "@/config";
 import { requestSchema } from "./request-schema";
 
 const GOOGLE_SHEETS_WEB_APP_URL =
@@ -24,6 +25,27 @@ function getSuccessMessage(kind: "demo" | "trial" | "contact" | "newsletter") {
 export async function submitRequest(data: unknown): Promise<{ ok: boolean; message: string }> {
   const parsed = requestSchema.parse(data);
   const submissionId = parsed.submission_id || crypto.randomUUID();
+
+  if (parsed.kind === "demo") {
+    const fullName = `${parsed.first_name} ${parsed.last_name}`.trim();
+    const { data: response } = await API.post("/super-admin/modules/demo-requests", {
+      submission_id: submissionId,
+      name: fullName,
+      email: parsed.email,
+      organization: parsed.organization,
+      phone: parsed.phone || null,
+      city: parsed.city || null,
+      state: parsed.state || null,
+      preferred_demo_date: parsed.preferred_demo_date || null,
+      preferred_demo_time: parsed.preferred_demo_time || null,
+      message: parsed.message || null,
+    });
+
+    return {
+      ok: true,
+      message: response.message || getSuccessMessage(parsed.kind),
+    };
+  }
 
   try {
     if (GOOGLE_SHEETS_WEB_APP_URL && GOOGLE_SHEETS_SHARED_SECRET) {

@@ -94,6 +94,7 @@ const SideBarContent = () => {
       const filtered = items
         .filter((item) => {
           if (item.isTitle) return true;
+          if (item.adminOnly) return false;
           if (!item.children) {
             const itemKeyLower = item.key.toLowerCase().trim();
             const singularKey = itemKeyLower.endsWith("s") ? itemKeyLower.slice(0, -1) : itemKeyLower;

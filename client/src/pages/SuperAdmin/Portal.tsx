@@ -3,21 +3,41 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSuperAdminStore } from "@/store/superAdminStore";
 import SuperAdminDashboard from "@/pages/SuperAdmin/Dashboard";
 import SuperAdminModulePage from "@/pages/SuperAdmin/ModulePage.tsx";
+import NotificationDropdown from "@/pages/SuperAdmin/NotificationDropdown";
+import EmailTemplatesPage from "@/pages/SuperAdmin/EmailTemplatesPage";
+import "@/pages/SuperAdmin/superAdminTheme.css";
+import {
+  Bell,
+  Building2,
+  CalendarDays,
+  FileText,
+  Gem,
+  Globe2,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  Receipt,
+  Shield,
+  ShieldCheck,
+  Tags,
+  Users,
+} from "lucide-react";
 
 const menuItems = [
-  { key: "dashboard", permission: "platform.dashboard.view", label: "Dashboard", icon: "mgc_home_3_line" },
-  { key: "organizations", permission: "platform.organizations.view", label: "Organizations", icon: "mgc_building_1_line" },
-  { key: "domains", permission: "platform.domains.view", label: "Domains & Subdomains", icon: "mgc_world_line" },
-  { key: "subscriptions", permission: "platform.subscriptions.view", label: "Subscriptions", icon: "mgc_diamond_line" },
-  { key: "payments", permission: "platform.payments.view", label: "Payment Details", icon: "mgc_bill_line" },
-  { key: "users", permission: "platform.users.view", label: "Users", icon: "mgc_group_line" },
-  { key: "roles", permission: "platform.roles.view", label: "Roles", icon: "mgc_safe_shield_line" },
-  { key: "access-management", permission: "platform.access_management.view", label: "Access Management", icon: "mgc_lock_key_line" },
-  { key: "demos", permission: "platform.demos.view", label: "Demo Requests", icon: "mgc_calendar_line" },
-  { key: "pricing", permission: "platform.pricing.view", label: "Pricing Tiers", icon: "mgc_tag_2_line" },
-  { key: "email-templates", permission: "platform.email_templates.view", label: "Email Templates", icon: "mgc_document_line" },
-  { key: "smtp", permission: "platform.smtp.view", label: "SMTP Configuration", icon: "mgc_mail_send_line" },
-  { key: "notifications", permission: "platform.notifications.view", label: "Notifications", icon: "mgc_notification_line" },
+  { key: "dashboard", permission: "platform.dashboard.view", label: "Dashboard", icon: LayoutDashboard },
+  { key: "organizations", permission: "platform.organizations.view", label: "Organizations", icon: Building2 },
+  { key: "domains", permission: "platform.domains.view", label: "Domains & Subdomains", icon: Globe2 },
+  { key: "subscriptions", permission: "platform.subscriptions.view", label: "Subscriptions", icon: Gem },
+  { key: "payments", permission: "platform.payments.view", label: "Payment Details", icon: Receipt },
+  { key: "users", permission: "platform.users.view", label: "Users", icon: Users },
+  { key: "roles", permission: "platform.roles.view", label: "Roles", icon: ShieldCheck },
+  { key: "access-management", permission: "platform.access_management.view", label: "Access Management", icon: KeyRound },
+  { key: "demos", permission: "platform.demos.view", label: "Demo Requests", icon: CalendarDays },
+  { key: "pricing", permission: "platform.pricing.view", label: "Pricing Tiers", icon: Tags },
+  { key: "email-templates", permission: "platform.email_templates.view", label: "Email Templates", icon: FileText },
+  { key: "smtp", permission: "platform.smtp.view", label: "SMTP Configuration", icon: Mail },
+  { key: "notifications", permission: "platform.notifications.view", label: "Notifications", icon: Bell },
 ];
 
 const SuperAdminPortal: React.FC = () => {
@@ -87,11 +107,11 @@ const SuperAdminPortal: React.FC = () => {
   }, [accessibleMenuItems, activeItem, navigate, permissions, portalBasePath, profileError, profileLoading]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 xl:flex">
+    <div className="super-admin-theme min-h-screen bg-slate-950 text-slate-100 xl:flex">
       <aside className="border-b border-slate-800 bg-slate-900 xl:fixed xl:inset-y-0 xl:flex xl:w-64 xl:flex-col xl:border-b-0 xl:border-r">
         <div className="flex h-16 items-center gap-3 border-b border-slate-800 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-600/20 text-indigo-400">
-            <i className="mgc_shield_line text-lg" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-100 to-violet-100 text-indigo-600 shadow-sm">
+            <Shield className="h-5 w-5" />
           </div>
           <div>
             <p className="text-sm font-bold text-white">Super Admin</p>
@@ -115,11 +135,11 @@ const SuperAdminPortal: React.FC = () => {
                 aria-current={active ? "page" : undefined}
                 className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors xl:w-full ${
                   active
-                    ? "bg-indigo-600/15 text-indigo-300 ring-1 ring-inset ring-indigo-500/25"
+                    ? "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200"
                     : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                 }`}
               >
-                <i className={`${item.icon} text-base`} />
+                <item.icon aria-hidden="true" size={18} strokeWidth={active ? 2.4 : 2} />
                 <span className="whitespace-nowrap">{item.label}</span>
               </Link>
             );
@@ -134,13 +154,22 @@ const SuperAdminPortal: React.FC = () => {
             onClick={logout}
             className="mt-3 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800"
           >
-            <i className="mgc_exit_line text-sm" />
+            <LogOut aria-hidden="true" size={15} />
             Sign out
           </button>
         </div>
       </aside>
 
       <main className="min-w-0 flex-1 xl:pl-64">
+        <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-5 backdrop-blur">
+          <h1 className="text-sm font-semibold text-slate-200">{activeItem?.label || "Super Admin"}</h1>
+          {permissions.includes("platform.notifications.view") && (
+            <NotificationDropdown
+              canEdit={permissions.includes("platform.notifications.edit")}
+              canDelete={permissions.includes("platform.notifications.delete")}
+            />
+          )}
+        </div>
         {profileLoading ? (
           <div role="status" className="p-8 text-sm text-slate-400">Loading role access…</div>
         ) : profileError ? (
@@ -157,6 +186,15 @@ const SuperAdminPortal: React.FC = () => {
             canViewOrganizations={permissions.includes("platform.organizations.view")}
             canCreateOrganizations={permissions.includes("platform.organizations.create")}
             canEditOrganizations={permissions.includes("platform.organizations.edit")}
+            canSendPaymentLinks={permissions.includes("platform.payments.create")}
+          />
+        ) : activeSection === "email-templates" ? (
+          <EmailTemplatesPage
+            key={`email-templates-${moduleRefreshKey}`}
+            title={activeItem?.label || "Email Templates"}
+            canCreate={permissions.includes("platform.email_templates.create")}
+            canEdit={permissions.includes("platform.email_templates.edit")}
+            canDelete={permissions.includes("platform.email_templates.delete")}
           />
         ) : (
           activeItem && <SuperAdminModulePage key={`${activeItem.key}-${moduleRefreshKey}`} moduleKey={activeItem.key} title={activeItem.label} />
