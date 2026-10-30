@@ -111,6 +111,11 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
     return buffer.toString('utf8');
   }
 
+  // Image files should be processed via OCR, not raw byte pattern matching
+  if (['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.gif'].includes(ext)) {
+    return '';
+  }
+
   const raw = buffer.toString('latin1');
   const textChunks: string[] = [];
 
@@ -152,10 +157,10 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
       }
     }
 
-    // Match PDF array text: [ (text1) 20 (text2) ] TJ
-    const arrayTjRegex = /\[\s*((?:\([^)]*\)|[0-9\s.-]+)+)\s*\]\s*TJ/g;
+    // Match PDF array text: [ (text1) 20 (text2) ] TJ safely without catastrophic backtracking
+    const arrayTjRegex = /\[([^\]]*)\]\s*TJ/g;
     while ((match = arrayTjRegex.exec(src)) !== null) {
-      const subStrRegex = /\(([^)]+)\)/g;
+      const subStrRegex = /\(([^)]*)\)/g;
       let subMatch;
       let fullWord = '';
       while ((subMatch = subStrRegex.exec(match[1])) !== null) {
@@ -302,11 +307,12 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     products: [],
   };
 
-  // Clean lines of box drawing characters, decorative borders, and extra symbols
+  // Clean lines of box drawing characters, decorative borders, extra symbols, and non-printable binary noise
   const rawLines = text
     .split(/\r?\n/)
     .map((l) =>
       l
+        .replace(/[^\x20-\x7E\t\r\n]/g, ' ')
         .replace(/[┌┐└┘│─├┤┬┴┼═║╔╗╚╝╠╣╦╩╬┃━┏┓┗┛┣┫┳┻╋|_\-—=]/g, ' ')
         .replace(/[⚡📞☎️✉️🌐🏢👤💼🛠️✨🌟🔹🔸]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -654,13 +660,13 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   // 5. Organization / Company extraction
   const orgPatterns = [
     /(?:organization|company\s*name|company|account\s*name|business\s*name|firm|client(?:\s*org)?|vendor)\s*[:=-]\s*([A-Za-z0-9\s.,&'-]+)/i,
-    /(?:at|for|from)\s+([A-Za-z0-9\s.,&'-]+(?:\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt|Global|Services|Group|Systems)))/i,
+    /(?:at|for|from)\s+([A-Z][A-Za-z0-9.&'-]+(?:\s+[A-Z][A-Za-z0-9.&'-]+){0,3}\s+(?:Inc|LLC|Ltd|Corporation|Technologies|Solutions|Enterprises|Pvt\s*Ltd|Pvt|Global|Services|Group|Systems))\b/i,
   ];
   for (const pat of orgPatterns) {
     const oMatch = text.match(pat);
     if (oMatch && oMatch[1]) {
       const val = oMatch[1].split('\n')[0].replace(/[,;].*$/, '').trim();
-      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson) {
+      if (val.length >= 2 && !val.includes('@') && !isCandidateDesignation(val) && val !== result.contactPerson && !/^(?:quotation|proposal|request|rfq|invoice|order|requirement)/i.test(val)) {
         result.organization = val;
         break;
       }
@@ -688,15 +694,17 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
 
       if (companyKeywords.some((kw) => lower.includes(kw))) {
         let orgName = l
-          .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
-          .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+          .replace(/^[^a-zA-Z0-9]+/, '')
+          .replace(/^(?:ls|te|es|an|re|no|a|z|oy)\)?\s+/i, '')
+          .replace(/\s+(?:NW|NE|SW|SE|[A-Z]{1,2})\b\s*[#*?~]*$/i, '')
+          .replace(/[^a-zA-Z0-9)]+$/, '')
           .replace(/pt\.?\s*ltd/i, 'Pvt Ltd')
           .trim();
         // Look backwards for a preceding brand prefix (e.g. "SunLine")
         for (let j = i - 1; j >= 0; j--) {
           const prev = lines[j]
-            .replace(/^[+\-*—_~|#\s:]+|[+\-*—_~|#\s:]+$/g, '')
-            .replace(/^(?:ls|te|es|an|re|no|a)\s+/i, '')
+            .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '')
+            .replace(/^(?:ls|te|es|an|re|no|a|z)\s+/i, '')
             .trim();
           if (!prev || prev.includes(':') || isCandidateDesignation(prev) || prev === result.contactPerson) continue;
           if (prev.length >= 2 && prev.length <= 30 && !/^(?:email|phone|website|address)/i.test(prev)) {
@@ -705,7 +713,16 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
           }
         }
         // Capitalize words nicely
-        orgName = orgName.split(/\s+/).map((w) => /^[a-z]+$/.test(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
+        orgName = orgName
+          .split(/\s+/)
+          .map((w) =>
+            /^[A-Z0-9]+$/.test(w) && w.length > 2
+              ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+              : /^[a-z]+$/.test(w)
+              ? w.charAt(0).toUpperCase() + w.slice(1)
+              : w
+          )
+          .join(' ');
         result.organization = orgName;
         break;
       }
@@ -717,14 +734,45 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
     result.organization = undefined;
   }
 
-  // If organization not found, check email domain
-  if (!result.organization && result.email) {
-    const domain = result.email.split('@')[1]?.toLowerCase();
+  // If email is available, enrich or resolve organization name from domain
+  const targetEmail = result.email || (allEmails.length > 0 ? allEmails[0] : undefined);
+  if (targetEmail) {
+    const domain = targetEmail.split('@')[1]?.toLowerCase();
     const publicDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'mail.com', 'proton.me'];
     if (domain && !publicDomains.includes(domain)) {
-      const domainName = domain.split('.')[0];
-      if (domainName.length >= 2) {
-        result.organization = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+      const domainPart = domain.split('.')[0];
+      if (domainPart && domainPart.length >= 2) {
+        const commonSuffixes = [
+          'healthcare', 'health', 'technologies', 'technology', 'solutions', 'systems',
+          'corporation', 'corp', 'group', 'global', 'pharma', 'care', 'soft',
+          'medical', 'services', 'infra', 'energy', 'solar', 'motors', 'labs', 'digital', 'media'
+        ];
+
+        let brandPrefix = domainPart;
+        let detectedSuffix = '';
+        for (const suf of commonSuffixes) {
+          if (domainPart.endsWith(suf) && domainPart.length > suf.length) {
+            brandPrefix = domainPart.slice(0, -suf.length);
+            detectedSuffix = suf;
+            break;
+          }
+        }
+
+        if (result.organization) {
+          const lowerOrg = result.organization.toLowerCase();
+          if (brandPrefix && brandPrefix.length >= 3 && !lowerOrg.includes(brandPrefix)) {
+            const formattedBrand = brandPrefix.charAt(0).toUpperCase() + brandPrefix.slice(1);
+            result.organization = `${formattedBrand} ${result.organization}`;
+          }
+        } else {
+          if (detectedSuffix && brandPrefix) {
+            const b = brandPrefix.charAt(0).toUpperCase() + brandPrefix.slice(1);
+            const s = detectedSuffix.charAt(0).toUpperCase() + detectedSuffix.slice(1);
+            result.organization = `${b} ${s}`;
+          } else {
+            result.organization = domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
+          }
+        }
       }
     }
   }

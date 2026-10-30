@@ -8,7 +8,7 @@ import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
-import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from "@/utils/documentParser";
+import { extractTextFromBuffer, parseLeadDocumentText, recognizeImageWithAutoOrientation, ExtractedLeadData } from "@/utils/documentParser";
 import { parseVoiceTranscript, transcribeAudioWithWhisper, translateToEnglish, IVoiceLeadExtractedData } from "@/utils/voiceLeadParser";
 import { configService } from "@/services/configService";
 
@@ -841,10 +841,24 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       fileBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
     }
 
-    // 1. Extract text and parse structured data from the document
+    // 1. Extract text and parse structured data from the document (or image via OCR)
     let parsed: ExtractedLeadData = {};
     if (fileBuffer) {
-      const extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
+      const ext = path.extname(file.originalname).toLowerCase();
+      let extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
+
+      // If document text is empty or file is an image (jpg, jpeg, png, bmp, webp), run OCR
+      if (['.jpg', '.jpeg', '.png', '.bmp', '.webp'].includes(ext) || (!extractedText || extractedText.trim().length < 15)) {
+        try {
+          const ocrText = await recognizeImageWithAutoOrientation(fileBuffer, file.originalname);
+          if (ocrText && ocrText.trim().length > 0) {
+            extractedText = extractedText ? `${extractedText}\n${ocrText}` : ocrText;
+          }
+        } catch (ocrErr: any) {
+          logger.warn(`OCR error for ${file.originalname}: ${ocrErr.message}`);
+        }
+      }
+
       parsed = parseLeadDocumentText(extractedText, file.originalname);
     }
 
@@ -862,9 +876,10 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       if (existingOrgRes.rows.length > 0) {
         organizationId = existingOrgRes.rows[0].id;
       } else {
+        const addressParam = parsed.address ? JSON.stringify({ address: parsed.address }) : null;
         const newOrgRes = await connection.query(
           "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
-          [orgName, null, currentUserId, "{}"]
+          [orgName, addressParam, currentUserId, "{}"]
         );
         const newOrg = newOrgRes.rows[0]?.result;
         if (newOrg && newOrg.id) {
@@ -882,8 +897,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     if (parsed.email || parsed.phone || parsed.contactPerson) {
       const pFindRes = await connection.query(
-        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
-        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3, $4)",
+        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null, organizationId || null]
       );
       if (pFindRes.rows.length > 0) {
         personId = pFindRes.rows[0].id;
