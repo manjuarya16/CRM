@@ -4,6 +4,20 @@ import { getSuperAdminToken } from "@/lib/auth-utils";
 import { useSuperAdminStore } from "@/store/superAdminStore";
 import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { showConfirmDialog, showSuccessAlert } from "@/utils/swalAlert";
+import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
+import {
+  Check,
+  Eye,
+  Inbox,
+  Mail,
+  MailOpen,
+  Pencil,
+  Power,
+  RefreshCw,
+  Send,
+  Trash2,
+  Zap,
+} from "lucide-react";
 
 type RecordValue = Record<string, unknown>;
 type Field = { name: string; label: string; type?: "text" | "number" | "email" | "textarea" | "select"; options?: string[]; required?: boolean; secret?: boolean };
@@ -12,49 +26,6 @@ type ModuleConfig = {
   fields?: Field[];
   scoped?: boolean;
 };
-type RazorpayCheckoutResult = {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-};
-type RazorpayCheckoutOptions = {
-  key: string;
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id: string;
-  handler: (result: RazorpayCheckoutResult) => void;
-  modal: { ondismiss: () => void };
-  theme: { color: string };
-};
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => { open: () => void };
-  }
-}
-
-let razorpayCheckoutScript: Promise<void> | null = null;
-
-const loadRazorpayCheckout = async (): Promise<void> => {
-  if (window.Razorpay) return;
-  if (!razorpayCheckoutScript) {
-    razorpayCheckoutScript = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => {
-        razorpayCheckoutScript = null;
-        reject(new Error("Could not load Razorpay Checkout. Check your internet connection and try again."));
-      };
-      document.body.appendChild(script);
-    });
-  }
-  await razorpayCheckoutScript;
-};
-
 const ENDPOINTS: Record<string, ModuleConfig> = {
   domains: { listPath: "/super-admin/tenants" },
   subscriptions: {
@@ -62,7 +33,7 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
     scoped: true,
     fields: [
       { name: "pricing_tier_id", label: "Plan", type: "select" },
-      { name: "status", label: "Status", type: "select", options: ["trialing", "active", "past_due", "cancelled", "expired"] },
+      { name: "status", label: "Status", type: "select", options: ["trialing", "pending", "active", "past_due", "cancelled", "expired"] },
       { name: "trial_days", label: "Trial period (days)", type: "number" },
       { name: "starts_at", label: "Starts at", type: "text" },
       { name: "ends_at", label: "Ends at", type: "text" },
@@ -131,6 +102,7 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
       { name: "host", label: "SMTP host" },
       { name: "port", label: "Port", type: "number" },
       { name: "secure", label: "Secure connection", type: "select", options: ["true", "false"] },
+      { name: "delivery_enabled", label: "Enable email delivery", type: "select", options: ["true", "false"] },
       { name: "username", label: "Username" },
       { name: "password", label: "Credential (write only)", type: "text", secret: true },
       { name: "clear_password", label: "Clear saved credential", type: "select", options: ["true", "false"] },
@@ -225,6 +197,29 @@ const displayValue = (value: unknown): string => {
   return String(value);
 };
 
+const displayDateOnly = (value: unknown): string => {
+  if (typeof value !== "string" || !value) return "—";
+  const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (datePart) return datePart;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
+
+const formatTierPrice = (record: RecordValue): string => {
+  const amount = Number(record.amount_cents);
+  const currency = typeof record.currency === "string" ? record.currency.toUpperCase() : "";
+  if (!Number.isFinite(amount) || !/^[A-Z]{3}$/.test(currency)) return "Price unavailable";
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount / 100);
+  } catch {
+    return "Price unavailable";
+  }
+};
+
 const jsonField = (value: string, field: string): unknown => {
   try {
     return JSON.parse(value);
@@ -268,14 +263,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [savedPermissions, setSavedPermissions] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [orderDetails, setOrderDetails] = useState<RecordValue | null>(null);
-  const [orderTenantId, setOrderTenantId] = useState("");
-  const [newOrder, setNewOrder] = useState({
-    tenant_id: "",
-    amount_cents: "",
-    currency: "INR",
-    subscription_id: "",
-  });
+  const [paymentLinkTenant, setPaymentLinkTenant] = useState<RecordValue | null>(null);
   const [paymentFilterDraft, setPaymentFilterDraft] = useState({
     search: "",
     status: "",
@@ -330,7 +318,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       return;
     }
     if ((scoped || moduleKey === "domains" || moduleKey === "payments") && tenants.length === 0) await fetchTenants();
-    if (scoped && !tenantId) {
+    if (scoped && !tenantId && moduleKey !== "subscriptions") {
       setRecords([]);
       setLoading(false);
       setError("");
@@ -340,7 +328,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setError("");
     try {
       let path = config.listPath;
-      if (moduleKey === "subscriptions") path = `/tenants/${encodeURIComponent(tenantId)}/subscriptions`;
+      if (moduleKey === "subscriptions") path = "/subscriptions";
       if (moduleKey === "users") path = "/platform-users";
       if (moduleKey === "access-management") path = "/platform-roles";
       if (moduleKey === "payments") {
@@ -363,6 +351,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
       if (moduleKey === "smtp" && list.length === 1) {
         setRecords(list.map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !SECRET_KEY.test(key)))));
+        setForm((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            Object.entries(list[0]).map(([key, value]) => [
+              key,
+              value === undefined || value === null ? "" : String(value),
+            ]),
+          ),
+          password: "",
+        }));
       } else if (moduleKey === "roles" || moduleKey === "access-management") {
         const roleById = new Map(list.map((role) => [String(role.id), role]));
         setRecords(roleHierarchy(list).map(({ role, depth }) => ({
@@ -399,7 +397,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setForm(moduleKey === "users"
       ? { status: "active", platform_role_id: "" }
       : moduleKey === "subscriptions"
-        ? { status: "trialing", pricing_tier_id: "", trial_days: "14", auto_renew: "false" }
+        ? { pricing_tier_id: "" }
       : moduleKey === "roles" && admin?.platform_role_id
         ? { parent_role_id: String(admin.platform_role_id) }
         : {});
@@ -410,6 +408,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const beginEdit = (record: RecordValue) => {
     setViewing(null);
     setEditing(record);
+    if (moduleKey === "subscriptions" && record.tenant_id !== undefined) {
+      setTenantId(String(record.tenant_id));
+    }
     const next: Record<string, string> = {};
     for (const field of fields) {
       const value = record[field.name];
@@ -440,7 +441,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         const value = form[field.name]?.trim();
         if (value !== undefined && value !== "") {
           if (field.type === "number") payload[field.name] = Number(value);
-          else if (["active", "auto_renew", "secure", "clear_password"].includes(field.name)) payload[field.name] = value === "true";
+          else if (["active", "auto_renew", "secure", "delivery_enabled", "clear_password"].includes(field.name)) payload[field.name] = value === "true";
           else if (field.name === "features" || field.name === "limits") payload[field.name] = jsonField(value, field.label);
           else payload[field.name] = value;
         }
@@ -480,7 +481,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         setSaving(false);
         return;
       } else if (moduleKey === "subscriptions") {
-        await request("post", `/tenants/${tenantId}/subscriptions`, payload);
+        actionResult = asObject(await request("post", `/tenants/${tenantId}/subscriptions/payment-link`, {
+          pricing_tier_id: Number(form.pricing_tier_id),
+        }));
       } else if (moduleKey === "pricing") {
         await request("post", "/pricing-tiers", payload);
       } else if (moduleKey === "email-templates") {
@@ -500,12 +503,19 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         ? editing ? "Super Admin user updated successfully." : "Super Admin user created successfully."
         : editing ? "Role updated successfully." : "Role created successfully.";
       const emailFailed = actionResult?.email_sent === false;
-      setNotice(emailFailed
+      const subscriptionEmailFailure = moduleKey === "subscriptions" && !editing && emailFailed;
+      const responseMessage = String(actionResult?.response_message || "");
+      setNotice(moduleKey === "subscriptions" && !editing
+        ? subscriptionEmailFailure ? "" : responseMessage || "Payment link emailed."
+        : emailFailed
         ? String(actionResult?.response_message || "Notification saved, but email delivery failed. Check SMTP configuration.")
         : moduleKey === "notifications" && actionResult?.email_sent === true
           ? "Notification saved and email sent."
           : moduleKey === "roles" ? "" : editing ? "Changes saved." : "Record created.");
       await load();
+      if (subscriptionEmailFailure) {
+        setError(responseMessage || "Payment link was created, but its email could not be sent. Resend it after checking SMTP settings.");
+      }
       if (moduleKey === "roles" || moduleKey === "users") {
         await showSuccessAlert("Success!", successMessage);
       }
@@ -582,74 +592,17 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     }
   };
 
-  const startOrder = async (payment: RecordValue) => {
-    const paymentTenantId = payment.tenant_id === undefined ? "" : String(payment.tenant_id);
-    if (!paymentTenantId || typeof payment.amount_cents !== "number" || !Number.isSafeInteger(payment.amount_cents) || payment.amount_cents <= 0) {
-      setError("Select an organization and enter a positive whole-number amount in the currency's minor unit.");
-      return;
-    }
+  const sendPaymentLink = async (record: RecordValue) => {
     try {
       setError("");
       setNotice("");
-      setOrderDetails(null);
-      const result = asObject(await request("post", `/tenants/${paymentTenantId}/payments/razorpay/orders`, {
-        amount_cents: payment.amount_cents,
-        currency: payment.currency || "INR",
-        ...(typeof payment.subscription_id === "number" ? { subscription_id: payment.subscription_id } : {}),
-      }));
-      const order = asObject(result?.order);
-      setOrderTenantId(paymentTenantId);
-      if (typeof order?.id === "string" && typeof result?.key_id === "string") {
-        setOrderDetails({ ...order, key_id: result.key_id });
-      } else {
-        setOrderDetails(null);
-        setError("The server did not return the order ID and public key required to continue.");
-      }
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    }
-  };
-
-  const verifyOrder = async (result: RazorpayCheckoutResult) => {
-    try {
-      setSaving(true);
-      setError("");
-      await request("post", `/tenants/${orderTenantId}/payments/razorpay/verify`, result);
-      setOrderDetails(null);
-      setNotice("Payment verified successfully.");
+      const result = asObject(await request("post", `/tenants/${record.tenant_id}/subscriptions/${record.id}/payment-link`));
       await load();
+      const responseMessage = String(result?.response_message || "Payment link email request completed.");
+      if (result?.email_sent === false) setError(responseMessage);
+      else setNotice(responseMessage);
     } catch (requestError) {
       setError(errorMessage(requestError));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const openRazorpayCheckout = async () => {
-    if (!orderDetails || typeof orderDetails.id !== "string" || typeof orderDetails.key_id !== "string") return;
-    try {
-      setSaving(true);
-      setError("");
-      await loadRazorpayCheckout();
-      if (!window.Razorpay) throw new Error("Razorpay Checkout did not initialize. Please try again.");
-      const checkout = new window.Razorpay({
-        key: orderDetails.key_id,
-        amount: Number(orderDetails.amount),
-        currency: String(orderDetails.currency || "INR"),
-        name: "CRM Platform",
-        description: `Organization payment order ${orderDetails.id}`,
-        order_id: orderDetails.id,
-        handler: (result) => { void verifyOrder(result); },
-        modal: {
-          ondismiss: () => setNotice("Checkout was closed. The payment order remains pending."),
-        },
-        theme: { color: "#4f46e5" },
-      });
-      checkout.open();
-    } catch (checkoutError) {
-      setError(errorMessage(checkoutError));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -731,8 +684,20 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const visibleColumns = useMemo(() => {
     if (moduleKey === "users") return ["name", "email", "role_name", "status", "created_at"];
     if (moduleKey === "roles") return ["id", "name", "description", "parent_role_name", "permission_type", "created_at"];
-    if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "starts_at", "ends_at", "amount_cents", "currency"];
-    if (moduleKey === "demos") return ["name", "email", "company", "status", "trial_tenant_id", "created_at"];
+    if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "payment_status", "starts_at", "ends_at", "amount_cents", "currency"];
+    if (moduleKey === "demos") return [
+      "name",
+      "email",
+      "organization",
+      "city",
+      "state",
+      "preferred_demo_date",
+      "preferred_demo_time",
+      "status",
+      "trial_tenant_id",
+      "trial_subdomain",
+      "created_at",
+    ];
     const first = records.find((item) => Object.keys(item).length > 0);
     return first
       ? Object.keys(first)
@@ -740,11 +705,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           .slice(0, 6)
       : [];
   }, [moduleKey, records]);
+  const displayedRecords = moduleKey === "subscriptions" && tenantId
+    ? records.filter((record) => String(record.tenant_id) === tenantId)
+    : records;
 
   const createLabel = moduleKey === "users"
     ? "Add User"
     : moduleKey === "payments"
       ? "Create manual payment"
+      : moduleKey === "subscriptions"
+        ? "Send payment link"
       : moduleKey === "smtp"
         ? "Edit SMTP settings"
         : "Add record";
@@ -758,11 +728,12 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           ["Updated at", viewing.updated_at],
         ]
     : [];
-  const canCreate = Boolean(fields.length) && !["demos"].includes(moduleKey) && hasPermission("create");
+  const canCreate = Boolean(fields.length) && !["demos"].includes(moduleKey) && hasPermission("create") &&
+    (moduleKey !== "subscriptions" || admin?.permissions?.includes("platform.payments.create"));
 
   return (
     <section className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {moduleKey !== "smtp" && <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Super Admin Console</p>
           <h1 className="mt-2 text-2xl font-bold text-white">{title}</h1>
@@ -771,9 +742,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         <div className="flex flex-wrap gap-2">
           {scoped && (
             <label className="text-xs text-slate-400">
-              Tenant
+              {moduleKey === "subscriptions" ? "Filter by tenant" : "Tenant"}
               <select value={tenantId} onChange={(event) => { setTenantId(event.target.value); setRoleId(""); }} className="mt-1 block min-w-48 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
-                <option value="">Select a tenant</option>
+                <option value="">{moduleKey === "subscriptions" ? "All tenants (default)" : "Select a tenant"}</option>
                 {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
               </select>
             </label>
@@ -787,19 +758,27 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               </select>
             </label>
           )}
-          <button type="button" onClick={() => void load()} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Refresh</button>
-          {moduleKey === "smtp" && <button type="button" disabled={testingSmtp} onClick={() => void testSmtp()} className="self-end rounded-lg border border-indigo-500/40 px-3 py-2 text-sm text-indigo-300 disabled:opacity-50">{testingSmtp ? "Testing…" : "Test SMTP"}</button>}
-          {canCreate && (!scoped || tenantId) && (
+          {moduleKey !== "smtp" && <button type="button" onClick={() => void load()} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Refresh</button>}
+          {moduleKey !== "smtp" && canCreate && (!scoped || tenantId) && (
             <button type="button" onClick={beginCreate} className="self-end rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">{createLabel}</button>
           )}
           {moduleKey === "notifications" && records.length > 0 && (
             <button type="button" onClick={async () => { try { await request("delete", "/notifications"); await load(); setNotice("All notifications deleted."); } catch (e) { setError(errorMessage(e)); } }} className="self-end rounded-lg border border-rose-500/40 px-3 py-2 text-sm text-rose-300 hover:bg-rose-500/10">Clear all</button>
           )}
         </div>
-      </header>
+      </header>}
 
-      {moduleKey === "smtp" && <div className="mb-5 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-200">Saved SMTP credentials are never displayed. Credential writes only work when server-side encryption is configured; leave the credential blank to keep the current value.</div>}
+      {moduleKey === "subscriptions" && <div className="mb-5 rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-4 text-sm text-indigo-200">Choose an organization and plan to create a pending subscription. The customer pays through a hosted Razorpay link emailed to its administrator; access activates only after Razorpay confirms payment.</div>}
       {moduleKey === "smtp" && smtpTestResult && <div role={smtpTestResult.success ? "status" : "alert"} className={`mb-4 rounded-lg border px-4 py-3 text-sm ${smtpTestResult.success ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>{smtpTestResult.message}</div>}
+      {moduleKey === "domains" && paymentLinkTenant && (
+        <PaymentLinkDialog
+          tenantId={Number(paymentLinkTenant.id)}
+          tenantName={String(paymentLinkTenant.name || `Organization ${paymentLinkTenant.id}`)}
+          currentPlan={typeof paymentLinkTenant.plan === "string" ? paymentLinkTenant.plan : null}
+          onClose={() => setPaymentLinkTenant(null)}
+          onComplete={() => { void load(); }}
+        />
+      )}
       {moduleKey === "demos" && <div className="mb-5 rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-300">Demo requests are listed here. New requests are collected by the public intake form, not this authenticated screen.</div>}
       {trialDemo && moduleKey === "demos" && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-slate-900 p-4 sm:p-5">
@@ -867,42 +846,6 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </form>
       )}
 
-      {moduleKey === "payments" && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void startOrder({
-              tenant_id: newOrder.tenant_id,
-              amount_cents: Number(newOrder.amount_cents),
-              currency: newOrder.currency,
-              ...(newOrder.subscription_id ? { subscription_id: Number(newOrder.subscription_id) } : {}),
-            });
-          }}
-          className="mb-6 grid gap-3 rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-4 sm:grid-cols-2 lg:grid-cols-5"
-        >
-          <label className="text-xs font-medium text-slate-300">
-            Tenant
-            <select required value={newOrder.tenant_id} onChange={(event) => setNewOrder((current) => ({ ...current, tenant_id: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-              <option value="">Select a tenant</option>
-              {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-medium text-slate-300">
-            Amount (minor units)
-            <input type="number" min="1" required value={newOrder.amount_cents} onChange={(event) => setNewOrder((current) => ({ ...current, amount_cents: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          </label>
-          <label className="text-xs font-medium text-slate-300">
-            Currency
-            <input required maxLength={3} value={newOrder.currency} onChange={(event) => setNewOrder((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          </label>
-          <label className="text-xs font-medium text-slate-300">
-            Subscription ID <span className="font-normal text-slate-500">(optional)</span>
-            <input type="number" min="1" value={newOrder.subscription_id} onChange={(event) => setNewOrder((current) => ({ ...current, subscription_id: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          </label>
-          <button type="submit" className="self-end rounded-lg border border-indigo-500/40 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Create Razorpay order</button>
-        </form>
-      )}
-
       {viewing && moduleKey === "users" && (
         <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5" aria-labelledby="user-details-heading">
           <div className="mb-5 flex items-center justify-between gap-3">
@@ -935,7 +878,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           <div className="grid gap-4 sm:grid-cols-2">
             {fields.filter((field) =>
               !(moduleKey === "payments" && tenantId && field.name === "tenant_id") &&
-              !(moduleKey === "subscriptions" && editing && field.name === "trial_days")
+              !(moduleKey === "subscriptions" && editing && field.name === "trial_days") &&
+              !(moduleKey === "subscriptions" && !editing && field.name !== "pricing_tier_id")
             ).map((field) => (
               <label key={field.name} className={`text-xs font-medium text-slate-300 ${field.type === "textarea" ? "sm:col-span-2" : ""}`}>
                 {field.label}
@@ -959,21 +903,18 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 ) : field.name === "pricing_tier_id" && moduleKey === "subscriptions" ? (
                   <select value={form[field.name] || ""} onChange={(event) => {
                     const pricingTierId = event.target.value;
-                    const selectedPlan = planOptions.find((plan) => String(plan.id) === pricingTierId);
-                    setForm((current) => ({
-                      ...current,
-                      [field.name]: pricingTierId,
-                      ...(selectedPlan && !editing ? { trial_days: String(selectedPlan.trial_days ?? 14) } : {}),
-                    }));
-                  }} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">No plan / trial only</option>
+                    setForm((current) => ({ ...current, [field.name]: pricingTierId }));
+                  }} required={!editing || field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                    <option value="">{editing ? "No plan / trial only" : "Select a plan"}</option>
                     {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)} — {String(plan.currency)} {Number(plan.amount_cents || 0) / 100} / {String(plan.billing_interval)}</option>)}
                   </select>
                 ) : field.type === "textarea" ? (
                   <textarea value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} rows={5} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
                 ) : field.type === "select" ? (
                   <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">Select…</option>{field.options?.map((option) => <option key={option} value={option}>{option}</option>)}
+                    <option value="">Select…</option>{field.options?.filter((option) =>
+                      !(moduleKey === "subscriptions" && field.name === "status" && option === "active" && editing?.status !== "active")
+                    ).map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 ) : (
                   <input type={field.secret ? "password" : field.type || "text"} value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} min={field.type === "number" ? 0 : undefined} autoComplete={field.secret ? "new-password" : undefined} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
@@ -1055,39 +996,206 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </section>
       )}
 
-      {moduleKey === "payments" && orderDetails && (
-        <section className="mb-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 sm:p-5">
-          <h2 className="font-semibold text-white">Complete Razorpay payment</h2>
-          <p className="mt-1 text-sm text-slate-300">Open Razorpay Checkout to complete the payment. The payment response will be verified with the server automatically.</p>
-          <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-4">
-            {["id", "amount", "currency", "key_id"].filter((key) => orderDetails[key] !== undefined).map((key) => <div key={key} className="rounded-lg bg-slate-900 p-2"><span className="text-slate-500">{key === "id" ? "order_id" : key}: </span>{displayValue(orderDetails[key])}</div>)}
+      {moduleKey === "smtp" && !loading && records.length > 0 && (
+        <form onSubmit={(event) => void submitForm(event)} className="smtp-settings-card mb-6 max-w-5xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Mail aria-hidden="true" size={19} />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Mail server settings</h2>
+                <p className="mt-1 text-sm text-slate-500">Use these credentials for Super Admin outbound emails and notifications.</p>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button type="button" onClick={() => setOrderDetails(null)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300">Cancel</button>
-            <button type="button" disabled={saving} onClick={() => void openRazorpayCheckout()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Opening checkout…" : "Pay with Razorpay"}</button>
+          <div className="space-y-5 p-5 sm:p-7">
+            <div className="grid gap-5 sm:grid-cols-2">
+              {([
+                ["host", "Host", "smtp.gmail.com", "text"],
+                ["port", "Port", "587", "number"],
+                ["username", "Username", "mail@example.com", "text"],
+                ["password", "Password", form.password_configured === "true" ? "Saved password is configured" : "Enter SMTP password", "password"],
+                ["from_name", "From Name", "MORSE CRM", "text"],
+                ["from_email", "From Email", "mail@example.com", "email"],
+              ] as const).map(([field, label, placeholder, type]) => (
+                <label key={field} className="block text-sm font-medium text-slate-700">
+                  {label}
+                  <input
+                    type={type}
+                    inputMode={type === "number" ? "numeric" : undefined}
+                    value={form[field] || ""}
+                    onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))}
+                    placeholder={placeholder}
+                    required={field !== "password"}
+                    min={type === "number" ? 1 : undefined}
+                    disabled={!hasPermission("edit")}
+                    className="mt-1.5 block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              ))}
+            </div>
+
+            {([
+              {
+                key: "secure",
+                title: "Secure (TLS / SSL)",
+                description: "Use an encrypted connection when connecting to the mail server.",
+              },
+              {
+                key: "delivery_enabled",
+                title: "Enable Email Delivery",
+                description: "Turn this on to send real emails from Super Admin workflows.",
+              },
+            ] as const).map(({ key, title: settingTitle, description }) => {
+              const checked = form[key] === "true";
+              return (
+                <div key={key} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 px-4 py-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{settingTitle}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={checked}
+                    aria-label={settingTitle}
+                    disabled={!hasPermission("edit")}
+                    onClick={() => setForm((current) => ({ ...current, [key]: checked ? "false" : "true" }))}
+                    className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${checked ? "bg-blue-600" : "bg-slate-300"}`}
+                  >
+                    <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+              );
+            })}
+
+            <div className="flex flex-col-reverse justify-between gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center">
+              <p className="text-xs text-slate-500">
+                {form.password_configured === "true"
+                  ? "Leave Password blank to keep the saved credential."
+                  : "SMTP credentials are encrypted before they are stored."}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={testingSmtp} onClick={() => void testSmtp()} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {testingSmtp ? "Testing…" : "Test SMTP"}
+                </button>
+                {hasPermission("edit") && <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? "Saving…" : "Save SMTP Configuration"}
+                </button>}
+              </div>
+            </div>
           </div>
-        </section>
+        </form>
       )}
 
-      {moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+      {moduleKey === "smtp" && loading && (
+        <p role="status" className="max-w-5xl rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading mail server settings…</p>
+      )}
+
+      {moduleKey !== "smtp" && moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
         {loading ? (
           <div role="status" className="space-y-3 p-5"><div className="h-4 w-40 animate-pulse rounded bg-slate-800" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><span className="sr-only">Loading {title.toLowerCase()}…</span></div>
         ) : scoped && !tenantId ? (
           <div className="p-10 text-center"><h2 className="font-semibold text-white">Select a tenant</h2><p className="mt-1 text-sm text-slate-400">Choose a tenant above to load its {title.toLowerCase()}.</p></div>
-        ) : records.length === 0 ? (
-          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-800 text-slate-400"><i className="mgc_inbox_2_line text-xl" /></div><h2 className="mt-3 font-semibold text-white">{error ? "Unable to load records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-400">{error ? "Check the error above and retry." : `No ${title.toLowerCase()} were found.`}</p></div>
+        ) : displayedRecords.length === 0 ? (
+          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-white">{error ? "Unable to load records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-400">{error ? "Check the error above and retry." : `No ${title.toLowerCase()} were found.`}</p></div>
+        ) : moduleKey === "pricing" ? (
+          <div className="grid gap-5 p-4 sm:grid-cols-2 sm:p-6 2xl:grid-cols-3">
+            {records.map((record, index) => {
+              const features = Array.isArray(record.features) ? record.features : [];
+              const interval = record.billing_interval === "yearly"
+                ? "per year"
+                : record.billing_interval === "monthly"
+                  ? "per month"
+                  : "one-time";
+              return (
+                <article
+                  key={String(record.id ?? index)}
+                  className={`flex min-w-0 flex-col rounded-2xl border bg-white p-6 text-slate-900 shadow-sm ${
+                    records.length === 3 && index === 1
+                      ? "border-indigo-300 shadow-indigo-100"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-700">
+                        {displayValue(record.name)}
+                      </p>
+                      <h2 className="mt-3 text-2xl font-semibold text-slate-900">{displayValue(record.name)}</h2>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      record.active === true
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}>
+                      {record.active === true ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <strong className="text-3xl font-bold tracking-tight text-slate-900">
+                      {formatTierPrice(record)}
+                    </strong>
+                    <span className="text-sm text-slate-500">/{interval}</span>
+                  </div>
+                  <p className="mt-4 min-h-12 text-sm leading-6 text-slate-600">
+                    {displayValue(record.description)}
+                  </p>
+                  <ul className="mt-5 grid gap-3">
+                    {features.map((feature, featureIndex) => (
+                      <li key={`${String(record.id)}-${featureIndex}`} className="flex gap-2.5 text-sm text-slate-700">
+                        <Check className="mt-0.5 shrink-0 text-indigo-700" aria-hidden="true" size={17} />
+                        <span>{displayValue(feature)}</span>
+                      </li>
+                    ))}
+                    {features.length === 0 && (
+                      <li className="text-sm text-slate-500">No features listed.</li>
+                    )}
+                  </ul>
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 pt-5">
+                    <span className="text-xs text-slate-500">
+                      {displayValue(record.trial_days)}-day trial
+                    </span>
+                    <div className="flex gap-2">
+                      {canEditRecord(record) && (
+                        <button
+                          type="button"
+                          onClick={() => beginEdit(record)}
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canDeleteRecord(record) && (
+                        <button
+                          type="button"
+                          onClick={() => void performAction("delete", record)}
+                          className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-800">
-                  {records.map((record, index) => (
+                  {displayedRecords.map((record, index) => (
                     <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">
                       {visibleColumns.map((column) => (
                         <td key={column} className="max-w-xs px-4 py-3 text-slate-300">
                           <span className="block truncate">
-                            {moduleKey === "roles" && column === "name"
+                            {moduleKey === "demos" && column === "preferred_demo_date"
+                              ? displayDateOnly(record[column])
+                              : moduleKey === "roles" && column === "name"
                               ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
                               : displayValue(record[column])}
                           </span>
@@ -1096,20 +1204,21 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           {moduleKey === "users" && <>
-                            <button type="button" onClick={() => beginView(record)} className="rounded border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200">View</button>
-                            {canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
-                            {canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                            <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                            {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
+                            {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                           </>}
-                          {moduleKey === "domains" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate"}</button>}
-                          {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="rounded border border-amber-500/40 px-2 py-1 text-xs text-amber-200">Activate trial</button>}
-                          {moduleKey === "demos" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}
-                          {moduleKey === "subscriptions" && ["trialing", "active", "past_due"].includes(String(record.status)) && Number(record.amount_cents) > 0 && admin?.permissions?.includes("platform.payments.create") && <button type="button" onClick={() => void startOrder({ ...record, amount_cents: Number(record.amount_cents), subscription_id: Number(record.id) })} className="rounded border border-emerald-500/40 px-2 py-1 text-xs text-emerald-200">Renew via Razorpay</button>}
-                          {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                          {moduleKey === "domains" && hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} title={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
+                          {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                          {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" aria-label="Activate trial" title="Activate trial" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="super-admin-action-icon super-admin-action-icon-warning"><Zap aria-hidden="true" size={17} /></button>}
+                          {moduleKey === "demos" && hasPermission("edit") && <button type="button" aria-label="Advance status" title="Advance status" onClick={() => void performAction("status", record)} className="super-admin-action-icon"><RefreshCw aria-hidden="true" size={16} /></button>}
+                          {moduleKey === "subscriptions" && record.status === "pending" && typeof record.provider_payment_link_url === "string" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Resend payment link" title="Resend payment link" onClick={() => void sendPaymentLink(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                          {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" aria-label={`Edit ${title.toLowerCase()}`} title={`Edit ${title.toLowerCase()}`} onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                           {moduleKey === "notifications" && <>
-                            {hasPermission("edit") && <button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button>}
-                            {hasPermission("delete") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                            {hasPermission("edit") && <button type="button" aria-label={record.is_read === true ? "Mark unread" : "Mark read"} title={record.is_read === true ? "Mark unread" : "Mark read"} onClick={() => void performAction("read", record)} className="super-admin-action-icon">{record.is_read === true ? <Mail aria-hidden="true" size={17} /> : <MailOpen aria-hidden="true" size={17} />}</button>}
+                            {hasPermission("delete") && <button type="button" aria-label="Delete notification" title="Delete notification" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                           </>}
-                          {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                          {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" aria-label={`Delete ${title.toLowerCase()}`} title={`Delete ${title.toLowerCase()}`} onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                         </div>
                       </td>
                     </tr>
@@ -1118,14 +1227,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               </table>
             </div>
             <div className="divide-y divide-slate-800 md:hidden">
-              {records.map((record, index) => (
+              {displayedRecords.map((record, index) => (
                 <article key={String(record.id ?? index)} className="p-4">
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                     {visibleColumns.map((column) => (
                       <div key={column} className="min-w-0">
                         <p className="text-[10px] uppercase tracking-wide text-slate-500">{column.replace(/_/g, " ")}</p>
                         <p className="truncate text-sm text-slate-200">
-                          {moduleKey === "roles" && column === "name"
+                          {moduleKey === "demos" && column === "preferred_demo_date"
+                            ? displayDateOnly(record[column])
+                            : moduleKey === "roles" && column === "name"
                             ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
                             : displayValue(record[column])}
                         </p>
@@ -1134,20 +1245,21 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {moduleKey === "users" && <>
-                      <button type="button" onClick={() => beginView(record)} className="rounded border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200">View</button>
-                      {canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
-                      {canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                    <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
+                    {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
+                    {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                     </>}
-                    {moduleKey === "domains" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{String(record.status).toLowerCase() === "active" ? "Suspend" : "Activate"}</button>}
-                    {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="rounded border border-amber-500/40 px-2 py-1 text-xs text-amber-200">Activate trial</button>}
-                    {moduleKey === "demos" && hasPermission("edit") && <button type="button" onClick={() => void performAction("status", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Advance status</button>}
-                    {moduleKey === "subscriptions" && ["trialing", "active", "past_due"].includes(String(record.status)) && Number(record.amount_cents) > 0 && admin?.permissions?.includes("platform.payments.create") && <button type="button" onClick={() => void startOrder({ ...record, amount_cents: Number(record.amount_cents), subscription_id: Number(record.id) })} className="rounded border border-emerald-500/40 px-2 py-1 text-xs text-emerald-200">Renew via Razorpay</button>}
-                    {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" onClick={() => beginEdit(record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">Edit</button>}
+                    {moduleKey === "domains" && hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} title={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
+                    {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                    {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" aria-label="Activate trial" title="Activate trial" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="super-admin-action-icon super-admin-action-icon-warning"><Zap aria-hidden="true" size={17} /></button>}
+                    {moduleKey === "demos" && hasPermission("edit") && <button type="button" aria-label="Advance status" title="Advance status" onClick={() => void performAction("status", record)} className="super-admin-action-icon"><RefreshCw aria-hidden="true" size={16} /></button>}
+                    {moduleKey === "subscriptions" && record.status === "pending" && typeof record.provider_payment_link_url === "string" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Resend payment link" title="Resend payment link" onClick={() => void sendPaymentLink(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                    {["roles", "pricing", "subscriptions", "email-templates", "smtp"].includes(moduleKey) && fields.length > 0 && canEditRecord(record) && <button type="button" aria-label={`Edit ${title.toLowerCase()}`} title={`Edit ${title.toLowerCase()}`} onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                     {moduleKey === "notifications" && <>
-                      {hasPermission("edit") && <button type="button" onClick={() => void performAction("read", record)} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{record.is_read === true ? "Mark unread" : "Mark read"}</button>}
-                      {hasPermission("delete") && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                    {hasPermission("edit") && <button type="button" aria-label={record.is_read === true ? "Mark unread" : "Mark read"} title={record.is_read === true ? "Mark unread" : "Mark read"} onClick={() => void performAction("read", record)} className="super-admin-action-icon">{record.is_read === true ? <Mail aria-hidden="true" size={17} /> : <MailOpen aria-hidden="true" size={17} />}</button>}
+                    {hasPermission("delete") && <button type="button" aria-label="Delete notification" title="Delete notification" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                     </>}
-                    {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" onClick={() => void performAction("delete", record)} className="rounded border border-rose-500/30 px-2 py-1 text-xs text-rose-300">Delete</button>}
+                    {(moduleKey === "email-templates" || moduleKey === "pricing" || moduleKey === "roles") && canDeleteRecord(record) && <button type="button" aria-label={`Delete ${title.toLowerCase()}`} title={`Delete ${title.toLowerCase()}`} onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                   </div>
                 </article>
               ))}

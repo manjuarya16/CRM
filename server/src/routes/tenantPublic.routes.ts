@@ -3,6 +3,20 @@ import { pool } from '@/config/db';
 
 const router = Router();
 
+router.get('/pricing', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, description, amount_cents, currency, billing_interval, features
+         FROM public.platform_pricing_tiers
+        WHERE active = TRUE
+        ORDER BY amount_cents, name`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Public: Get Tenant Information by slug for login page branding
 router.get('/tenant/:slug', async (req, res, next) => {
   try {

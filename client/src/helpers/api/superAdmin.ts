@@ -76,6 +76,10 @@ export const superAdminApi = {
     return API.get("/super-admin/tenants", authHeader(token));
   },
 
+  getSubscriptionPlans: (token?: string) => {
+    return API.get("/super-admin/modules/subscription-plans", authHeader(token));
+  },
+
   getTenant: (id: number, token?: string) => {
     return API.get(`/super-admin/tenants/${id}`, authHeader(token));
   },
@@ -92,8 +96,15 @@ export const superAdminApi = {
     return API.patch(`/super-admin/tenants/${id}/status`, { status }, authHeader(token));
   },
 
+  createTenantPaymentLink: (id: number, pricingTierId?: number, token?: string) => {
+    return API.post(
+      `/super-admin/modules/tenants/${id}/subscriptions/payment-link`,
+      pricingTierId ? { pricing_tier_id: pricingTierId } : {},
+      authHeader(token)
+    );
+  },
+
   getPublicTenant: (slug: string) => {
     return API.get(`/public/tenant/${slug}`);
   },
 };
-

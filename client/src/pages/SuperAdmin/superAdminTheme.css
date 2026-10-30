@@ -1,0 +1,258 @@
+.super-admin-theme {
+  min-height: 100vh;
+  background: #eef2f7 !important;
+  color: #15213a !important;
+  color-scheme: light;
+}
+
+.super-admin-theme[class*="bg-gradient-"] {
+  background-image:
+    radial-gradient(ellipse at 86% 12%, rgb(129 140 248 / 18%), transparent 34%),
+    radial-gradient(ellipse at 12% 88%, rgb(56 189 248 / 10%), transparent 32%),
+    linear-gradient(135deg, #eef2f7 0%, #f7f9fc 52%, #f0f2fb 100%) !important;
+}
+
+.super-admin-theme[class*="bg-slate-950"],
+.super-admin-theme [class*="bg-slate-950"]:not([class*="bg-slate-950/"]) {
+  background-color: #eef2f7 !important;
+}
+
+.super-admin-theme [class*="bg-slate-50"] {
+  background-color: #f6f8fb !important;
+}
+
+.super-admin-theme [class*="bg-slate-900"] {
+  background-color: #fff !important;
+}
+
+.super-admin-theme [class*="bg-slate-800"],
+.super-admin-theme [class*="bg-slate-700"] {
+  background-color: #f5f7fb !important;
+}
+
+.super-admin-theme [class*="bg-slate-950/"] {
+  background-color: rgb(15 23 42 / 72%) !important;
+}
+
+.super-admin-theme [class*="hover:bg-slate-"]:hover {
+  background-color: #edf1fa !important;
+}
+
+.super-admin-theme [class*="border-slate-"],
+.super-admin-theme [class*="divide-slate-"] {
+  border-color: #e1e6ef !important;
+}
+
+.super-admin-theme [class*="text-slate-100"] {
+  color: #15213a !important;
+}
+
+.super-admin-theme [class*="text-slate-200"] {
+  color: #26344d !important;
+}
+
+.super-admin-theme [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+
+.super-admin-theme [class*="text-slate-400"] {
+  color: #66758e !important;
+}
+
+.super-admin-theme [class*="text-slate-500"],
+.super-admin-theme [class*="text-slate-600"] {
+  color: #8290a6 !important;
+}
+
+.super-admin-theme [class*="text-indigo-300"],
+.super-admin-theme [class*="text-indigo-400"] {
+  color: #4c46c8 !important;
+}
+
+.super-admin-theme [class*="border-indigo-500"] {
+  border-color: #c6d0f2 !important;
+}
+
+.super-admin-theme [class*="text-emerald-"],
+.super-admin-theme [class*="text-green-"] {
+  color: #00875a !important;
+}
+
+.super-admin-theme [class*="text-amber-"],
+.super-admin-theme [class*="text-yellow-"] {
+  color: #a45b00 !important;
+}
+
+.super-admin-theme [class*="text-rose-"],
+.super-admin-theme [class*="text-red-"] {
+  color: #d93850 !important;
+}
+
+.super-admin-theme [class*="text-blue-"] {
+  color: #1768b3 !important;
+}
+
+.super-admin-theme [class*="text-purple-"],
+.super-admin-theme [class*="text-violet-"] {
+  color: #7544c8 !important;
+}
+
+.super-admin-theme [class*="text-white"] {
+  color: #15213a !important;
+}
+
+.super-admin-theme [class*="bg-indigo-600"][class*="text-white"],
+.super-admin-theme [class*="bg-indigo-500"][class*="text-white"],
+.super-admin-theme [class*="bg-rose-500"][class*="text-white"],
+.super-admin-theme [class*="bg-emerald-500"][class*="text-white"],
+.super-admin-theme [class*="from-indigo-600"][class*="text-white"],
+.super-admin-theme button[class*="bg-indigo-600"],
+.super-admin-theme button[class*="bg-indigo-500"] {
+  color: #fff !important;
+}
+
+.super-admin-theme button[class*="bg-indigo-600"] {
+  background-color: #11177e !important;
+  box-shadow: 0 5px 14px rgb(17 23 126 / 18%);
+}
+
+.super-admin-theme button[class*="bg-indigo-600"]:hover {
+  background-color: #232b9a !important;
+}
+
+.super-admin-theme [class*="hover:text-slate-"]:hover,
+.super-admin-theme [class*="hover:text-white"]:hover {
+  color: #343ab0 !important;
+}
+
+.super-admin-theme aside,
+.super-admin-theme main > .sticky {
+  background-color: #fff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.super-admin-theme table {
+  background-color: #fff;
+  color: #26344d;
+}
+
+.super-admin-theme thead {
+  background-color: #f6f8fb;
+  color: #52627c;
+}
+
+.super-admin-theme th {
+  border-color: #e1e6ef !important;
+  font-weight: 700;
+}
+
+.super-admin-theme td {
+  border-color: #e6ebf2 !important;
+}
+
+.super-admin-theme tbody tr:hover {
+  background-color: #f7f9fd !important;
+}
+
+.super-admin-theme input:not([type="checkbox"]):not([type="radio"]),
+.super-admin-theme select,
+.super-admin-theme textarea {
+  color: #26344d !important;
+  border-color: #dce3ed !important;
+  background-color: #fff !important;
+}
+
+.super-admin-theme input::placeholder,
+.super-admin-theme textarea::placeholder {
+  color: #8794a8 !important;
+}
+
+.super-admin-theme input:focus,
+.super-admin-theme select:focus,
+.super-admin-theme textarea:focus {
+  border-color: #7379de !important;
+  box-shadow: 0 0 0 3px rgb(91 97 214 / 12%) !important;
+  outline: none;
+}
+
+.super-admin-theme div[class*="bg-slate-900"][class*="rounded-"][class*="border"] {
+  box-shadow: 0 2px 8px rgb(28 43 76 / 4%);
+}
+
+.super-admin-theme .super-admin-action-icon {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #91a0b7;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.super-admin-theme .super-admin-action-icon:hover:not(:disabled) {
+  background: #edf2fb;
+  color: #3444b2;
+}
+
+.super-admin-theme .super-admin-action-icon:focus-visible {
+  outline: 2px solid #7379de;
+  outline-offset: 2px;
+}
+
+.super-admin-theme .super-admin-action-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.super-admin-theme .super-admin-action-icon svg {
+  stroke-width: 1.8;
+}
+
+.super-admin-theme .super-admin-action-icon-danger:hover:not(:disabled) {
+  background: #fff0f1;
+  color: #d93850;
+}
+
+.super-admin-theme .super-admin-action-icon-warning:hover:not(:disabled) {
+  background: #fff7e8;
+  color: #a45b00;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] a {
+  min-height: 2.75rem;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] a[aria-current="page"] {
+  background: linear-gradient(110deg, #eef2ff, #f1f0ff) !important;
+  box-shadow: inset 3px 0 #3f46bd;
+  color: #3039a8 !important;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] a[aria-current="page"] svg {
+  color: #5546d7;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] a:not([aria-current="page"]):hover {
+  color: #3039a8 !important;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] svg {
+  flex: none;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.super-admin-theme nav[aria-label="Super admin menu"] a:hover svg {
+  color: #5546d7;
+  transform: translateX(1px);
+}
+
+@media (max-width: 1279px) {
+  .super-admin-theme nav[aria-label="Super admin menu"] {
+    background: #fff;
+    border-bottom: 1px solid #e1e6ef;
+  }
+}

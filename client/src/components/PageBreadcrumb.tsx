@@ -18,6 +18,7 @@ const routeMap: Record<string, string> = {
   Organizations: "/contacts/organizations",
   Products: "/products",
   Settings: "/settings",
+  "Subscription & Billing": "/subscription",
   "All Settings": "/settings",
   Groups: "/settings/groups",
   Roles: "/settings/roles",

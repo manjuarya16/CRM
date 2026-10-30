@@ -15,12 +15,13 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { articles, formatINR, modules, pricingPlans } from "@/data/marketing";
+import { articles, modules } from "@/data/marketing";
 
 import { RequestForm } from "./forms";
 import { ProductPreview, Reveal } from "./product-preview";
 import { PageIntro, SectionTitle, FinalCTA, FAQ, Actions } from "./shared";
 import { SalesJourney } from "./home";
+import { billingIntervalLabel, formatPricingAmount, usePricingPlans } from "./usePricingPlans";
 
 type DetailCard = {
   title: string;
@@ -551,6 +552,8 @@ export function SolutionPage({ slug }: { slug: string }) {
 }
 
 export function PricingPage() {
+  const { plans, loading, error, reload } = usePricingPlans();
+
   return (
     <>
       <PageIntro
@@ -558,30 +561,41 @@ export function PricingPage() {
         title="Choose the workspace that matches your customer process."
         description="Clear, predictable pricing built around the work your team does every day."
       />
-      <section className="container-width section-space">
+      <section className="container-width section-space pricing-plans-section">
         <div className="pricing-grid">
-          {pricingPlans.map((plan) => (
-            <div key={plan.name} className="price-card">
-              <p className="eyebrow">{plan.name}</p>
-              <h3>{plan.name}</h3>
-              <div className="price-row">
-                <strong>{formatINR(plan.price)}</strong>
-                <span>/per year</span>
+          {loading ? (
+            <p role="status">Loading pricing plans…</p>
+          ) : error ? (
+            <p role="alert">
+              {error}{" "}
+              <button type="button" onClick={() => void reload()}>Try again</button>
+            </p>
+          ) : plans.length === 0 ? (
+            <p role="status">No pricing plans are currently available.</p>
+          ) : (
+            plans.map((plan) => (
+              <div key={plan.id} className="price-card">
+                <p className="eyebrow">{plan.name}</p>
+                <h3>{plan.name}</h3>
+                <div className="price-row">
+                  <strong>{formatPricingAmount(plan.amount_cents, plan.currency)}</strong>
+                  <span>/{billingIntervalLabel(plan.billing_interval)}</span>
+                </div>
+                <p>{plan.description}</p>
+                <ul>
+                  {plan.features.map((feature) => (
+                    <li key={feature}>
+                      <Check />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button asChild className="cta-button">
+                  <Link href="/book-demo">Talk to sales</Link>
+                </Button>
               </div>
-              <p>{plan.description}</p>
-              <ul>
-                {plan.features.map((feature) => (
-                  <li key={feature}>
-                    <Check />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <Button asChild className="cta-button">
-                <Link href="/book-demo">Talk to sales</Link>
-              </Button>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
       <DetailCardSection

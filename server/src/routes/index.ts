@@ -34,6 +34,7 @@ import superAdminRoutes from '@/routes/superAdmin.routes';
 import superAdminModulesRoutes from '@/routes/superAdminModules.routes';
 import tenantPublicRoutes from '@/routes/tenantPublic.routes';
 import tenantRoutes from '@/routes/tenant.routes';
+import subscriptionRoutes from '@/routes/subscription.routes';
 import { resolveTenant } from '@/middleware/tenant.middleware';
 import reportRoutes from '@/routes/report.routes';
 
@@ -52,6 +53,7 @@ router.use('/public', tenantPublicRoutes);
 
 // Tenant context resolution for all standard CRM operations
 router.use(resolveTenant);
+router.use('/subscription', subscriptionRoutes);
 
 // Unified Mega Search
 router.use('/search', searchRoutes);

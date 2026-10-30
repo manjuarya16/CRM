@@ -7,8 +7,9 @@ import { pool } from '@/config/db';
 import { env } from '@/config/env';
 import { ApiError } from '@/middleware/errorHandler';
 import { requirePlatformModulePermission, requireSuperAdmin } from '@/middleware/superAdminAuth';
-import { sendRealMail, testSmtpConnection } from '@/utils/mailer';
+import { sendPlatformMail, testPlatformSmtpConnection } from '@/utils/mailer';
 import { getAllPlatformRoleIds, getPlatformRoleDescendantIds } from '@/services/platformRoleAccess.service';
+import { markRazorpayPaymentPaid } from '@/services/platformPayment.service';
 import { superAdminService } from '@/services/superAdmin.service';
 
 const router = Router();
@@ -90,95 +91,25 @@ const sendTemplateMail = async (
     'SELECT subject, content FROM public.platform_email_templates WHERE LOWER(name)=LOWER($1) LIMIT 1',
     [templateName]
   );
-  const template = rows[0] || fallback;
+  const template = {
+    subject: typeof rows[0]?.subject === 'string' && rows[0].subject.trim()
+      ? rows[0].subject
+      : fallback.subject,
+    content: typeof rows[0]?.content === 'string' && rows[0].content.trim()
+      ? rows[0].content
+      : fallback.html,
+  };
   const replaceVariables = (content: string, escape: (value: string) => string) =>
     content.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) =>
       escape(variables[key] || '')
     );
-  return sendRealMail({
+  const textContent = template.content.replace(/<[^>]*>/g, '');
+  return sendPlatformMail({
     to: recipient,
     subject: replaceVariables(template.subject, (value) => value),
     html: replaceVariables(template.content, escapeHtml),
-    text: replaceVariables(template.content.replace(/<[^>]*>/g, ''), (value) => value),
+    text: replaceVariables(textContent, (value) => value),
   });
-};
-const activatePaidSubscription = async (client: PoolClient, tenantId: number, subscriptionId: number): Promise<void> => {
-  const { rows } = await client.query(
-    `UPDATE public.platform_subscriptions s
-        SET status='active',
-            starts_at=CASE WHEN s.ends_at IS NOT NULL AND s.ends_at <= NOW() THEN NOW() ELSE s.starts_at END,
-            ends_at=CASE
-              WHEN t.billing_interval='monthly' THEN GREATEST(COALESCE(s.ends_at, NOW()), NOW()) + INTERVAL '1 month'
-              WHEN t.billing_interval='yearly' THEN GREATEST(COALESCE(s.ends_at, NOW()), NOW()) + INTERVAL '1 year'
-              WHEN t.billing_interval='one_time' THEN NULL
-              ELSE s.ends_at
-            END,
-            updated_at=NOW()
-       FROM public.platform_pricing_tiers t
-      WHERE s.id=$1 AND s.tenant_id=$2 AND t.id=s.pricing_tier_id
-      RETURNING t.name`,
-    [subscriptionId, tenantId]
-  );
-  if (rows.length) {
-    await client.query("UPDATE public.saas_tenants SET plan=$1, status='active', updated_at=NOW() WHERE id=$2", [rows[0].name, tenantId]);
-    return;
-  }
-  await client.query(
-    `UPDATE public.platform_subscriptions SET status='active', updated_at=NOW()
-      WHERE id=$1 AND tenant_id=$2`,
-    [subscriptionId, tenantId]
-  );
-};
-const markRazorpayPaymentPaid = async (orderId: string, paymentId: string | null, tenantId?: number) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      `SELECT id, tenant_id, subscription_id, status, provider_payment_id
-         FROM public.platform_payments
-        WHERE provider_order_id=$1 AND ($2::bigint IS NULL OR tenant_id=$2)
-        FOR UPDATE`,
-      [orderId, tenantId ?? null]
-    );
-    const payment = rows[0];
-    if (!payment) {
-      await client.query('COMMIT');
-      return null;
-    }
-    if (payment.status === 'paid') {
-      if (paymentId && payment.provider_payment_id && payment.provider_payment_id !== paymentId) {
-        throw new ApiError(409, 'This order is already associated with a different Razorpay payment');
-      }
-      if (paymentId && !payment.provider_payment_id) {
-        await client.query(
-          'UPDATE public.platform_payments SET provider_payment_id=$1, updated_at=NOW() WHERE id=$2',
-          [paymentId, payment.id]
-        );
-      }
-      await client.query('COMMIT');
-      return { ...payment, provider_payment_id: paymentId || payment.provider_payment_id };
-    }
-    if (!['created', 'pending', 'failed'].includes(payment.status)) {
-      throw new ApiError(409, 'This Razorpay order is no longer payable');
-    }
-    await client.query(
-      `UPDATE public.platform_payments
-          SET status='paid', provider_payment_id=COALESCE($1, provider_payment_id),
-              paid_at=COALESCE(paid_at, NOW()), updated_at=NOW()
-        WHERE id=$2`,
-      [paymentId, payment.id]
-    );
-    if (payment.subscription_id) {
-      await activatePaidSubscription(client, Number(payment.tenant_id), Number(payment.subscription_id));
-    }
-    await client.query('COMMIT');
-    return { ...payment, status: 'paid', provider_payment_id: paymentId || payment.provider_payment_id };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
 };
 type ManualPaymentInput = {
   amount_cents: number;
@@ -207,9 +138,6 @@ const createManualPayment = async (tenantId: number, input: ManualPaymentInput) 
       [tenantId, input.subscription_id || null, input.amount_cents, input.currency, input.status,
         input.reference || null, input.notes || null]
     );
-    if (input.status === 'paid' && input.subscription_id) {
-      await activatePaidSubscription(client, tenantId, input.subscription_id);
-    }
     await client.query('COMMIT');
     return rows[0];
   } catch (error) {
@@ -223,6 +151,7 @@ const publicSmtp = (row: any) => ({
   host: row.host,
   port: row.port,
   secure: row.secure,
+  delivery_enabled: row.delivery_enabled,
   username: row.username,
   from_email: row.from_email,
   from_name: row.from_name,
@@ -243,7 +172,7 @@ const tierSchema = z.object({
 });
 const subscriptionSchema = z.object({
   pricing_tier_id: z.number().int().positive().nullable().optional(),
-  status: z.enum(['trialing', 'active', 'past_due', 'cancelled', 'expired']).default('trialing'),
+  status: z.enum(['trialing', 'pending', 'active', 'past_due', 'cancelled', 'expired']).default('trialing'),
   trial_days: z.number().int().min(1).max(365).optional(),
   starts_at: z.string().datetime().optional(),
   ends_at: z.string().datetime().nullable().optional(),
@@ -263,8 +192,14 @@ const platformRoleSchema = z.object({
 const demoRequestSchema = z.object({
   name: z.string().trim().min(1).max(191),
   email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()),
+  submission_id: z.string().uuid().optional(),
+  organization: z.string().trim().max(191).nullable().optional(),
   company: z.string().trim().max(191).nullable().optional(),
   phone: z.string().trim().max(50).nullable().optional(),
+  city: z.string().trim().max(100).nullable().optional(),
+  state: z.string().trim().max(100).nullable().optional(),
+  preferred_demo_date: z.string().date().nullable().optional(),
+  preferred_demo_time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   message: z.string().trim().max(5000).nullable().optional(),
 });
 
@@ -272,23 +207,53 @@ const demoRequestSchema = z.object({
 // on an existing payment order after verifying its provider signature.
 router.post('/demo-requests', handler(async (req, res) => {
   const input = demoRequestSchema.parse(req.body);
-  const { rows } = await pool.query(
-    `INSERT INTO public.platform_demo_requests (name, email, company, phone, message)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, company, status, created_at`,
-    [input.name, input.email, input.company || null, input.phone || null, input.message || null]
+  const organization = input.organization || input.company || null;
+  const { rows } = await pool.query<{ id: number; name: string; email: string; organization: string | null; status: string; created_at: Date; created: boolean }>(
+    `INSERT INTO public.platform_demo_requests
+       (name, email, organization, phone, city, state, preferred_demo_date, preferred_demo_time, submission_id, message)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (submission_id) WHERE submission_id IS NOT NULL
+     DO UPDATE SET submission_id = EXCLUDED.submission_id
+     RETURNING id, name, email, organization, status, created_at, (xmax = 0) AS created`,
+    [
+      input.name,
+      input.email,
+      organization,
+      input.phone || null,
+      input.city || null,
+      input.state || null,
+      input.preferred_demo_date || null,
+      input.preferred_demo_time || null,
+      input.submission_id || null,
+      input.message || null,
+    ]
   );
-  const emailSent = await sendTemplateMail('demo_received', input.email, {
-    name: input.name,
-    company: input.company || '',
-  }, {
-    subject: 'We received your CRM demo request',
-    html: `<p>Hi ${escapeHtml(input.name)},</p><p>We received your demo request${input.company ? ` for ${escapeHtml(input.company)}` : ''}. Our team will contact you soon.</p>`,
-  });
+  const request = rows[0];
+  if (request.created) {
+    await pool.query(
+      `INSERT INTO public.platform_notifications (title, message, type)
+       VALUES ($1, $2, 'demo_request')`,
+      ['New demo request', `${input.name}${organization ? ` from ${organization}` : ''} requested a product demo.`]
+    );
+  }
+  const emailSent = request.created
+    ? await sendTemplateMail('demo_received', input.email, {
+        name: input.name,
+        company: organization || '',
+      }, {
+        subject: 'We received your CRM demo request',
+        html: `<p>Hi ${escapeHtml(input.name)},</p><p>We received your demo request${organization ? ` for ${escapeHtml(organization)}` : ''}. Our team will contact you soon.</p>`,
+      })
+    : false;
   res.status(201).json({
     success: true,
-    data: rows[0],
+    data: request,
     email_sent: emailSent,
-    message: emailSent ? 'Demo request submitted and confirmation email sent.' : 'Demo request submitted; confirmation email could not be sent. Please check SMTP configuration.',
+    message: !request.created
+      ? 'This demo request has already been received.'
+      : emailSent
+        ? 'Demo request submitted and confirmation email sent.'
+        : 'Demo request submitted; confirmation email could not be sent. Please check SMTP configuration.',
   });
 }));
 
@@ -304,6 +269,35 @@ router.post('/payments/razorpay/webhook', handler(async (req, res) => {
   if (!sameLengthEqual(signature, expected)) throw new ApiError(401, 'Invalid Razorpay webhook signature');
 
   const event = req.body.event;
+  const paymentLink = req.body.payload?.payment_link?.entity;
+  if (event === 'payment_link.paid' && typeof paymentLink?.id === 'string') {
+    const paymentEntity = req.body.payload?.payment?.entity;
+    const payment = await markRazorpayPaymentPaid(
+      paymentLink.id,
+      typeof paymentEntity?.id === 'string'
+        ? paymentEntity.id
+        : typeof paymentLink.payment_id === 'string' ? paymentLink.payment_id : null,
+      undefined,
+      typeof paymentLink.amount === 'number' ? paymentLink.amount : undefined,
+      typeof paymentLink.currency === 'string' ? paymentLink.currency : undefined
+    );
+    res.json({ success: true, matched: Boolean(payment) });
+    return;
+  }
+  if (
+    ['payment_link.cancelled', 'payment_link.expired'].includes(String(event)) &&
+    typeof paymentLink?.id === 'string'
+  ) {
+    const { rows } = await pool.query(
+      `UPDATE public.platform_payments
+          SET status='failed', updated_at=NOW()
+        WHERE provider_payment_link_id=$1 AND status='pending'
+        RETURNING id`,
+      [paymentLink.id]
+    );
+    res.json({ success: true, matched: Boolean(rows[0]) });
+    return;
+  }
   const entity = req.body.payload?.payment?.entity || req.body.payload?.order?.entity;
   const orderId = entity?.order_id || entity?.id;
   if (typeof event !== 'string' || typeof orderId !== 'string') {
@@ -589,10 +583,18 @@ router.get('/subscriptions', handler(async (req, res) => {
     `SELECT s.id, s.tenant_id, st.name AS tenant_name, s.pricing_tier_id, s.status, s.starts_at, s.ends_at,
             s.auto_renew, s.notes, s.created_at, s.updated_at,
             t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval, t.trial_days,
-            st.slug AS tenant_slug
+            st.slug AS tenant_slug, payment.status AS payment_status,
+            payment.provider_payment_link_url, payment.provider_payment_link_id
        FROM public.platform_subscriptions s
        LEFT JOIN public.platform_pricing_tiers t ON t.id=s.pricing_tier_id
        LEFT JOIN public.saas_tenants st ON st.id=s.tenant_id
+       LEFT JOIN LATERAL (
+         SELECT p.status, p.provider_payment_link_url, p.provider_payment_link_id
+           FROM public.platform_payments p
+          WHERE p.subscription_id=s.id AND p.provider_payment_link_id IS NOT NULL
+          ORDER BY p.created_at DESC
+          LIMIT 1
+       ) payment ON TRUE
       WHERE ($1::bigint IS NULL OR s.tenant_id=$1)
       ORDER BY s.created_at DESC LIMIT $2 OFFSET $3`,
     [tenantId, limit, offset]
@@ -641,18 +643,315 @@ router.get('/tenants/:tenantId/subscriptions', handler(async (req, res) => {
     `SELECT s.id, s.tenant_id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at,
             s.auto_renew, s.notes, s.created_at, s.updated_at,
             t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval, t.trial_days,
-            st.name AS tenant_name, st.slug AS tenant_slug
+            st.name AS tenant_name, st.slug AS tenant_slug, payment.status AS payment_status,
+            payment.provider_payment_link_url, payment.provider_payment_link_id
        FROM public.platform_subscriptions s
        LEFT JOIN public.platform_pricing_tiers t ON t.id=s.pricing_tier_id
        LEFT JOIN public.saas_tenants st ON st.id=s.tenant_id
+       LEFT JOIN LATERAL (
+         SELECT p.status, p.provider_payment_link_url, p.provider_payment_link_id
+           FROM public.platform_payments p
+          WHERE p.subscription_id=s.id AND p.provider_payment_link_id IS NOT NULL
+          ORDER BY p.created_at DESC
+          LIMIT 1
+       ) payment ON TRUE
       WHERE s.tenant_id=$1 ORDER BY s.created_at DESC`,
     [tenantId]
   );
   res.json({ success: true, data: rows });
 }));
+router.post('/tenants/:tenantId/subscriptions/payment-link', handler(async (req, res) => {
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+    throw new ApiError(503, 'Razorpay payment links are not configured');
+  }
+  const tenantId = tenantIdFrom(req.params.tenantId);
+  const input = z.object({ pricing_tier_id: idSchema.optional() }).parse(req.body || {});
+  await tenantExists(tenantId);
+
+  const client = await pool.connect();
+  let paymentLinkId: string | null = null;
+  let committed = false;
+  try {
+    await client.query('BEGIN');
+    const { rows: tenantRows } = await client.query<{
+      tenant_name: string;
+      current_plan: string;
+      admin_email: string;
+      admin_name: string;
+    }>(
+      `SELECT t.name AS tenant_name, t.plan AS current_plan,
+              admin.email AS admin_email, admin.name AS admin_name
+         FROM public.saas_tenants t
+         JOIN LATERAL (
+           SELECT u.email, u.name
+             FROM public.users u
+             JOIN public.roles r ON r.id=u.role_id AND r.tenant_id=u.tenant_id
+            WHERE u.tenant_id=t.id AND u.status=TRUE
+              AND LOWER(r.name) IN ('admin', 'administrator')
+            ORDER BY CASE WHEN LOWER(r.name)='administrator' THEN 0 ELSE 1 END, u.id
+            LIMIT 1
+         ) admin ON TRUE
+        WHERE t.id=$1
+        FOR UPDATE OF t`,
+      [tenantId]
+    );
+    const tenant = tenantRows[0];
+    if (!tenant) throw new ApiError(409, 'An organization administrator email is required before sending a payment link');
+
+    const pendingResult = await client.query(
+      `SELECT s.id, p.amount_cents, p.currency, p.provider_payment_link_url, tier.name AS tier_name
+         FROM public.platform_subscriptions s
+         JOIN public.platform_payments p ON p.subscription_id=s.id
+         JOIN public.platform_pricing_tiers tier ON tier.id=p.pricing_tier_id
+        WHERE s.tenant_id=$1 AND s.status='pending' AND p.status='pending'
+          AND p.provider_payment_link_id IS NOT NULL
+        LIMIT 1
+        FOR UPDATE OF s`,
+      [tenantId]
+    );
+    const existingPayment = pendingResult.rows[0];
+    if (existingPayment) {
+      await client.query('COMMIT');
+      committed = true;
+      const emailSent = await sendTemplateMail('subscription_payment_link', tenant.admin_email, {
+        name: tenant.admin_name,
+        company: tenant.tenant_name,
+        plan_name: existingPayment.tier_name,
+        amount: (Number(existingPayment.amount_cents) / 100).toFixed(2),
+        currency: existingPayment.currency,
+        payment_link: existingPayment.provider_payment_link_url,
+      }, {
+        subject: `Complete your ${existingPayment.tier_name} CRM subscription payment`,
+        html: `<p>Hi ${escapeHtml(tenant.admin_name)},</p><p>Complete payment for the ${escapeHtml(existingPayment.tier_name)} plan for ${escapeHtml(tenant.tenant_name)} using the <a href="${escapeHtml(existingPayment.provider_payment_link_url)}">secure Razorpay payment link</a>.</p><p>Your subscription activates after Razorpay confirms payment.</p>`,
+      });
+      res.json({
+        success: true,
+        data: {
+          subscription_id: existingPayment.id,
+          email_sent: emailSent,
+          payment_link_url: existingPayment.provider_payment_link_url,
+        },
+        email_sent: emailSent,
+        message: emailSent
+          ? `The existing payment link was re-sent to ${tenant.admin_email}.`
+          : `The existing payment link is still active, but email to ${tenant.admin_email} could not be sent. Check SMTP settings.`,
+      });
+      return;
+    }
+
+    const { rows: tierRows } = await client.query<{
+      id: number;
+      name: string;
+      amount_cents: number | string;
+      currency: string;
+    }>(
+      `SELECT id, name, amount_cents, currency
+         FROM public.platform_pricing_tiers
+        WHERE active=TRUE
+          AND (($1::bigint IS NOT NULL AND id=$1)
+            OR ($1::bigint IS NULL AND LOWER(name)=LOWER($2)))
+        ORDER BY CASE WHEN id=$1 THEN 0 ELSE 1 END
+        LIMIT 1`,
+      [input.pricing_tier_id ?? null, tenant.current_plan]
+    );
+    const tier = tierRows[0];
+    if (!tier) throw new ApiError(400, 'An active pricing tier is required');
+    const amount = Number(tier.amount_cents);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new ApiError(400, 'The selected pricing tier must have a positive, valid payment amount');
+    }
+
+    const { rows: subscriptionRows } = await client.query(
+      `INSERT INTO public.platform_subscriptions
+         (tenant_id, pricing_tier_id, status, starts_at, auto_renew, notes)
+       VALUES ($1,$2,'pending',NOW(),FALSE,'Awaiting Razorpay payment link')
+       RETURNING id, tenant_id, pricing_tier_id, status, starts_at, created_at`,
+      [tenantId, tier.id]
+    );
+    const subscription = subscriptionRows[0];
+    const referenceId = randomBytes(16).toString('hex');
+    const expiresAt = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+    const gatewayResponse = await fetch('https://api.razorpay.com/v1/payment_links', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount,
+        currency: tier.currency,
+        accept_partial: false,
+        description: `${tier.name} subscription for ${tenant.tenant_name}`,
+        reference_id: referenceId,
+        customer: { name: tenant.admin_name, email: tenant.admin_email },
+        notify: { email: false, sms: false },
+        reminder_enable: true,
+        expire_by: expiresAt,
+        notes: {
+          tenant_id: String(tenantId),
+          subscription_id: String(subscription.id),
+          pricing_tier_id: String(tier.id),
+        },
+      }),
+    });
+    const gatewayBody = await gatewayResponse.text();
+    if (!gatewayResponse.ok) {
+      let gatewayMessage: string | null = null;
+      try {
+        const gatewayError = JSON.parse(gatewayBody) as { error?: { description?: string; reason?: string } };
+        gatewayMessage = gatewayError.error?.description || gatewayError.error?.reason || null;
+      } catch {
+        gatewayMessage = null;
+      }
+      throw new ApiError(
+        502,
+        gatewayMessage
+          ? `Razorpay could not create the hosted payment link: ${gatewayMessage}`
+          : `Razorpay could not create the hosted payment link (HTTP ${gatewayResponse.status})`
+      );
+    }
+    let paymentLink: {
+      id?: string;
+      short_url?: string;
+      amount?: number;
+      currency?: string;
+    };
+    try {
+      paymentLink = JSON.parse(gatewayBody) as typeof paymentLink;
+    } catch {
+      throw new ApiError(502, 'Razorpay returned an unreadable hosted payment link response');
+    }
+    if (
+      typeof paymentLink.id !== 'string' ||
+      typeof paymentLink.short_url !== 'string' ||
+      paymentLink.amount !== amount ||
+      paymentLink.currency?.toUpperCase() !== tier.currency.toUpperCase()
+    ) {
+      throw new ApiError(502, 'Razorpay returned an invalid hosted payment link');
+    }
+    paymentLinkId = paymentLink.id;
+
+    const { rows: paymentRows } = await client.query(
+      `INSERT INTO public.platform_payments
+         (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method,
+          provider_payment_link_id, provider_payment_link_url, reference, notes)
+       VALUES ($1,$2,$3,$4,$5,'pending','razorpay',$6,$7,$8,$9)
+       RETURNING id, amount_cents, currency, status, provider_payment_link_id, provider_payment_link_url`,
+      [tenantId, subscription.id, tier.id, amount, tier.currency, paymentLink.id, paymentLink.short_url,
+        referenceId, `Payment link email recipient: ${tenant.admin_email}`]
+    );
+    await client.query('COMMIT');
+    committed = true;
+
+    const emailSent = await sendTemplateMail('subscription_payment_link', tenant.admin_email, {
+      name: tenant.admin_name,
+      company: tenant.tenant_name,
+      plan_name: tier.name,
+      amount: (amount / 100).toFixed(2),
+      currency: tier.currency,
+      payment_link: paymentLink.short_url,
+    }, {
+      subject: `Complete your ${tier.name} CRM subscription payment`,
+      html: `<p>Hi ${escapeHtml(tenant.admin_name)},</p><p>To activate the ${escapeHtml(tier.name)} plan for ${escapeHtml(tenant.tenant_name)}, complete payment of ${escapeHtml((amount / 100).toFixed(2))} ${escapeHtml(tier.currency)} using the <a href="${escapeHtml(paymentLink.short_url)}">secure Razorpay payment link</a>.</p><p>Your subscription activates after Razorpay confirms payment.</p>`,
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        subscription,
+        payment: paymentRows[0],
+        email_sent: emailSent,
+        payment_link_url: paymentLink.short_url,
+      },
+      email_sent: emailSent,
+      message: emailSent
+        ? `Payment link emailed to ${tenant.admin_email}. The subscription will activate after payment confirmation.`
+        : `The payment link was created, but email to ${tenant.admin_email} could not be sent. Resend it after checking SMTP settings.`,
+    });
+  } catch (error) {
+    if (!committed) await client.query('ROLLBACK');
+    if (!committed && paymentLinkId) {
+      try {
+        const cancelResponse = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}/cancel`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+          },
+        });
+        if (!cancelResponse.ok) {
+          throw new ApiError(502, `Payment link ${paymentLinkId} was created but could not be saved or cancelled`);
+        }
+      } catch (cancelError) {
+        if (cancelError instanceof ApiError) throw cancelError;
+        throw new ApiError(502, `Payment link ${paymentLinkId} could not be saved or cancelled`);
+      }
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+router.post('/tenants/:tenantId/subscriptions/:subscriptionId/payment-link', handler(async (req, res) => {
+  const tenantId = tenantIdFrom(req.params.tenantId);
+  const subscriptionId = tenantIdFrom(req.params.subscriptionId);
+  const { rows } = await pool.query<{
+    tenant_name: string;
+    admin_email: string;
+    admin_name: string;
+    tier_name: string;
+    amount_cents: number | string;
+    currency: string;
+    payment_link_url: string;
+  }>(
+    `SELECT t.name AS tenant_name, admin.email AS admin_email, admin.name AS admin_name,
+            tier.name AS tier_name, p.amount_cents, p.currency,
+            p.provider_payment_link_url AS payment_link_url
+       FROM public.platform_payments p
+       JOIN public.platform_subscriptions s ON s.id=p.subscription_id
+       JOIN public.saas_tenants t ON t.id=p.tenant_id
+       JOIN public.platform_pricing_tiers tier ON tier.id=p.pricing_tier_id
+       JOIN LATERAL (
+         SELECT u.email, u.name
+           FROM public.users u
+           JOIN public.roles r ON r.id=u.role_id AND r.tenant_id=u.tenant_id
+          WHERE u.tenant_id=t.id AND u.status=TRUE
+            AND LOWER(r.name) IN ('admin', 'administrator')
+          ORDER BY CASE WHEN LOWER(r.name)='administrator' THEN 0 ELSE 1 END, u.id
+          LIMIT 1
+       ) admin ON TRUE
+      WHERE p.tenant_id=$1 AND s.id=$2 AND s.status='pending' AND p.status='pending'
+        AND p.provider_payment_link_url IS NOT NULL
+      ORDER BY p.created_at DESC
+      LIMIT 1`,
+    [tenantId, subscriptionId]
+  );
+  const payment = rows[0];
+  if (!payment) throw new ApiError(404, 'A pending payment link was not found for this organization subscription');
+  const emailSent = await sendTemplateMail('subscription_payment_link', payment.admin_email, {
+    name: payment.admin_name,
+    company: payment.tenant_name,
+    plan_name: payment.tier_name,
+    amount: (Number(payment.amount_cents) / 100).toFixed(2),
+    currency: payment.currency,
+    payment_link: payment.payment_link_url,
+  }, {
+    subject: `Complete your ${payment.tier_name} CRM subscription payment`,
+    html: `<p>Hi ${escapeHtml(payment.admin_name)},</p><p>Complete payment for the ${escapeHtml(payment.tier_name)} plan for ${escapeHtml(payment.tenant_name)} using the <a href="${escapeHtml(payment.payment_link_url)}">secure Razorpay payment link</a>.</p><p>Your subscription activates after Razorpay confirms payment.</p>`,
+  });
+  res.json({
+    success: true,
+    data: { email_sent: emailSent },
+    email_sent: emailSent,
+    message: emailSent
+      ? `Payment link emailed to ${payment.admin_email}.`
+      : `Email to ${payment.admin_email} could not be sent. Check SMTP settings.`,
+  });
+}));
 router.post('/tenants/:tenantId/subscriptions', handler(async (req, res) => {
   const tenantId = tenantIdFrom(req.params.tenantId);
   const input = subscriptionSchema.parse(req.body);
+  if (input.status !== 'trialing') {
+    throw new ApiError(400, 'Paid subscriptions must be activated through confirmed payment');
+  }
   await tenantExists(tenantId);
   let planTrialDays: number | null = null;
   if (input.pricing_tier_id) {
@@ -688,6 +987,16 @@ router.patch('/tenants/:tenantId/subscriptions/:subscriptionId', handler(async (
   const subscriptionId = tenantIdFrom(req.params.subscriptionId);
   const input = subscriptionSchema.partial().parse(req.body);
   if (!Object.keys(input).length) throw new ApiError(400, 'At least one subscription field is required');
+  if (input.status === 'active') {
+    const current = await pool.query<{ status: string }>(
+      'SELECT status FROM public.platform_subscriptions WHERE id=$1 AND tenant_id=$2',
+      [subscriptionId, tenantId]
+    );
+    if (!current.rowCount) throw new ApiError(404, 'Subscription not found for this organization');
+    if (current.rows[0].status !== 'active') {
+      throw new ApiError(409, 'A subscription can only be activated after confirmed payment');
+    }
+  }
   if (input.pricing_tier_id) {
     const tier = await pool.query('SELECT id FROM public.platform_pricing_tiers WHERE id=$1', [input.pricing_tier_id]);
     if (!tier.rowCount) throw new ApiError(400, 'Pricing tier not found');
@@ -724,7 +1033,17 @@ router.patch('/tenants/:tenantId/subscriptions/:subscriptionId', handler(async (
 router.patch('/tenants/:tenantId/subscriptions/:subscriptionId/status', handler(async (req, res) => {
   const tenantId = tenantIdFrom(req.params.tenantId);
   const subscriptionId = tenantIdFrom(req.params.subscriptionId);
-  const { status } = z.object({ status: z.enum(['trialing', 'active', 'past_due', 'cancelled', 'expired']) }).parse(req.body);
+  const { status } = z.object({ status: z.enum(['trialing', 'pending', 'active', 'past_due', 'cancelled', 'expired']) }).parse(req.body);
+  if (status === 'active') {
+    const current = await pool.query<{ status: string }>(
+      'SELECT status FROM public.platform_subscriptions WHERE id=$1 AND tenant_id=$2',
+      [subscriptionId, tenantId]
+    );
+    if (!current.rowCount) throw new ApiError(404, 'Subscription not found for this organization');
+    if (current.rows[0].status !== 'active') {
+      throw new ApiError(409, 'A subscription can only be activated after confirmed payment');
+    }
+  }
   const { rows } = await pool.query(
     `UPDATE public.platform_subscriptions SET status=$1, updated_at=NOW()
       WHERE id=$2 AND tenant_id=$3
@@ -735,7 +1054,7 @@ router.patch('/tenants/:tenantId/subscriptions/:subscriptionId/status', handler(
   res.json({ success: true, data: rows[0] });
 }));
 
-// Payments: listing, manual records, Razorpay order and verified payment.
+// Payments: listing and manual records; Razorpay confirmation is webhook-only.
 router.get('/payments', handler(async (req, res) => {
   const { limit, offset } = pageParams(req);
   const filters = z.object({
@@ -813,75 +1132,27 @@ router.post('/tenants/:tenantId/payments', handler(async (req, res) => {
   const payment = await createManualPayment(tenantId, input);
   res.status(201).json({ success: true, data: payment });
 }));
-router.post('/tenants/:tenantId/payments/razorpay/orders', handler(async (req, res) => {
-  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-    throw new ApiError(503, 'Razorpay order creation is not configured');
-  }
-  const tenantId = tenantIdFrom(req.params.tenantId);
-  const input = z.object({
-    amount_cents: z.number().int().positive().safe().max(100_000_000_000),
-    currency: z.string().trim().length(3).transform((value) => value.toUpperCase()).default('INR'),
-    subscription_id: z.number().int().positive().nullable().optional(),
-    receipt: z.string().trim().max(40).optional(),
-  }).parse(req.body);
-  await tenantExists(tenantId);
-  if (input.subscription_id) {
-    const sub = await pool.query('SELECT id FROM public.platform_subscriptions WHERE id=$1 AND tenant_id=$2', [input.subscription_id, tenantId]);
-    if (!sub.rowCount) throw new ApiError(400, 'Subscription does not belong to this organization');
-  }
-  const response = await fetch('https://api.razorpay.com/v1/orders', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      amount: input.amount_cents,
-      currency: input.currency,
-      receipt: input.receipt || `tenant-${tenantId}-${Date.now()}`,
-      notes: { tenant_id: String(tenantId) },
-    }),
-  });
-  if (!response.ok) throw new ApiError(502, 'Razorpay could not create the payment order');
-  const order = await response.json() as { id?: string; amount?: number; currency?: string; status?: string };
-  if (!order.id) throw new ApiError(502, 'Razorpay returned an invalid payment order');
-  const { rows } = await pool.query(
-    `INSERT INTO public.platform_payments
-       (tenant_id, subscription_id, amount_cents, currency, status, method, provider_order_id)
-     VALUES ($1,$2,$3,$4,'pending','razorpay',$5)
-     RETURNING id, tenant_id, subscription_id, amount_cents, currency, status, provider_order_id, created_at`,
-    [tenantId, input.subscription_id || null, input.amount_cents, input.currency, order.id]
-  );
-  res.status(201).json({ success: true, data: { payment: rows[0], order: { id: order.id, amount: order.amount, currency: order.currency, status: order.status }, key_id: env.RAZORPAY_KEY_ID } });
-}));
-router.post('/tenants/:tenantId/payments/razorpay/verify', handler(async (req, res) => {
-  if (!env.RAZORPAY_KEY_SECRET) throw new ApiError(503, 'Razorpay payment verification is not configured');
-  const tenantId = tenantIdFrom(req.params.tenantId);
-  const input = z.object({
-    razorpay_order_id: z.string().trim().min(1).max(120),
-    razorpay_payment_id: z.string().trim().min(1).max(120),
-    razorpay_signature: z.string().regex(/^[a-f0-9]{64}$/i),
-  }).parse(req.body);
-  const expected = createHmac('sha256', env.RAZORPAY_KEY_SECRET)
-    .update(`${input.razorpay_order_id}|${input.razorpay_payment_id}`)
-    .digest('hex');
-  if (!sameLengthEqual(input.razorpay_signature, expected)) throw new ApiError(401, 'Invalid Razorpay payment signature');
-  const payment = await markRazorpayPaymentPaid(input.razorpay_order_id, input.razorpay_payment_id, tenantId);
-  if (!payment || payment.status !== 'paid' || payment.provider_payment_id !== input.razorpay_payment_id) {
-    throw new ApiError(404, 'Payment order not found for this organization');
-  }
-  res.json({ success: true, data: payment });
-}));
-
 // Public notifications are global platform records, not tenant notifications.
 router.get('/notifications', handler(async (req, res) => {
   const { limit, offset } = pageParams(req);
-  const { rows } = await pool.query(
+  const unreadOnly = req.query.unread_only === 'true' || req.query.unread_only === '1';
+  const [notifications, unread] = await Promise.all([
+    pool.query(
     `SELECT id, title, message, type, is_read, created_at
-       FROM public.platform_notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-    [limit, offset]
-  );
-  res.json({ success: true, data: rows });
+       FROM public.platform_notifications
+      WHERE NOT $3::boolean OR is_read = FALSE
+      ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset, unreadOnly]
+    ),
+    pool.query<{ unread_count: number }>(
+      'SELECT COUNT(*)::INTEGER AS unread_count FROM public.platform_notifications WHERE is_read = FALSE'
+    ),
+  ]);
+  res.json({
+    success: true,
+    data: notifications.rows,
+    unread_count: unread.rows[0]?.unread_count ?? 0,
+  });
 }));
 router.post('/notifications', handler(async (req, res) => {
   const input = z.object({
@@ -896,7 +1167,7 @@ router.post('/notifications', handler(async (req, res) => {
     [input.title, input.message, input.type]
   );
   const emailSent = input.email_to
-    ? await sendRealMail({
+    ? await sendPlatformMail({
         to: input.email_to,
         subject: input.title,
         text: input.message,
@@ -924,6 +1195,10 @@ router.patch('/notifications/:id/read', handler(async (req, res) => {
   );
   if (!rows.length) throw new ApiError(404, 'Notification not found');
   res.json({ success: true, data: rows[0] });
+}));
+router.patch('/notifications/read-all', handler(async (_req, res) => {
+  await pool.query('UPDATE public.platform_notifications SET is_read=TRUE WHERE is_read=FALSE');
+  res.json({ success: true });
 }));
 router.delete('/notifications/:id', handler(async (req, res) => {
   const id = tenantIdFrom(req.params.id);
@@ -985,6 +1260,7 @@ router.put('/smtp-config', handler(async (req, res) => {
     host: z.string().trim().max(255).nullable().optional(),
     port: z.number().int().min(1).max(65535).nullable().optional(),
     secure: z.boolean().optional(),
+    delivery_enabled: z.boolean().optional(),
     username: z.string().trim().max(255).nullable().optional(),
     password: z.string().min(1).max(500).optional(),
     clear_password: z.boolean().default(false),
@@ -1002,16 +1278,18 @@ router.put('/smtp-config', handler(async (req, res) => {
        host=CASE WHEN $1 THEN $2 ELSE host END,
        port=CASE WHEN $3 THEN $4 ELSE port END,
        secure=CASE WHEN $5 THEN $6 ELSE secure END,
-       username=CASE WHEN $7 THEN $8 ELSE username END,
-       password_encrypted=CASE WHEN $9 THEN $10 ELSE password_encrypted END,
-       from_email=CASE WHEN $11 THEN $12 ELSE from_email END,
-       from_name=CASE WHEN $13 THEN $14 ELSE from_name END,
+       delivery_enabled=CASE WHEN $7 THEN $8 ELSE delivery_enabled END,
+       username=CASE WHEN $9 THEN $10 ELSE username END,
+       password_encrypted=CASE WHEN $11 THEN $12 ELSE password_encrypted END,
+       from_email=CASE WHEN $13 THEN $14 ELSE from_email END,
+       from_name=CASE WHEN $15 THEN $16 ELSE from_name END,
        updated_at=NOW()
      WHERE id=1 RETURNING *`,
     [
       Object.prototype.hasOwnProperty.call(input, 'host'), input.host ?? null,
       Object.prototype.hasOwnProperty.call(input, 'port'), input.port ?? null,
       Object.prototype.hasOwnProperty.call(input, 'secure'), input.secure ?? null,
+      Object.prototype.hasOwnProperty.call(input, 'delivery_enabled'), input.delivery_enabled ?? null,
       Object.prototype.hasOwnProperty.call(input, 'username'), input.username ?? null,
       encrypted !== undefined, encrypted ?? null,
       Object.prototype.hasOwnProperty.call(input, 'from_email'), input.from_email ?? null,
@@ -1021,7 +1299,7 @@ router.put('/smtp-config', handler(async (req, res) => {
   res.json({ success: true, data: publicSmtp(rows[0]) });
 }));
 router.post('/smtp-config/test', handler(async (_req, res) => {
-  const result = await testSmtpConnection();
+  const result = await testPlatformSmtpConnection();
   if (!result.success) throw new ApiError(400, result.message);
   res.json({ success: true, message: result.message });
 }));
@@ -1193,9 +1471,13 @@ router.put('/tenants/:tenantId/roles/:roleId/access', handler(async (req, res) =
 router.get('/demo-requests', handler(async (req, res) => {
   const { limit, offset } = pageParams(req);
   const { rows } = await pool.query(
-    `SELECT id, name, email, company, phone, message, status, notes, trial_tenant_id,
-            created_at, updated_at
-       FROM public.platform_demo_requests ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+    `SELECT d.id, d.name, d.email, COALESCE(d.organization, d.company) AS organization,
+            d.phone, d.city, d.state, d.preferred_demo_date, d.preferred_demo_time,
+            d.message, d.status, d.notes, d.trial_tenant_id, t.slug AS trial_subdomain,
+            d.created_at, d.updated_at
+       FROM public.platform_demo_requests d
+       LEFT JOIN public.saas_tenants t ON t.id = d.trial_tenant_id
+      ORDER BY d.created_at DESC LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
   res.json({ success: true, data: rows });
@@ -1210,7 +1492,7 @@ router.patch('/demo-requests/:id/status', handler(async (req, res) => {
     `UPDATE public.platform_demo_requests
         SET status=COALESCE($1, status), notes=CASE WHEN $2 THEN $3 ELSE notes END, updated_at=NOW()
       WHERE id=$4
-      RETURNING id, name, email, company, phone, message, status, notes, trial_tenant_id, created_at, updated_at`,
+      RETURNING id, name, email, COALESCE(organization, company) AS organization, phone, message, status, notes, trial_tenant_id, created_at, updated_at`,
     [input.status || null, Object.prototype.hasOwnProperty.call(input, 'notes'), input.notes ?? null, id]
   );
   if (!rows.length) throw new ApiError(404, 'Demo request not found');
@@ -1224,13 +1506,14 @@ router.post('/demo-requests/:id/activate-trial', handler(async (req, res) => {
     pricing_tier_id: z.union([idSchema, z.null()]).optional(),
   }).parse(req.body);
   const demoResult = await pool.query(
-    `SELECT id, name, email, company, phone, trial_tenant_id
+    `SELECT id, name, email, COALESCE(organization, company) AS organization, phone, trial_tenant_id
        FROM public.platform_demo_requests WHERE id=$1`,
     [id]
   );
   const demo = demoResult.rows[0];
   if (!demo) throw new ApiError(404, 'Demo request not found');
   if (demo.trial_tenant_id) throw new ApiError(409, 'A trial organization has already been activated for this demo request');
+  const organizationName = String(demo.organization || demo.name);
   let tier: { id: number; name: string } | null = null;
   if (input.pricing_tier_id) {
     const tierResult = await pool.query<{ id: number; name: string }>(
@@ -1240,7 +1523,7 @@ router.post('/demo-requests/:id/activate-trial', handler(async (req, res) => {
     tier = tierResult.rows[0] || null;
     if (!tier) throw new ApiError(400, 'The selected pricing tier is unavailable');
   }
-  const baseSlug = String(demo.company || demo.name)
+  const baseSlug = organizationName
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'trial';
   let slug = baseSlug;
   for (let suffix = 1; ; suffix += 1) {
@@ -1250,7 +1533,7 @@ router.post('/demo-requests/:id/activate-trial', handler(async (req, res) => {
   }
   const trialExpiry = new Date(Date.now() + input.trial_days * 24 * 60 * 60 * 1000).toISOString();
   const result = await superAdminService.createTenant({
-    name: String(demo.company || demo.name),
+    name: organizationName,
     slug,
     plan: tier?.name || 'Trial',
     admin_name: String(demo.name),
@@ -1272,7 +1555,7 @@ router.post('/demo-requests/:id/activate-trial', handler(async (req, res) => {
   const loginUrl = tenantLoginUrl(slug);
   const emailSent = await sendTemplateMail('trial_activation', String(demo.email), {
     name: String(demo.name),
-    company: String(demo.company || demo.name),
+    company: organizationName,
     slug,
     login_url: loginUrl,
     email: String(demo.email),
@@ -1281,26 +1564,28 @@ router.post('/demo-requests/:id/activate-trial', handler(async (req, res) => {
     trial_expiry: trialExpiry,
   }, {
     subject: `Your ${input.trial_days}-day CRM trial is ready`,
-    html: `<p>Your CRM trial for <strong>${escapeHtml(String(demo.company || demo.name))}</strong> is ready.</p><p><a href="${escapeHtml(loginUrl)}">Sign in</a></p><p>Email: ${escapeHtml(String(demo.email))}<br>Temporary password: ${escapeHtml(input.admin_password)}<br>Trial expires: ${escapeHtml(trialExpiry)}</p>`,
+    html: `<p>Your CRM trial for <strong>${escapeHtml(organizationName)}</strong> is ready.</p><p><a href="${escapeHtml(loginUrl)}">Sign in</a></p><p>Email: ${escapeHtml(String(demo.email))}<br>Temporary password: ${escapeHtml(input.admin_password)}<br>Trial expires: ${escapeHtml(trialExpiry)}</p>`,
   });
   await pool.query(
     `INSERT INTO public.platform_notifications (title, message, type)
      VALUES ($1,$2,'success')`,
-    ['Trial activated', `A ${input.trial_days}-day trial was activated for ${String(demo.company || demo.name)} (${slug}).`]
+    ['Trial activated', `A ${input.trial_days}-day trial was activated for ${organizationName} (${slug}).`]
   );
   res.status(201).json({
     success: true,
     data: {
       tenant_id: result.tenant.id,
+      organization: organizationName,
       slug,
+      subdomain_url: new URL(loginUrl).origin,
       admin_email: demo.email,
       login_url: loginUrl,
       trial_expiry: trialExpiry,
       email_sent: emailSent,
     },
     message: emailSent
-      ? 'Trial activated and credentials emailed.'
-      : 'Trial activated, but email delivery failed. Verify SMTP settings and contact the administrator directly.',
+      ? 'Trial organization and subdomain created; credentials emailed.'
+      : 'Trial organization and subdomain created, but email delivery failed. Verify SMTP settings and contact the administrator directly.',
   });
 }));
 

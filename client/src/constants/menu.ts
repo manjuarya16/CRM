@@ -26,6 +26,14 @@ const MENU_ITEMS: MenuItemTypes[] = [
     url: "/organization",
   },
   {
+    key: "subscription-billing",
+    label: "Subscription & Billing",
+    isTitle: false,
+    icon: "mgc_bank_card_line",
+    url: "/subscription",
+    adminOnly: true,
+  },
+  {
     key: "reports",
     label: "Reports",
     isTitle: false,

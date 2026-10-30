@@ -1,6 +1,40 @@
 import React, { useEffect, useState } from "react";
 import { useSuperAdminStore, TenantRecord } from "@/store/superAdminStore";
 import { buildTenantUrl } from "@/utils/subdomain";
+import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  CircleCheck,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileCheck2,
+  Ghost,
+  LogOut,
+  Mail,
+  MapPin,
+  PauseCircle,
+  Pencil,
+  Phone,
+  PlayCircle,
+  PlusCircle,
+  RefreshCw,
+  Search,
+  Send,
+  Server,
+  Shield,
+  ShieldCheck,
+  Target,
+  UserRound,
+  UserRoundCog,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 const TIMEZONES = [
   "Asia/Kolkata",
@@ -61,30 +95,37 @@ const DetailField: React.FC<{
 );
 
 // ─── Section heading ─────────────────────────────────────────────────────────
-const DetailSection: React.FC<{ title: string; icon: string; children: React.ReactNode }> = ({
+const DetailSection: React.FC<{ title: string; icon: LucideIcon; children: React.ReactNode }> = ({
   title,
   icon,
   children,
-}) => (
+}) => {
+  const Icon = icon;
+  return (
   <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5 space-y-4">
     <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
-      <i className={`${icon} text-indigo-400 text-base`}></i>
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+        <Icon aria-hidden="true" size={17} />
+      </span>
       <h4 className="text-sm font-bold text-white">{title}</h4>
     </div>
     <div className="grid md:grid-cols-2 gap-4">{children}</div>
   </div>
-);
+  );
+};
 
 export const SuperAdminDashboard: React.FC<{
   showMetrics?: boolean;
   canViewOrganizations?: boolean;
   canCreateOrganizations?: boolean;
   canEditOrganizations?: boolean;
+  canSendPaymentLinks?: boolean;
 }> = ({
   showMetrics = true,
   canViewOrganizations = true,
   canCreateOrganizations = true,
   canEditOrganizations = true,
+  canSendPaymentLinks = false,
 }) => {
   const {
     admin,
@@ -108,6 +149,7 @@ export const SuperAdminDashboard: React.FC<{
   const [showModal, setShowModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantRecord | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [paymentLinkTenant, setPaymentLinkTenant] = useState<TenantRecord | null>(null);
 
   // ── View Detail Panel ──────────────────────────────────────────────────────
   const [viewingTenant, setViewingTenant] = useState<any | null>(null);
@@ -440,11 +482,11 @@ export const SuperAdminDashboard: React.FC<{
     setCreatedTenantResult(null);
   };
 
-  const tabsList: { id: ModalTab; label: string; icon: string }[] = [
-    { id: "company", label: "Company Details", icon: "mgc_building_2_line" },
-    { id: "address", label: "Address & Location", icon: "mgc_map_pin_line" },
-    { id: "workspace", label: "Workspace & Plan", icon: "mgc_server_line" },
-    { id: "admin", label: "Primary Administrator", icon: "mgc_user_star_line" },
+  const tabsList: { id: ModalTab; label: string; icon: LucideIcon }[] = [
+    { id: "company", label: "Company Details", icon: Building2 },
+    { id: "address", label: "Address & Location", icon: MapPin },
+    { id: "workspace", label: "Workspace & Plan", icon: Server },
+    { id: "admin", label: "Primary Administrator", icon: UserRoundCog },
   ];
 
   const currentTabIndex = tabsList.findIndex((t) => t.id === activeTab);
@@ -470,6 +512,11 @@ export const SuperAdminDashboard: React.FC<{
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const openPaymentLinkDialog = (tenant: TenantRecord) => {
+    setStatusError(null);
+    setPaymentLinkTenant(tenant);
   };
 
   useEffect(() => {
@@ -500,7 +547,7 @@ export const SuperAdminDashboard: React.FC<{
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center font-bold text-lg shadow-sm">
-              <i className="mgc_shield_line"></i>
+              <ShieldCheck aria-hidden="true" size={21} />
             </div>
             <div>
               <h1 className="font-bold text-base sm:text-lg leading-tight text-white">
@@ -514,14 +561,14 @@ export const SuperAdminDashboard: React.FC<{
 
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-              <i className="mgc_user_3_line text-slate-400"></i>
+              <UserRound aria-hidden="true" className="text-indigo-500" size={15} />
               <span>{admin?.name || admin?.email || "Super Admin"}</span>
             </div>
             <button
               onClick={logout}
               className="h-8 px-3 rounded-lg border border-slate-700 hover:border-slate-600 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition-colors flex items-center gap-1.5"
             >
-              <i className="mgc_exit_line text-sm"></i>
+              <LogOut aria-hidden="true" size={15} />
               <span>Logout</span>
             </button>
           </div>
@@ -542,7 +589,7 @@ export const SuperAdminDashboard: React.FC<{
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center text-xl">
-              <i className="mgc_community_line"></i>
+              <Building2 aria-hidden="true" size={22} />
             </div>
           </div>
 
@@ -556,7 +603,7 @@ export const SuperAdminDashboard: React.FC<{
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
-              <i className="mgc_check_circle_line"></i>
+              <CircleCheck aria-hidden="true" size={22} />
             </div>
           </div>
 
@@ -570,7 +617,7 @@ export const SuperAdminDashboard: React.FC<{
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center text-xl">
-              <i className="mgc_user_3_line"></i>
+              <Users aria-hidden="true" size={22} />
             </div>
           </div>
 
@@ -584,7 +631,7 @@ export const SuperAdminDashboard: React.FC<{
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
-              <i className="mgc_target_line"></i>
+              <Target aria-hidden="true" size={22} />
             </div>
           </div>
         </div>
@@ -594,7 +641,7 @@ export const SuperAdminDashboard: React.FC<{
         {/* Toolbar & Filter */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
           <div className="relative flex-1 sm:max-w-md">
-            <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
               value={search}
@@ -623,14 +670,14 @@ export const SuperAdminDashboard: React.FC<{
               className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors flex items-center gap-1.5"
               title="Refresh"
             >
-              <i className="mgc_refresh_3_line text-sm"></i>
+              <RefreshCw aria-hidden="true" size={15} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
             {canCreateOrganizations && <button
               onClick={handleOpenCreateModal}
               className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-1.5 shrink-0"
             >
-              <i className="mgc_add_circle_line text-base"></i>
+              <PlusCircle aria-hidden="true" size={17} />
               <span>Create Organization</span>
             </button>}
           </div>
@@ -671,7 +718,7 @@ export const SuperAdminDashboard: React.FC<{
                 ) : filteredTenants.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="text-center py-12 text-slate-400">
-                      <i className="mgc_ghost_line text-4xl mb-2 text-slate-600 block"></i>
+                      <Ghost aria-hidden="true" className="mx-auto mb-2 text-slate-400" size={38} />
                       <p>No organizations match the current search and status filters.</p>
                     </td>
                   </tr>
@@ -721,7 +768,7 @@ export const SuperAdminDashboard: React.FC<{
                               title="Open Login Workspace"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <i className="mgc_external_link_line text-sm"></i>
+                              <ExternalLink aria-hidden="true" size={15} />
                             </a>
                           </div>
                         </td>
@@ -754,42 +801,51 @@ export const SuperAdminDashboard: React.FC<{
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            {canSendPaymentLinks && !isDefault && <button
+                              type="button"
+                              aria-label={`Email payment link for ${t.name}`}
+                              onClick={() => openPaymentLinkDialog(t)}
+                              className="super-admin-action-icon"
+                              title="Email a hosted payment link for this organization's assigned plan"
+                            >
+                              <Send aria-hidden="true" size={17} />
+                            </button>}
                             {canEditOrganizations && <button
                               type="button"
+                              aria-label={`Edit ${t.name}`}
                               onClick={() => handleOpenEditModal(t)}
-                              className="h-8 px-2.5 rounded-lg border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition-colors"
+                              className="super-admin-action-icon"
                               title="Edit Organization Details"
                             >
-                              <i className="mgc_edit_line text-sm"></i>
-                              <span>Edit</span>
+                              <Pencil aria-hidden="true" size={16} />
                             </button>}
 
                             <a
                               href={workspaceUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="h-8 px-2.5 rounded-lg border border-slate-700 hover:border-slate-600 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors flex items-center gap-1"
+                              aria-label={`Open ${t.name} workspace`}
+                              title="Open workspace"
+                              className="super-admin-action-icon"
                             >
-                              <span>Workspace</span>
-                              <i className="mgc_external_link_line text-xs"></i>
+                              <ExternalLink aria-hidden="true" size={16} />
                             </a>
 
                             {canEditOrganizations && !isDefault && (
                               <button
+                                type="button"
+                                aria-label={t.status === "active" ? `Suspend ${t.name}` : `Activate ${t.name}`}
+                                title={t.status === "active" ? "Suspend organization" : "Activate organization"}
                                 onClick={() => handleToggleStatus(t)}
                                 disabled={actionLoadingId === t.id}
-                                className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors ${
-                                  t.status === "active"
-                                    ? "border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
-                                    : "border-emerald-900/40 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-900/30"
-                                }`}
+                                className={`super-admin-action-icon ${t.status === "active" ? "super-admin-action-icon-danger" : ""}`}
                               >
                                 {actionLoadingId === t.id ? (
                                   <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                                 ) : t.status === "active" ? (
-                                  "Suspend"
+                                  <PauseCircle aria-hidden="true" size={17} />
                                 ) : (
-                                  "Activate"
+                                  <PlayCircle aria-hidden="true" size={17} />
                                 )}
                               </button>
                             )}
@@ -830,6 +886,15 @@ export const SuperAdminDashboard: React.FC<{
                 </button>
               </div>
             </div>
+          )}
+          {paymentLinkTenant && (
+            <PaymentLinkDialog
+              tenantId={paymentLinkTenant.id}
+              tenantName={paymentLinkTenant.name}
+              currentPlan={paymentLinkTenant.plan}
+              onClose={() => setPaymentLinkTenant(null)}
+              onComplete={() => { void fetchTenants(); }}
+            />
           )}
         </div>
         </>)}
@@ -887,7 +952,7 @@ export const SuperAdminDashboard: React.FC<{
                   onClick={() => handleOpenEditModal(viewingTenant)}
                   className="h-8 px-3 rounded-lg border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-semibold text-indigo-300 flex items-center gap-1.5 transition-colors"
                 >
-                  <i className="mgc_edit_line text-sm"></i>
+                  <Pencil aria-hidden="true" size={15} />
                   <span className="hidden sm:inline">Edit</span>
                 </button>}
                 <button
@@ -895,7 +960,7 @@ export const SuperAdminDashboard: React.FC<{
                   onClick={() => setViewingTenant(null)}
                   className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
                 >
-                  <i className="mgc_close_line text-xl"></i>
+                  <X aria-hidden="true" size={20} />
                 </button>
               </div>
             </div>
@@ -932,7 +997,7 @@ export const SuperAdminDashboard: React.FC<{
                   </div>
 
                   {/* Basic Information */}
-                  <DetailSection title="Basic Information" icon="mgc_building_2_line">
+                  <DetailSection title="Basic Information" icon={Building2}>
                     <DetailField label="Organization Name" value={viewingTenant.name} span />
                     <DetailField
                       label="Description / Purpose"
@@ -962,7 +1027,7 @@ export const SuperAdminDashboard: React.FC<{
                   </DetailSection>
 
                   {/* Legal & Compliance */}
-                  <DetailSection title="Legal & Compliance" icon="mgc_certificate_line">
+                  <DetailSection title="Legal & Compliance" icon={FileCheck2}>
                     <DetailField
                       label="Registration / Tax Number"
                       value={
@@ -980,7 +1045,7 @@ export const SuperAdminDashboard: React.FC<{
                   </DetailSection>
 
                   {/* Contact */}
-                  <DetailSection title="Contact" icon="mgc_phone_line">
+                  <DetailSection title="Contact" icon={Phone}>
                     <DetailField
                       label="Email"
                       value={viewingTenant.email || viewingTenant.settings?.email}
@@ -1005,7 +1070,7 @@ export const SuperAdminDashboard: React.FC<{
                   </DetailSection>
 
                   {/* Address */}
-                  <DetailSection title="Address" icon="mgc_map_pin_line">
+                  <DetailSection title="Address" icon={MapPin}>
                     <DetailField
                       label="Street Address"
                       value={
@@ -1050,7 +1115,7 @@ export const SuperAdminDashboard: React.FC<{
                   </DetailSection>
 
                   {/* Key Persons */}
-                  <DetailSection title="Key Persons" icon="mgc_user_star_line">
+                  <DetailSection title="Key Persons" icon={Users}>
                     <DetailField
                       label="CEO / Director Name"
                       value={
@@ -1080,7 +1145,7 @@ export const SuperAdminDashboard: React.FC<{
 
                   {/* Administrator */}
                   {(viewingTenant.admin?.name || viewingTenant.admin?.email) && (
-                    <DetailSection title="Primary Administrator" icon="mgc_user_security_line">
+                    <DetailSection title="Primary Administrator" icon={ShieldCheck}>
                       <DetailField label="Name" value={viewingTenant.admin?.name} />
                       <DetailField label="Email" value={viewingTenant.admin?.email} />
                     </DetailSection>
@@ -1089,7 +1154,7 @@ export const SuperAdminDashboard: React.FC<{
                   {/* Workspace */}
                   <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5 space-y-3">
                     <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
-                      <i className="mgc_server_line text-indigo-400 text-base"></i>
+                      <Server aria-hidden="true" className="text-indigo-500" size={17} />
                       <h4 className="text-sm font-bold text-white">Workspace</h4>
                     </div>
                     <div className="space-y-2">
@@ -1103,7 +1168,7 @@ export const SuperAdminDashboard: React.FC<{
                         className="text-indigo-400 hover:underline font-mono text-xs flex items-center gap-1.5 break-all bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/60"
                       >
                         <span>{buildTenantUrl(viewingTenant.slug, "/login")}</span>
-                        <i className="mgc_external_link_line text-sm shrink-0"></i>
+                        <ExternalLink aria-hidden="true" className="shrink-0" size={15} />
                       </a>
                     </div>
                   </div>
@@ -1122,7 +1187,7 @@ export const SuperAdminDashboard: React.FC<{
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-xl">
-                  <i className="mgc_building_2_line"></i>
+                  <Building2 aria-hidden="true" size={18} />
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white">
@@ -1140,7 +1205,7 @@ export const SuperAdminDashboard: React.FC<{
                 onClick={resetModal}
                 className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
               >
-                <i className="mgc_close_line text-xl"></i>
+                <X aria-hidden="true" size={20} />
               </button>
             </div>
 
@@ -1148,7 +1213,7 @@ export const SuperAdminDashboard: React.FC<{
               <div className="p-6 space-y-5 overflow-y-auto">
                 <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm space-y-2">
                   <div className="flex items-center gap-2 font-bold text-emerald-400 text-base">
-                    <i className="mgc_check_circle_fill text-xl"></i>
+                    <CircleCheck aria-hidden="true" size={21} />
                     <span>Organization Created Successfully!</span>
                   </div>
                   <p className="text-xs text-slate-300">
@@ -1198,7 +1263,7 @@ export const SuperAdminDashboard: React.FC<{
                       className="text-indigo-400 hover:underline font-mono text-xs flex items-center gap-1.5 break-all bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/60"
                     >
                       <span>{buildTenantUrl(createdTenantResult.slug, "/login")}</span>
-                      <i className="mgc_external_link_line text-sm"></i>
+                      <ExternalLink aria-hidden="true" size={15} />
                     </a>
                   </div>
                 </div>
@@ -1218,7 +1283,7 @@ export const SuperAdminDashboard: React.FC<{
                     className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all"
                   >
                     <span>Open Workspace</span>
-                    <i className="mgc_external_link_line"></i>
+                    <ExternalLink aria-hidden="true" size={16} />
                   </a>
                 </div>
               </div>
@@ -1239,7 +1304,7 @@ export const SuperAdminDashboard: React.FC<{
                             : "border-transparent text-slate-400 hover:text-slate-200"
                         }`}
                       >
-                        <i className={`${tab.icon} text-base`}></i>
+                        <tab.icon aria-hidden="true" size={17} />
                         <span>{tab.label}</span>
                       </button>
                     );
@@ -1250,7 +1315,7 @@ export const SuperAdminDashboard: React.FC<{
                 <div className="p-6 overflow-y-auto flex-1 space-y-4">
                   {modalError && (
                     <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
-                      <i className="mgc_alert_line text-base text-rose-400 shrink-0"></i>
+                      <AlertCircle aria-hidden="true" className="shrink-0 text-rose-500" size={17} />
                       <span>{modalError}</span>
                     </div>
                   )}
@@ -1441,7 +1506,7 @@ export const SuperAdminDashboard: React.FC<{
                       {/* Key Persons sub-section */}
                       <div className="pt-2">
                         <div className="flex items-center gap-2 mb-3">
-                          <i className="mgc_user_star_line text-indigo-400"></i>
+                          <UserRoundCog aria-hidden="true" className="text-indigo-500" size={17} />
                           <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Key Persons</span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-800/40 rounded-xl border border-slate-700/60">
@@ -1622,7 +1687,7 @@ export const SuperAdminDashboard: React.FC<{
                                 >
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="text-xs font-bold text-white capitalize">{p.title}</span>
-                                    {isSelected && <i className="mgc_check_circle_fill text-indigo-400 text-sm"></i>}
+                                    {isSelected && <CircleCheck aria-hidden="true" className="text-indigo-600" size={16} />}
                                   </div>
                                   <p className="text-[11px] text-slate-400">{p.desc}</p>
                                 </div>
@@ -1632,7 +1697,7 @@ export const SuperAdminDashboard: React.FC<{
                         </div>
 
                         <div className="md:col-span-2 p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60 text-xs text-slate-300 flex items-start gap-2.5">
-                          <i className="mgc_shield_line text-indigo-400 text-base shrink-0 mt-0.5"></i>
+                          <Shield aria-hidden="true" className="mt-0.5 shrink-0 text-indigo-500" size={17} />
                           <div>
                             <span className="font-semibold text-white block mb-0.5">Automated Tenant Isolation</span>
                             <span className="text-slate-400 text-[11px]">
@@ -1697,7 +1762,7 @@ export const SuperAdminDashboard: React.FC<{
                               onClick={() => setShowPassword(!showPassword)}
                               className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
                             >
-                              <i className={showPassword ? "mgc_eye_close_line" : "mgc_eye_line"}></i>
+                              {showPassword ? <EyeOff aria-hidden="true" size={17} /> : <Eye aria-hidden="true" size={17} />}
                             </button>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-1">
@@ -1720,7 +1785,7 @@ export const SuperAdminDashboard: React.FC<{
                         onClick={handlePrevTab}
                         className="h-9 px-3.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-1.5"
                       >
-                        <i className="mgc_left_line text-sm"></i>
+                        <ArrowLeft aria-hidden="true" size={15} />
                         <span>Previous</span>
                       </button>
                     )}
@@ -1731,7 +1796,7 @@ export const SuperAdminDashboard: React.FC<{
                         className="h-9 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5"
                       >
                         <span>Next Step</span>
-                        <i className="mgc_right_line text-sm"></i>
+                        <ArrowRight aria-hidden="true" size={15} />
                       </button>
                     )}
                   </div>
@@ -1756,7 +1821,7 @@ export const SuperAdminDashboard: React.FC<{
                         </>
                       ) : (
                         <>
-                          <i className="mgc_check_line text-sm"></i>
+                          <Check aria-hidden="true" size={15} />
                           <span>{editingTenant ? "Save Changes" : "Create Organization"}</span>
                         </>
                       )}
