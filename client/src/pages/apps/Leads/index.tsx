@@ -1338,12 +1338,12 @@ const LeadsPage: React.FC = () => {
                 {uploading && (
                   <div className="w-full space-y-1.5 pt-3">
                     <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium">
-                      <span>Uploading document...</span>
+                      <span>{uploadProgress < 100 ? "Uploading document..." : "Processing document & creating lead..."}</span>
                       <span className="font-bold text-[#0088cc]">{uploadProgress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-[#0088cc] h-2 rounded-full transition-all duration-150"
+                        className={`h-2 rounded-full transition-all duration-150 ${uploadProgress >= 100 ? "bg-emerald-500 animate-pulse" : "bg-[#0088cc]"}`}
                         style={{ width: `${uploadProgress}%` }}
                       ></div>
                     </div>
@@ -1355,16 +1355,27 @@ const LeadsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowUploadModal(false)}
-                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  disabled={uploading}
+                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                  className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded-lg text-xs font-semibold disabled:opacity-75 inline-flex items-center gap-1.5"
                 >
-                  {uploading ? (uploadProgress > 0 ? `Uploading (${uploadProgress}%)...` : "Uploading...") : "Upload & Create Lead"}
+                  {uploading ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>{uploadProgress < 100 ? `Uploading (${uploadProgress}%)...` : "Processing & Creating Lead..."}</span>
+                    </>
+                  ) : (
+                    "Upload & Create Lead"
+                  )}
                 </button>
               </div>
             </form>

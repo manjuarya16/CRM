@@ -152,10 +152,10 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
       }
     }
 
-    // Match PDF array text: [ (text1) 20 (text2) ] TJ
-    const arrayTjRegex = /\[\s*((?:\([^)]*\)|[0-9\s.-]+)+)\s*\]\s*TJ/g;
+    // Match PDF array text: [ (text1) 20 (text2) ] TJ safely without catastrophic backtracking
+    const arrayTjRegex = /\[([^\]]*)\]\s*TJ/g;
     while ((match = arrayTjRegex.exec(src)) !== null) {
-      const subStrRegex = /\(([^)]+)\)/g;
+      const subStrRegex = /\(([^)]*)\)/g;
       let subMatch;
       let fullWord = '';
       while ((subMatch = subStrRegex.exec(match[1])) !== null) {
