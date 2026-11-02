@@ -254,46 +254,55 @@ export const formatEmailBodyHtml = (input: string | null | undefined): string =>
   // 2. Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
   text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
 
-  // 3. Remove CSS @rules (@media, @import, @keyframes, @font-face, etc.)
-  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "");
-  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "");
-
-  // 4. Remove complete CSS rules: selector { property: value; ... }
-  text = text.replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{[^}]*\}/g, "\n");
-
-  // 5. Remove CSS selector lines ending with { or containing multiple { like "ol, li, a { sup {" or ".mobile-only {"
-  text = text.replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*\{[^}\n]*(?=\n|$)/g, "\n");
-
-  // 6. Remove CSS selector continuation lines (e.g. "body, table, td, th, h1, h2, h3, div, span, strong, b, i, p, ul,")
-  text = text.replace(/(?:^|\n)[ \t]*(?:body|table|td|th|h[1-6]|div|span|strong|b|i|p|ul|ol|li|a)[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*,\s*(?=\n|$)/gi, "\n");
-
-  // 7. Remove CSS property declarations like "padding-right: 15px !important; } 96"
-  text = text.replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "");
-  text = text.replace(/!important\s*;\s*\}\s*\d*/gi, "");
-
-  // 8. Remove any line that only consists of CSS braces, punctuation, or whitespace remnants
-  text = text.replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
-
-  // 9. Un-wrap multiline URLs inside parentheses: ( https://... \n ... )
+  // 3. Un-wrap multiline URLs inside parentheses FIRST so dots inside domains are safe
   text = text.replace(/\(\s*(https?:\/\/[^)]+?)\s*\)/gis, (_match, rawUrl) => {
     const cleanUrl = rawUrl.replace(/[\r\n\s]+/g, "");
     return `( ${cleanUrl} )`;
   });
 
+  // 4. Strip CSS @rules (@media, @import, @keyframes, etc.)
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "");
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "");
+
+  // 5. Strip CSS property declarations: property: value [!important];
+  text = text.replace(/[a-zA-Z0-9_-]+\s*:\s*[^;{}\n]+(?:!important)?\s*;?/gi, (match) => {
+    if (/(?:color|background|margin|padding|width|height|font|display|border|float|overflow|text|line-height|max-|min-|align|clear|visibility|opacity|position|top|left|right|bottom|table-layout|vertical-align|box-sizing|cursor|outline|z-index|!important)/i.test(match)) {
+      return " ";
+    }
+    return match;
+  });
+
+  // 6. Strip comma-separated HTML element selector lists (e.g. "body, table, td, th, h1, h2, h3, div, span, strong, b, i, p, ul, ol, li, a")
+  text = text.replace(/(?:^|\n)[ \t]*(?:(?:body|table|tbody|thead|tr|th|td|div|span|strong|b|i|em|p|ul|ol|li|a|h[1-6]|sup|sub|img)[ \t]*,[ \t]*)+[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*(?:\{|\n|$)/gim, "\n");
+
+  // 7. Iteratively remove CSS selector chains ending in { or {} or open braces
+  for (let i = 0; i < 15; i++) {
+    const prev = text;
+    text = text.replace(/(?:^|\s|\{)[.#*a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{/g, " ");
+    text = text.replace(/\{\s*\}/g, " ");
+    text = text.replace(/\{[ \t]*/g, " ");
+    text = text.replace(/\}[ \t]*/g, " ");
+    if (text === prev) break;
+  }
+
+  // 8. Strip isolated CSS class selector remnants (only when preceded by whitespace and not inside a URL)
+  text = text.replace(/(?<![/:a-zA-Z0-9])\.[a-zA-Z0-9_-]{2,}\b/g, " ");
+  text = text.replace(/\*\[class=[^\]]+\]/g, " ");
+
+  // 9. Remove any line that only consists of punctuation/braces remnants
+  text = text.replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
+
   // 10. Transform mailparser link patterns
-  // Pattern 1: ( https://... ) Label
   text = text.replace(
     /\(\s*(https?:\/\/\S+)\s*\)\s*([A-Za-z0-9][^\n\r()]{2,80})/g,
     (_m, url, label) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
   );
 
-  // Pattern 2: Label \n ( https://... )
   text = text.replace(
     /([A-Za-z0-9][^\n\r()]{2,80})\s*\n?\s*\(\s*(https?:\/\/\S+)\s*\)/g,
     (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
   );
 
-  // Pattern 3: Standalone ( https://... )
   text = text.replace(
     /\(\s*(https?:\/\/\S+)\s*\)/g,
     (_m, url) => {
@@ -303,7 +312,6 @@ export const formatEmailBodyHtml = (input: string | null | undefined): string =>
     }
   );
 
-  // Pattern 4: Standalone URLs not yet inside an anchor tag
   text = text.replace(
     /(?<!href=["'])(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+)(?!["']>)/g,
     (url) => {
@@ -319,6 +327,9 @@ export const formatEmailBodyHtml = (input: string | null | undefined): string =>
   // 11. Normalize newlines
   text = text
     .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -327,7 +338,6 @@ export const formatEmailBodyHtml = (input: string | null | undefined): string =>
     return text;
   }
 
-  // Otherwise convert paragraphs and newlines
   const paragraphs = text.split(/\n\s*\n/);
   return paragraphs
     .map((p) => `<p class="mb-3">${p.replace(/\n/g, "<br />")}</p>`)
