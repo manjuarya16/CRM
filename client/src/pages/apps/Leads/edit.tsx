@@ -161,9 +161,23 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   return `${months} ${months === 1 ? "Month" : "Months"}`;
 };
 
+const toISODateString = (val?: string): string => {
+  if (!val) return "";
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{2}-\d{2}-\d{4}/.test(s)) {
+    const [d, m, y] = s.slice(0, 10).split("-");
+    return `${y}-${m}-${d}`;
+  }
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt.toISOString().split("T")[0];
+  return s;
+};
+
 const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
-  if (!startDateStr) return "";
-  const parts = startDateStr.split("-").map(Number);
+    if (!startDateStr) return "";
+    const cleanDate = toISODateString(startDateStr);
+    const parts = cleanDate.split("-").map(Number);
   if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
   const [y, m, d] = parts;
   const months = parseInt(durationMonthsStr || "12", 10) || 12;
@@ -552,13 +566,35 @@ const EditLeadPage: React.FC = () => {
       }
 
       if (field === "contract_start_date") {
-        updated[index].contract_start_date = value;
-        if (!updated[index].contract_end_date || updated[index].contract_end_date < value) {
+        const startIso = toISODateString(value);
+        updated[index].contract_start_date = startIso;
+        const currentEndIso = toISODateString(updated[index].contract_end_date);
+        if (!currentEndIso || currentEndIso < startIso) {
           updated[index].contract_end_date = computeContractEndDate(
-            value,
+            startIso,
             updated[index].contract_duration || "12"
           );
         }
+      }
+
+      if (field === "contract_end_date") {
+        const endIso = toISODateString(value);
+        const startIso = toISODateString(updated[index].contract_start_date);
+        if (startIso && endIso && endIso < startIso) {
+          Swal.fire({
+            icon: "warning",
+            title: "Invalid End Date",
+            text: `End date (${endIso}) cannot be earlier than start date (${startIso}).`,
+            timer: 3000,
+            showConfirmButton: false,
+          });
+          updated[index].contract_end_date = computeContractEndDate(
+            startIso,
+            updated[index].contract_duration || "12"
+          );
+          return updated;
+        }
+        updated[index].contract_end_date = endIso;
       }
 
       if (field === "contract_duration") {
@@ -1930,8 +1966,8 @@ const EditLeadPage: React.FC = () => {
                                           <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
                                           <input
                                             type="date"
-                                            min={row.contract_start_date || undefined}
-                                            value={row.contract_end_date || ""}
+                                            min={toISODateString(row.contract_start_date) || undefined}
+                                            value={toISODateString(row.contract_end_date) || ""}
                                             onChange={(e) =>
                                               updateProductRow(
                                                 index,
@@ -2114,8 +2150,8 @@ const EditLeadPage: React.FC = () => {
                                 </label>
                                 <input
                                   type="date"
-                                  min={row.contract_start_date || undefined}
-                                  value={row.contract_end_date || ""}
+                                  min={toISODateString(row.contract_start_date) || undefined}
+                                  value={toISODateString(row.contract_end_date) || ""}
                                   onChange={(e) =>
                                     updateProductRow(
                                       index,
