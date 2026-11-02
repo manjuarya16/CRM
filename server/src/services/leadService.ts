@@ -273,8 +273,12 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         const rawEnd = p.contract_end_date || p.end_date;
         const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
         const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
-        if (pRecurring && pStartDate && pEndDate && pEndDate < pStartDate) {
-          throw new Error(`Product: Contract end date cannot be earlier than start date`);
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (pRecurring && pStartDate && pStartDate < todayStr) {
+          throw new Error(`Product: Contract start date cannot be in the past`);
+        }
+        if (pRecurring && pEndDate && (pEndDate < todayStr || (pStartDate && pEndDate < pStartDate))) {
+          throw new Error(`Product: Contract end date cannot be in the past or earlier than start date`);
         }
 
         await connection.query(
