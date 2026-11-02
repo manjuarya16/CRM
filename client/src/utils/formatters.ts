@@ -108,6 +108,15 @@ export const stripHtmlToText = (input: string | null | undefined): string => {
   text = text.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
   text = text.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, "");
 
+  // Strip CSS block debris, @media rules, and inline style fragments that leaked into text
+  text = text
+    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, "")
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, "")
+    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, "")
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "")
+    .replace(/!important\s*;\s*\}\s*\d*/gi, "")
+    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, "");
+
   // Preserve email addresses inside angle brackets like <user@example.com> before stripping HTML tags
   text = text.replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, "$1");
 
@@ -219,3 +228,88 @@ export const cleanEmailAddress = (raw: any): string => {
 };
 
 
+
+/**
+ * Formats email bodies into clean, safe HTML suitable for rendering in the email viewer.
+ * Cleans out CSS debris, un-wraps multiline tracking URLs, transforms ugly links into clean clickable anchors,
+ * and preserves paragraph and text readability.
+ */
+export const formatEmailBodyHtml = (input: string | null | undefined): string => {
+  if (!input) return "";
+  let text = String(input);
+
+  // 1. Remove dangerous scripts and style blocks
+  text = text.replace(/<!--[\s\S]*?-->/g, "");
+  text = text.replace(/<!DOCTYPE[^>]*>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+
+  // 2. Strip CSS debris
+  text = text
+    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, "")
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, "")
+    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, "")
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "")
+    .replace(/!important\s*;\s*\}\s*\d*/gi, "")
+    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, "");
+
+  // 3. Un-wrap multiline URLs inside parentheses
+  text = text.replace(/\(\s*(https?:\/\/[^)]+?)\s*\)/gis, (_match, rawUrl) => {
+    const cleanUrl = rawUrl.replace(/[\r\n\s]+/g, "");
+    return `( ${cleanUrl} )`;
+  });
+
+  // 4. Transform mailparser link patterns
+  // Pattern 1: ( https://... ) Label
+  text = text.replace(
+    /\(\s*(https?:\/\/\S+)\s*\)\s*([A-Za-z0-9][^\n\r()]{2,80})/g,
+    (_m, url, label) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
+  );
+
+  // Pattern 2: Label \n ( https://... )
+  text = text.replace(
+    /([A-Za-z0-9][^\n\r()]{2,80})\s*\n?\s*\(\s*(https?:\/\/\S+)\s*\)/g,
+    (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
+  );
+
+  // Pattern 3: Standalone ( https://... )
+  text = text.replace(
+    /\(\s*(https?:\/\/\S+)\s*\)/g,
+    (_m, url) => {
+      let host = "Link";
+      try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[#0088cc] hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 my-0.5">${host} &rarr;</a>`;
+    }
+  );
+
+  // Pattern 4: Standalone URLs not yet inside an anchor tag
+  text = text.replace(
+    /(?<!href=["'])(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+)(?!["']>)/g,
+    (url) => {
+      let host = url;
+      try {
+        const u = new URL(url);
+        host = u.hostname.replace(/^www\./, "");
+      } catch {}
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline">${host}</a>`;
+    }
+  );
+
+  // 5. Convert newlines to HTML <br /> while preserving spacing
+  text = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // If text already has HTML block tags (like <p>, <div>, <table>), preserve them
+  if (/<(p|div|table|h[1-6]|ul|ol|blockquote)\b/i.test(text)) {
+    return text;
+  }
+
+  // Otherwise convert paragraphs and newlines
+  const paragraphs = text.split(/\n\s*\n/);
+  return paragraphs
+    .map((p) => `<p class="mb-3">${p.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+};

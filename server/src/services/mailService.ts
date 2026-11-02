@@ -13,6 +13,12 @@ const stripHtmlToText = (input: string | null | undefined): string => {
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, '')
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, '')
+    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, '')
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, '')
+    .replace(/!important\s*;\s*\}\s*\d*/gi, '')
+    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, '')
     .replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, '$1')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer|table)>/gi, '\n')
@@ -27,6 +33,23 @@ const stripHtmlToText = (input: string | null | undefined): string => {
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+export const cleanEmailBodyContent = (input: string | null | undefined): string => {
+  if (!input) return '';
+  let str = String(input);
+  return str
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, '')
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, '')
+    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, '')
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, '')
+    .replace(/!important\s*;\s*\}\s*\d*/gi, '')
+    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, '')
     .trim();
 };
 
@@ -97,7 +120,7 @@ export class MailService {
     }
 
     const email = emailQueryResult.rows[0];
-    email.reply = stripHtmlToText(email.reply);
+    email.reply = cleanEmailBodyContent(email.reply);
 
     // Mark email as read automatically via procedural function
     if (!email.is_read) {
@@ -121,7 +144,7 @@ export class MailService {
 
     const replies = repliesQueryResult.rows;
     for (const reply of replies) {
-      reply.reply = stripHtmlToText(reply.reply);
+      reply.reply = cleanEmailBodyContent(reply.reply);
       const replyAttachmentsQueryResult = await pool.query(
         'SELECT * FROM public.fn_get_email_attachments($1)',
         [reply.id]
