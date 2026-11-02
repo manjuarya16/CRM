@@ -435,6 +435,14 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   return `${months} ${months === 1 ? "Month" : "Months"}`;
 };
 
+const getLocalTodayString = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const toISODateString = (val?: string): string => {
   if (!val) return "";
   const s = String(val).trim();
@@ -540,7 +548,20 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       }
 
       if (field === "contract_start_date") {
+        const today = getLocalTodayString();
         const startIso = toISODateString(val);
+        if (startIso && startIso < today) {
+          Swal.fire({
+            icon: "warning",
+            title: "Invalid Start Date",
+            text: `Start date (${startIso}) cannot be in the past. Please select today (${today}) or a future date.`,
+            timer: 3000,
+            showConfirmButton: false,
+          });
+          next[idx].contract_start_date = today;
+          next[idx].contract_end_date = computeContractEndDate(today, next[idx].contract_duration || "12");
+          return next;
+        }
         next[idx].contract_start_date = startIso;
         const currentEndIso = toISODateString(next[idx].contract_end_date);
         if (!currentEndIso || currentEndIso < startIso) {
@@ -549,9 +570,12 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       }
 
       if (field === "contract_end_date") {
+        const today = getLocalTodayString();
         const endIso = toISODateString(val);
-        const startIso = toISODateString(next[idx].contract_start_date);
-        if (startIso && endIso && endIso < startIso) {
+        const startIso = toISODateString(next[idx].contract_start_date) || today;
+        const minAllowed = startIso > today ? startIso : today;
+
+        if (endIso && endIso < minAllowed) {
           Swal.fire({
             icon: "warning",
             title: "Invalid End Date",
@@ -739,13 +763,20 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
           fieldErrors[`price_${idx}`] = "Price cannot be negative";
         }
       if (row.is_recurring) {
-        if (!row.contract_start_date) {
+        const today = getLocalTodayString();
+        const s = toISODateString(row.contract_start_date);
+        const e = toISODateString(row.contract_end_date);
+        if (!s) {
           fieldErrors[`contract_start_date_${idx}`] = "Start date is required";
+        } else if (s < today) {
+          fieldErrors[`contract_start_date_${idx}`] = `Start date cannot be in the past (must be on or after ${today})`;
         }
-        if (!row.contract_end_date) {
+        if (!e) {
           fieldErrors[`contract_end_date_${idx}`] = "End date is required";
-        } else if (row.contract_start_date && row.contract_end_date < row.contract_start_date) {
-          fieldErrors[`contract_end_date_${idx}`] = "End date cannot be earlier than start date";
+        } else if (e < today) {
+          fieldErrors[`contract_end_date_${idx}`] = `End date cannot be in the past (must be on or after ${today})`;
+        } else if (s && e < s) {
+          fieldErrors[`contract_end_date_${idx}`] = `End date (${e}) cannot be earlier than start date (${s})`;
         }
       }
       }
@@ -1722,27 +1753,32 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
 
                                           <div className="flex items-center gap-1.5">
                                             <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Start:</span>
-                                            <input
-                                              type="date"
-                                              value={row.contract_start_date || ""}
-                                              onChange={(e) => handleProductRowChange(idx, "contract_start_date", e.target.value)}
-                                              className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
-                                            />
-                                          </div>
+                                              <input
+                                                type="date"
+                                                min={getLocalTodayString()}
+                                                value={toISODateString(row.contract_start_date) || getLocalTodayString()}
+                                                onChange={(e) => handleProductRowChange(idx, "contract_start_date", e.target.value)}
+                                                className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
+                                                  (row.contract_start_date && toISODateString(row.contract_start_date) < getLocalTodayString()) || errors[`contract_start_date_${idx}`]
+                                                    ? "border-red-500 text-red-600 focus:ring-red-500"
+                                                    : "border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:ring-blue-500"
+                                                }`}
+                                              />
+                                            </div>
 
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
-                                            <input
-                                              type="date"
-                                              min={toISODateString(row.contract_start_date) || undefined}
-                                              value={toISODateString(row.contract_end_date) || ""}
-                                              onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
-                                              className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
-                                                (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
-                                                  ? "border-red-500 text-red-600 focus:ring-red-500"
-                                                  : "border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:ring-blue-500"
-                                              }`}
-                                            />
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
+                                              <input
+                                                type="date"
+                                                min={toISODateString(row.contract_start_date) > getLocalTodayString() ? toISODateString(row.contract_start_date) : getLocalTodayString()}
+                                                value={toISODateString(row.contract_end_date) || ""}
+                                                onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
+                                                className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
+                                                  (row.contract_end_date && (toISODateString(row.contract_end_date) < getLocalTodayString() || (row.contract_start_date && toISODateString(row.contract_end_date) < toISODateString(row.contract_start_date)))) || errors[`contract_end_date_${idx}`]
+                                                    ? "border-red-500 text-red-600 focus:ring-red-500"
+                                                    : "border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:ring-blue-500"
+                                                }`}
+                                              />
                                           </div>
                                         </div>
                                       ) : (
@@ -1752,10 +1788,16 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                       )}
                                     </div>
 
-                                    {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
+                                    {row.is_recurring && row.contract_start_date && toISODateString(row.contract_start_date) < getLocalTodayString() && (
                                       <div className="inline-flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800">
                                         <i className="mgc_alert_line text-sm text-red-500"></i>
-                                        End date ({row.contract_end_date}) cannot be earlier than start date ({row.contract_start_date})
+                                        Start date cannot be in the past (before {getLocalTodayString()})
+                                      </div>
+                                    )}
+                                    {row.is_recurring && row.contract_end_date && (toISODateString(row.contract_end_date) < getLocalTodayString() || (row.contract_start_date && toISODateString(row.contract_end_date) < toISODateString(row.contract_start_date))) && (
+                                      <div className="inline-flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800">
+                                        <i className="mgc_alert_line text-sm text-red-500"></i>
+                                        End date cannot be in the past or earlier than start date ({toISODateString(row.contract_start_date) || getLocalTodayString()})
                                       </div>
                                     )}
                                     {row.is_recurring && (
@@ -1896,26 +1938,31 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                   <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Start Date</label>
                                   <input
                                     type="date"
-                                    value={row.contract_start_date || ""}
+                                    min={getLocalTodayString()}
+                                    value={toISODateString(row.contract_start_date) || getLocalTodayString()}
                                     onChange={(e) => handleProductRowChange(idx, "contract_start_date", e.target.value)}
-                                    className={`${inputCls} !py-1 text-xs`}
+                                    className={`${inputCls} !py-1 text-xs ${
+                                      (row.contract_start_date && toISODateString(row.contract_start_date) < getLocalTodayString()) || errors[`contract_start_date_${idx}`]
+                                        ? "!border-red-500 text-red-600"
+                                        : ""
+                                    }`}
                                   />
                                 </div>
                                 <div>
                                   <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
                                   <input
                                     type="date"
-                                    min={toISODateString(row.contract_start_date) || undefined}
+                                    min={toISODateString(row.contract_start_date) > getLocalTodayString() ? toISODateString(row.contract_start_date) : getLocalTodayString()}
                                     value={toISODateString(row.contract_end_date) || ""}
                                     onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
                                     className={`${inputCls} !py-1 text-xs ${
-                                      (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
+                                      (row.contract_end_date && (toISODateString(row.contract_end_date) < getLocalTodayString() || (row.contract_start_date && toISODateString(row.contract_end_date) < toISODateString(row.contract_start_date)))) || errors[`contract_end_date_${idx}`]
                                         ? "!border-red-500 text-red-600"
                                         : ""
                                     }`}
                                   />
-                                  {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
-                                    <p className="text-[10px] text-red-500 font-medium mt-1">End date cannot be earlier than start date</p>
+                                  {row.is_recurring && row.contract_end_date && (toISODateString(row.contract_end_date) < getLocalTodayString() || (row.contract_start_date && toISODateString(row.contract_end_date) < toISODateString(row.contract_start_date))) && (
+                                    <p className="text-[10px] text-red-500 font-medium mt-1">End date cannot be in the past or earlier than start date</p>
                                   )}
                                 </div>
                               </div>
