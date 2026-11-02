@@ -526,7 +526,10 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       }
 
       if (field === "contract_start_date") {
-        next[idx].contract_end_date = computeContractEndDate(val, next[idx].contract_duration || "12");
+        next[idx].contract_start_date = val;
+        if (!next[idx].contract_end_date || next[idx].contract_end_date < val) {
+          next[idx].contract_end_date = computeContractEndDate(val, next[idx].contract_duration || "12");
+        }
       }
 
       if (field === "contract_duration") {
@@ -715,6 +718,16 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       const price = Number(row.price);
       if (isNaN(price) || price < 0) {
         fieldErrors[`price_${idx}`] = "Price cannot be negative";
+      }
+      if (row.is_recurring) {
+        if (!row.contract_start_date) {
+          fieldErrors[`contract_start_date_${idx}`] = "Start date is required";
+        }
+        if (!row.contract_end_date) {
+          fieldErrors[`contract_end_date_${idx}`] = "End date is required";
+        } else if (row.contract_start_date && row.contract_end_date < row.contract_start_date) {
+          fieldErrors[`contract_end_date_${idx}`] = "End date cannot be earlier than start date";
+        }
       }
     });
 
@@ -1708,9 +1721,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                             <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
                                             <input
                                               type="date"
+                                              min={row.contract_start_date || undefined}
                                               value={row.contract_end_date || ""}
                                               onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
-                                              className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                              className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
+                                                (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
+                                                  ? "border-red-500 text-red-600 focus:ring-red-500"
+                                                  : "border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:ring-blue-500"
+                                              }`}
                                             />
                                           </div>
                                         </div>
@@ -1721,6 +1739,12 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                       )}
                                     </div>
 
+                                    {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
+                                      <div className="inline-flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800">
+                                        <i className="mgc_alert_line text-sm text-red-500"></i>
+                                        End date ({row.contract_end_date}) cannot be earlier than start date ({row.contract_start_date})
+                                      </div>
+                                    )}
                                     {row.is_recurring && (
                                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200/80 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-medium">
                                         <i className="mgc_calendar_line text-sm text-blue-500"></i>
@@ -1868,10 +1892,18 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                   <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
                                   <input
                                     type="date"
+                                    min={row.contract_start_date || undefined}
                                     value={row.contract_end_date || ""}
                                     onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
-                                    className={`${inputCls} !py-1 text-xs`}
+                                    className={`${inputCls} !py-1 text-xs ${
+                                      (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
+                                        ? "!border-red-500 text-red-600"
+                                        : ""
+                                    }`}
                                   />
+                                  {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
+                                    <p className="text-[10px] text-red-500 font-medium mt-1">End date cannot be earlier than start date</p>
+                                  )}
                                 </div>
                               </div>
                             )}

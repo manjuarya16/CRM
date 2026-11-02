@@ -429,8 +429,8 @@ export const VoiceLeadModal: React.FC<VoiceLeadModalProps> = ({
       if (res.data?.success) {
         Swal.fire({
           icon: "success",
-          title: "Lead Created in English!",
-          text: res.data.message || `Lead "${payload.title}" created successfully.`,
+          title: "Success",
+          text: "Lead successfully saved",
           timer: 2000,
           showConfirmButton: false,
         });

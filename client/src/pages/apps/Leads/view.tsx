@@ -542,6 +542,10 @@ const LeadViewPage: React.FC = () => {
     const contractDuration = isRecurring ? (Number(newProd.contract_duration) || 12) : undefined;
     const contractStartDate = isRecurring ? (newProd.contract_start_date || new Date().toISOString().split("T")[0]) : undefined;
     const contractEndDate = isRecurring ? (newProd.contract_end_date || computeContractEndDate(contractStartDate, String(contractDuration || 12))) : undefined;
+    if (isRecurring && contractStartDate && contractEndDate && contractEndDate < contractStartDate) {
+      setProdError(`End date (${contractEndDate}) cannot be earlier than start date (${contractStartDate})`);
+      return;
+    }
 
     await addLeadProduct(
       leadId,
@@ -1543,9 +1547,14 @@ const getPersonEmail = (person: any): string => {
                           <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End Date:</span>
                           <input
                             type="date"
+                            min={newProd.contract_start_date || undefined}
                             value={newProd.contract_end_date || ""}
                             onChange={(e) => setNewProd({ ...newProd, contract_end_date: e.target.value })}
-                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                            className={`px-2 py-1 bg-white dark:bg-gray-900 border ${
+                              newProd.contract_start_date && newProd.contract_end_date && newProd.contract_end_date < newProd.contract_start_date
+                                ? "border-red-500 text-red-600"
+                                : "border-gray-300 dark:border-gray-600"
+                            } rounded text-xs`}
                           />
                         </div>
                       </div>

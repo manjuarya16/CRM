@@ -423,8 +423,7 @@ const LeadsPage: React.FC = () => {
         },
       });
 
-      const msg = response.data?.message || `Lead created from "${uploadFile.name}"`;
-      Swal.fire("Success", msg, "success");
+      Swal.fire("Success", "Lead successfully saved", "success");
       setShowUploadModal(false);
       setUploadFile(null);
       setUploadProgress(0);
