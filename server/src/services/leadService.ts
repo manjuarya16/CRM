@@ -273,6 +273,9 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         const rawEnd = p.contract_end_date || p.end_date;
         const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
         const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+        if (pRecurring && pStartDate && pEndDate && pEndDate < pStartDate) {
+          throw new Error(`Product: Contract end date cannot be earlier than start date`);
+        }
 
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -309,7 +312,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: "Lead created successfully",
+      message: "Lead successfully saved",
       data: lead,
     });
   } catch (error: any) {
@@ -476,7 +479,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      message: "Lead updated successfully",
+      message: "Lead successfully saved",
       data: updatedLead,
     });
   } catch (error: any) {
@@ -1085,7 +1088,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: `${msgParts.join(", ")}.`,
+      message: "Lead successfully saved",
       data: {
         ...lead,
         person_id: personId,
@@ -1464,7 +1467,7 @@ const createLeadByVoice = async (req: Request, res: Response): Promise<void> => 
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: `Lead "${title}" created successfully via Voice Assistant!`,
+      message: "Lead successfully saved",
       data: lead,
     });
   } catch (error: any) {

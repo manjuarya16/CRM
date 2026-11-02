@@ -416,8 +416,7 @@ const LeadsPage: React.FC = () => {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const msg = response.data?.message || `Lead created from "${uploadFile.name}"`;
-      Swal.fire("Success", msg, "success");
+      Swal.fire("Success", "Lead successfully saved", "success");
       setShowUploadModal(false);
       setUploadFile(null);
       if (viewMode === "kanban") {

@@ -329,10 +329,18 @@ export const saveEntityAttributeValues = async (
 ): Promise<void> => {
   if (!customAttrs || typeof customAttrs !== 'object' || Object.keys(customAttrs).length === 0) return;
 
+  const spName = `sp_attr_${entityType}_${entityId}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
   try {
+
+    await client.query(`SAVEPOINT ${spName}`);
+
     const { rows: attrResult } = await client.query(
-      'SELECT get_all_attributes(null, $1) AS data',
-      [entityType]
+
+      'SELECT get_all_attributes($1, $2, $3, $4) AS data',
+
+      [null, entityType, null, null]
+
     );
     const dbAttrs: any[] = attrResult[0]?.data || [];
 
@@ -405,7 +413,9 @@ export const saveEntityAttributeValues = async (
         ]
       );
     }
+    await client.query(`RELEASE SAVEPOINT ${spName}`);
   } catch (attrErr) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${spName}`).catch(() => {});
     logger.warn({ attrErr, entityType, entityId }, 'Failed to save entity attribute_values');
   }
 };
