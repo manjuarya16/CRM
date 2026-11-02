@@ -8,6 +8,17 @@ async function bootstrap(): Promise<void> {
   await checkDbConnection();
   await connectRedis();
 
+  // Ensure recurring report procedural functions are installed
+  import('@/scripts/setupRecurringReport')
+    .then(({ setupRecurringReport }) => {
+      setupRecurringReport().catch((err: any) => {
+        logger.warn(`[Bootstrap] Notice: setupRecurringReport skipped or deferred: ${err.message}`);
+      });
+    })
+    .catch((err) => {
+      logger.warn(`[Bootstrap] Could not load setupRecurringReport: ${err.message}`);
+    });
+
   const app = createApp();
 
   app.listen(env.PORT, () => {
