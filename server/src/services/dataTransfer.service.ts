@@ -1,7 +1,6 @@
 import { pool } from '@/config/db';
 import { IImport } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
-import { getTenantContext } from '@/context/tenantContext';
 
 const BUILT_IN_FIELD_CODES = new Set([
   'title',
@@ -116,16 +115,12 @@ const resolveOrgId = async (client: any, rawVal: any, nameVal?: any): Promise<nu
   // Auto-create organization if a non-numeric name was specified
   if (n && isNaN(Number(n))) {
     try {
-      await client.query('SAVEPOINT sp_resolve_org');
       const created = await client.query(
-        'SELECT save_organization($1, null, 1, \'{}\'::jsonb, null) as result',
+        'SELECT save_organization($1, null, 1, \'{}\') as result',
         [n]
       );
-      await client.query('RELEASE SAVEPOINT sp_resolve_org');
       return created.rows[0]?.result?.id || null;
-    } catch {
-      await client.query('ROLLBACK TO SAVEPOINT sp_resolve_org').catch(() => {});
-    }
+    } catch {}
   }
   return null;
 };
@@ -334,10 +329,18 @@ export const saveEntityAttributeValues = async (
 ): Promise<void> => {
   if (!customAttrs || typeof customAttrs !== 'object' || Object.keys(customAttrs).length === 0) return;
 
+  const spName = `sp_attr_${entityType}_${entityId}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
   try {
+
+    await client.query(`SAVEPOINT ${spName}`);
+
     const { rows: attrResult } = await client.query(
-      'SELECT get_all_attributes(null, $1) AS data',
-      [entityType]
+
+      'SELECT get_all_attributes($1, $2, $3, $4) AS data',
+
+      [null, entityType, null, null]
+
     );
     const dbAttrs: any[] = attrResult[0]?.data || [];
 
@@ -410,7 +413,9 @@ export const saveEntityAttributeValues = async (
         ]
       );
     }
+    await client.query(`RELEASE SAVEPOINT ${spName}`);
   } catch (attrErr) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${spName}`).catch(() => {});
     logger.warn({ attrErr, entityType, entityId }, 'Failed to save entity attribute_values');
   }
 };
@@ -760,12 +765,6 @@ export class DataTransferService {
 
     try {
       await client.query('BEGIN');
-      const ctx = getTenantContext();
-      const tenantId = ctx?.tenantId || 1;
-      await client.query(
-        `SELECT set_config('app.current_tenant_id', $1, true), set_config('app.is_super_admin', $2, true)`,
-        [String(tenantId), ctx?.isSuperAdmin ? 'true' : 'false']
-      );
 
       // Fetch defined attributes for this entity type
       const { rows: attrRows } = await client.query(
@@ -871,7 +870,10 @@ export class DataTransferService {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const savepointName = `sp_${i}`;
-        await client.query(`SAVEPOINT ${savepointName}`);
+
+        if (validationStrategy === 'skip_error_entries') {
+          await client.query(`SAVEPOINT ${savepointName}`);
+        }
 
         try {
           const rowCustomAttrs = extractCustomAttributes(row);
@@ -935,7 +937,9 @@ export class DataTransferService {
               }
               const leadId = existingLead.rows[0].id;
               await client.query('SELECT public.fn_delete_lead($1)', [leadId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1040,7 +1044,9 @@ export class DataTransferService {
               }
               const personId = existing.rows[0].id;
               await client.query('SELECT delete_person($1)', [personId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1161,7 +1167,9 @@ export class DataTransferService {
               }
               const orgId = existingOrg.rows[0].id;
               await client.query('SELECT delete_organization($1)', [orgId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1221,7 +1229,9 @@ export class DataTransferService {
               }
               const prodId = existingProd.rows[0].id;
               await client.query('SELECT public.fn_delete_product($1)', [prodId]);
-              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              if (validationStrategy === 'skip_error_entries') {
+                await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+              }
               processed++;
               continue;
             }
@@ -1251,10 +1261,14 @@ export class DataTransferService {
             }
           }
 
-          await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+          if (validationStrategy === 'skip_error_entries') {
+            await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+          }
           processed++;
         } catch (err: any) {
-          await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`).catch(() => {});
+          if (validationStrategy === 'skip_error_entries') {
+            await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+          }
           errorCount++;
           errorDetails.push({ row: i + 1, error: err.message, data: row });
 
@@ -1297,41 +1311,30 @@ export class DataTransferService {
 
     // Record import job in imports table
     try {
-      const recordClient = await pool.connect();
-      try {
-        const ctx = getTenantContext();
-        const tenantId = ctx?.tenantId || 1;
-        await recordClient.query(
-          `SELECT set_config('app.current_tenant_id', $1, true), set_config('app.is_super_admin', $2, true)`,
-          [String(tenantId), ctx?.isSuperAdmin ? 'true' : 'false']
-        );
-        const { rows: res } = await recordClient.query(
-          'SELECT save_import_record($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11) as result',
-          [
-            type,
-            action,
-            state,
-            JSON.stringify(summary),
-            errorDetails.length ? JSON.stringify(errorDetails) : '',
-            validationStrategy,
-            allowedErrors || 0,
-            fieldSeparator || ',',
-            processInQueue || false,
-            '',
-            fileName || `${type}_import.csv`,
-          ]
-        );
+      const { rows: res } = await pool.query(
+        'SELECT save_import_record($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11) as result',
+        [
+          type,
+          action,
+          state,
+          JSON.stringify(summary),
+          errorDetails.length ? JSON.stringify(errorDetails) : '',
+          validationStrategy,
+          allowedErrors || 0,
+          fieldSeparator || ',',
+          processInQueue || false,
+          '',
+          fileName || `${type}_import.csv`,
+        ]
+      );
 
-        return {
-          importId: res[0]?.result?.id,
-          total: rows.length,
-          processed,
-          errors: errorCount,
-          details: summary,
-        };
-      } finally {
-        recordClient.release();
-      }
+      return {
+        importId: res[0]?.result?.id,
+        total: rows.length,
+        processed,
+        errors: errorCount,
+        details: summary,
+      };
     } catch (saveRecErr) {
       logger.error({ saveRecErr }, 'Failed to save import record log');
       return {

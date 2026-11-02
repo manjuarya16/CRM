@@ -8,7 +8,7 @@ import fs from "fs";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
-import { extractTextFromBuffer, parseLeadDocumentText, recognizeImageWithAutoOrientation, ExtractedLeadData } from "@/utils/documentParser";
+import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from "@/utils/documentParser";
 import { parseVoiceTranscript, transcribeAudioWithWhisper, translateToEnglish, IVoiceLeadExtractedData } from "@/utils/voiceLeadParser";
 import { configService } from "@/services/configService";
 
@@ -273,6 +273,9 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
         const rawEnd = p.contract_end_date || p.end_date;
         const pStartDate = pRecurring && rawStart && String(rawStart).trim() ? String(rawStart).trim().slice(0, 10) : null;
         const pEndDate = pRecurring && rawEnd && String(rawEnd).trim() ? String(rawEnd).trim().slice(0, 10) : null;
+        if (pRecurring && pStartDate && pEndDate && pEndDate < pStartDate) {
+          throw new Error(`Product: Contract end date cannot be earlier than start date`);
+        }
 
         await connection.query(
           "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -309,7 +312,7 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: "Lead created successfully",
+      message: "Lead successfully saved",
       data: lead,
     });
   } catch (error: any) {
@@ -408,22 +411,6 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     const updatedLead = result.rows[0];
 
-    // Persist organization_id if explicitly provided or resolved via person
-    const rawOrgId = req.body.organization_id !== undefined ? req.body.organization_id : (person?.organization_id);
-    const organizationId = rawOrgId !== undefined && rawOrgId !== null && rawOrgId !== "" && !isNaN(Number(rawOrgId))
-      ? Number(rawOrgId)
-      : (rawOrgId === null ? null : undefined);
-
-    if (organizationId !== undefined) {
-      await connection.query(
-        "UPDATE public.leads SET organization_id = $1 WHERE id = $2",
-        [organizationId, id]
-      );
-      if (updatedLead) {
-        updatedLead.organization_id = organizationId;
-      }
-    }
-
     if (id && custom_attributes !== undefined) {
       const customAttrsJson = JSON.stringify(custom_attributes || {});
       await connection.query(
@@ -492,7 +479,7 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
-      message: "Lead updated successfully",
+      message: "Lead successfully saved",
       data: updatedLead,
     });
   } catch (error: any) {
@@ -831,34 +818,32 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const uniqueName = file.filename || path.basename(file.path);
-    const fileUrl = `/uploads/leads/${uniqueName}`;
+    const uploadDir = path.join(process.cwd(), "uploads", "leads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destPath = path.join(uploadDir, uniqueName);
 
     let fileBuffer: Buffer | null = null;
     if (file.path && fs.existsSync(file.path)) {
-      fileBuffer = await fs.promises.readFile(file.path);
+      fileBuffer = fs.readFileSync(file.path);
+      fs.copyFileSync(file.path, destPath);
+      try { fs.unlinkSync(file.path); } catch (e) {}
     } else if (file.buffer) {
       fileBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
+      if (fileBuffer) {
+        fs.writeFileSync(destPath, fileBuffer);
+      }
     }
 
-    // 1. Extract text and parse structured data from the document (or image via OCR)
+    const fileUrl = `/uploads/leads/${uniqueName}`;
+
+    // 1. Extract text and parse structured data from the document
     let parsed: ExtractedLeadData = {};
     if (fileBuffer) {
-      const ext = path.extname(file.originalname).toLowerCase();
-      let extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
-
-      // If document text is empty or file is an image (jpg, jpeg, png, bmp, webp), run OCR
-      if (['.jpg', '.jpeg', '.png', '.bmp', '.webp'].includes(ext) || (!extractedText || extractedText.trim().length < 15)) {
-        try {
-          const ocrText = await recognizeImageWithAutoOrientation(fileBuffer, file.originalname);
-          if (ocrText && ocrText.trim().length > 0) {
-            extractedText = extractedText ? `${extractedText}\n${ocrText}` : ocrText;
-          }
-        } catch (ocrErr: any) {
-          logger.warn(`OCR error for ${file.originalname}: ${ocrErr.message}`);
-        }
-      }
-
+      const extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
       parsed = parseLeadDocumentText(extractedText, file.originalname);
     }
 
@@ -876,10 +861,9 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
       if (existingOrgRes.rows.length > 0) {
         organizationId = existingOrgRes.rows[0].id;
       } else {
-        const addressParam = parsed.address ? JSON.stringify({ address: parsed.address }) : null;
         const newOrgRes = await connection.query(
           "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
-          [orgName, addressParam, currentUserId, "{}"]
+          [orgName, null, currentUserId, "{}"]
         );
         const newOrg = newOrgRes.rows[0]?.result;
         if (newOrg && newOrg.id) {
@@ -897,8 +881,8 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     if (parsed.email || parsed.phone || parsed.contactPerson) {
       const pFindRes = await connection.query(
-        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3, $4)",
-        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null, organizationId || null]
+        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
+        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
       );
       if (pFindRes.rows.length > 0) {
         personId = pFindRes.rows[0].id;
@@ -1104,7 +1088,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: `${msgParts.join(", ")}.`,
+      message: "Lead successfully saved",
       data: {
         ...lead,
         person_id: personId,
@@ -1139,7 +1123,25 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const uniqueName = file.filename || path.basename(file.path);
+    const uploadDir = path.join(process.cwd(), "uploads", "leads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destPath = path.join(uploadDir, uniqueName);
+
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.renameSync(file.path, destPath);
+      } catch {
+        fs.copyFileSync(file.path, destPath);
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      }
+    } else if (file.buffer) {
+      fs.writeFileSync(destPath, file.buffer);
+    }
+
     const fileUrl = `/uploads/leads/${uniqueName}`;
 
     const safeTitle = (file.originalname || "Attached File").substring(0, 200);
@@ -1465,7 +1467,7 @@ const createLeadByVoice = async (req: Request, res: Response): Promise<void> => 
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: `Lead "${title}" created successfully via Voice Assistant!`,
+      message: "Lead successfully saved",
       data: lead,
     });
   } catch (error: any) {

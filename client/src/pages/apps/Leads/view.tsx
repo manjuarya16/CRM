@@ -362,7 +362,6 @@ const LeadViewPage: React.FC = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingAction, setSubmittingAction] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Forms state for quick actions
   const [modalForm, setModalForm] = useState({
@@ -381,22 +380,10 @@ const LeadViewPage: React.FC = () => {
     person_id: "",
   });
 
-  const [modalErrors, setModalErrors] = useState<{ title?: string; comment?: string; schedule_to?: string }>({});
-
   // Add Product form
   const [warehousesList, setWarehousesList] = useState<any[]>([]);
-  const [newProd, setNewProd] = useState<{
-    product_id: string;
-    quantity: string;
-    price: string;
-    warehouse_id: string;
-    warehouse_location_id: string;
-    is_recurring?: boolean;
-    billing_cycle?: string;
-    contract_duration?: string;
-    contract_start_date?: string;
-    contract_end_date?: string;
-  }>({
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [newProd, setNewProd] = useState({
     product_id: "",
     quantity: "1",
     price: "",
@@ -405,8 +392,8 @@ const LeadViewPage: React.FC = () => {
     is_recurring: false,
     billing_cycle: "monthly",
     contract_duration: "12",
-    contract_start_date: new Date().toISOString().split("T")[0],
-    contract_end_date: "",
+    contract_start_date: todayStr,
+    contract_end_date: computeContractEndDate(todayStr, "12"),
   });
   const [prodError, setProdError] = useState<string>("");
 
@@ -542,6 +529,10 @@ const LeadViewPage: React.FC = () => {
     const contractDuration = isRecurring ? (Number(newProd.contract_duration) || 12) : undefined;
     const contractStartDate = isRecurring ? (newProd.contract_start_date || new Date().toISOString().split("T")[0]) : undefined;
     const contractEndDate = isRecurring ? (newProd.contract_end_date || computeContractEndDate(contractStartDate, String(contractDuration || 12))) : undefined;
+    if (isRecurring && contractStartDate && contractEndDate && contractEndDate < contractStartDate) {
+      setProdError(`End date (${contractEndDate}) cannot be earlier than start date (${contractStartDate})`);
+      return;
+    }
 
     await addLeadProduct(
       leadId,
@@ -589,21 +580,11 @@ const LeadViewPage: React.FC = () => {
         if (selectedFile) {
           const formData = new FormData();
           formData.append("file", selectedFile);
-          if (modalForm.comment?.trim()) {
-            formData.append("comment", modalForm.comment.trim());
-          }
-          setUploadProgress(0);
           await API.post(`/leads/${leadId}/upload-file`, formData, {
-            onUploadProgress: (progressEvent) => {
-              if (progressEvent.total) {
-                const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                setUploadProgress(percent);
-              }
-            },
+            headers: { "Content-Type": "multipart/form-data" },
           });
           Swal.fire("Success", "File uploaded and attached to lead", "success");
           setSelectedFile(null);
-          setUploadProgress(0);
         } else {
           await addActivity({
             title: modalForm.title || "File Attachment",
@@ -615,78 +596,22 @@ const LeadViewPage: React.FC = () => {
           Swal.fire("Success", "File activity logged", "success");
         }
       } else if (activeModal === "note") {
-        const errors: { title?: string; comment?: string } = {};
-        const trimmedTitle = modalForm.title?.trim() || "";
-        const trimmedComment = modalForm.comment?.trim() || "";
-
-        if (!trimmedTitle) {
-          errors.title = "Title is required.";
-        } else if (/^[0-9\W_]+$/.test(trimmedTitle) || !/[a-zA-Z]/.test(trimmedTitle)) {
-          errors.title = "Title must contain at least one letter and cannot be only special characters or numbers.";
-        }
-
-        if (!trimmedComment) {
-          errors.comment = "Note content cannot be empty.";
-        }
-
-        if (Object.keys(errors).length > 0) {
-          setModalErrors(errors);
-          Swal.fire({
-            icon: "warning",
-            title: "Validation Error",
-            text: errors.title || errors.comment,
-            confirmButtonColor: "#0088cc",
-          });
+        if (!modalForm.comment?.trim()) {
+          Swal.fire("Validation Error", "Note content cannot be empty.", "warning");
           setSubmittingAction(false);
           return;
         }
-
-        setModalErrors({});
         await addActivity({
-          title: trimmedTitle,
+          title: modalForm.title?.trim() || "Note",
           type: "note",
-          comment: trimmedComment,
+          comment: modalForm.comment.trim(),
           lead_id: leadId,
           person_id: selectedLead?.person_id,
         });
-        Swal.fire("Success", "Note saved successfully", "success");
+        Swal.fire("Success", "Note saved", "success");
       } else if (activeModal === "activity") {
-        const errors: { title?: string; schedule_to?: string } = {};
-        const trimmedTitle = modalForm.title?.trim() || "";
-
-        if (!trimmedTitle) {
-          errors.title = "Title is required.";
-        } else if (/^[0-9\W_]+$/.test(trimmedTitle) || !/[a-zA-Z]/.test(trimmedTitle)) {
-          errors.title = "Title must contain at least one letter and cannot be only special characters or numbers.";
-        }
-
-        if (modalForm.schedule_to) {
-          const toDate = new Date(modalForm.schedule_to);
-          if (toDate.getTime() < Date.now() - 60000) {
-            errors.schedule_to = "Schedule To date/time cannot be in the past.";
-          } else if (modalForm.schedule_from) {
-            const fromDate = new Date(modalForm.schedule_from);
-            if (toDate.getTime() < fromDate.getTime()) {
-              errors.schedule_to = "Schedule To must be after Schedule From.";
-            }
-          }
-        }
-
-        if (Object.keys(errors).length > 0) {
-          setModalErrors(errors);
-          Swal.fire({
-            icon: "warning",
-            title: "Validation Error",
-            text: errors.title || errors.schedule_to,
-            confirmButtonColor: "#0088cc",
-          });
-          setSubmittingAction(false);
-          return;
-        }
-
-        setModalErrors({});
         await addActivity({
-          title: trimmedTitle,
+          title: modalForm.title,
           type: modalForm.type,
           comment: modalForm.comment,
           schedule_from: modalForm.schedule_from || undefined,
@@ -695,19 +620,13 @@ const LeadViewPage: React.FC = () => {
           lead_id: leadId,
           person_id: modalForm.person_id ? Number(modalForm.person_id) : selectedLead?.person_id,
         });
-        Swal.fire("Success", "Activity logged successfully", "success");
+        Swal.fire("Success", "Activity logged", "success");
       }
       setActiveModal(null);
-      setModalErrors({});
       setModalForm({ title: "", comment: "", type: "call", email_to: "", email_subject: "", email_body: "", won_value: "", lost_reason: "", closed_at: "", schedule_from: "", schedule_to: "", location: "", person_id: "" });
       fetchActivities(1, 100, "", leadId);
     } catch (err: any) {
-      const errorMsg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to process action";
-      Swal.fire("Error", errorMsg, "error");
+      Swal.fire("Error", err.message || "Failed to process action", "error");
     } finally {
       setSubmittingAction(false);
     }
@@ -846,7 +765,7 @@ const getPersonEmail = (person: any): string => {
                 className="flex flex-col items-center justify-center p-3 bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-300 rounded-xl hover:bg-sky-200 transition-colors font-bold text-xs gap-1 border border-sky-300 shadow-sm"
               >
                 <i className="mgc_attachment_line text-lg"></i>
-                Upload File
+                File
               </button>
               <button
                 onClick={() => setActiveModal("note")}
@@ -1543,9 +1462,22 @@ const getPersonEmail = (person: any): string => {
                           <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End Date:</span>
                           <input
                             type="date"
+                            min={newProd.contract_start_date || undefined}
                             value={newProd.contract_end_date || ""}
-                            onChange={(e) => setNewProd({ ...newProd, contract_end_date: e.target.value })}
-                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (newProd.contract_start_date && val && val < newProd.contract_start_date) {
+                                setProdError(`End date cannot be earlier than start date (${newProd.contract_start_date})`);
+                                return;
+                              }
+                              setProdError("");
+                              setNewProd({ ...newProd, contract_end_date: val });
+                            }}
+                            className={`px-2 py-1 bg-white dark:bg-gray-900 border ${
+                              newProd.contract_start_date && newProd.contract_end_date && newProd.contract_end_date < newProd.contract_start_date
+                                ? "border-red-500 text-red-600"
+                                : "border-gray-300 dark:border-gray-600"
+                            } rounded text-xs`}
                           />
                         </div>
                       </div>
@@ -1577,7 +1509,7 @@ const getPersonEmail = (person: any): string => {
                             const badge = p.is_recurring ? getContractStatusBadge(p.contract_start_date, p.contract_end_date) : null;
                             return (
                               <tr key={p.id} className="border-b hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
-                                <td className="p-2 font-semibold text-gray-900 dark:text-gray-100">{p.product_name || p.name || `Product #${p.product_id || p.id}`}</td>
+                                <td className="p-2 font-semibold text-gray-900 dark:text-gray-100">{p.product_name}</td>
                                 <td className="p-2">
                                   {p.is_recurring ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-[11px] font-semibold">
@@ -1800,20 +1732,6 @@ const getPersonEmail = (person: any): string => {
                           className="w-full px-3 py-1.5 border rounded text-xs"
                         />
                       </div>
-                      {activeModal === "file" && submittingAction && (
-                        <div className="w-full space-y-1 pt-1">
-                          <div className="flex justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium">
-                            <span>Uploading file...</span>
-                            <span className="font-bold text-[#0088cc]">{uploadProgress}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <div
-                              className="bg-[#0088cc] h-2 rounded-full transition-all duration-150"
-                              style={{ width: `${uploadProgress}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -1824,30 +1742,11 @@ const getPersonEmail = (person: any): string => {
                         <input
                           type="text"
                           required
-                          placeholder={activeModal === "note" ? "e.g. Client Discussion, Follow-up" : "Title"}
+                          placeholder="Title"
                           value={modalForm.title}
-                          onChange={(e) => {
-                            setModalForm({ ...modalForm, title: e.target.value });
-                            if (modalErrors.title) {
-                              setModalErrors((prev) => ({ ...prev, title: undefined }));
-                            }
-                          }}
-                          className={`w-full px-3 py-1.5 border rounded text-xs transition-colors ${
-                            modalErrors.title
-                              ? "border-red-500 ring-1 ring-red-500/20 focus:border-red-500"
-                              : "border-gray-300 dark:border-gray-700 focus:border-[#0088cc]"
-                          }`}
+                          onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
+                          className="w-full px-3 py-1.5 border rounded text-xs"
                         />
-                        {modalErrors.title ? (
-                          <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
-                            <i className="mgc_alert_line text-xs shrink-0"></i>
-                            <span>{modalErrors.title}</span>
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-gray-400 mt-1">
-                            Must contain at least one letter and cannot consist of only numbers or symbols.
-                          </p>
-                        )}
                       </div>
 
                       {activeModal === "activity" && (
@@ -1892,6 +1791,7 @@ const getPersonEmail = (person: any): string => {
                             </div>
                           </div>
 
+
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-xs font-semibold mb-1">Schedule From</label>
@@ -1906,26 +1806,10 @@ const getPersonEmail = (person: any): string => {
                               <label className="block text-xs font-semibold mb-1">Schedule To</label>
                               <input
                                 type="datetime-local"
-                                min={modalForm.schedule_from || new Date().toISOString().slice(0, 16)}
                                 value={modalForm.schedule_to || ""}
-                                onChange={(e) => {
-                                  setModalForm({ ...modalForm, schedule_to: e.target.value });
-                                  if (modalErrors.schedule_to) {
-                                    setModalErrors((prev) => ({ ...prev, schedule_to: undefined }));
-                                  }
-                                }}
-                                className={`w-full px-3 py-1.5 border rounded text-xs ${
-                                  modalErrors.schedule_to
-                                    ? "border-red-500 ring-1 ring-red-500/20"
-                                    : "border-gray-300 dark:border-gray-700"
-                                }`}
+                                onChange={(e) => setModalForm({ ...modalForm, schedule_to: e.target.value })}
+                                className="w-full px-3 py-1.5 border rounded text-xs"
                               />
-                              {modalErrors.schedule_to && (
-                                <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
-                                  <i className="mgc_alert_line text-xs shrink-0"></i>
-                                  <span>{modalErrors.schedule_to}</span>
-                                </p>
-                              )}
                             </div>
                           </div>
                         </>
@@ -1940,45 +1824,27 @@ const getPersonEmail = (person: any): string => {
                           rows={3}
                           placeholder={activeModal === "note" ? "Enter note content..." : "Details..."}
                           value={modalForm.comment}
-                          onChange={(e) => {
-                            setModalForm({ ...modalForm, comment: e.target.value });
-                            if (modalErrors.comment) {
-                              setModalErrors((prev) => ({ ...prev, comment: undefined }));
-                            }
-                          }}
-                          className={`w-full px-3 py-1.5 border rounded text-xs transition-colors ${
-                            modalErrors.comment
-                              ? "border-red-500 ring-1 ring-red-500/20 focus:border-red-500"
-                              : "border-gray-300 dark:border-gray-700 focus:border-[#0088cc]"
-                          }`}
+                          onChange={(e) => setModalForm({ ...modalForm, comment: e.target.value })}
+                          className="w-full px-3 py-1.5 border rounded text-xs"
                         />
-                        {modalErrors.comment && (
-                          <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
-                            <i className="mgc_alert_line text-xs shrink-0"></i>
-                            <span>{modalErrors.comment}</span>
-                          </p>
-                        )}
                       </div>
                     </>
                   )}
+
 
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     <button
                       type="button"
                       disabled={submittingAction}
-                      onClick={() => {
-                        setActiveModal(null);
-                        setModalErrors({});
-                      }}
+                      onClick={() => setActiveModal(null)}
                       className="px-3 py-1.5 border rounded text-xs font-semibold disabled:opacity-50"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={submittingAction || (activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim())) || (activeModal === "file" && !selectedFile) || (activeModal === "activity" && !modalForm.title?.trim())}
-                      className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 transition-all"
-                      title={(activeModal === "note" && (!modalForm.title?.trim() || !modalForm.comment?.trim())) ? "Please enter both title and note content" : undefined}
+                      disabled={submittingAction}
+                      className="px-4 py-1.5 bg-[#0088cc] hover:bg-[#0077b5] text-white rounded text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {submittingAction ? (
                         <>
@@ -1986,7 +1852,7 @@ const getPersonEmail = (person: any): string => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          <span>{activeModal === "file" ? (uploadProgress > 0 ? `Uploading (${uploadProgress}%)...` : "Uploading...") : "Saving..."}</span>
+                          <span>{activeModal === "file" ? "Uploading..." : "Saving..."}</span>
                         </>
                       ) : (
                         <span>{activeModal === "file" ? "Upload a File" : "Submit"}</span>

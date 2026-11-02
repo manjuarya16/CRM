@@ -435,9 +435,23 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   return `${months} ${months === 1 ? "Month" : "Months"}`;
 };
 
+const toISODateString = (val?: string): string => {
+  if (!val) return "";
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{2}-\d{2}-\d{4}/.test(s)) {
+    const [d, m, y] = s.slice(0, 10).split("-");
+    return `${y}-${m}-${d}`;
+  }
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt.toISOString().split("T")[0];
+  return s;
+};
+
 const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
     if (!startDateStr) return "";
-    const parts = startDateStr.split("-").map(Number);
+    const cleanDate = toISODateString(startDateStr);
+    const parts = cleanDate.split("-").map(Number);
     if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
     const [y, m, d] = parts;
     const months = parseInt(durationMonthsStr || "12", 10) || 12;
@@ -471,7 +485,7 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
 
   const handleRemoveProductRow = (idx: number) => {
     setProductRows((rows) => rows.filter((_, i) => i !== idx));
-    clearError("products", `product_${idx}`, `quantity_${idx}`, `price_${idx}`);
+    clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
   const handleProductRowChange = (idx: number, field: keyof ProductRow, val: any) => {
@@ -526,7 +540,29 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       }
 
       if (field === "contract_start_date") {
-        next[idx].contract_end_date = computeContractEndDate(val, next[idx].contract_duration || "12");
+        const startIso = toISODateString(val);
+        next[idx].contract_start_date = startIso;
+        const currentEndIso = toISODateString(next[idx].contract_end_date);
+        if (!currentEndIso || currentEndIso < startIso) {
+          next[idx].contract_end_date = computeContractEndDate(startIso, next[idx].contract_duration || "12");
+        }
+      }
+
+      if (field === "contract_end_date") {
+        const endIso = toISODateString(val);
+        const startIso = toISODateString(next[idx].contract_start_date);
+        if (startIso && endIso && endIso < startIso) {
+          Swal.fire({
+            icon: "warning",
+            title: "Invalid End Date",
+            text: `End date (${endIso}) cannot be earlier than start date (${startIso}).`,
+            timer: 3000,
+            showConfirmButton: false,
+          });
+          next[idx].contract_end_date = computeContractEndDate(startIso, next[idx].contract_duration || "12");
+          return next;
+        }
+        next[idx].contract_end_date = endIso;
       }
 
       if (field === "contract_duration") {
@@ -555,7 +591,7 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
         .catch(() => {});
     }
 
-    clearError("products", `product_${idx}`, `quantity_${idx}`, `price_${idx}`);
+    clearError(`product_${idx}`, `quantity_${idx}`, `price_${idx}`);
   };
 
   const handleSplitProductRow = (idx: number, maxQty: number, remainingQty: number) => {
@@ -676,45 +712,42 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       fieldErrors.personName = "Contact Person Name is required";
     }
 
-    const strictEmailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
     const firstEmail = contactEmails[0]?.value?.trim();
     if (!firstEmail) {
       fieldErrors.contactEmail = "Contact Person Email is required";
-    } else if (!strictEmailRegex.test(firstEmail)) {
-      fieldErrors.contactEmail = "Please enter a valid email address without trailing dots (e.g. name@domain.com)";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
+      fieldErrors.contactEmail = "Please enter a valid email address";
     }
 
-    contactEmails.forEach((ce, idx) => {
-      const val = ce.value?.trim();
-      if (val && !strictEmailRegex.test(val)) {
-        fieldErrors[`contactEmail_${idx}`] = "Please enter a valid email address (e.g. name@domain.com)";
-      }
-    });
-
-    // Product rows validation - At least one product is required
-    const hasAnyValidProduct = productRows.some((r) => r.product_id);
-    if (!hasAnyValidProduct) {
-      fieldErrors.products = "At least one product is required";
-      if (productRows.length > 0) {
-        fieldErrors.product_0 = "Please select a product";
-      }
-    }
-
+    // Product rows validation
     productRows.forEach((row, idx) => {
-      if (!row.product_id) {
-        fieldErrors[`product_${idx}`] = "Please select a product";
-      }
-      const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
-      const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
-      if (!isService) {
-        const qty = Number(row.quantity);
-        if (isNaN(qty) || qty <= 0) {
-          fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+      const hasAnyInput = row.product_id || (row.quantity && row.quantity !== "1") || (row.price && row.price !== "0") || productRows.length > 1;
+      if (hasAnyInput) {
+        if (!row.product_id) {
+          fieldErrors[`product_${idx}`] = "Please select a product";
+        }
+        const selectedProd = products.find((p) => String(p.id) === String(row.product_id));
+        const isService = selectedProd?.type?.toLowerCase() === "service" || selectedProd?.type === "Service";
+        if (!isService) {
+          const qty = Number(row.quantity);
+          if (isNaN(qty) || qty <= 0) {
+            fieldErrors[`quantity_${idx}`] = "Quantity must be at least 1";
+          }
+        }
+        const price = Number(row.price);
+        if (isNaN(price) || price < 0) {
+          fieldErrors[`price_${idx}`] = "Price cannot be negative";
+        }
+      if (row.is_recurring) {
+        if (!row.contract_start_date) {
+          fieldErrors[`contract_start_date_${idx}`] = "Start date is required";
+        }
+        if (!row.contract_end_date) {
+          fieldErrors[`contract_end_date_${idx}`] = "End date is required";
+        } else if (row.contract_start_date && row.contract_end_date < row.contract_start_date) {
+          fieldErrors[`contract_end_date_${idx}`] = "End date cannot be earlier than start date";
         }
       }
-      const price = Number(row.price);
-      if (isNaN(price) || price < 0) {
-        fieldErrors[`price_${idx}`] = "Price cannot be negative";
       }
     });
 
@@ -1314,13 +1347,6 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
             </button>
           </div>
 
-          {errors.products && (
-            <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 rounded-xl flex items-center gap-2 text-xs text-red-600 dark:text-red-400 font-medium">
-              <i className="mgc_alert_line text-base shrink-0"></i>
-              <span>{errors.products}</span>
-            </div>
-          )}
-
             {(() => {
               const hasPhysicalProduct = productRows.some((r) => {
                 if (!r.product_id) return true;
@@ -1708,9 +1734,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                             <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
                                             <input
                                               type="date"
-                                              value={row.contract_end_date || ""}
+                                              min={toISODateString(row.contract_start_date) || undefined}
+                                              value={toISODateString(row.contract_end_date) || ""}
                                               onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
-                                              className="py-1 px-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-xs"
+                                              className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
+                                                (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
+                                                  ? "border-red-500 text-red-600 focus:ring-red-500"
+                                                  : "border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:ring-blue-500"
+                                              }`}
                                             />
                                           </div>
                                         </div>
@@ -1721,6 +1752,12 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                       )}
                                     </div>
 
+                                    {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
+                                      <div className="inline-flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800">
+                                        <i className="mgc_alert_line text-sm text-red-500"></i>
+                                        End date ({row.contract_end_date}) cannot be earlier than start date ({row.contract_start_date})
+                                      </div>
+                                    )}
                                     {row.is_recurring && (
                                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200/80 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-medium">
                                         <i className="mgc_calendar_line text-sm text-blue-500"></i>
@@ -1868,10 +1905,18 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                   <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
                                   <input
                                     type="date"
-                                    value={row.contract_end_date || ""}
+                                    min={toISODateString(row.contract_start_date) || undefined}
+                                    value={toISODateString(row.contract_end_date) || ""}
                                     onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
-                                    className={`${inputCls} !py-1 text-xs`}
+                                    className={`${inputCls} !py-1 text-xs ${
+                                      (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
+                                        ? "!border-red-500 text-red-600"
+                                        : ""
+                                    }`}
                                   />
+                                  {row.is_recurring && row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date && (
+                                    <p className="text-[10px] text-red-500 font-medium mt-1">End date cannot be earlier than start date</p>
+                                  )}
                                 </div>
                               </div>
                             )}
