@@ -223,6 +223,12 @@ export class ImapLeadSyncService {
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+      .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, '')
+      .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, '')
+      .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, '')
+      .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, '')
+      .replace(/!important\s*;\s*\}\s*\d*/gi, '')
+      .replace(/^[ \t]*\}?\s*\d+\s*$/gm, '')
       .replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, '$1')
       .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer|table)>/gi, '\n')
       .replace(/<br\s*[\/]?>/gi, '\n')
@@ -260,8 +266,14 @@ export class ImapLeadSyncService {
       body = this.extractCleanTextFromHtml(body);
     }
 
-    // Strip out common fallback disclaimer blocks and tracking link boilerplate
+    // Strip out residual CSS debris, fallback disclaimers, and tracking boilerplate
     body = body
+      .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, '')
+      .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, '')
+      .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, '')
+      .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, '')
+      .replace(/!important\s*;\s*\}\s*\d*/gi, '')
+      .replace(/^[ \t]*\}?\s*\d+\s*$/gm, '')
       .replace(/unfortunately,\s*your\s*email\s*client\s*cannot\s*display\s*html[^\n\r]*(\r?\n[^\n\r]*)*/gi, '')
       .replace(/view\s*web\s*version:\s*https?:\/\/\S+/gi, '')
       .replace(/to\s*view\s*this\s*email[^.\n]*into\s*your\s*browser\.?/gi, '')

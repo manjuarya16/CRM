@@ -643,15 +643,37 @@ export const getRecurringContractsReport = async (req: Request, res: Response): 
     const status = req.query.status ? String(req.query.status) : req.query.contract_status ? String(req.query.contract_status) : null;
     const productType = req.query.product_type ? String(req.query.product_type) : req.query.type ? String(req.query.type) : null;
     const search = req.query.search ? String(req.query.search) : null;
+    const organization = req.query.organization ? String(req.query.organization) : req.query.organization_id ? String(req.query.organization_id) : req.query.org ? String(req.query.org) : null;
     const tenantId = getTenantId(req);
 
-    const result = await connection.query(
-      `SELECT fn_get_report_recurring_contracts(
-        $1::timestamptz, $2::timestamptz, $3::varchar, $4::varchar, 
-        $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::int
-      ) AS report_data`,
-      [fromDate, toDate, owner, pipeline, cycle, status, productType, search, tenantId]
-    );
+    const queryParams = [fromDate, toDate, owner, pipeline, cycle, status, productType, search, tenantId, organization];
+    const execProc = () =>
+      connection!.query(
+        `SELECT fn_get_report_recurring_contracts(
+          $1::timestamptz, $2::timestamptz, $3::varchar, $4::varchar, 
+          $5::varchar, $6::varchar, $7::varchar, $8::varchar, $9::int, $10::varchar
+        ) AS report_data`,
+        queryParams
+      );
+
+    let result;
+    try {
+      result = await execProc();
+    } catch (procErr: any) {
+      if (procErr.code === '42883' || /does not exist/i.test(procErr.message)) {
+        logger.warn('fn_get_report_recurring_contracts missing in DB, executing setupRecurringReport...');
+        try {
+          const { setupRecurringReport } = await import('@/scripts/setupRecurringReport');
+          await setupRecurringReport();
+          result = await execProc();
+        } catch (setupErr: any) {
+          logger.error({ setupErr }, 'Failed to install recurring report function on the fly');
+          throw setupErr;
+        }
+      } else {
+        throw procErr;
+      }
+    }
 
     const data = result.rows[0]?.report_data || null;
 
