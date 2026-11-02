@@ -108,14 +108,19 @@ export const stripHtmlToText = (input: string | null | undefined): string => {
   text = text.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
   text = text.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, "");
 
-  // Strip CSS block debris, @media rules, and inline style fragments that leaked into text
+  // Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
+  text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
+
+  // Strip CSS block debris, @media rules, selectors, and inline style fragments that leaked into text
   text = text
-    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, "")
-    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, "")
-    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, "")
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "")
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "")
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{[^}]*\}/g, "\n")
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*\{[^}\n]*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)[ \t]*(?:body|table|td|th|h[1-6]|div|span|strong|b|i|p|ul|ol|li|a)[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*,?\s*(?=\n|$)/gi, "\n")
     .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "")
     .replace(/!important\s*;\s*\}\s*\d*/gi, "")
-    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, "");
+    .replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
 
   // Preserve email addresses inside angle brackets like <user@example.com> before stripping HTML tags
   text = text.replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, "$1");
@@ -231,36 +236,51 @@ export const cleanEmailAddress = (raw: any): string => {
 
 /**
  * Formats email bodies into clean, safe HTML suitable for rendering in the email viewer.
- * Cleans out CSS debris, un-wraps multiline tracking URLs, transforms ugly links into clean clickable anchors,
- * and preserves paragraph and text readability.
+ * Strips leaked CSS selector blocks, invisible preheader padding characters, un-wraps tracking links,
+ * and converts ugly raw URL lines into clean, clickable hyperlinks.
  */
 export const formatEmailBodyHtml = (input: string | null | undefined): string => {
   if (!input) return "";
   let text = String(input);
 
-  // 1. Remove dangerous scripts and style blocks
+  // 1. Remove conditional comments, HTML comments, doctype, style, script, head
+  text = text.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, "");
   text = text.replace(/<!--[\s\S]*?-->/g, "");
   text = text.replace(/<!DOCTYPE[^>]*>/gi, "");
   text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
   text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
 
-  // 2. Strip CSS debris
-  text = text
-    .replace(/@media[^{]*\{[^{}]*\{[^{}]*\}\s*\}/gi, "")
-    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}/gi, "")
-    .replace(/(?:^|\n)\s*[.#][a-zA-Z0-9_\-#.,\s>:+]+\s*\{[^}]*\}/gm, "")
-    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "")
-    .replace(/!important\s*;\s*\}\s*\d*/gi, "")
-    .replace(/^[ \t]*\}?\s*\d+\s*$/gm, "");
+  // 2. Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
+  text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
 
-  // 3. Un-wrap multiline URLs inside parentheses
+  // 3. Remove CSS @rules (@media, @import, @keyframes, @font-face, etc.)
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "");
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "");
+
+  // 4. Remove complete CSS rules: selector { property: value; ... }
+  text = text.replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{[^}]*\}/g, "\n");
+
+  // 5. Remove CSS selector lines ending with { or containing multiple { like "ol, li, a { sup {" or ".mobile-only {"
+  text = text.replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*\{[^}\n]*(?=\n|$)/g, "\n");
+
+  // 6. Remove CSS selector continuation lines (e.g. "body, table, td, th, h1, h2, h3, div, span, strong, b, i, p, ul,")
+  text = text.replace(/(?:^|\n)[ \t]*(?:body|table|td|th|h[1-6]|div|span|strong|b|i|p|ul|ol|li|a)[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*,\s*(?=\n|$)/gi, "\n");
+
+  // 7. Remove CSS property declarations like "padding-right: 15px !important; } 96"
+  text = text.replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "");
+  text = text.replace(/!important\s*;\s*\}\s*\d*/gi, "");
+
+  // 8. Remove any line that only consists of CSS braces, punctuation, or whitespace remnants
+  text = text.replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
+
+  // 9. Un-wrap multiline URLs inside parentheses: ( https://... \n ... )
   text = text.replace(/\(\s*(https?:\/\/[^)]+?)\s*\)/gis, (_match, rawUrl) => {
     const cleanUrl = rawUrl.replace(/[\r\n\s]+/g, "");
     return `( ${cleanUrl} )`;
   });
 
-  // 4. Transform mailparser link patterns
+  // 10. Transform mailparser link patterns
   // Pattern 1: ( https://... ) Label
   text = text.replace(
     /\(\s*(https?:\/\/\S+)\s*\)\s*([A-Za-z0-9][^\n\r()]{2,80})/g,
@@ -296,13 +316,13 @@ export const formatEmailBodyHtml = (input: string | null | undefined): string =>
     }
   );
 
-  // 5. Convert newlines to HTML <br /> while preserving spacing
+  // 11. Normalize newlines
   text = text
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // If text already has HTML block tags (like <p>, <div>, <table>), preserve them
+  // If text already has HTML block tags (like <p>, <div>, <table>), return as is
   if (/<(p|div|table|h[1-6]|ul|ol|blockquote)\b/i.test(text)) {
     return text;
   }
