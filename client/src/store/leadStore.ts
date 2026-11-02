@@ -120,7 +120,7 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
           total: state.total + 1,
           error: null,
         }));
-        handleSuccessResponse("Lead", "created", null);
+        handleSuccessResponse("Lead", "saved", response);
         return newLead;
       } else {
         throw new Error(response.data?.message || "Failed to create lead");
@@ -146,7 +146,7 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
           ),
           error: null,
         }));
-        handleSuccessResponse("Lead", "updated", null);
+        handleSuccessResponse("Lead", "saved", response);
         return response.data.data;
       } else {
         throw new Error(response.data?.message || "Failed to update lead");

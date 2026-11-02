@@ -13,6 +13,15 @@ const stripHtmlToText = (input: string | null | undefined): string => {
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, ' ')
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, '')
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, '')
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{[^}]*\}/g, '\n')
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*\{[^}\n]*(?=\n|$)/g, '\n')
+    .replace(/(?:^|\n)[ \t]*(?:body|table|td|th|h[1-6]|div|span|strong|b|i|p|ul|ol|li|a)[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*,?\s*(?=\n|$)/gi, '\n')
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, '')
+    .replace(/!important\s*;\s*\}\s*\d*/gi, '')
+    .replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, '')
     .replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, '$1')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|tr|li|h[1-6]|blockquote|section|article|header|footer|table)>/gi, '\n')
@@ -28,6 +37,71 @@ const stripHtmlToText = (input: string | null | undefined): string => {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+};
+
+export const cleanEmailBodyContent = (input: string | null | undefined): string => {
+  if (!input) return "";
+  let text = String(input);
+
+  // 1. Remove conditional comments, HTML comments, doctype, style, script, head
+  text = text.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, "");
+  text = text.replace(/<!--[\s\S]*?-->/g, "");
+  text = text.replace(/<!DOCTYPE[^>]*>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+
+  // 2. Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
+  text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
+
+  // 3. Un-wrap multiline URLs inside parentheses FIRST so dots inside domains are safe
+  text = text.replace(/\(\s*(https?:\/\/[^)]+?)\s*\)/gis, (_match, rawUrl) => {
+    const cleanUrl = rawUrl.replace(/[\r\n\s]+/g, "");
+    return `( ${cleanUrl} )`;
+  });
+
+  // 4. Strip CSS @rules (@media, @import, @keyframes, etc.)
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "");
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "");
+
+  // 5. Strip CSS property declarations: property: value [!important];
+  text = text.replace(/[a-zA-Z0-9_-]+\s*:\s*[^;{}\n]+(?:!important)?\s*;?/gi, (match) => {
+    if (/(?:color|background|margin|padding|width|height|font|display|border|float|overflow|text|line-height|max-|min-|align|clear|visibility|opacity|position|top|left|right|bottom|table-layout|vertical-align|box-sizing|cursor|outline|z-index|!important)/i.test(match)) {
+      return " ";
+    }
+    return match;
+  });
+
+  // 6. Strip comma-separated HTML element selector lists (e.g. "body, table, td, th, h1, h2, h3, div, span, strong, b, i, p, ul, ol, li, a")
+  text = text.replace(/(?:^|\n)[ \t]*(?:(?:body|table|tbody|thead|tr|th|td|div|span|strong|b|i|em|p|ul|ol|li|a|h[1-6]|sup|sub|img)[ \t]*,[ \t]*)+[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*(?:\{|\n|$)/gim, "\n");
+
+  // 7. Iteratively remove CSS selector chains ending in { or {} or open braces
+  for (let i = 0; i < 15; i++) {
+    const prev = text;
+    text = text.replace(/(?:^|\s|\{)[.#*a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{/g, " ");
+    text = text.replace(/\{\s*\}/g, " ");
+    text = text.replace(/\{[ \t]*/g, " ");
+    text = text.replace(/\}[ \t]*/g, " ");
+    if (text === prev) break;
+  }
+
+  // 8. Strip isolated CSS class selector remnants (only when preceded by whitespace and not inside a URL)
+  text = text.replace(/(?<![/:a-zA-Z0-9])\.[a-zA-Z0-9_-]{2,}\b/g, " ");
+  text = text.replace(/\*\[class=[^\]]+\]/g, " ");
+
+  // 9. Remove any line that only consists of punctuation/braces remnants
+  text = text.replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
+
+  // 10. Normalize newlines
+  text = text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return text;
 };
 
 export class MailService {
@@ -97,7 +171,7 @@ export class MailService {
     }
 
     const email = emailQueryResult.rows[0];
-    email.reply = stripHtmlToText(email.reply);
+    email.reply = cleanEmailBodyContent(email.reply);
 
     // Mark email as read automatically via procedural function
     if (!email.is_read) {
@@ -121,7 +195,7 @@ export class MailService {
 
     const replies = repliesQueryResult.rows;
     for (const reply of replies) {
-      reply.reply = stripHtmlToText(reply.reply);
+      reply.reply = cleanEmailBodyContent(reply.reply);
       const replyAttachmentsQueryResult = await pool.query(
         'SELECT * FROM public.fn_get_email_attachments($1)',
         [reply.id]

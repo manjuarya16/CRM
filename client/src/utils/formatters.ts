@@ -108,6 +108,20 @@ export const stripHtmlToText = (input: string | null | undefined): string => {
   text = text.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
   text = text.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, "");
 
+  // Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
+  text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
+
+  // Strip CSS block debris, @media rules, selectors, and inline style fragments that leaked into text
+  text = text
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "")
+    .replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "")
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{[^}]*\}/g, "\n")
+    .replace(/(?:^|\n)[ \t]*[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*\{[^}\n]*(?=\n|$)/g, "\n")
+    .replace(/(?:^|\n)[ \t]*(?:body|table|td|th|h[1-6]|div|span|strong|b|i|p|ul|ol|li|a)[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*,?\s*(?=\n|$)/gi, "\n")
+    .replace(/(?:padding|margin|font|color|background|width|height|border|display|line-height|text-align)[a-z-]*\s*:\s*[^;{}\n]+(?:!important)?\s*;?\s*\}?\s*\d*/gi, "")
+    .replace(/!important\s*;\s*\}\s*\d*/gi, "")
+    .replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
+
   // Preserve email addresses inside angle brackets like <user@example.com> before stripping HTML tags
   text = text.replace(/<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/g, "$1");
 
@@ -218,4 +232,112 @@ export const cleanEmailAddress = (raw: any): string => {
   return str.replace(/^[<>"'\s]+|[<>"'\s]+$/g, "").trim();
 };
 
+/**
+ * Formats email bodies into clean, safe HTML suitable for rendering in the email viewer.
+ * Strips leaked CSS selector blocks, invisible preheader padding characters, un-wraps tracking links,
+ * and converts ugly raw URL lines into clean, clickable hyperlinks.
+ */
+export const formatEmailBodyHtml = (input: string | null | undefined): string => {
+  if (!input) return "";
+  let text = String(input);
 
+  // 1. Remove conditional comments, HTML comments, doctype, style, script, head
+  text = text.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, "");
+  text = text.replace(/<!--[\s\S]*?-->/g, "");
+  text = text.replace(/<!DOCTYPE[^>]*>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+
+  // 2. Strip Unicode zero-width preheader filler characters (\u034F, \u200B, \u200C, \uFEFF, \u00A0, etc.)
+  text = text.replace(/[\u034F\u200B-\u200F\uFEFF\u00A0\u00AD]+/g, " ");
+
+  // 3. Un-wrap multiline URLs inside parentheses FIRST so dots inside domains are safe
+  text = text.replace(/\(\s*(https?:\/\/[^)]+?)\s*\)/gis, (_match, rawUrl) => {
+    const cleanUrl = rawUrl.replace(/[\r\n\s]+/g, "");
+    return `( ${cleanUrl} )`;
+  });
+
+  // 4. Strip CSS @rules (@media, @import, @keyframes, etc.)
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^{}]*\{[^{}]*\}\s*\}?/gi, "");
+  text = text.replace(/@[a-zA-Z0-9_-]+[^{]*\{[^}]*\}?/gi, "");
+
+  // 5. Strip CSS property declarations: property: value [!important];
+  text = text.replace(/[a-zA-Z0-9_-]+\s*:\s*[^;{}\n]+(?:!important)?\s*;?/gi, (match) => {
+    if (/(?:color|background|margin|padding|width|height|font|display|border|float|overflow|text|line-height|max-|min-|align|clear|visibility|opacity|position|top|left|right|bottom|table-layout|vertical-align|box-sizing|cursor|outline|z-index|!important)/i.test(match)) {
+      return " ";
+    }
+    return match;
+  });
+
+  // 6. Strip comma-separated HTML element selector lists (e.g. "body, table, td, th, h1, h2, h3, div, span, strong, b, i, p, ul, ol, li, a")
+  text = text.replace(/(?:^|\n)[ \t]*(?:(?:body|table|tbody|thead|tr|th|td|div|span|strong|b|i|em|p|ul|ol|li|a|h[1-6]|sup|sub|img)[ \t]*,[ \t]*)+[a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]*(?:\{|\n|$)/gim, "\n");
+
+  // 7. Iteratively remove CSS selector chains ending in { or {} or open braces
+  for (let i = 0; i < 15; i++) {
+    const prev = text;
+    text = text.replace(/(?:^|\s|\{)[.#*a-zA-Z0-9_.\-#*~> \t,:+[\]=\'\"]+\s*\{/g, " ");
+    text = text.replace(/\{\s*\}/g, " ");
+    text = text.replace(/\{[ \t]*/g, " ");
+    text = text.replace(/\}[ \t]*/g, " ");
+    if (text === prev) break;
+  }
+
+  // 8. Strip isolated CSS class selector remnants (only when preceded by whitespace and not inside a URL)
+  text = text.replace(/(?<![/:a-zA-Z0-9])\.[a-zA-Z0-9_-]{2,}\b/g, " ");
+  text = text.replace(/\*\[class=[^\]]+\]/g, " ");
+
+  // 9. Remove any line that only consists of punctuation/braces remnants
+  text = text.replace(/^[ \t]*[{}();:,.\-_ \t\d]+$/gm, "");
+
+  // 10. Transform mailparser link patterns
+  text = text.replace(
+    /\(\s*(https?:\/\/\S+)\s*\)\s*([A-Za-z0-9][^\n\r()]{2,80})/g,
+    (_m, url, label) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
+  );
+
+  text = text.replace(
+    /([A-Za-z0-9][^\n\r()]{2,80})\s*\n?\s*\(\s*(https?:\/\/\S+)\s*\)/g,
+    (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline font-semibold">${label.trim()}</a>`
+  );
+
+  text = text.replace(
+    /\(\s*(https?:\/\/\S+)\s*\)/g,
+    (_m, url) => {
+      let host = "Link";
+      try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[#0088cc] hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 my-0.5">${host} &rarr;</a>`;
+    }
+  );
+
+  text = text.replace(
+    /(?<!href=["'])(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+)(?!["']>)/g,
+    (url) => {
+      let host = url;
+      try {
+        const u = new URL(url);
+        host = u.hostname.replace(/^www\./, "");
+      } catch {}
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-[#0088cc] hover:underline">${host}</a>`;
+    }
+  );
+
+  // 11. Normalize newlines
+  text = text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // If text already has HTML block tags (like <p>, <div>, <table>), return as is
+  if (/<(p|div|table|h[1-6]|ul|ol|blockquote)\b/i.test(text)) {
+    return text;
+  }
+
+  const paragraphs = text.split(/\n\s*\n/);
+  return paragraphs
+    .map((p) => `<p class="mb-3">${p.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+};

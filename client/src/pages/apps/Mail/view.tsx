@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useMailStore, useLeadStore } from "@/store";
 import { EmailItem } from "@/interface";
 import API, { API_URL } from "@/config";
-import { formatFileSize, stripHtmlToText, cleanEmailAddress } from "@/utils/formatters";
+import { formatFileSize, stripHtmlToText, cleanEmailAddress, formatEmailBodyHtml } from "@/utils/formatters";
 
 const MailViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -394,9 +394,10 @@ const MailViewPage: React.FC = () => {
             </div>
 
             {/* Email Message Content Body */}
-            <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap min-h-[100px]">
-              {stripHtmlToText(email.reply)}
-            </div>
+            <div
+              className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed min-h-[100px] break-words"
+              dangerouslySetInnerHTML={{ __html: formatEmailBodyHtml(email.reply) }}
+            />
 
             {/* Email Attachments */}
             {email.attachments && email.attachments.length > 0 && (
@@ -519,9 +520,10 @@ const MailViewPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-                      {stripHtmlToText(replyItem.reply)}
-                    </div>
+                    <div
+                      className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed break-words"
+                      dangerouslySetInnerHTML={{ __html: formatEmailBodyHtml(replyItem.reply) }}
+                    />
 
                     {/* Reply Attachments */}
                     {replyItem.attachments && replyItem.attachments.length > 0 && (

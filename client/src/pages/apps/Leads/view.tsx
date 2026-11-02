@@ -102,6 +102,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getLocalTodayString = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const formatDateDisplay = (dateStr?: string) => {
   if (!dateStr) return "-";
   try {
@@ -529,6 +537,19 @@ const LeadViewPage: React.FC = () => {
     const contractDuration = isRecurring ? (Number(newProd.contract_duration) || 12) : undefined;
     const contractStartDate = isRecurring ? (newProd.contract_start_date || new Date().toISOString().split("T")[0]) : undefined;
     const contractEndDate = isRecurring ? (newProd.contract_end_date || computeContractEndDate(contractStartDate, String(contractDuration || 12))) : undefined;
+    const today = getLocalTodayString();
+    if (isRecurring && contractStartDate && contractStartDate < today) {
+      setProdError(`Start date cannot be in the past (before ${today})`);
+      return;
+    }
+    if (isRecurring && contractEndDate && contractEndDate < today) {
+      setProdError(`End date cannot be in the past (before ${today})`);
+      return;
+    }
+    if (isRecurring && contractStartDate && contractEndDate && contractEndDate < contractStartDate) {
+      setProdError(`End date (${contractEndDate}) cannot be earlier than start date (${contractStartDate})`);
+      return;
+    }
 
     await addLeadProduct(
       leadId,
@@ -1441,16 +1462,27 @@ const getPersonEmail = (person: any): string => {
                           <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Start Date:</span>
                           <input
                             type="date"
-                            value={newProd.contract_start_date || ""}
+                            min={getLocalTodayString()}
+                            value={newProd.contract_start_date || getLocalTodayString()}
                             onChange={(e) => {
                               const start = e.target.value;
+                              const today = getLocalTodayString();
+                              if (start && start < today) {
+                                setProdError(`Start date cannot be in the past (before ${today})`);
+                                return;
+                              }
+                              setProdError("");
                               setNewProd((prev) => ({
                                 ...prev,
                                 contract_start_date: start,
                                 contract_end_date: computeContractEndDate(start, prev.contract_duration || "12"),
                               }));
                             }}
-                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                            className={`px-2 py-1 bg-white dark:bg-gray-900 border ${
+                              newProd.contract_start_date && newProd.contract_start_date < getLocalTodayString()
+                                ? "border-red-500 text-red-600"
+                                : "border-gray-300 dark:border-gray-600"
+                            } rounded text-xs`}
                           />
                         </div>
 
@@ -1458,9 +1490,24 @@ const getPersonEmail = (person: any): string => {
                           <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End Date:</span>
                           <input
                             type="date"
+                            min={newProd.contract_start_date && newProd.contract_start_date > getLocalTodayString() ? newProd.contract_start_date : getLocalTodayString()}
                             value={newProd.contract_end_date || ""}
-                            onChange={(e) => setNewProd({ ...newProd, contract_end_date: e.target.value })}
-                            className="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const today = getLocalTodayString();
+                              const minAllowed = newProd.contract_start_date && newProd.contract_start_date > today ? newProd.contract_start_date : today;
+                              if (val && val < minAllowed) {
+                                setProdError(`End date cannot be in the past or earlier than start date (${minAllowed})`);
+                                return;
+                              }
+                              setProdError("");
+                              setNewProd({ ...newProd, contract_end_date: val });
+                            }}
+                            className={`px-2 py-1 bg-white dark:bg-gray-900 border ${
+                              newProd.contract_end_date && (newProd.contract_end_date < getLocalTodayString() || (newProd.contract_start_date && newProd.contract_end_date < newProd.contract_start_date))
+                                ? "border-red-500 text-red-600"
+                                : "border-gray-300 dark:border-gray-600"
+                            } rounded text-xs`}
                           />
                         </div>
                       </div>
