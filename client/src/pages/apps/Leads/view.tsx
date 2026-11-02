@@ -1549,7 +1549,15 @@ const getPersonEmail = (person: any): string => {
                             type="date"
                             min={newProd.contract_start_date || undefined}
                             value={newProd.contract_end_date || ""}
-                            onChange={(e) => setNewProd({ ...newProd, contract_end_date: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (newProd.contract_start_date && val && val < newProd.contract_start_date) {
+                                setProdError(`End date cannot be earlier than start date (${newProd.contract_start_date})`);
+                                return;
+                              }
+                              setProdError("");
+                              setNewProd({ ...newProd, contract_end_date: val });
+                            }}
                             className={`px-2 py-1 bg-white dark:bg-gray-900 border ${
                               newProd.contract_start_date && newProd.contract_end_date && newProd.contract_end_date < newProd.contract_start_date
                                 ? "border-red-500 text-red-600"

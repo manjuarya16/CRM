@@ -435,9 +435,23 @@ const formatCycleDuration = (cycle?: string, duration?: number | string) => {
   return `${months} ${months === 1 ? "Month" : "Months"}`;
 };
 
+const toISODateString = (val?: string): string => {
+  if (!val) return "";
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{2}-\d{2}-\d{4}/.test(s)) {
+    const [d, m, y] = s.slice(0, 10).split("-");
+    return `${y}-${m}-${d}`;
+  }
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt.toISOString().split("T")[0];
+  return s;
+};
+
 const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: string): string => {
     if (!startDateStr) return "";
-    const parts = startDateStr.split("-").map(Number);
+    const cleanDate = toISODateString(startDateStr);
+    const parts = cleanDate.split("-").map(Number);
     if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return "";
     const [y, m, d] = parts;
     const months = parseInt(durationMonthsStr || "12", 10) || 12;
@@ -526,10 +540,29 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       }
 
       if (field === "contract_start_date") {
-        next[idx].contract_start_date = val;
-        if (!next[idx].contract_end_date || next[idx].contract_end_date < val) {
-          next[idx].contract_end_date = computeContractEndDate(val, next[idx].contract_duration || "12");
+        const startIso = toISODateString(val);
+        next[idx].contract_start_date = startIso;
+        const currentEndIso = toISODateString(next[idx].contract_end_date);
+        if (!currentEndIso || currentEndIso < startIso) {
+          next[idx].contract_end_date = computeContractEndDate(startIso, next[idx].contract_duration || "12");
         }
+      }
+
+      if (field === "contract_end_date") {
+        const endIso = toISODateString(val);
+        const startIso = toISODateString(next[idx].contract_start_date);
+        if (startIso && endIso && endIso < startIso) {
+          Swal.fire({
+            icon: "warning",
+            title: "Invalid End Date",
+            text: `End date (${endIso}) cannot be earlier than start date (${startIso}).`,
+            timer: 3000,
+            showConfirmButton: false,
+          });
+          next[idx].contract_end_date = computeContractEndDate(startIso, next[idx].contract_duration || "12");
+          return next;
+        }
+        next[idx].contract_end_date = endIso;
       }
 
       if (field === "contract_duration") {
@@ -1721,8 +1754,8 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                             <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">End:</span>
                                             <input
                                               type="date"
-                                              min={row.contract_start_date || undefined}
-                                              value={row.contract_end_date || ""}
+                                              min={toISODateString(row.contract_start_date) || undefined}
+                                              value={toISODateString(row.contract_end_date) || ""}
                                               onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
                                               className={`py-1 px-2 text-xs font-medium rounded-lg border bg-white dark:bg-gray-800 focus:outline-none focus:ring-1 shadow-xs ${
                                                 (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
@@ -1892,8 +1925,8 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                                   <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">End Date</label>
                                   <input
                                     type="date"
-                                    min={row.contract_start_date || undefined}
-                                    value={row.contract_end_date || ""}
+                                    min={toISODateString(row.contract_start_date) || undefined}
+                                    value={toISODateString(row.contract_end_date) || ""}
                                     onChange={(e) => handleProductRowChange(idx, "contract_end_date", e.target.value)}
                                     className={`${inputCls} !py-1 text-xs ${
                                       (row.contract_end_date && row.contract_start_date && row.contract_end_date < row.contract_start_date) || errors[`contract_end_date_${idx}`]
