@@ -339,7 +339,7 @@ router.use(requireSuperAdmin, requirePlatformModulePermission);
 router.get('/platform-users', handler(async (req, res) => {
   const roleIds = await visiblePlatformRoleIds(req);
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.email, u.platform_role_id, r.name AS role_name,
+    `SELECT u.id, u.name, u.email, u.phone, u.platform_role_id, r.name AS role_name,
             u.status, u.created_at, u.updated_at
        FROM public.saas_super_admins u
        LEFT JOIN public.platform_roles r ON r.id = u.platform_role_id
@@ -354,6 +354,7 @@ router.post('/platform-users', handler(async (req, res) => {
   const input = z.object({
     name: z.string().trim().min(1).max(255),
     email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()),
+    phone: z.string().trim().max(20).optional().nullable(),
     password: z.string().min(8).max(128),
     platform_role_id: idSchema,
     status: z.enum(['active', 'suspended']).default('active'),
@@ -363,10 +364,10 @@ router.post('/platform-users', handler(async (req, res) => {
   if (!role.rowCount) throw new ApiError(400, 'Platform role was not found');
   const passwordHash = await bcrypt.hash(input.password, 10);
   const { rows } = await pool.query(
-    `INSERT INTO public.saas_super_admins (name, email, password_hash, platform_role_id, status)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, name, email, platform_role_id, status, created_at, updated_at`,
-    [input.name, input.email, passwordHash, input.platform_role_id, input.status]
+    `INSERT INTO public.saas_super_admins (name, email, phone, password_hash, platform_role_id, status)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, email, phone, platform_role_id, status, created_at, updated_at`,
+    [input.name, input.email, input.phone || null, passwordHash, input.platform_role_id, input.status]
   );
   res.status(201).json({ success: true, data: rows[0] });
 }));
@@ -375,6 +376,7 @@ router.patch('/platform-users/:id', handler(async (req, res) => {
   const input = z.object({
     name: z.string().trim().min(1).max(255).optional(),
     email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()).optional(),
+    phone: z.string().trim().max(20).optional().nullable(),
     password: z.string().min(8).max(128).optional(),
     platform_role_id: idSchema.optional(),
     status: z.enum(['active', 'suspended']).optional(),
@@ -397,7 +399,7 @@ router.patch('/platform-users/:id', handler(async (req, res) => {
   }
   const fields: string[] = [];
   const values: unknown[] = [];
-  for (const key of ['name', 'email', 'platform_role_id', 'status'] as const) {
+  for (const key of ['name', 'email', 'phone', 'platform_role_id', 'status'] as const) {
     if (input[key] !== undefined) {
       values.push(input[key]);
       fields.push(`${key}=$${values.length}`);
@@ -412,7 +414,7 @@ router.patch('/platform-users/:id', handler(async (req, res) => {
     `UPDATE public.saas_super_admins
         SET ${fields.join(', ')}, updated_at=NOW()
       WHERE id=$${values.length}
-      RETURNING id, name, email, platform_role_id, status, created_at, updated_at`,
+      RETURNING id, name, email, phone, platform_role_id, status, created_at, updated_at`,
     values
   );
   if (!rows.length) throw new ApiError(404, 'Super Admin user not found');

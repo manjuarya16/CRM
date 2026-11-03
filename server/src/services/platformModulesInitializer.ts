@@ -28,6 +28,8 @@ export async function initializePlatformModuleTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS platform_role_id BIGINT
       REFERENCES public.platform_roles(id) ON DELETE SET NULL;
     ALTER TABLE public.saas_super_admins
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+    ALTER TABLE public.saas_super_admins
       ADD COLUMN IF NOT EXISTS is_platform_owner BOOLEAN;
     UPDATE public.saas_super_admins
        SET is_platform_owner = (platform_role_id IS NULL)
