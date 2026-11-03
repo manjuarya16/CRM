@@ -25,7 +25,7 @@ const AuthLayout = ({
     <div
       className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 md:p-8 relative select-none font-sans overflow-hidden"
       style={{
-        background: "radial-gradient(circle at 50% 20%, #1E3A8A 0%, #0B0F1A 70%)",
+        background: "radial-gradient(circle at 50% 20%, #1e3a5f 0%, #142236 50%, #0d1724 100%)",
       }}
     >
       {/* Centered Single Form Card Container */}
@@ -40,9 +40,13 @@ const AuthLayout = ({
                 className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all drop-shadow-sm"
               />
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-white/10 text-white flex items-center justify-center font-bold text-3xl shadow-sm">
-                C
-              </div>
+              <img
+                src="/logonew.png"
+                alt={orgName || "CRM"}
+                className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all drop-shadow-sm"
+              />
+
+
             )}
           </Link>
         </div>

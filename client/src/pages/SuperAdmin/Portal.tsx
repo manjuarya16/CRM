@@ -11,6 +11,7 @@ import SuperAdminOrganizationEdit from "@/pages/admin/EditOrganization";
 import SuperAdminModulePage from "@/pages/SuperAdmin/ModulePage.tsx";
 import NotificationDropdown from "@/pages/SuperAdmin/NotificationDropdown";
 import EmailTemplatesPage from "@/pages/SuperAdmin/EmailTemplatesPage";
+import useAppLogo from "@/hooks/useAppLogo";
 import "@/pages/SuperAdmin/superAdminTheme.css";
 import { API } from "@/config";
 import {
@@ -53,6 +54,7 @@ const SuperAdminPortal: React.FC = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { admin, token, logout, refreshAdminProfile } = useSuperAdminStore();
+  const { logoLight, orgName } = useAppLogo();
   const [counts, setCounts] = useState<{ [key: string]: number }>({});
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -232,18 +234,25 @@ const SuperAdminPortal: React.FC = () => {
       >
         {/* Brand Header matching domain theme logo box */}
         <div
-          className="flex h-[70px] items-center justify-between border-b border-[#03075e] bg-[#040975] px-5 shrink-0"
+          className="flex h-[70px] items-center justify-between border-b border-[#03075e] bg-[#040975] px-4 shrink-0"
           style={{ height: "70px", background: "#040975" }}
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white shadow-sm">
-              <Shield className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-base font-bold tracking-tight text-white leading-tight">Super Admin</p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-200/80">CRM Console</p>
-            </div>
-          </div>
+          <Link to="/" className="flex items-center gap-2 overflow-hidden hover:opacity-95 transition-opacity" aria-label="Home">
+            <img
+              src={logoLight || "/logonew.png"}
+              alt={orgName || "MORSE CRM"}
+              className="h-11 max-h-[48px] w-auto max-w-[170px] object-contain object-left drop-shadow-sm"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.src.endsWith("/logo-2.png")) {
+                  target.src = "/logo-2.png";
+                }
+              }}
+            />
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-blue-100 border border-white/20 shrink-0">
+              Admin
+            </span>
+          </Link>
           {/* Close button on mobile */}
           <button
             type="button"

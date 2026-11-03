@@ -381,28 +381,13 @@ const SuperAdminPayments: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Tabs: Payment Transactions vs Webhook Logs */}
+      {/* Main Tabs: Payment Transactions */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 gap-2">
         <button
-          className={`py-2.5 px-4 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
-            activeTab === "payments"
-              ? "border-primary text-primary"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-          }`}
+          className="py-2.5 px-4 font-bold text-sm border-b-2 border-primary text-primary transition flex items-center gap-2"
           onClick={() => setActiveTab("payments")}
         >
           <i className="mgc_wallet_2_line text-base"></i> Payment Transactions ({payments.length})
-        </button>
-
-        <button
-          className={`py-2.5 px-4 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
-            activeTab === "webhooks"
-              ? "border-primary text-primary"
-              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-          }`}
-          onClick={() => setActiveTab("webhooks")}
-        >
-          <i className="mgc_refresh_3_line text-base"></i> Webhook Event Tracking ({webhookLogs.length})
         </button>
       </div>
 
@@ -411,8 +396,8 @@ const SuperAdminPayments: React.FC = () => {
         <>
           {/* Filter Bar */}
           <div className="card mb-6 p-4">
-            <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-              <div>
+            <form onSubmit={handleFilterSubmit} className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[180px]">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Organization</label>
                 <select
                   className="form-select text-xs w-full py-1.5 px-2"
@@ -428,7 +413,7 @@ const SuperAdminPayments: React.FC = () => {
                 </select>
               </div>
 
-              <div>
+              <div className="flex-1 min-w-[180px]">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Search ID / Invoice</label>
                 <input
                   type="text"
@@ -439,7 +424,7 @@ const SuperAdminPayments: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="w-40 min-w-[130px]">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Payment Status</label>
                 <select
                   className="form-select text-xs w-full py-1.5 px-2"
@@ -453,37 +438,36 @@ const SuperAdminPayments: React.FC = () => {
                 </select>
               </div>
 
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">From</label>
-                  <input
-                    type="date"
-                    className="form-input text-xs w-full py-1.5 px-2"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">To</label>
-                  <input
-                    type="date"
-                    className="form-input text-xs w-full py-1.5 px-2"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </div>
+              <div className="w-36 min-w-[135px]">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">From</label>
+                <input
+                  type="date"
+                  className="form-input text-xs w-full py-1.5 px-2"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
               </div>
 
-              <div className="flex gap-2">
+              <div className="w-36 min-w-[135px]">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">To</label>
+                <input
+                  type="date"
+                  className="form-input text-xs w-full py-1.5 px-2"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="submit"
-                  className="btn bg-primary text-white text-xs px-4 py-2 rounded-lg flex-1 hover:bg-primary-600 transition"
+                  className="btn bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary-600 transition"
                 >
                   Filter
                 </button>
                 <button
                   type="button"
-                  className="btn border border-gray-300 text-gray-700 text-xs px-3 py-2 rounded-lg hover:bg-gray-100 transition"
+                  className="btn border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
                   onClick={handleClearFilters}
                 >
                   Reset
@@ -538,6 +522,7 @@ const SuperAdminPayments: React.FC = () => {
                         <table className="w-full min-w-[850px] divide-y divide-gray-200 dark:divide-gray-700">
                           <thead className="bg-gray-50 dark:bg-gray-700 text-xs font-semibold text-gray-500 uppercase">
                             <tr>
+                              <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-16">Sr. No.</th>
                               <th className="px-4 py-3 text-left">Invoice / Txn ID</th>
                               <th className="px-4 py-3 text-left">Organization</th>
                               <th className="px-3 py-3 text-left">Plan</th>
@@ -549,8 +534,11 @@ const SuperAdminPayments: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
-                            {paginatedPayments.map((p) => (
+                            {paginatedPayments.map((p, index) => (
                               <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                <td className="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400 font-mono font-medium w-16">
+                                  {startIndex + index + 1}
+                                </td>
                                 {/* Invoice / Txn ID */}
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   <div className="font-mono font-bold text-slate-800 dark:text-slate-200">

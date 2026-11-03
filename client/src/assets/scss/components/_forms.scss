@@ -25,6 +25,16 @@
         }
     }
 
+    // Safety safeguard: ensure input padding for search icons and trailing toggle icons is never overridden
+    input {
+        &[class*="pl-9"], &[class*="pl-10"], &[class*="!pl-9"], &[class*="!pl-10"] {
+            padding-left: 2.5rem !important;
+        }
+        &[class*="pr-8"], &[class*="pr-10"], &[class*="!pr-8"], &[class*="!pr-10"] {
+            padding-right: 2.5rem !important;
+        }
+    }
+
 
     .form-textarea {
         @apply font-normal rounded block w-full border-gray-200 text-sm focus:border-gray-300 

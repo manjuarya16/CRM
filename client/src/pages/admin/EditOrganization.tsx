@@ -209,8 +209,12 @@ const EditOrganization = () => {
       setActiveTab("basic");
       return;
     }
-    if (!registrationNo) {
+    if (!registrationNo.trim()) {
       setClientValidationError("Registration number is required.");
+      setActiveTab("legal");
+      return;
+    } else if (!/^[A-Za-z0-9-]+$/.test(registrationNo.trim())) {
+      setClientValidationError("Registration number can only contain letters, digits, and hyphens (-).");
       setActiveTab("legal");
       return;
     }
@@ -656,9 +660,12 @@ const EditOrganization = () => {
                 <input
                   type="text"
                   className="form-input text-xs w-full"
-                  placeholder="Enter registration number"
+                  placeholder="e.g. REG-2024-8891"
                   value={registrationNo}
-                  onChange={(e) => setRegistrationNo(e.target.value)}
+                  onChange={(e) => {
+                    const cleanVal = e.target.value.replace(/[^a-zA-Z0-9-]/g, "").toUpperCase();
+                    setRegistrationNo(cleanVal);
+                  }}
                   required
                   disabled={modalLoading}
                 />
