@@ -11,6 +11,7 @@ import {
   Check,
   ExternalLink,
   Eye,
+  EyeOff,
   Inbox,
   Mail,
   MailOpen,
@@ -87,6 +88,7 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
     fields: [
       { name: "name", label: "Full name", required: true },
       { name: "email", label: "Email", type: "email", required: true },
+      { name: "phone", label: "Phone number", type: "text", required: false },
       { name: "password", label: "Password", type: "text", required: true, secret: true },
       { name: "platform_role_id", label: "Role", type: "select", required: true },
       { name: "status", label: "Account status", type: "select", options: ["active", "suspended"], required: true },
@@ -334,6 +336,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [editing, setEditing] = useState<RecordValue | null>(null);
   const [viewing, setViewing] = useState<RecordValue | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [savedPermissions, setSavedPermissions] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -489,6 +493,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       : moduleKey === "roles" && admin?.platform_role_id
         ? { parent_role_id: String(admin.platform_role_id) }
         : {});
+    setFieldErrors({});
+    setShowPasswordMap({});
     setShowForm(true);
     setNotice("");
   };
@@ -504,6 +510,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       const value = record[field.name];
       next[field.name] = value === undefined || value === null ? "" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
     }
+    setFieldErrors({});
+    setShowPasswordMap({});
     setForm(next);
     setShowForm(true);
   };
@@ -516,52 +524,78 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setError("");
   };
 
+  const validateSingleField = (name: string, rawVal: string): string => {
+    const val = rawVal.trim();
+    if (["name", "admin_name", "from_name"].includes(name)) {
+      if (!val) return "Full name is required.";
+      if (!/^[a-zA-Z\s.'-]+$/.test(val)) return "Full name must only contain letters and spaces (no special characters).";
+      if (val.length < 2) return "Full name must be at least 2 characters.";
+    }
+    if (name === "email" || name.includes("email")) {
+      if (!val) return "Email address is required.";
+      if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val)) {
+        return "Please enter a valid email address (e.g. user@example.com).";
+      }
+    }
+    if (name.includes("phone") || name.includes("mobile") || name.includes("contact")) {
+      if (val && !/^[0-9]{10}$/.test(val)) {
+        return "Phone number must be exactly 10 digits.";
+      }
+    }
+    if (name === "password" || name === "admin_password") {
+      if (!editing && !val) return "Password is required.";
+      if (val && val.length < 8) return "Password must be at least 8 characters.";
+    }
+    if (name === "platform_role_id" && moduleKey === "users") {
+      if (!val) return "Please select a platform role.";
+    }
+    if (name === "slug") {
+      if (!val) return "Slug is required.";
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(val)) {
+        return "Slug must contain only lowercase letters, numbers, and single hyphens.";
+      }
+    }
+    return "";
+  };
+
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
-    setSaving(true);
     setError("");
     setNotice("");
-    let actionResult: RecordValue | null = null;
-    try {
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      const phoneRegex = /^[0-9]{10}$/;
-      const nameRegex = /^[a-zA-Z0-9\s.,'&-]+$/;
-      const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-      for (const field of fields) {
-        const val = form[field.name]?.trim();
-        if (!val) continue;
+    // Comprehensive client-side validation
+    const newErrors: Record<string, string> = {};
+    for (const field of fields) {
+      const isHidden =
+        (moduleKey === "payments" && tenantId && field.name === "tenant_id") ||
+        (moduleKey === "subscriptions" && editing && field.name === "trial_days") ||
+        (moduleKey === "subscriptions" && !editing && field.name !== "pricing_tier_id");
+      if (isHidden) continue;
 
-        if (field.type === "email" || field.name.includes("email")) {
-          if (!emailRegex.test(val)) {
-            setError(`Please enter a valid email address for ${field.label}.`);
-            setSaving(false);
-            return;
-          }
-        }
-        if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
-          if (!phoneRegex.test(val)) {
-            setError(`${field.label} must be exactly 10 digits.`);
-            setSaving(false);
-            return;
-          }
-        }
-        if (field.name === "slug") {
-          if (!slugRegex.test(val)) {
-            setError("Slug must contain only lowercase letters, numbers, and hyphens.");
-            setSaving(false);
-            return;
-          }
-        }
-        if (["name", "admin_name", "from_name"].includes(field.name)) {
-          if (!nameRegex.test(val)) {
-            setError(`${field.label} contains invalid special characters.`);
-            setSaving(false);
-            return;
-          }
+      const val = form[field.name] || "";
+      if (field.required && !(moduleKey === "users" && editing && field.name === "password")) {
+        if (!val.trim()) {
+          newErrors[field.name] = `${field.label} is required.`;
+          continue;
         }
       }
+      const err = validateSingleField(field.name, val);
+      if (err) {
+        newErrors[field.name] = err;
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
+      const firstError = Object.values(newErrors)[0];
+      setError(firstError);
+      return;
+    }
+
+    setSaving(true);
+    let actionResult: RecordValue | null = null;
+    try {
 
       const payload: RecordValue = {};
       for (const field of fields) {
@@ -903,7 +937,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
 
   const visibleColumns = useMemo(() => {
     if (moduleKey === "organizations") return ["name", "slug", "plan", "status", "email", "created_at"];
-    if (moduleKey === "users") return ["name", "email", "role_name", "status", "created_at"];
+    if (moduleKey === "users") return ["name", "email", "phone", "role_name", "status", "created_at"];
     if (moduleKey === "roles") return ["name", "description", "parent_role_name", "permission_type", "created_at"];
     if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "payment_status", "starts_at", "ends_at", "amount_cents", "currency"];
     if (moduleKey === "demos") return [
@@ -997,6 +1031,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       : [
           ["Name", viewing.name],
           ["Email", viewing.email],
+          ["Phone", viewing.phone],
           ["Role", viewing.role_name],
           ["Status", viewing.status],
           ["Created at", viewing.created_at],
@@ -1145,7 +1180,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       )}
 
       {showForm && (
-        <form onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
+        <form noValidate onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold text-white">{editing ? "Edit record" : createLabel}</h2>
             <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-400 hover:text-white">Close</button>
@@ -1155,65 +1190,177 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               !(moduleKey === "payments" && tenantId && field.name === "tenant_id") &&
               !(moduleKey === "subscriptions" && editing && field.name === "trial_days") &&
               !(moduleKey === "subscriptions" && !editing && field.name !== "pricing_tier_id")
-            ).map((field) => (
-              <label key={field.name} className={`text-xs font-medium text-slate-300 ${field.type === "textarea" ? "sm:col-span-2" : ""}`}>
-                {field.label}
-                {field.secret && <span className="ml-1 font-normal text-slate-500">(never shown after saving)</span>}
-                {field.name === "tenant_id" && moduleKey === "payments" ? (
-                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">Select a tenant</option>
-                    {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
-                  </select>
-                ) : field.name === "parent_role_id" && moduleKey === "roles" ? (
-                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    {records
-                      .filter((role) => !editing || String(role.id) !== String(editing.id))
-                      .map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name || `Role ${role.id}`)}`}</option>)}
-                  </select>
-                ) : field.name === "platform_role_id" && moduleKey === "users" ? (
-                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">Select a platform role</option>
-                    {platformRoles.map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name)}`}</option>)}
-                  </select>
-                ) : field.name === "pricing_tier_id" && moduleKey === "subscriptions" ? (
-                  <select value={form[field.name] || ""} onChange={(event) => {
-                    const pricingTierId = event.target.value;
-                    setForm((current) => ({ ...current, [field.name]: pricingTierId }));
-                  }} required={!editing || field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">{editing ? "No plan / trial only" : "Select a plan"}</option>
-                    {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)} — {String(plan.currency)} {Number(plan.amount_cents || 0) / 100} / {String(plan.billing_interval)}</option>)}
-                  </select>
-                ) : field.type === "textarea" ? (
-                  <textarea value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} rows={5} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
-                ) : field.type === "select" ? (
-                  <select value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                    <option value="">Select…</option>{field.options?.filter((option) =>
-                      !(moduleKey === "subscriptions" && field.name === "status" && option === "active" && editing?.status !== "active")
-                    ).map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                ) : (
-                  <input
-                    type={field.secret ? "password" : (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) ? "tel" : field.type || "text"}
-                    maxLength={field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact") ? 10 : undefined}
-                    value={form[field.name] || ""}
-                    onChange={(event) => {
-                      let val = event.target.value;
-                      if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
-                        val = val.replace(/\D/g, "").slice(0, 10);
-                      } else if (field.name === "slug") {
-                        val = val.toLowerCase().replace(/[^a-z0-9-]/g, "");
+            ).map((field) => {
+              const hasErr = Boolean(fieldErrors[field.name]);
+              const inputBorderClass = hasErr
+                ? "border-rose-500 ring-1 ring-rose-500 focus:border-rose-500"
+                : "border-slate-700 focus:border-indigo-500";
+
+              return (
+                <div key={field.name} className={`${field.type === "textarea" ? "sm:col-span-2" : ""}`}>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    {field.label}
+                    {field.required && !(moduleKey === "users" && editing && field.name === "password") && (
+                      <span className="text-rose-400 ml-1">*</span>
+                    )}
+                    {field.secret && <span className="ml-1 font-normal text-slate-500">(never shown after saving)</span>}
+                  </label>
+                  {field.name === "tenant_id" && moduleKey === "payments" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, [field.name]: event.target.value }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    >
+                      <option value="">Select a tenant</option>
+                      {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
+                    </select>
+                  ) : field.name === "parent_role_id" && moduleKey === "roles" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, [field.name]: event.target.value }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    >
+                      {records
+                        .filter((role) => !editing || String(role.id) !== String(editing.id))
+                        .map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name || `Role ${role.id}`)}`}</option>)}
+                    </select>
+                  ) : field.name === "platform_role_id" && moduleKey === "users" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, [field.name]: event.target.value }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    >
+                      <option value="">Select a platform role</option>
+                      {platformRoles.map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name)}`}</option>)}
+                    </select>
+                  ) : field.name === "pricing_tier_id" && moduleKey === "subscriptions" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        const pricingTierId = event.target.value;
+                        setForm((current) => ({ ...current, [field.name]: pricingTierId }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    >
+                      <option value="">{editing ? "No plan / trial only" : "Select a plan"}</option>
+                      {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)} — {String(plan.currency)} {Number(plan.amount_cents || 0) / 100} / {String(plan.billing_interval)}</option>)}
+                    </select>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, [field.name]: event.target.value }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      rows={5}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    />
+                  ) : field.type === "select" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        setForm((current) => ({ ...current, [field.name]: event.target.value }));
+                        if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                      }}
+                      
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    >
+                      <option value="">Select…</option>
+                      {field.options?.filter((option) =>
+                        !(moduleKey === "subscriptions" && field.name === "status" && option === "active" && editing?.status !== "active")
+                      ).map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  ) : field.secret ? (
+                    <div className="relative">
+                      <input
+                        type={showPasswordMap[field.name] ? "text" : "password"}
+                        maxLength={128}
+                        value={form[field.name] || ""}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setForm((current) => ({ ...current, [field.name]: val }));
+                          if (fieldErrors[field.name]) {
+                            const err = validateSingleField(field.name, val);
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                          }
+                        }}
+                        onBlur={() => {
+                          const err = validateSingleField(field.name, form[field.name] || "");
+                          if (err) setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                        }}
+                        autoComplete="new-password"
+                        placeholder="Min 8 characters"
+                        className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 outline-none`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordMap((prev) => ({ ...prev, [field.name]: !prev[field.name] }))}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+                        aria-label={showPasswordMap[field.name] ? "Hide password" : "Show password"}
+                      >
+                        {showPasswordMap[field.name] ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type={(field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) ? "tel" : field.type || "text"}
+                      maxLength={field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact") ? 10 : undefined}
+                      value={form[field.name] || ""}
+                      onChange={(event) => {
+                        let val = event.target.value;
+                        if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
+                          // Allow digits only (max 10 digits)
+                          val = val.replace(/\D/g, "").slice(0, 10);
+                        } else if (field.name === "slug") {
+                          val = val.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                        } else if (["name", "admin_name", "from_name"].includes(field.name)) {
+                          // No invalid special characters (letters, spaces, dots, hyphens, apostrophes only)
+                          val = val.replace(/[^a-zA-Z\s.'-]/g, "");
+                        }
+                        setForm((current) => ({ ...current, [field.name]: val }));
+                        if (fieldErrors[field.name]) {
+                          const err = validateSingleField(field.name, val);
+                          setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                        }
+                      }}
+                      onBlur={() => {
+                        const err = validateSingleField(field.name, form[field.name] || "");
+                        if (err) setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                      }}
+                      min={field.type === "number" ? 0 : undefined}
+                      placeholder={
+                        field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")
+                          ? "e.g. 9876543210 (10 digits)"
+                          : field.name === "name" || field.name === "admin_name"
+                          ? "e.g. John Doe (letters only)"
+                          : field.name === "email" || field.name === "admin_email"
+                          ? "e.g. name@example.com"
+                          : undefined
                       }
-                      setForm((current) => ({ ...current, [field.name]: val }));
-                    }}
-                    required={field.required && !(moduleKey === "users" && editing && field.name === "password")}
-                    min={field.type === "number" ? 0 : undefined}
-                    autoComplete={field.secret ? "new-password" : undefined}
-                    placeholder={field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact") ? "e.g. 9876543210 (10 digits)" : undefined}
-                    className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500"
-                  />
-                )}
-              </label>
-            ))}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                    />
+                  )}
+                  {fieldErrors[field.name] && (
+                    <p className="mt-1 text-xs font-semibold text-rose-400 flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-rose-400 shrink-0"></span>
+                      {fieldErrors[field.name]}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
             {moduleKey === "users" && editing && <p className="text-xs text-slate-400 sm:col-span-2">Leave Password blank to keep the current password.</p>}
           </div>
           <div className="mt-5 flex justify-end gap-2">
