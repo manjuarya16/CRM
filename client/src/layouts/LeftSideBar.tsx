@@ -219,39 +219,24 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
             paddingRight: isCondensed ? "0.5rem" : undefined,
           }}
         >
-          {activeLogoUrl ? (
-            <div className="flex items-center gap-2">
-              <img
-                src={activeLogoUrl}
-                alt="Logo"
-                className={
-                  isCondensed
-                    ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
-                    : "h-full max-h-[70px] max-w-[200px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
+          <div className="flex items-center">
+            <img
+              src={activeLogoUrl || "/logo-2.png"}
+              alt="Logo"
+              className={
+                isCondensed
+                  ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
+                  : "h-full max-h-[70px] max-w-[200px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
+              }
+              style={{ maxHeight: isCondensed ? "42px" : "70px" }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.src.endsWith("/logonew.png")) {
+                  target.src = "/logonew.png";
                 }
-                style={{ maxHeight: isCondensed ? "42px" : "70px" }}
-              />
-              {!isCondensed && isTrial && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40 shrink-0">
-                  Trial
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-                <path d="M7 6L14 13L7 20L0 13L7 6Z" fill="#0284c7" />
-                <path d="M18 6L25 13L18 20L11 13L18 6Z" fill="#0088cc" />
-                <path d="M12.5 17.5L19.5 24.5L12.5 31.5L5.5 24.5L12.5 17.5Z" fill="#38bdf8" />
-              </svg>
-              <span className="text-xl font-bold tracking-tight text-white">CRM</span>
-              {!isCondensed && isTrial && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40 shrink-0">
-                  Trial
-                </span>
-              )}
-            </div>
-          )}
+              }}
+            />
+          </div>
         </Link>
 
         <HoverMenuToggler />

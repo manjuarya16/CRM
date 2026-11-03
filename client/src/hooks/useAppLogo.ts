@@ -51,7 +51,7 @@ const useAppLogo = () => {
   // Admin Logo configured in Configuration is the primary brand logo for the entire system
   const adminLogo = configs["general.general.admin_logo.logo_image"];
   const rawLogo = adminLogo || (userLoggedIn ? organization?.logo : publicBranding.logo);
-  const orgLogo = resolveLogoUrl(rawLogo ?? null);
+  const orgLogo = resolveLogoUrl(rawLogo ?? null) || "/logonew.png";
 
   // Favicon configured in Configuration -> General settings for condensed/small sidebar
   const adminFavicon = configs["general.general.admin_logo.favicon_image"];
@@ -62,7 +62,7 @@ const useAppLogo = () => {
     logoDark: orgLogo,
     logoSm: faviconUrl || orgLogo,
     orgName:
-      (userLoggedIn ? organization?.name : publicBranding.name) ?? "CRM",
+      (userLoggedIn ? organization?.name : publicBranding.name) ?? "MORSE CRM",
   };
 };
 

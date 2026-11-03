@@ -5,6 +5,7 @@ import { useSuperAdminStore } from "@/store/superAdminStore";
 import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { showConfirmDialog, showSuccessAlert } from "@/utils/swalAlert";
 import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
+import { buildTenantUrl } from "@/utils/subdomain";
 import Swal from "sweetalert2";
 import {
   Calendar,
@@ -750,28 +751,18 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       const payload = res as any;
       const token = payload?.token;
       if (token) {
-        const protocol = window.location.protocol;
-        const port = window.location.port ? `:${window.location.port}` : "";
-        const host = window.location.hostname;
         const slug = payload.tenant?.slug || record.slug || "";
         let targetUrl = "/dashboard";
         if (slug) {
-          if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
-            targetUrl = `${protocol}//${slug}.localhost${port}/dashboard`;
-          } else {
-            const parts = host.split(".");
-            const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
-            targetUrl = `${protocol}//${slug}.${rootDomain}${port}/dashboard`;
-          }
-          const query = new URLSearchParams({
+          const queryParams: Record<string, string> = {
             impersonate_token: token,
             token: token,
-            org_name: payload.tenant?.name || record.name || "",
-            org_slug: slug,
+            org_name: String(payload.tenant?.name || record.name || ""),
+            org_slug: String(slug),
             org_id: String(record.id),
             user: JSON.stringify(payload.user),
-          }).toString();
-          targetUrl = `${targetUrl}?${query}`;
+          };
+          targetUrl = buildTenantUrl(String(slug), "/dashboard", queryParams);
 
           try {
             sessionStorage.setItem("active_tenant_slug", slug);

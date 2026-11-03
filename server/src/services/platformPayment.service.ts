@@ -130,10 +130,11 @@ export async function markRazorpayPaymentPaid(
     // 3. Lookup or Create Subscription
     let subscriptionId = payment.subscription_id;
     let tierId = payment.pricing_tier_id;
+    let existingEndsAt: Date | null = null;
 
     if (!subscriptionId) {
       const { rows: existingSubs } = await client.query(
-        `SELECT id, pricing_tier_id FROM public.platform_subscriptions
+        `SELECT id, pricing_tier_id, ends_at, status FROM public.platform_subscriptions
           WHERE tenant_id = $1
           ORDER BY id DESC
           LIMIT 1`,
@@ -142,6 +143,17 @@ export async function markRazorpayPaymentPaid(
       if (existingSubs[0]) {
         subscriptionId = existingSubs[0].id;
         tierId = tierId || existingSubs[0].pricing_tier_id;
+        if (existingSubs[0].ends_at && new Date(existingSubs[0].ends_at) > new Date() && existingSubs[0].status === 'active') {
+          existingEndsAt = new Date(existingSubs[0].ends_at);
+        }
+      }
+    } else {
+      const { rows: currentSubRows } = await client.query(
+        `SELECT ends_at, status FROM public.platform_subscriptions WHERE id = $1`,
+        [subscriptionId]
+      );
+      if (currentSubRows[0]?.ends_at && new Date(currentSubRows[0].ends_at) > new Date() && currentSubRows[0].status === 'active') {
+        existingEndsAt = new Date(currentSubRows[0].ends_at);
       }
     }
 
@@ -162,7 +174,11 @@ export async function markRazorpayPaymentPaid(
       }
     }
 
-    const endsAt = calculateSubscriptionEndDate(billingInterval, new Date(), 0);
+    // If upgrading an active package, keep expiry date intact; otherwise 1 year from now:
+    const isUpgradePayment = (payment.notes || '').toLowerCase().includes('upgrade');
+    const endsAt = (isUpgradePayment && existingEndsAt)
+      ? existingEndsAt
+      : (existingEndsAt || calculateSubscriptionEndDate(billingInterval, new Date(), 0));
 
     if (subscriptionId) {
       await client.query(
@@ -258,9 +274,42 @@ export const platformPaymentService = {
     if (!tierRows[0]) throw new ApiError(404, 'Selected pricing tier not found or inactive');
     const tier = tierRows[0];
 
+    let targetAmountCents = Number(tier.amount_cents);
+    let isUpgrade = false;
+
+    if (amountCents === undefined || amountCents <= 0) {
+      const { rows: subRows } = await pool.query(
+        `SELECT s.id, s.pricing_tier_id, s.ends_at, s.status, t.amount_cents as tier_amount_cents
+           FROM public.platform_subscriptions s
+           LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
+          WHERE s.tenant_id = $1
+          ORDER BY s.id DESC
+          LIMIT 1`,
+        [tenantId]
+      );
+      const existingSub = subRows[0];
+      const isFutureExpiry = existingSub?.ends_at && new Date(existingSub.ends_at).getTime() > Date.now();
+      const isTrial = (existingSub?.status || '').includes('trial') || (tenant.plan || '').toLowerCase().includes('trial');
+      const hasActivePaidPlan = existingSub?.status === 'active' && isFutureExpiry && !isTrial;
+
+      if (hasActivePaidPlan && existingSub?.tier_amount_cents) {
+        const currentAmountCents = Number(existingSub.tier_amount_cents);
+        if (targetAmountCents < currentAmountCents) {
+          throw new ApiError(
+            400,
+            `Your organization already has an active ${existingSub.tier_name || 'higher'} plan. Downgrades are not permitted during an active subscription period. You can only upgrade to a higher plan.`
+          );
+        }
+        if (targetAmountCents > currentAmountCents) {
+          isUpgrade = true;
+          targetAmountCents = targetAmountCents - currentAmountCents;
+        }
+      }
+    }
+
     const finalAmountCents = amountCents !== undefined && amountCents > 0
       ? amountCents
-      : Number(tier.amount_cents);
+      : targetAmountCents;
 
     if (!Number.isSafeInteger(finalAmountCents) || finalAmountCents <= 0) {
       throw new ApiError(400, 'Invalid payment amount');
@@ -281,6 +330,7 @@ export const platformPaymentService = {
           tenant_name: tenant.name,
           pricing_tier_id: String(tier.id),
           tier_name: tier.name,
+          is_upgrade: String(isUpgrade),
           ...notes,
         },
       });

@@ -4,6 +4,21 @@ import Swal from "sweetalert2";
 import { Check, ShieldCheck, Zap } from "lucide-react";
 import { useTenantStore } from "@/store/tenantStore";
 
+// Helper to dynamically load Razorpay script
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 type Plan = {
   id: number;
   name: string;
@@ -141,6 +156,20 @@ const SubscriptionBillingPage = () => {
 
   const handleCheckout = async (plan: Plan) => {
     try {
+      const currentAmount = subscription?.amount_cents ? Number(subscription.amount_cents) : 0;
+      const planAmount = Number(plan.amount_cents || 0);
+      const isCurrent = subscription?.pricing_tier_id === plan.id;
+      const isOrgActive = subscription?.status === "active";
+
+      if (isOrgActive && !isCurrent && planAmount < currentAmount) {
+        Swal.fire({
+          icon: "warning",
+          title: "Upgrade Only",
+          text: "Your organization already has an active higher plan. Downgrades are not permitted during an active subscription period. You can only upgrade to a higher plan.",
+        });
+        return;
+      }
+
       setProcessingPlanId(plan.id);
 
       // 1. Initiate order creation
@@ -154,7 +183,9 @@ const SubscriptionBillingPage = () => {
         throw new Error("Could not initialize payment order.");
       }
 
-      // 2. Check if Razorpay SDK is loaded
+      // 2. Ensure Razorpay SDK is loaded
+      await loadRazorpayScript();
+
       if (typeof (window as any).Razorpay === "function") {
         const options = {
           key: orderData.key_id,
@@ -318,6 +349,13 @@ const SubscriptionBillingPage = () => {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {plans.map((plan) => {
                     const isCurrent = subscription?.pricing_tier_id === plan.id;
+                    const isOrgActive = subscription?.status === "active";
+                    const currentAmount = subscription?.amount_cents ? Number(subscription.amount_cents) : 0;
+                    const planAmount = Number(plan.amount_cents || 0);
+                    const isLowerPlan = isOrgActive && !isCurrent && planAmount < currentAmount;
+                    const isUpgrade = isOrgActive && !isCurrent && planAmount > currentAmount;
+                    const diffAmount = isUpgrade ? planAmount - currentAmount : 0;
+
                     const parsedFeatures: string[] = Array.isArray(plan.features)
                       ? plan.features
                       : typeof plan.features === "string"
@@ -330,6 +368,8 @@ const SubscriptionBillingPage = () => {
                         className={`flex flex-col justify-between rounded-xl border bg-white p-6 shadow-sm transition-all ${
                           isCurrent
                             ? "border-indigo-600 ring-2 ring-indigo-600/20"
+                            : isLowerPlan
+                            ? "border-slate-200 bg-slate-50/60 opacity-80"
                             : "border-slate-200 hover:border-slate-300"
                         }`}
                       >
@@ -339,6 +379,11 @@ const SubscriptionBillingPage = () => {
                             {isCurrent && (
                               <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
                                 Current Plan
+                              </span>
+                            )}
+                            {isLowerPlan && (
+                              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+                                Included in plan
                               </span>
                             )}
                           </div>
@@ -365,10 +410,15 @@ const SubscriptionBillingPage = () => {
                         <div className="mt-6 pt-4">
                           <button
                             type="button"
-                            disabled={isCurrent || processingPlanId === plan.id}
-                            onClick={() => void handleCheckout(plan)}
+                            disabled={isCurrent || isLowerPlan || processingPlanId === plan.id}
+                            onClick={() => {
+                              if (isLowerPlan) return;
+                              void handleCheckout(plan);
+                            }}
                             className={`flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors ${
-                              isCurrent
+                              isLowerPlan
+                                ? "cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200 shadow-none"
+                                : isCurrent
                                 ? "cursor-default bg-slate-100 text-slate-400"
                                 : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
                             }`}
@@ -378,6 +428,10 @@ const SubscriptionBillingPage = () => {
                               ? "Processing…"
                               : isCurrent
                               ? "Current Plan"
+                              : isLowerPlan
+                              ? "Included in current plan"
+                              : isUpgrade
+                              ? `Upgrade (${formatAmount(diffAmount, plan.currency)})`
                               : "Subscribe with Razorpay"}
                           </button>
                         </div>

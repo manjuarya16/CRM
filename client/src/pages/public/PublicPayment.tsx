@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import API from "../../config";
 import Swal from "sweetalert2";
+import { buildTenantUrl } from "@/utils/subdomain";
 
 // Helper to dynamically load Razorpay script
 const loadRazorpayScript = (): Promise<boolean> => {
@@ -162,21 +163,43 @@ const PublicPayment: React.FC = () => {
   };
 
   const getLoginUrl = (orgSlug: string) => {
-    const protocol = window.location.protocol;
-    const port = window.location.port ? `:${window.location.port}` : "";
-    const host = window.location.hostname;
-    if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
-      return `${protocol}//${orgSlug}.localhost${port}/auth/login`;
-    }
-    const parts = host.split(".");
-    const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
-    return `${protocol}//${orgSlug}.${rootDomain}${port}/auth/login`;
+    return buildTenantUrl(orgSlug, "/auth/login");
   };
 
   const handlePayNow = async (plan: any, customAmt?: number) => {
     const effectiveSlug = orgData?.slug || slug;
     if (!effectiveSlug) {
       Swal.fire("Organization Required", "Please specify your organization subdomain to proceed.", "warning");
+      return;
+    }
+
+    const currentPlanObj = plans.find((p) => p.code === orgData?.plan_code);
+    const isOrgActivePaid =
+      orgData &&
+      (orgData.computed_status === "Active" ||
+        (orgData.subscription_expiry_date && new Date(orgData.subscription_expiry_date) > new Date())) &&
+      !orgData.is_trial &&
+      orgData.plan_code !== "free_trial" &&
+      orgData.plan_code !== "trial" &&
+      orgData.computed_status !== "Trial";
+
+    const currentPlanPrice = currentPlanObj
+      ? currency === "USD"
+        ? Number(currentPlanObj.price_usd)
+        : Number(currentPlanObj.price_inr)
+      : 0;
+
+    const planPrice = currency === "USD" ? Number(plan.price_usd) : Number(plan.price_inr);
+    const isCurrent = orgData?.plan_code === plan.code;
+
+    // Disallow downgrades
+    if (isOrgActivePaid && !isCurrent && planPrice < currentPlanPrice) {
+      Swal.fire({
+        title: "Upgrade Only",
+        text: `Your organization currently has an active ${orgData?.plan_name || "higher"} plan. Downgrading to a lower plan is not allowed during an active subscription.`,
+        icon: "warning",
+        confirmButtonColor: "#040975",
+      });
       return;
     }
 
@@ -312,12 +335,17 @@ const PublicPayment: React.FC = () => {
         key: key_id,
         amount: amount,
         currency: currency.toUpperCase(),
-        name: "CRM SaaS Platform",
+        name: "MORSE CRM",
         description: is_upgrade
           ? `Upgrade to ${plan.name} Plan - ${orgData?.name || effectiveSlug}`
           : `${plan.name} Subscription Renewal - ${orgData?.name || effectiveSlug}`,
         image: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png",
         order_id: order_id,
+        prefill: {
+          ...(orgData?.name ? { name: orgData.name } : {}),
+          ...(orgData?.email ? { email: orgData.email } : {}),
+          ...(orgData?.phone && String(orgData.phone).trim().length >= 10 ? { contact: String(orgData.phone).trim() } : {}),
+        },
         handler: async function (response: any) {
           try {
             Swal.fire({
@@ -368,7 +396,7 @@ const PublicPayment: React.FC = () => {
           }
         },
         theme: {
-          color: "#4f46e5",
+          color: "#040975",
         },
       };
 
@@ -400,11 +428,9 @@ const PublicPayment: React.FC = () => {
       <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md">
-              <i className="mgc_shield_line text-xl"></i>
-            </div>
+            <img src="/logo-2.png" alt="MORSE CRM" className="h-9 w-auto bg-[#040975] p-1.5 rounded-lg object-contain shadow-sm" />
             <div>
-              <span className="font-extrabold text-slate-900 dark:text-white text-lg tracking-tight">CRM Platform</span>
+              <span className="font-extrabold text-slate-900 dark:text-white text-lg tracking-tight">MORSE CRM</span>
               <span className="text-[10px] uppercase font-bold tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-2">
                 Payment Portal
               </span>
@@ -624,13 +650,16 @@ const PublicPayment: React.FC = () => {
                       const isCurrent = orgData?.plan_code === plan.code;
                       const planPrice = currency === "USD" ? Number(plan.price_usd) : Number(plan.price_inr);
                       const isUpgradeEligible = isOrgActivePaid && !isCurrent && planPrice > currentPlanPrice;
+                      const isLowerPlan = isOrgActivePaid && !isCurrent && planPrice < currentPlanPrice;
                       const upgradeDiffAmount = isUpgradeEligible ? planPrice - currentPlanPrice : 0;
 
                       return (
                         <div
                           key={plan.id}
                           className={`card p-7 flex flex-col justify-between rounded-2xl border transition-all relative ${
-                            plan.code === "growth" || plan.is_popular
+                            isLowerPlan
+                              ? "border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-slate-800/50 opacity-80"
+                              : plan.code === "growth" || plan.is_popular
                               ? "border-2 border-indigo-500 shadow-xl ring-4 ring-indigo-500/10 bg-white dark:bg-slate-800"
                               : isCurrent
                               ? "border-2 border-emerald-500 shadow-md bg-white dark:bg-slate-800"
@@ -649,9 +678,15 @@ const PublicPayment: React.FC = () => {
                                     Current Plan
                                   </span>
                                 )}
-                                <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                  Active
-                                </span>
+                                {isLowerPlan ? (
+                                  <span className="text-[10px] bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-bold px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                    Included in current plan
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                    Active
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -693,22 +728,36 @@ const PublicPayment: React.FC = () => {
                                   Upgrade diff: {currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}
                                 </span>
                               )}
+                              {isLowerPlan && (
+                                <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                  Downgrade not allowed
+                                </span>
+                              )}
                             </div>
 
                             <button
                               type="button"
-                              disabled={processingPlan === plan.code}
+                              disabled={isLowerPlan || processingPlan === plan.code}
                               className={`w-full py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md ${
-                                plan.code === "growth" || plan.is_popular
+                                isLowerPlan
+                                  ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed border border-gray-200 dark:border-gray-700 shadow-none"
+                                  : plan.code === "growth" || plan.is_popular
                                   ? "bg-indigo-600 hover:bg-indigo-700 text-white"
                                   : isCurrent
                                   ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                                   : "bg-primary hover:bg-primary-600 text-white"
                               }`}
-                              onClick={() => handlePayNow(plan)}
+                              onClick={() => {
+                                if (isLowerPlan) return;
+                                handlePayNow(plan);
+                              }}
                             >
                               {processingPlan === plan.code ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              ) : isLowerPlan ? (
+                                <>
+                                  <i className="mgc_check_circle_fill text-base text-emerald-500"></i> Included in {orgData?.plan_name || "Active"} Plan
+                                </>
                               ) : isUpgradeEligible ? (
                                 <>
                                   <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}) →

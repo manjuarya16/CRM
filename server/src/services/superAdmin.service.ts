@@ -413,11 +413,23 @@ export class SuperAdminService {
 
     const origins = env.CLIENT_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
     const origin = new URL(origins[0] || 'http://localhost:5173');
-    const hostname = origin.hostname;
+    const hostname = origin.hostname.toLowerCase();
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    // Determine base platform domain (preserve dev.morsecrm.com or staging.morsecrm.com)
+    let baseDomain = hostname;
+    if (hostname === 'dev.morsecrm.com' || hostname.endsWith('.dev.morsecrm.com')) {
+      baseDomain = 'dev.morsecrm.com';
+    } else if (hostname === 'staging.morsecrm.com' || hostname.endsWith('.staging.morsecrm.com')) {
+      baseDomain = 'staging.morsecrm.com';
+    } else {
+      const parts = hostname.split('.');
+      baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : hostname;
+    }
+
     const redirectUrl = isLocal
       ? `${origin.protocol}//${tenant.slug}.localhost${origin.port ? `:${origin.port}` : ''}/?token=${token}`
-      : `${origin.protocol}//${tenant.slug}.${hostname.split('.').slice(-2).join('.')}${origin.port ? `:${origin.port}` : ''}/?token=${token}`;
+      : `${origin.protocol}//${tenant.slug}.${baseDomain}${origin.port ? `:${origin.port}` : ''}/?token=${token}`;
 
     return {
       token,

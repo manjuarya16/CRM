@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import adminApi from "../../lib/adminApi";
+import { buildTenantUrl } from "@/utils/subdomain";
 import Swal from "sweetalert2";
 import { PageBreadcrumb } from "../../components";
 
@@ -340,21 +341,8 @@ const CreateOrganization = () => {
       if (response.data && response.data.success) {
         const { slug, subscription_expiry_date } = response.data.data;
 
-        const protocol = window.location.protocol;
-        const port = window.location.port ? `:${window.location.port}` : "";
-        const host = window.location.hostname;
-        let loginUrl = "";
-        let paymentUrl = "";
-
-        if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
-          loginUrl = `${protocol}//${slug}.localhost${port}/auth/login`;
-          paymentUrl = `${protocol}//${slug}.localhost${port}/subscription`;
-        } else {
-          const parts = host.split(".");
-          const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
-          loginUrl = `${protocol}//${slug}.${rootDomain}${port}/auth/login`;
-          paymentUrl = `${protocol}//${slug}.${rootDomain}${port}/subscription`;
-        }
+        const loginUrl = buildTenantUrl(slug, "/auth/login");
+        const paymentUrl = buildTenantUrl(slug, "/subscription");
 
         await Swal.fire({
           title: "Organization Provisioned! 🎉",

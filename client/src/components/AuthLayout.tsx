@@ -31,23 +31,21 @@ const AuthLayout = ({
       {/* Centered Single Form Card Container */}
       <div className="w-full max-w-md relative z-10 space-y-6">
         {/* Top Logo */}
-        <div className="text-center pb-2">
-          <Link to="/" className="inline-flex items-center justify-center w-full">
-            {logoLight ? (
-              <img
-                src={logoLight}
-                alt={orgName || "Logo"}
-                className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all drop-shadow-sm"
-              />
-            ) : (
-              <img
-                src="/logonew.png"
-                alt={orgName || "CRM"}
-                className="h-24 sm:h-28 w-auto max-w-[360px] sm:max-w-[400px] object-contain transition-all drop-shadow-sm"
-              />
-
-
-            )}
+        <div className="text-center pb-2 flex justify-center">
+          <Link to="/" className="inline-flex items-center justify-center transition-transform hover:scale-105" aria-label="Home">
+            <img
+              src={logoLight || "/logo-2.png"}
+              alt={orgName || "MORSE CRM"}
+              className="h-28 sm:h-36 w-auto max-w-[380px] sm:max-w-[460px] object-contain drop-shadow-md"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.src.endsWith("/logo-2.png")) {
+                  target.src = "/logo-2.png";
+                } else if (!target.src.endsWith("/logonew.png")) {
+                  target.src = "/logonew.png";
+                }
+              }}
+            />
           </Link>
         </div>
 
@@ -71,7 +69,12 @@ const AuthLayout = ({
           {bottomLinks}
         </div>
 
-
+        {/* Bottom Platform Branding Tag */}
+        <div className="text-center">
+          <p className="text-xs text-blue-200/60 font-medium">
+            Powered by MORSE CRM Platform
+          </p>
+        </div>
       </div>
     </div>
   );

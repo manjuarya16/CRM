@@ -16,6 +16,10 @@ export const SuperAdminLogin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
+    if (!email.trim()) {
+      setValidationError("Please enter your email address.");
+      return;
+    }
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email.trim())) {
       setValidationError("Please enter a valid email address.");
@@ -40,13 +44,13 @@ export const SuperAdminLogin: React.FC = () => {
         <div className="text-center pb-6 flex justify-center">
           <Link to="/" className="inline-flex items-center justify-center transition-transform hover:scale-105" aria-label="Home">
             <img
-              src="/logonew.png"
+              src="/logo-2.png"
               alt={orgName || "MORSE CRM"}
-              className="h-20 sm:h-24 w-auto max-w-[280px] sm:max-w-[320px] object-contain drop-shadow-md"
+              className="h-24 sm:h-28 w-auto max-w-[300px] sm:max-w-[340px] object-contain drop-shadow-md"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                if (!target.src.endsWith("/logo-2.png")) {
-                  target.src = "/logo-2.png";
+                if (!target.src.endsWith("/logonew.png")) {
+                  target.src = "/logonew.png";
                 }
               }}
             />
@@ -71,7 +75,7 @@ export const SuperAdminLogin: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4" autoComplete="off">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                 Super Admin Email
@@ -86,7 +90,6 @@ export const SuperAdminLogin: React.FC = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="superadmin@crm.com"
                   autoComplete="off"
-                  required
                   className="w-full pl-10 pr-3.5 py-2.5 h-11 bg-white border border-gray-300 rounded-xl text-sm leading-normal text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-[#040975] transition-all"
                 />
               </div>
@@ -106,7 +109,6 @@ export const SuperAdminLogin: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
                   autoComplete="new-password"
-                  required
                   className="w-full pl-10 pr-11 py-2.5 h-11 bg-white border border-gray-300 rounded-xl text-sm leading-normal text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-[#040975] transition-all"
                 />
                 <button
