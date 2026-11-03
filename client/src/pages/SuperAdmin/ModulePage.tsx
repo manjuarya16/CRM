@@ -218,18 +218,63 @@ const roleHierarchy = (roles: RecordValue[]) => {
   return ordered;
 };
 
-const displayValue = (value: unknown): string => {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+const isDateColumn = (column?: string): boolean => {
+  if (!column) return false;
+  const col = column.toLowerCase().trim();
+  if (col.endsWith("_time") || col.includes("time_")) return false;
+  return (
+    col.endsWith("_at") ||
+    col.endsWith("_date") ||
+    col === "date" ||
+    col.startsWith("created") ||
+    col.startsWith("updated") ||
+    col.startsWith("starts") ||
+    col.startsWith("ends") ||
+    col.startsWith("expires") ||
+    col.startsWith("expiry") ||
+    col === "preferred_demo_date" ||
+    col === "latest_payment_date" ||
+    col === "billing_start_date" ||
+    col === "billing_end_date"
+  );
+};
+
+const isDateString = (value: unknown): boolean => {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(trimmed);
 };
 
 const displayDateOnly = (value: unknown): string => {
-  if (typeof value !== "string" || !value) return "—";
-  const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
-  if (datePart) return datePart;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  if (value === null || value === undefined || value === "") return "—";
+  if (value instanceof Date) {
+    return isNaN(value.getTime())
+      ? "—"
+      : value.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  }
+  const str = String(value).trim();
+  if (!str) return "—";
+  const pureDateMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (pureDateMatch) {
+    const [, y, m, d] = pureDateMatch;
+    const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    }
+  }
+  const date = new Date(str);
+  return isNaN(date.getTime())
+    ? str
+    : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+};
+
+const displayValue = (value: unknown, column?: string): string => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  if (isDateColumn(column) || isDateString(value)) {
+    return displayDateOnly(value);
+  }
+  return String(value);
 };
 
 const formatTierPrice = (record: RecordValue): string => {
@@ -360,7 +405,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setError("");
     try {
       let path = config.listPath;
-      if (moduleKey === "subscriptions") path = "/subscriptions";
+      if (moduleKey === "subscriptions") path = tenantId ? `/subscriptions?tenant_id=${tenantId}` : "/subscriptions";
       if (moduleKey === "users") path = "/platform-users";
       if (moduleKey === "access-management") path = "/platform-roles";
       if (moduleKey === "payments") {
@@ -411,7 +456,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
     } catch (requestError) {
       setRecords([]);
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     } finally {
       setLoading(false);
     }
@@ -470,6 +515,45 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     setNotice("");
     let actionResult: RecordValue | null = null;
     try {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      const phoneRegex = /^[0-9]{10}$/;
+      const nameRegex = /^[a-zA-Z0-9\s.,'&-]+$/;
+      const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+      for (const field of fields) {
+        const val = form[field.name]?.trim();
+        if (!val) continue;
+
+        if (field.type === "email" || field.name.includes("email")) {
+          if (!emailRegex.test(val)) {
+            setError(`Please enter a valid email address for ${field.label}.`);
+            setSaving(false);
+            return;
+          }
+        }
+        if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
+          if (!phoneRegex.test(val)) {
+            setError(`${field.label} must be exactly 10 digits.`);
+            setSaving(false);
+            return;
+          }
+        }
+        if (field.name === "slug") {
+          if (!slugRegex.test(val)) {
+            setError("Slug must contain only lowercase letters, numbers, and hyphens.");
+            setSaving(false);
+            return;
+          }
+        }
+        if (["name", "admin_name", "from_name"].includes(field.name)) {
+          if (!nameRegex.test(val)) {
+            setError(`${field.label} contains invalid special characters.`);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       const payload: RecordValue = {};
       for (const field of fields) {
         const value = form[field.name]?.trim();
@@ -558,7 +642,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         await showSuccessAlert("Success!", successMessage);
       }
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     } finally {
       setSaving(false);
     }
@@ -613,7 +697,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       setNotice("Action completed.");
       await load();
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     }
   };
 
@@ -621,9 +705,42 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     try {
       const res = await request("post", `/super-admin/tenants/${record.id}/impersonate`);
       const payload = res as any;
-      if (payload?.redirectUrl) {
-        window.open(payload.redirectUrl, "_blank");
-        await showSuccessAlert("Impersonating", `Redirecting to ${record.name} workspace...`);
+      const token = payload?.token;
+      if (token) {
+        const protocol = window.location.protocol;
+        const port = window.location.port ? `:${window.location.port}` : "";
+        const host = window.location.hostname;
+        const slug = payload.tenant?.slug || record.slug || "";
+        let targetUrl = "/dashboard";
+        if (slug) {
+          if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
+            targetUrl = `${protocol}//${slug}.localhost${port}/dashboard`;
+          } else {
+            const parts = host.split(".");
+            const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
+            targetUrl = `${protocol}//${slug}.${rootDomain}${port}/dashboard`;
+          }
+          const query = new URLSearchParams({
+            impersonate_token: token,
+            token: token,
+            org_name: payload.tenant?.name || record.name || "",
+            org_slug: slug,
+            org_id: String(record.id),
+            user: JSON.stringify(payload.user),
+          }).toString();
+          targetUrl = `${targetUrl}?${query}`;
+
+          try {
+            sessionStorage.setItem("active_tenant_slug", slug);
+            localStorage.setItem("active_tenant_slug", slug);
+            sessionStorage.setItem("active_tenant_id", String(record.id));
+            localStorage.setItem("active_tenant_id", String(record.id));
+            sessionStorage.removeItem("current_tenant_profile");
+            localStorage.removeItem("current_tenant_profile");
+          } catch {}
+        }
+        window.open(targetUrl, "_blank");
+        await showSuccessAlert("Impersonating", `Logging into ${record.name} workspace...`);
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -680,7 +797,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         : "Trial activated and credentials email sent.")));
       await load();
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     } finally {
       setSaving(false);
     }
@@ -696,7 +813,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       if (result?.email_sent === false) setError(responseMessage);
       else setNotice(responseMessage);
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     }
   };
 
@@ -718,7 +835,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       setNotice("Platform role access updated.");
       setError("");
     } catch (requestError) {
-      setError(errorMessage(requestError));
+      console.error("Save record error:", requestError);
     } finally {
       setSaving(false);
     }
@@ -841,7 +958,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     (moduleKey !== "subscriptions" || admin?.permissions?.includes("platform.payments.create"));
 
   return (
-    <section className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <section className="min-h-screen text-slate-100">
       {moduleKey !== "smtp" && <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Super Admin Console</p>
@@ -868,7 +985,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </label>
           )}
           {moduleKey !== "smtp" && <button type="button" onClick={() => void load()} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Refresh</button>}
-          {moduleKey !== "smtp" && canCreate && (!scoped || tenantId) && (
+          {moduleKey !== "smtp" && canCreate && (!scoped || tenantId || moduleKey === "subscriptions") && (
             <button type="button" onClick={beginCreate} className="self-end rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">{createLabel}</button>
           )}
           {moduleKey === "notifications" && records.length > 0 && (
@@ -877,7 +994,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </div>
       </header>}
 
-      {moduleKey === "subscriptions" && <div className="mb-5 rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-4 text-sm text-indigo-200">Choose an organization and plan to create a pending subscription. The customer pays through a hosted Razorpay link emailed to its administrator; access activates only after Razorpay confirms payment.</div>}
+      {moduleKey === "subscriptions" && <div className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 text-xs sm:text-sm text-indigo-950 dark:border-indigo-500/25 dark:bg-indigo-500/5 dark:text-indigo-200">Choose an organization and plan to create a pending subscription. The customer pays through a hosted Razorpay link emailed to its administrator; access activates only after Razorpay confirms payment.</div>}
       {moduleKey === "smtp" && smtpTestResult && <div role={smtpTestResult.success ? "status" : "alert"} className={`mb-4 rounded-lg border px-4 py-3 text-sm ${smtpTestResult.success ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>{smtpTestResult.message}</div>}
       {moduleKey === "domains" && paymentLinkTenant && (
         <PaymentLinkDialog
@@ -968,7 +1085,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             {userDetails.map(([label, value]) => (
               <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-                <dd className="mt-1 break-words text-sm text-slate-200">{displayValue(value)}</dd>
+                <dd className="mt-1 break-words text-sm text-slate-200">{displayValue(value, label)}</dd>
               </div>
             ))}
           </dl>
@@ -1026,7 +1143,25 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     ).map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 ) : (
-                  <input type={field.secret ? "password" : field.type || "text"} value={form[field.name] || ""} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} required={field.required && !(moduleKey === "users" && editing && field.name === "password")} min={field.type === "number" ? 0 : undefined} autoComplete={field.secret ? "new-password" : undefined} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500" />
+                  <input
+                    type={field.secret ? "password" : (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) ? "tel" : field.type || "text"}
+                    maxLength={field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact") ? 10 : undefined}
+                    value={form[field.name] || ""}
+                    onChange={(event) => {
+                      let val = event.target.value;
+                      if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
+                        val = val.replace(/\D/g, "").slice(0, 10);
+                      } else if (field.name === "slug") {
+                        val = val.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                      }
+                      setForm((current) => ({ ...current, [field.name]: val }));
+                    }}
+                    required={field.required && !(moduleKey === "users" && editing && field.name === "password")}
+                    min={field.type === "number" ? 0 : undefined}
+                    autoComplete={field.secret ? "new-password" : undefined}
+                    placeholder={field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact") ? "e.g. 9876543210 (10 digits)" : undefined}
+                    className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500"
+                  />
                 )}
               </label>
             ))}
@@ -1205,10 +1340,10 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       {moduleKey !== "smtp" && moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
         {loading ? (
           <div role="status" className="space-y-3 p-5"><div className="h-4 w-40 animate-pulse rounded bg-slate-800" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><span className="sr-only">Loading {title.toLowerCase()}…</span></div>
-        ) : scoped && !tenantId ? (
-          <div className="p-10 text-center"><h2 className="font-semibold text-white">Select a tenant</h2><p className="mt-1 text-sm text-slate-400">Choose a tenant above to load its {title.toLowerCase()}.</p></div>
+        ) : scoped && !tenantId && moduleKey !== "subscriptions" ? (
+          <div className="p-10 text-center"><h2 className="font-semibold text-slate-800 dark:text-white">Select a tenant</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose a tenant above to load its {title.toLowerCase()}.</p></div>
         ) : displayedRecords.length === 0 ? (
-          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-white">{error ? "Unable to load records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-400">{error ? "Check the error above and retry." : `No ${title.toLowerCase()} were found.`}</p></div>
+          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-slate-800 dark:text-white">{error ? "Unable to load records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{error ? "Check the error above and retry." : `No ${title.toLowerCase()} were found.`}</p></div>
         ) : moduleKey === "pricing" ? (
           <div className="grid gap-5 p-4 sm:grid-cols-2 sm:p-6 2xl:grid-cols-3">
             {records.map((record, index) => {
@@ -1294,7 +1429,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-800">
                   {displayedRecords.map((record, index) => (
@@ -1302,11 +1437,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       {visibleColumns.map((column) => (
                         <td key={column} className="max-w-xs px-4 py-3 text-slate-300">
                           <span className="block truncate">
-                            {moduleKey === "demos" && column === "preferred_demo_date"
-                              ? displayDateOnly(record[column])
-                              : moduleKey === "roles" && column === "name"
-                              ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
-                              : displayValue(record[column])}
+                            {moduleKey === "roles" && column === "name"
+                              ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column], column)}`
+                              : displayValue(record[column], column)}
                           </span>
                         </td>
                       ))}
@@ -1348,21 +1481,19 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             <div className="divide-y divide-slate-800 md:hidden">
               {displayedRecords.map((record, index) => (
                 <article key={String(record.id ?? index)} className="p-4">
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
                     {visibleColumns.map((column) => (
                       <div key={column} className="min-w-0">
                         <p className="text-[10px] uppercase tracking-wide text-slate-500">{column.replace(/_/g, " ")}</p>
                         <p className="truncate text-sm text-slate-200">
-                          {moduleKey === "demos" && column === "preferred_demo_date"
-                            ? displayDateOnly(record[column])
-                            : moduleKey === "roles" && column === "name"
-                            ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column])}`
-                            : displayValue(record[column])}
+                          {moduleKey === "roles" && column === "name"
+                            ? `${"— ".repeat(Number(record.hierarchy_depth) || 0)}${displayValue(record[column], column)}`
+                            : displayValue(record[column], column)}
                         </p>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5">
                     {moduleKey === "organizations" && <>
                     <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
                     <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>

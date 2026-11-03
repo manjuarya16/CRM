@@ -143,14 +143,14 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
             </a>
           )}
 
-          <div className="mt-6 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">
+          <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <button type="button" onClick={onClose} className="w-full sm:w-auto rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">
               {message || error ? "Close" : "Cancel"}
             </button>
             <button
               type="submit"
               disabled={loadingPlans || sending || plans.length === 0 || !selectedPlanId}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full sm:w-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {sending ? "Sending…" : "Create and email link"}
             </button>

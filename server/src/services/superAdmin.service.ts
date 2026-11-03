@@ -358,19 +358,55 @@ export class SuperAdminService {
     const tenant = tenantRows[0];
 
     const { rows: users } = await pool.query(
-      `SELECT u.id, u.name, u.email, u.tenant_id, r.name as role_name
+      `SELECT u.id, u.name, u.email, u.tenant_id, u.role_id, r.name as role_name
          FROM public.users u
          LEFT JOIN public.roles r ON r.id = u.role_id
-        WHERE u.tenant_id = $1 AND u.status = true
-        ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END, u.id ASC
+        WHERE u.tenant_id = $1
+        ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END,
+                 CASE WHEN u.status = true THEN 0 ELSE 1 END,
+                 u.id ASC
         LIMIT 1`,
       [tenantId]
     );
-    if (!users[0]) throw new ApiError(404, 'No active administrator found in this organization to impersonate');
-    const user = users[0];
+
+    let user = users[0];
+    if (!user) {
+      // Find or create admin role
+      const { rows: roleRows } = await pool.query(
+        `SELECT id FROM public.roles WHERE tenant_id = $1 AND LOWER(name) IN ('admin', 'administrator') LIMIT 1`,
+        [tenantId]
+      );
+      let roleId = roleRows[0]?.id;
+      if (!roleId) {
+        const insertRole = await pool.query(
+          `INSERT INTO public.roles (name, description, permission_type, tenant_id)
+           VALUES ('Administrator', 'Full system access', 'all', $1)
+           RETURNING id`,
+          [tenantId]
+        );
+        roleId = insertRole.rows[0]?.id;
+      }
+
+      const fallbackEmail = `admin@${tenant.slug}.localhost`;
+      const fallbackName = `${tenant.name} Administrator`;
+      const insertRes = await pool.query(
+        `INSERT INTO public.users (name, email, password, tenant_id, role_id, status)
+         VALUES ($1, $2, 'managed_tenant_sso', $3, $4, true)
+         RETURNING id, name, email, tenant_id, role_id, 'admin' as role_name`,
+        [fallbackName, fallbackEmail, tenantId, roleId]
+      );
+      user = insertRes.rows[0];
+    }
 
     const token = jwt.sign(
-      { sub: String(user.id), tenant_id: user.tenant_id, email: user.email, name: user.name },
+      {
+        sub: String(user.id),
+        tenant_id: user.tenant_id,
+        email: user.email,
+        name: user.name,
+        role: user.role_name || 'admin',
+        role_id: user.role_id || 1,
+      },
       env.JWT_SECRET,
       { expiresIn: '2h' } as jwt.SignOptions
     );
@@ -389,8 +425,10 @@ export class SuperAdminService {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role_name,
+        role: user.role_name || 'admin',
+        role_id: user.role_id || 1,
         tenant_id: user.tenant_id,
+        permissions: ['*'],
       },
       tenant: {
         id: tenant.id,

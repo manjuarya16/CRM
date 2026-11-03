@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useTenantStore } from "@/store";
 import ReactApexChart from "react-apexcharts";
 import API from "@/config";
 import type {
@@ -166,6 +168,23 @@ const SafeApexChart: React.FC<any> = (props) => {
 };
 
 export const DashboardPage: React.FC = () => {
+  const profile = useTenantStore((s) => s.profile);
+  const fetchProfile = useTenantStore((s) => s.fetchProfile);
+
+  useEffect(() => {
+    if (!profile) {
+      fetchProfile();
+    }
+  }, [profile, fetchProfile]);
+
+  const isTrial = Boolean(
+    profile?.is_trial ||
+    profile?.status === "trial" ||
+    profile?.computed_status === "Trial" ||
+    (profile?.plan && profile.plan.toLowerCase().includes("trial"))
+  );
+  const daysRemaining = profile?.trial_days_remaining ?? null;
+
   const [startDate, setStartDate] = useState<string>(getDefaultStartDateStr);
   const [endDate, setEndDate] = useState<string>(getTodayDateStr);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | number>("all");
@@ -413,6 +432,37 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="p-3.5 sm:p-6 space-y-5 max-w-[1700px] mx-auto text-gray-800 dark:text-gray-100 font-sans">
+      {/* Trial Organization Alert Banner */}
+      {isTrial && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-300 dark:border-amber-600/50 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <i className="mgc_time_line text-2xl font-bold"></i>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-900 dark:text-white text-sm">
+                  Organization is on Free Trial
+                </span>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                  {daysRemaining !== null ? `${daysRemaining} days remaining` : "Active Trial"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                Enjoy full access to MORSE CRM features during your trial. Upgrade anytime to avoid interruption.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/subscription"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold rounded-lg shadow transition-all shrink-0 cursor-pointer"
+          >
+            <span>Upgrade Subscription</span>
+            <i className="mgc_arrow_right_line text-sm"></i>
+          </Link>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

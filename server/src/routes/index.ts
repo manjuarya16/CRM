@@ -32,6 +32,7 @@ import realtimeRoutes from '@/routes/realtime.routes';
 import searchRoutes from '@/routes/search.routes';
 import superAdminRoutes from '@/routes/superAdmin.routes';
 import superAdminModulesRoutes from '@/routes/superAdminModules.routes';
+import adminRoutes from '@/routes/admin.routes';
 import tenantPublicRoutes from '@/routes/tenantPublic.routes';
 import tenantRoutes from '@/routes/tenant.routes';
 import subscriptionRoutes from '@/routes/subscription.routes';
@@ -47,6 +48,7 @@ router.get('/health', (_req, res) => {
 // SaaS Super Admin Management (global platform scope)
 router.use('/super-admin', superAdminRoutes);
 router.use('/super-admin/modules', superAdminModulesRoutes);
+router.use('/admin', adminRoutes);
 
 // Public Tenant Metadata (for subdomain verification and login branding)
 router.use('/public', tenantPublicRoutes);

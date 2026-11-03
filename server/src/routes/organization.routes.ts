@@ -9,6 +9,25 @@ import { pool } from '@/config/db';
 
 const router = Router();
 
+async function resolveTenantId(req: any): Promise<number | null> {
+  const headerSlug = (req.headers['x-tenant-slug'] || req.headers['x-organization-slug'] || req.query?.slug) as string;
+  if (headerSlug && typeof headerSlug === 'string' && headerSlug.trim()) {
+    const { rows } = await pool.query('SELECT id FROM public.saas_tenants WHERE slug = $1 LIMIT 1', [headerSlug.trim().toLowerCase()]);
+    if (rows[0]) return rows[0].id;
+  }
+
+  const headerId = req.headers['x-tenant-id'] || req.headers['x-organization-id'] || req.query?.tenant_id;
+  if (headerId && Number(headerId) > 0) {
+    return Number(headerId);
+  }
+
+  let tenantId = req.user?.tenant_id || req.tenant?.id;
+  if (tenantId) return tenantId;
+
+  const { rows } = await pool.query("SELECT id FROM public.saas_tenants WHERE status = 'active' ORDER BY (id = 101) DESC, id ASC LIMIT 1");
+  return rows[0]?.id || null;
+}
+
 router.get('/public/branding', async (_req, res, next) => {
   try {
     const branding = await OrganizationService.getPublicBranding();
@@ -21,7 +40,7 @@ router.get('/public/branding', async (_req, res, next) => {
 // Profile endpoints for the logged-in tenant organization
 router.get('/current', requireAuth, async (req, res, next) => {
   try {
-    const tenantId = (req as any).user?.tenant_id || req.tenant?.id;
+    const tenantId = await resolveTenantId(req);
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;
@@ -39,7 +58,7 @@ router.get('/current', requireAuth, async (req, res, next) => {
 
 router.put('/current', requireAuth, async (req, res, next) => {
   try {
-    const tenantId = (req as any).user?.tenant_id || req.tenant?.id;
+    const tenantId = await resolveTenantId(req);
     if (!tenantId) {
       res.status(400).json({ success: false, message: 'No tenant context found' });
       return;

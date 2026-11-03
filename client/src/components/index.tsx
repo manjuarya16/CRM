@@ -12,6 +12,7 @@ import MaximizeScreen from "./MaximizeScreen";
 import NotificationDropdown from "./NotificationDropDown";
 import ProfileDropDown from "./ProfileDropDown";
 import PageBreadcrumb from "./PageBreadcrumb";
+import SuperAdminBreadcrumb from "./SuperAdminBreadcrumb";
 import Preloader from "./Preloader";
 
 export {
@@ -29,6 +30,7 @@ export {
   NotificationDropdown,
   ProfileDropDown,
   PageBreadcrumb,
+  SuperAdminBreadcrumb,
   Preloader,
 };
 export * from './PaginationControls';

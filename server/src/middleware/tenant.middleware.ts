@@ -16,12 +16,17 @@ declare global {
  */
 export function extractTenantSlug(req: Request): string | null {
   // 1. Explicit custom header from API client (highest precedence)
-  const headerSlug = req.headers['x-tenant-slug'];
+  const headerSlug = req.headers['x-tenant-slug'] || req.headers['x-organization-slug'];
   if (typeof headerSlug === 'string' && headerSlug.trim()) {
     return headerSlug.trim().toLowerCase();
   }
 
-  // 2. From Origin or Referer header (e.g. http://acme.localhost:5173 or https://acme.yourcrm.com)
+  // 2. Query param
+  if (req.query?.slug && typeof req.query.slug === 'string' && req.query.slug.trim()) {
+    return req.query.slug.trim().toLowerCase();
+  }
+
+  // 3. From Origin or Referer header (e.g. http://acme.localhost:5173 or https://acme.yourcrm.com)
   const origin = (req.headers.origin as string) || (req.headers.referer as string) || '';
   if (origin) {
     try {
@@ -36,7 +41,7 @@ export function extractTenantSlug(req: Request): string | null {
     }
   }
 
-  // 3. From direct Host header
+  // 4. From direct Host header
   const host = req.headers.host || '';
   if (host) {
     const hostname = host.split(':')[0]; // strip port
@@ -55,19 +60,45 @@ export function extractTenantSlug(req: Request): string | null {
 export async function resolveTenant(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const slug = extractTenantSlug(req);
+    const headerId = req.headers['x-tenant-id'] || req.headers['x-organization-id'] || req.query?.tenant_id;
+    let rows: ITenant[] = [];
 
-    // If no slug is supplied, fall back to default tenant (id = 1, slug = 'default')
-    const targetSlug = slug || 'default';
+    if (slug) {
+      const resSlug = await pool.query<ITenant>(
+        'SELECT id, name, slug, domain, status, plan, logo_url, settings FROM public.saas_tenants WHERE slug = $1 LIMIT 1',
+        [slug]
+      );
+      rows = resSlug.rows;
+    } else if (headerId && Number(headerId) > 0) {
+      const resId = await pool.query<ITenant>(
+        'SELECT id, name, slug, domain, status, plan, logo_url, settings FROM public.saas_tenants WHERE id = $1 LIMIT 1',
+        [Number(headerId)]
+      );
+      rows = resId.rows;
+    }
 
-    const { rows } = await pool.query<ITenant>(
-      'SELECT id, name, slug, domain, status, plan, logo_url, settings FROM public.saas_tenants WHERE slug = $1 LIMIT 1',
-      [targetSlug]
-    );
+    if (rows.length === 0) {
+      const userTenantId = (req as any).user?.tenant_id;
+      if (userTenantId) {
+        const resUser = await pool.query<ITenant>(
+          'SELECT id, name, slug, domain, status, plan, logo_url, settings FROM public.saas_tenants WHERE id = $1 LIMIT 1',
+          [userTenantId]
+        );
+        rows = resUser.rows;
+      }
+    }
+
+    if (rows.length === 0) {
+      const fallbackRes = await pool.query<ITenant>(
+        "SELECT id, name, slug, domain, status, plan, logo_url, settings FROM public.saas_tenants WHERE status = 'active' ORDER BY (id = 101) DESC, id ASC LIMIT 1"
+      );
+      rows = fallbackRes.rows;
+    }
 
     if (rows.length === 0) {
       res.status(404).json({
         success: false,
-        message: `Organization '${targetSlug}' does not exist. Please check your workspace URL.`,
+        message: 'No tenant organization found. Please check your workspace URL.',
       });
       return;
     }

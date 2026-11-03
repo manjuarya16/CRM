@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { API } from "@/config";
 import Swal from "sweetalert2";
 import { Check, ShieldCheck, Zap } from "lucide-react";
+import { useTenantStore } from "@/store/tenantStore";
 
 type Plan = {
   id: number;
@@ -40,7 +41,7 @@ type Payment = {
 };
 
 type BillingData = {
-  tenant: { name: string; slug?: string };
+  tenant: { id?: number; name: string; slug?: string; plan?: string; status?: string; is_trial?: boolean };
   subscription: Subscription | null;
   plans: Plan[];
   payments: Payment[];
@@ -79,6 +80,52 @@ const SubscriptionBillingPage = () => {
         throw new Error(payload.message || "Billing information could not be loaded.");
       }
       setData(payload.data);
+      if (payload.data?.tenant?.slug) {
+        sessionStorage.setItem("active_tenant_slug", payload.data.tenant.slug);
+        localStorage.setItem("active_tenant_slug", payload.data.tenant.slug);
+      }
+      if (payload.data?.tenant?.id) {
+        sessionStorage.setItem("active_tenant_id", String(payload.data.tenant.id));
+        localStorage.setItem("active_tenant_id", String(payload.data.tenant.id));
+      }
+      const sub = payload.data?.subscription;
+      const tenant = payload.data?.tenant;
+      if (sub && tenant) {
+        const isTrialing =
+          sub.status === "trialing" ||
+          sub.status === "trial" ||
+          (tenant.plan && tenant.plan.toLowerCase().includes("trial")) ||
+          tenant.status === "trial";
+        const expiry = sub.ends_at ? new Date(sub.ends_at) : null;
+        const now = new Date();
+        const daysRemaining = expiry ? Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : null;
+
+        const updatedProfile = {
+          ...(useTenantStore.getState().profile || {}),
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          status: tenant.status || "active",
+          plan: sub.tier_name || tenant.plan || "Starter",
+          tier_name: sub.tier_name,
+          sub_status: sub.status,
+          is_trial: Boolean(isTrialing),
+          computed_status: isTrialing ? "Trial" : "Active",
+          trial_days_remaining: isTrialing ? daysRemaining : null,
+          subscription_expiry_date: sub.ends_at,
+          settings: useTenantStore.getState().profile?.settings || {},
+        };
+
+        try {
+          sessionStorage.setItem("current_tenant_profile", JSON.stringify(updatedProfile));
+          localStorage.setItem("current_tenant_profile", JSON.stringify(updatedProfile));
+        } catch {}
+
+        useTenantStore.setState((prev) => ({
+          ...prev,
+          profile: updatedProfile as any,
+        }));
+      }
       setError("");
     } catch (requestError: unknown) {
       const message = requestError instanceof Error ? requestError.message : "Billing information could not be loaded.";

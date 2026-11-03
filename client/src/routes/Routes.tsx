@@ -25,6 +25,7 @@ import SuperAdminLogin from "../pages/SuperAdmin/Login";
 import SuperAdminPortal from "../pages/SuperAdmin/Portal";
 import WorkspaceFinder from "../pages/other/Auth/WorkspaceFinder";
 import BookDemo from "../pages/public/BookDemo";
+import PublicPayment from "../pages/public/PublicPayment";
 import { useSuperAdminStore } from "../store/superAdminStore";
 
 // Wrapper component to check module access
@@ -82,6 +83,16 @@ const AllRoutes = (props: RouteProps) => {
             ),
           )}
           <Route path="/book-demo" element={<BookDemo />} />
+          <Route path="/payment" element={<PublicPayment />} />
+          <Route path="/payment/:slug" element={<PublicPayment />} />
+          <Route path="/pay" element={<PublicPayment />} />
+          <Route path="/pay/:slug" element={<PublicPayment />} />
+          <Route path="/subscription" element={<PublicPayment />} />
+          <Route path="/subscription/:slug" element={<PublicPayment />} />
+          <Route
+            path="/admin/*"
+            element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}
+          />
           <Route
             path="/super-admin/*"
             element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}
@@ -102,13 +113,24 @@ const AllRoutes = (props: RouteProps) => {
   return (
     <React.Fragment>
       <Routes>
+        {/* Direct Public Payment & Demo routes on Tenant Subdomain */}
+        <Route path="/payment" element={<PublicPayment />} />
+        <Route path="/payment/:slug" element={<PublicPayment />} />
+        <Route path="/pay" element={<PublicPayment />} />
+        <Route path="/pay/:slug" element={<PublicPayment />} />
+        <Route path="/book-demo" element={<BookDemo />} />
+
         <Route>
           {(publicProtectedFlattenRoutes || []).map(
             (route: RouteObject, idx: number) => (
               <Route
                 path={route.path}
                 element={
-                  <DefaultLayout {...props}>{route.element}</DefaultLayout>
+                  route.path?.startsWith("/payment") || route.path?.startsWith("/pay") || route.path?.startsWith("/subscription") ? (
+                    route.element
+                  ) : (
+                    <DefaultLayout {...props}>{route.element}</DefaultLayout>
+                  )
                 }
                 key={idx}
               />
@@ -123,12 +145,16 @@ const AllRoutes = (props: RouteProps) => {
                 path={route.path}
                 element={
                   !isAuthenticated ? (
-                    <Navigate
-                      to={{
-                        pathname: "/auth/login",
-                        search: "next=" + route.path,
-                      }}
-                    />
+                    route.path === "/subscription" || route.path?.startsWith("/subscription/") ? (
+                      <PublicPayment />
+                    ) : (
+                      <Navigate
+                        to={{
+                          pathname: "/auth/login",
+                          search: "next=" + route.path,
+                        }}
+                      />
+                    )
                   ) : (
                     <VerticalLayout {...props}>
                       <ModuleAccessWrapper
@@ -143,6 +169,28 @@ const AllRoutes = (props: RouteProps) => {
             ),
           )}
         </Route>
+
+        {/* Tenant Subdomain Root & Catch-all Fallbacks */}
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <Navigate to="/auth/login" replace />
+            )
+          }
+        />
+        <Route
+          path="*"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <Navigate to="/auth/login" replace />
+            )
+          }
+        />
       </Routes>
     </React.Fragment>
   );

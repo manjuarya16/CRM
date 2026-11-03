@@ -1,236 +1,116 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
 import { API } from "@/config";
 import Swal from "sweetalert2";
-import {
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Building2,
-  Mail,
-  Phone,
-  User,
-  Shield,
-  Sparkles,
-  ArrowRight,
-  Layers,
-  Users2,
-  Zap,
-} from "lucide-react";
+import { Check } from "lucide-react";
+import { Navbar, Footer } from "@/components/marketing/layout";
 
 export const BookDemo: React.FC = () => {
   const [formData, setFormData] = useState({
-    full_name: "",
+    first_name: "",
+    last_name: "",
     email: "",
     phone: "",
-    organization_name: "",
-    industry: "Information Technology",
-    user_count: "1 - 10 Users",
-    preferred_date: "",
-    preferred_time: "Morning (10:00 AM - 01:00 PM)",
     city: "",
     state: "",
-    message: "",
+    preferred_date: "",
+    preferred_time: "",
+    explore: "",
+    agreed: false,
   });
 
   const [loading, setLoading] = useState(false);
 
-  // OTP Verification States
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otpVerifying, setOtpVerifying] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  // Countdown timer for resending OTP
-  useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resendCooldown]);
-
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (name === "email") {
-      setOtpVerified(false);
-    }
-  };
-
-  // Dispatch OTP
-  const handleSendOtp = async () => {
-    if (!formData.email.trim()) {
-      Swal.fire({
-        title: "Email Required",
-        text: "Please enter your official work email address first.",
-        icon: "warning",
-        confirmButtonColor: "#040975",
-      });
-      return;
-    }
-    if (!emailRegex.test(formData.email.trim())) {
-      Swal.fire({
-        title: "Invalid Email",
-        text: "Please enter a valid email address.",
-        icon: "warning",
-        confirmButtonColor: "#040975",
-      });
-      return;
-    }
-
-    setOtpSending(true);
-    try {
-      const response = await API.post("/send-otp", { email: formData.email.trim() });
-      if (response.data && response.data.success) {
-        setOtpSent(true);
-        setResendCooldown(60);
-        Swal.fire({
-          icon: "success",
-          title: "Verification Code Sent ✉️",
-          text: `A 6-digit verification code has been dispatched to ${formData.email.trim()}. Please check your inbox.`,
-          confirmButtonColor: "#040975",
-        });
-      }
-    } catch (err: any) {
-      // Graceful fallback for environments where SMTP is in testing mode
-      setOtpSent(true);
-      setResendCooldown(60);
-      Swal.fire({
-        icon: "info",
-        title: "Verification Active",
-        text: `Enter verification code for ${formData.email.trim()} to proceed.`,
-        confirmButtonColor: "#040975",
-      });
-    } finally {
-      setOtpSending(false);
-    }
-  };
-
-  // Verify OTP
-  const handleVerifyOtp = async () => {
-    if (!otp || otp.trim().length < 4) {
-      Swal.fire({
-        title: "Invalid Code",
-        text: "Please enter the 6-digit verification code received in your email.",
-        icon: "warning",
-        confirmButtonColor: "#040975",
-      });
-      return;
-    }
-
-    setOtpVerifying(true);
-    try {
-      const response = await API.post("/verify-otp", {
-        email: formData.email.trim(),
-        otp: otp.trim(),
-      });
-      if (response.data && response.data.success) {
-        setOtpVerified(true);
-        Swal.fire({
-          toast: true,
-          position: "top-end",
-          icon: "success",
-          title: "Email Verified Successfully! ✓",
-          showConfirmButton: false,
-          timer: 3000,
-        });
-      } else {
-        throw new Error(response.data?.message || "Invalid OTP");
-      }
-    } catch (err: any) {
-      // In development / fallback mode: allow matching simulation
-      if (otp.trim() === "123456" || otp.trim().length === 6) {
-        setOtpVerified(true);
-        Swal.fire({
-          toast: true,
-          position: "top-end",
-          icon: "success",
-          title: "Email Verified Successfully! ✓",
-          showConfirmButton: false,
-          timer: 3000,
-        });
-      } else {
-        const msg = err.response?.data?.message || err.message || "Invalid or expired verification code.";
-        Swal.fire({
-          title: "Verification Failed",
-          text: msg,
-          icon: "error",
-          confirmButtonColor: "#040975",
-        });
-      }
-    } finally {
-      setOtpVerifying(false);
+    const { name, value, type } = e.target;
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.full_name || !formData.email || !formData.organization_name) {
+
+    if (!formData.first_name.trim()) {
       Swal.fire({
-        title: "Required Fields Missing",
-        text: "Please provide your Full Name, Work Email, and Organization Name.",
+        title: "First Name Required",
+        text: "Please enter your first name.",
         icon: "warning",
-        confirmButtonColor: "#040975",
+        confirmButtonColor: "#03075e",
+      });
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      Swal.fire({
+        title: "Work Email Required",
+        text: "Please enter your official work email address.",
+        icon: "warning",
+        confirmButtonColor: "#03075e",
+      });
+      return;
+    }
+
+    if (!formData.agreed) {
+      Swal.fire({
+        title: "Consent Required",
+        text: "Please agree to the Privacy Policy to proceed.",
+        icon: "warning",
+        confirmButtonColor: "#03075e",
       });
       return;
     }
 
     setLoading(true);
     try {
+      const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
       const payload = {
-        name: formData.full_name.trim(),
-        full_name: formData.full_name.trim(),
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        name: fullName,
+        full_name: fullName,
         email: formData.email.trim().toLowerCase(),
+        work_email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim() || null,
-        organization: formData.organization_name.trim(),
-        organization_name: formData.organization_name.trim(),
-        company: formData.organization_name.trim(),
         city: formData.city.trim() || null,
         state: formData.state.trim() || null,
         preferred_demo_date: formData.preferred_date || null,
         preferred_demo_time: formData.preferred_time || null,
-        message: formData.message.trim()
-          ? `${formData.industry} | Team size: ${formData.user_count}\n${formData.message.trim()}`
-          : `${formData.industry} | Team size: ${formData.user_count}`,
+        message: formData.explore.trim() || null,
+        explore: formData.explore.trim() || null,
       };
 
       const response = await API.post("/book-demo", payload);
       if (response.data && response.data.success) {
         await Swal.fire({
-          title: "Demo Request Scheduled! 🎉",
+          title: "Demo Request Submitted! 🎉",
           html: `
             <div class="text-left text-sm text-gray-600 space-y-2 mt-2">
-              <p>Thank you, <strong>${formData.full_name}</strong>! We have received your demonstration request for <strong>${formData.organization_name}</strong>.</p>
+              <p>Thank you, <strong>${fullName}</strong>! We have received your demonstration request.</p>
               <p>Our solution engineers will review your requirements and reach out via <strong>${formData.email}</strong> to coordinate your live walkthrough.</p>
             </div>
           `,
           icon: "success",
-          confirmButtonColor: "#040975",
+          confirmButtonColor: "#03075e",
           confirmButtonText: "Got it",
         });
 
         setFormData({
-          full_name: "",
+          first_name: "",
+          last_name: "",
           email: "",
           phone: "",
-          organization_name: "",
-          industry: "Information Technology",
-          user_count: "1 - 10 Users",
-          preferred_date: "",
-          preferred_time: "Morning (10:00 AM - 01:00 PM)",
           city: "",
           state: "",
-          message: "",
+          preferred_date: "",
+          preferred_time: "",
+          explore: "",
+          agreed: false,
         });
-        setOtp("");
-        setOtpSent(false);
-        setOtpVerified(false);
       }
     } catch (err: any) {
       console.error("Error submitting demo request:", err);
@@ -240,7 +120,7 @@ export const BookDemo: React.FC = () => {
         title: "Submission Error",
         text: errMsg,
         icon: "error",
-        confirmButtonColor: "#040975",
+        confirmButtonColor: "#03075e",
       });
     } finally {
       setLoading(false);
@@ -248,370 +128,328 @@ export const BookDemo: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f7] text-slate-800 flex flex-col justify-between font-sans">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[70px] flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#040975] text-white shadow-md">
-              <Shield className="h-5 w-5 text-white" />
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between font-sans antialiased">
+      {/* Official Marketing Navbar from Image 1 */}
+      <Navbar />
+
+      {/* Main Two-Card Layout */}
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-14">
+        <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+          
+          {/* Left Card: Information & Highlights */}
+          <div className="lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-white via-[#f8fbff] to-[#edf4ff] rounded-3xl border border-blue-100/70 p-7 sm:p-9 flex flex-col justify-between shadow-xs">
+            {/* Top Content */}
+            <div className="relative z-10">
+              {/* Pill Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-widest text-[#03075e] bg-blue-100/60 border border-blue-200/60 shadow-2xs mb-5 uppercase">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#03075e]"></span>
+                <span>A CLOSER LOOK</span>
+              </div>
+
+              {/* Title */}
+              <h1
+                className="font-bold text-slate-900 tracking-tight leading-tight mb-4"
+                style={{ fontSize: "32px", lineHeight: "1.2" }}
+              >
+                Book a demo for your team.
+              </h1>
+
+              {/* Subtitle */}
+              <p
+                className="text-slate-600 leading-relaxed mb-7"
+                style={{ fontSize: "15px", lineHeight: "1.6" }}
+              >
+                A focused conversation about your sales process, customer journey and what you want your CRM to do better.
+              </p>
+
+              {/* 3 Checklist Items */}
+              <div className="space-y-3">
+                <div className="bg-white rounded-xl border border-gray-200/80 shadow-2xs py-3 px-4 flex items-center gap-3">
+                  <div className="h-5 w-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Check size={13} strokeWidth={2.8} />
+                  </div>
+                  <span
+                    className="font-semibold text-slate-800"
+                    style={{ fontSize: "14px" }}
+                  >
+                    Discuss your team's current workflow
+                  </span>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200/80 shadow-2xs py-3 px-4 flex items-center gap-3">
+                  <div className="h-5 w-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Check size={13} strokeWidth={2.8} />
+                  </div>
+                  <span
+                    className="font-semibold text-slate-800"
+                    style={{ fontSize: "14px" }}
+                  >
+                    Get guidance relevant to your process
+                  </span>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200/80 shadow-2xs py-3 px-4 flex items-center gap-3">
+                  <div className="h-5 w-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Check size={13} strokeWidth={2.8} />
+                  </div>
+                  <span
+                    className="font-semibold text-slate-800"
+                    style={{ fontSize: "14px" }}
+                  >
+                    No obligation to move forward
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* Bottom-Right Concentric Arcs Graphic (Watermark) */}
+            <div className="absolute -bottom-10 -right-10 pointer-events-none opacity-40">
+              <svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="150" cy="150" r="120" stroke="#93c5fd" strokeWidth="24" strokeOpacity="0.35" />
+                <circle cx="150" cy="150" r="75" stroke="#93c5fd" strokeWidth="20" strokeOpacity="0.45" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Right Card: Interactive Form */}
+          <div className="lg:col-span-7 bg-white rounded-3xl border border-gray-200/90 shadow-sm p-7 sm:p-9 flex flex-col justify-between">
             <div>
-              <span className="font-extrabold text-lg tracking-tight text-slate-900 block leading-tight">
-                MORSE CRM
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Enterprise Cloud Platform
-              </span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/auth/login"
-              className="text-xs sm:text-sm font-semibold text-slate-700 hover:text-[#040975] transition"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/pricing"
-              className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-50 text-[#040975] hover:bg-blue-100 text-xs font-bold border border-blue-200 transition"
-            >
-              <Sparkles size={14} />
-              <span>View Plans</span>
-            </Link>
-            <Link
-              to="/start-free-trial"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#040975] hover:bg-[#232894] text-white text-xs font-bold shadow-sm transition"
-            >
-              <Zap size={14} />
-              <span>Start Free Trial</span>
-            </Link>
-          </div>
-        </div>
-      </header>
+              {/* Form Header */}
+              <h2
+                className="font-bold text-slate-900 tracking-tight"
+                style={{ fontSize: "26px", lineHeight: "1.25" }}
+              >
+                Tell us about your team.
+              </h2>
+              <p
+                className="text-slate-500 mt-1.5 mb-6"
+                style={{ fontSize: "14px", lineHeight: "1.5" }}
+              >
+                A focused conversation around your process, not a generic product tour.
+              </p>
 
-      {/* Hero Section */}
-      <section className="py-10 sm:py-14 bg-gradient-to-b from-blue-50/60 to-transparent text-center px-4">
-        <div className="max-w-3xl mx-auto space-y-3">
-          <div className="inline-flex items-center gap-2 py-1 px-3.5 rounded-full text-xs font-bold bg-blue-50 text-[#040975] border border-blue-200/80 shadow-xs">
-            <Sparkles size={13} className="text-[#040975]" />
-            <span>Interactive Platform Walkthrough</span>
-          </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-            Schedule a Live Product Demo
-          </h1>
-          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            See how MORSE CRM streamlines leads, customer journeys, pipeline automation, and multi-tenant billing
-            specifically tailored for your sales operations.
-          </p>
-        </div>
-      </section>
-
-      {/* Main Form Container */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 flex-1 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Booking Form */}
-          <div className="lg:col-span-7 bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
-            <div className="bg-[#040975] p-6 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold tracking-tight">Request Your Demonstration</h2>
-                <p className="text-xs text-blue-200 mt-1">
-                  Fill in your details below. We'll set up a live environment and match your timezone.
-                </p>
-              </div>
-              <Calendar className="h-8 w-8 text-blue-200/40" />
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Full Name <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Row 1: First name & Last name */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      First name <span className="text-blue-600">*</span>
+                    </label>
                     <input
                       type="text"
-                      name="full_name"
+                      name="first_name"
                       required
-                      placeholder="e.g. Ramesh Patil"
-                      value={formData.full_name}
+                      value={formData.first_name}
                       onChange={handleChange}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition"
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      Last name
+                    </label>
+                    <input
+                      type="text"
+                      name="last_name"
+                      value={formData.last_name}
+                      onChange={handleChange}
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
                     />
                   </div>
                 </div>
 
-                {/* Organization Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Organization Name <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      type="text"
-                      name="organization_name"
-                      required
-                      placeholder="e.g. Acme Enterprises"
-                      value={formData.organization_name}
-                      onChange={handleChange}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Work Email with OTP Support */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Official Work Email <span className="text-red-500">*</span>
-                  </label>
-                  {otpVerified && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      <CheckCircle2 size={12} /> Email Verified
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                {/* Row 2: Work email & Phone */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      Work email <span className="text-blue-600">*</span>
+                    </label>
                     <input
                       type="email"
                       name="email"
                       required
-                      placeholder="e.g. ramesh@acme.com"
                       value={formData.email}
                       onChange={handleChange}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition"
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
                     />
                   </div>
-                  {!otpVerified && (
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={otpSending || resendCooldown > 0}
-                      className="px-3.5 py-2.5 rounded-lg bg-blue-50 text-[#040975] hover:bg-blue-100 border border-blue-200 text-xs font-bold transition shrink-0 disabled:opacity-50"
-                    >
-                      {otpSending ? "Sending..." : resendCooldown > 0 ? `Resend (${resendCooldown}s)` : otpSent ? "Resend OTP" : "Verify Email"}
-                    </button>
-                  )}
-                </div>
 
-                {otpSent && !otpVerified && (
-                  <div className="mt-3 p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 flex flex-col sm:flex-row items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      placeholder="6-digit code"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      className="w-full sm:w-44 px-3 py-2 rounded-lg border border-blue-300 text-sm font-mono text-center tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#040975]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={otpVerifying || !otp}
-                      className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#040975] text-white text-xs font-bold hover:bg-[#232894] transition disabled:opacity-50"
+                  <div>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
                     >
-                      {otpVerifying ? "Verifying..." : "Confirm Code"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Phone & Industry */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Phone / Mobile
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      Phone
+                    </label>
                     <input
                       type="tel"
                       name="phone"
-                      placeholder="e.g. +91 98765 43210"
                       value={formData.phone}
                       onChange={handleChange}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition"
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Industry Domain
-                  </label>
-                  <select
-                    name="industry"
-                    value={formData.industry}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition bg-white"
-                  >
-                    <option value="Information Technology">Information Technology & SaaS</option>
-                    <option value="Financial Services">Financial Services & Banking</option>
-                    <option value="Real Estate">Real Estate & Construction</option>
-                    <option value="Manufacturing">Manufacturing & Supply Chain</option>
-                    <option value="Healthcare">Healthcare & Life Sciences</option>
-                    <option value="Retail">Retail & E-Commerce</option>
-                    <option value="Education">Education & EdTech</option>
-                    <option value="Non-Profit">NGO / Foundation</option>
-                    <option value="Other">Other Enterprise</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Team Size & Schedule */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Expected Team Size
-                  </label>
-                  <select
-                    name="user_count"
-                    value={formData.user_count}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition bg-white"
-                  >
-                    <option value="1 - 10 Users">1 - 10 Users</option>
-                    <option value="11 - 50 Users">11 - 50 Users</option>
-                    <option value="51 - 200 Users">51 - 200 Users</option>
-                    <option value="200+ Enterprise">200+ Enterprise</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Preferred Date
-                  </label>
-                  <input
-                    type="date"
-                    name="preferred_date"
-                    min={new Date().toISOString().substring(0, 10)}
-                    value={formData.preferred_date}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Preferred Time Slot
-                  </label>
-                  <select
-                    name="preferred_time"
-                    value={formData.preferred_time}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition bg-white"
-                  >
-                    <option value="Morning (10:00 AM - 01:00 PM)">Morning (10 AM - 1 PM)</option>
-                    <option value="Afternoon (02:00 PM - 05:00 PM)">Afternoon (2 PM - 5 PM)</option>
-                    <option value="Evening (05:00 PM - 08:00 PM)">Evening (5 PM - 8 PM)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Message */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Specific Workflows or Requirements to Explore
-                </label>
-                <textarea
-                  rows={3}
-                  name="message"
-                  placeholder="Tell us about your current CRM challenges, pipeline stages, or integrations you need..."
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-[#040975] focus:ring-2 focus:ring-[#040975]/20 outline-none transition"
-                ></textarea>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#040975] hover:bg-[#232894] active:bg-[#373ca8] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Confirming Schedule...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Book Live Product Demonstration</span>
-                    <ArrowRight size={17} />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Right Column: Platform Highlights & Expectations */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-sm border border-gray-200 space-y-5">
-              <h3 className="text-base font-bold text-slate-900 border-b border-gray-100 pb-3 flex items-center gap-2">
-                <Sparkles className="text-[#040975]" size={18} />
-                <span>What to Expect During the Demo</span>
-              </h3>
-
-              <div className="space-y-4 text-xs sm:text-sm text-slate-600">
-                <div className="flex gap-3 items-start">
-                  <div className="h-6 w-6 rounded-full bg-blue-50 text-[#040975] flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 border border-blue-200">
-                    1
-                  </div>
+                {/* Row 3: City & State */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <strong className="text-slate-900 block font-semibold">30-Minute Targeted Tour</strong>
-                    <span>Focused on your actual sales bottlenecks, custom attributes, and lead qualification rules.</span>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      name="city"
+                      placeholder="e.g. Ahmedabad"
+                      value={formData.city}
+                      onChange={handleChange}
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
+                    />
                   </div>
-                </div>
 
-                <div className="flex gap-3 items-start">
-                  <div className="h-6 w-6 rounded-full bg-blue-50 text-[#040975] flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 border border-blue-200">
-                    2
-                  </div>
                   <div>
-                    <strong className="text-slate-900 block font-semibold">Architecture & Subdomain Setup</strong>
-                    <span>Learn how dedicated subdomain workspaces, Razorpay billing, and roles protect tenant data.</span>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      name="state"
+                      placeholder="e.g. Gujarat"
+                      value={formData.state}
+                      onChange={handleChange}
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
+                    />
                   </div>
                 </div>
 
-                <div className="flex gap-3 items-start">
-                  <div className="h-6 w-6 rounded-full bg-blue-50 text-[#040975] flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 border border-blue-200">
-                    3
-                  </div>
+                {/* Row 4: Preferred Demo Date & Preferred Demo Time */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <strong className="text-slate-900 block font-semibold">Instant Trial Sandbox</strong>
-                    <span>Our team can immediately spin up a 14-day fully featured trial workspace for your team.</span>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      Preferred Demo Date
+                    </label>
+                    <input
+                      type="date"
+                      name="preferred_date"
+                      min={new Date().toISOString().substring(0, 10)}
+                      value={formData.preferred_date}
+                      onChange={handleChange}
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      className="block font-semibold text-slate-700 mb-1.5"
+                      style={{ fontSize: "13px" }}
+                    >
+                      Preferred Demo Time
+                    </label>
+                    <input
+                      type="time"
+                      name="preferred_time"
+                      value={formData.preferred_time}
+                      onChange={handleChange}
+                      style={{ fontSize: "14px" }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white"
+                    />
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Direct Trial Callout */}
-            <div className="rounded-2xl p-6 bg-gradient-to-br from-[#040975] to-[#1e293b] text-white space-y-3 shadow-md">
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20 uppercase tracking-wider">
-                Instant Access
-              </span>
-              <h4 className="text-lg font-bold">Prefer exploring on your own?</h4>
-              <p className="text-xs text-blue-100/90 leading-relaxed">
-                You can create a trial organization right now with sample data, pre-configured pipelines, and full access.
-              </p>
-              <Link
-                to="/start-free-trial"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-[#040975] font-bold text-xs hover:bg-blue-50 transition"
-              >
-                <span>Launch Free Trial</span>
-                <ArrowRight size={14} />
-              </Link>
+                {/* Row 5: What would you like to explore? */}
+                <div>
+                  <label
+                    className="block font-semibold text-slate-700 mb-1.5"
+                    style={{ fontSize: "13px" }}
+                  >
+                    What would you like to explore?
+                  </label>
+                  <textarea
+                    rows={3}
+                    name="explore"
+                    placeholder="Your sales process, team needs, or integration requirements..."
+                    value={formData.explore}
+                    onChange={handleChange}
+                    style={{ fontSize: "14px" }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-slate-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#03075e]/15 focus:border-[#03075e] transition-all bg-white resize-none"
+                  ></textarea>
+                </div>
+
+                {/* Row 6: Consent Checkbox */}
+                <div className="pt-1">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      name="agreed"
+                      checked={formData.agreed}
+                      onChange={handleChange}
+                      required
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#03075e] focus:ring-[#03075e] cursor-pointer"
+                    />
+                    <span
+                      className="text-slate-600 leading-snug"
+                      style={{ fontSize: "13px" }}
+                    >
+                      I agree to the Privacy Policy and consent to being contacted about this request.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Row 7: Request a Demo Button */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{ fontSize: "15px" }}
+                    className="w-full py-3.5 px-6 rounded-xl bg-[#03075e] hover:bg-[#020542] active:scale-[0.99] text-white font-bold shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Submitting Request...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>&rarr; Request a Demo</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
+
         </div>
       </main>
+
+      {/* Official Marketing Footer */}
+      <Footer />
     </div>
   );
 };

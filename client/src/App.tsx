@@ -6,6 +6,10 @@ import { configureFakeBackend } from "./helpers";
 import setupAxiosInterceptors from "./config/axios.interceptor";
 import { API } from "./config"; // ← Import from root config.ts (main API instance)
 import { useAuthStore } from "./store";
+import { processUrlAuthToken } from "./lib/auth-utils";
+
+// Synchronously process any incoming impersonation / SSO tokens before rendering routes
+processUrlAuthToken();
 
 import "nouislider/distribute/nouislider.css";
 

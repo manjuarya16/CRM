@@ -114,19 +114,19 @@ export async function getPlatformSmtpConfig(): Promise<SmtpSettingsConfig> {
        FROM public.platform_smtp_config WHERE id=1`
   );
   const platformSmtp = rows[0];
-  const port = Number(platformSmtp?.port) || 587;
+  const port = Number(platformSmtp?.port) || Number(env.SMTP_PORT || process.env.SMTP_PORT) || 587;
 
   return {
     enabled: platformSmtp?.delivery_enabled ?? true,
-    host: (platformSmtp?.host || '').trim(),
+    host: (platformSmtp?.host || env.SMTP_HOST || process.env.SMTP_HOST || '').trim(),
     port,
     secure: platformSmtp?.secure ?? port === 465,
-    user: (platformSmtp?.username || '').trim(),
+    user: (platformSmtp?.username || env.SMTP_USER || process.env.SMTP_USER || '').trim(),
     pass: platformSmtp?.password_encrypted
       ? decryptPlatformSmtpPassword(platformSmtp.password_encrypted).trim()
-      : '',
-    fromName: platformSmtp?.from_name || 'CRM Admin',
-    fromEmail: platformSmtp?.from_email || platformSmtp?.username || 'no-reply@crm.local',
+      : (env.SMTP_PASS || process.env.SMTP_PASS || '').trim(),
+    fromName: platformSmtp?.from_name || env.SMTP_FROM_NAME || process.env.SMTP_FROM_NAME || 'CRM Platform',
+    fromEmail: platformSmtp?.from_email || platformSmtp?.username || env.SMTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || 'no-reply@crm.local',
   };
 }
 

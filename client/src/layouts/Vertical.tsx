@@ -1,8 +1,10 @@
 import React, { ReactNode, Suspense, useEffect } from "react";
+import { Link } from "react-router-dom";
 
 // zustand
 import { useLayoutStore } from "../store";
 import { useAuthStore } from "../store";
+import { useTenantStore } from "../store";
 import * as layoutConstants from "../constants/layout";
 
 // hooks
@@ -25,12 +27,33 @@ interface VerticalLayoutProps {
   children?: ReactNode;
 }
 
-
 const VerticalLayout = ({ children }: VerticalLayoutProps) => {
   const { width } = useViewPort();
   const { user } = useAuthStore();
   const { roles, fetchRoles } = useRoleStore();
   const { fetchUserAccess } = useAccessManagementStore();
+  const profile = useTenantStore((s) => s.profile);
+  const fetchProfile = useTenantStore((s) => s.fetchProfile);
+
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
+
+  const isTrial = Boolean(
+    profile?.is_trial ||
+    profile?.status === "trial" ||
+    profile?.computed_status === "Trial" ||
+    profile?.sub_status === "trialing" ||
+    (profile?.plan && profile.plan.toLowerCase().includes("trial"))
+  );
+  const daysRemaining = profile?.trial_days_remaining ?? (isTrial ? 14 : null);
+  const expiryDate = profile?.subscription_expiry_date
+    ? new Date(profile.subscription_expiry_date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   // Fetch roles once on mount so isAdmin resolves correctly everywhere
   useEffect(() => {
@@ -119,6 +142,35 @@ const VerticalLayout = ({ children }: VerticalLayoutProps) => {
           </Suspense>
 
           <div className="page-content">
+            {/* Top Announcement Bar when Organization is on Free Trial */}
+            {isTrial && (
+              <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 border-b border-amber-300 dark:border-amber-600/50 px-3 sm:px-6 py-2 flex items-center justify-between text-xs sm:text-sm text-amber-950 dark:text-amber-100 sticky top-0 z-40 backdrop-blur-md shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                  <div className="truncate">
+                    <span className="font-bold mr-1.5">Free Trial:</span>
+                    {daysRemaining !== null && daysRemaining <= 0 ? (
+                      <span className="text-rose-600 dark:text-rose-400 font-semibold">Your trial period has ended. Renew now to continue accessing all features.</span>
+                    ) : (
+                      <span>
+                        Your organization trial ends in <strong className="font-bold underline text-amber-950 dark:text-white">{daysRemaining ?? 14} {daysRemaining === 1 ? 'day' : 'days'}</strong>
+                        {expiryDate ? ` (${expiryDate})` : ""}. Renew your plan to keep your workspace active.
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Link
+                  to="/subscription"
+                  className="ml-3 shrink-0 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all hover:scale-105"
+                >
+                  <span>Renew</span>
+                  <i className="mgc_refresh_3_line text-sm"></i>
+                </Link>
+              </div>
+            )}
 
             <Suspense fallback={loading()}>
               <Topbar />

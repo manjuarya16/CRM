@@ -41,7 +41,7 @@ const PasswordInput = ({
           {...otherProps}
           {...(register ? register(name) : {})}
           type={showPassword ? "text" : "password"}
-          autoComplete={name}
+          autoComplete={otherProps.autoComplete !== undefined ? otherProps.autoComplete : name}
         />
         <button
           type="button"
@@ -149,7 +149,7 @@ const FormInput = ({
                       className={`${className} ${errors && errors[name] ? "border-red-500 focus:border-red-500 text-red-700  pe-10" : ""}`}
                       {...(register ? register(name) : {})}
                       {...otherProps}
-                      autoComplete={name}
+                      autoComplete={otherProps.autoComplete !== undefined ? otherProps.autoComplete : name}
                     />
                   </div>
                 </>
@@ -175,7 +175,7 @@ const FormInput = ({
                           className={`${className} ${errors && errors[name] ? "border-red-500 text-red-700" : ""}`}
                           {...(register ? register(name) : {})}
                           {...otherProps}
-                          autoComplete={name}
+                          autoComplete={otherProps.autoComplete !== undefined ? otherProps.autoComplete : name}
                         >
                           {children}
                         </Tag>
@@ -232,7 +232,7 @@ const FormInput = ({
                               className={`${className} ${errors && errors[name] ? "border-red-500 focus:border-red-500 text-red-700  pe-10" : ""}`}
                               {...(register ? register(name) : {})}
                               {...otherProps}
-                              autoComplete={name}
+                              autoComplete={otherProps.autoComplete !== undefined ? otherProps.autoComplete : name}
                             />
                             {errors && errors[name] && (
                               <>

@@ -10,6 +10,7 @@ import {
 } from "../helpers/api/auth";
 
 import { UserData, AuthState } from "@/interface/authInterface";
+import { processUrlAuthToken, parseJwt, isTokenExpired, getToken } from "@/lib/auth-utils";
 import { useConfigStore } from "./configStore";
 
 export const useAuthStore = create<AuthState>()(
@@ -266,14 +267,26 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initializeAuth: () => {
-        // Check if there's a valid token in sessionStorage
-        const token = sessionStorage.getItem("token");
+        const urlToken = processUrlAuthToken();
+        const token = urlToken || sessionStorage.getItem("token") || getToken();
         const appUser = sessionStorage.getItem("app_user");
 
-        if (token && appUser) {
+        if (token && !isTokenExpired(token)) {
           try {
-            const userSession = JSON.parse(appUser);
-            // Set the authorization header
+            let userSession = appUser ? JSON.parse(appUser) : null;
+            if (!userSession) {
+              const payload = parseJwt(token);
+              if (payload) {
+                userSession = {
+                  id: payload.sub,
+                  name: payload.name || payload.email || "Admin",
+                  email: payload.email,
+                  role: payload.role || "admin",
+                  tenant_id: payload.tenant_id,
+                };
+              }
+            }
+
             API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
             set({

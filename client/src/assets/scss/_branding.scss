@@ -201,6 +201,26 @@ input[type="file"].file\:text-\[\#0088cc\]::file-selector-button {
   color: var(--brand-color, #040975) !important;
 }
 
+/* Print / Download PDF Invoice Buttons (Always bright royal blue with crisp white text) */
+.btn-invoice-print,
+button.btn-invoice-print,
+.btn-invoice-print *,
+button.btn-invoice-print * {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
+}
+
+.btn-invoice-print:hover,
+button.btn-invoice-print:hover,
+.btn-invoice-print:hover *,
+button.btn-invoice-print:hover * {
+  background-color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
 /* 3. Explicit Protection for Secondary / Neutral Action Buttons
    (Cancel, Exit, Close, Back, Discard remain neutral gray) */
 .btn-secondary,

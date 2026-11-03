@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@/utils/zodResolver';
 import { z } from 'zod';
@@ -17,7 +16,6 @@ type FormValues = z.infer<typeof schema>;
 export default function Register() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
-  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -26,21 +24,18 @@ export default function Register() {
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   async function onSubmit(values: FormValues) {
-    setServerError(null);
     try {
       const { data } = await api.post('/auth/register', values);
       setAuth(data.user, data.token);
       navigate('/');
     } catch (err: any) {
-      setServerError(err.response?.data?.message ?? 'Registration failed');
+      console.error('Registration error:', err);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off">
       <h1 className="text-xl font-semibold text-dark">Create an account</h1>
-
-      {serverError && <p className="text-sm text-red-600">{serverError}</p>}
 
       <div>
         <label className="block text-sm font-medium">Name</label>
@@ -66,6 +61,7 @@ export default function Register() {
         <input
           type="password"
           {...register('password')}
+          autoComplete="new-password"
           className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:ring-primary"
         />
         {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}

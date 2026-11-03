@@ -23,7 +23,8 @@ interface EmailTemplatesPageProps {
 }
 
 const PLACEHOLDERS: Record<string, string[]> = {
-  demo_received: ["name", "company"],
+  demo_schedule_confirmation: ["name", "company", "organization", "email", "phone", "preferred_date", "preferred_time", "city", "state", "location", "requirements"],
+  demo_received: ["name", "company", "organization", "email", "phone", "preferred_date", "preferred_time", "city", "state", "location", "requirements"],
   trial_activation: ["name", "company", "trial_days", "login_url", "slug", "email", "trial_expiry"],
   plan_activation: ["name", "company", "plan_name", "login_url"],
   payment_confirmation: ["name", "company", "amount", "currency", "payment_reference", "plan_name"],
@@ -34,6 +35,7 @@ const PLACEHOLDERS: Record<string, string[]> = {
 const SAMPLE_VALUES: Record<string, string> = {
   name: "Jordan Smith",
   company: "Northwind Co.",
+  organization: "Northwind Co.",
   trial_days: "14",
   login_url: "https://northwind.crm.example.com/auth/login",
   slug: "northwind",
@@ -43,6 +45,13 @@ const SAMPLE_VALUES: Record<string, string> = {
   amount: "₹4,200",
   currency: "INR",
   payment_reference: "PAY-2026-00124",
+  phone: "+91 98765 43210",
+  preferred_date: "12-11-2026",
+  preferred_time: "10:30 AM",
+  city: "Ahmedabad",
+  state: "Gujarat",
+  location: "Ahmedabad, Gujarat",
+  requirements: "Lead tracking and sales automation",
 };
 
 const apiPath = (path: string) => `/super-admin/modules${path}`;
@@ -104,7 +113,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
       setError("");
       return data.data;
     } catch (requestError) {
-      setError(formatError(requestError));
+      console.error("Save template error:", requestError);
       return undefined;
     } finally {
       setLoading(false);
@@ -218,7 +227,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
       if (matching) selectTemplate(matching);
       setIsCreating(false);
     } catch (requestError) {
-      setError(formatError(requestError));
+      console.error("Save template error:", requestError);
     } finally {
       setSaving(false);
     }
@@ -246,7 +255,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
       setNotice("Email template deleted.");
       setError("");
     } catch (requestError) {
-      setError(formatError(requestError));
+      console.error("Save template error:", requestError);
     }
   };
 
@@ -259,7 +268,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
   const previewDocument = `<!doctype html><html><body style="margin:0;padding:24px;background:#f1f5f9;font-family:Arial,sans-serif;color:#334155"><main style="max-width:600px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;background:white;overflow:hidden"><header style="padding:24px;background:#312e81;color:white"><strong>MORSE CRM</strong><div style="margin-top:8px">${previewSubject || "Email subject preview"}</div></header><article style="padding:24px;line-height:1.6">${previewContent || "<p>Your email body preview appears here.</p>"}</article><footer style="padding:16px;background:#f8fafc;text-align:center;color:#64748b;font-size:12px">MORSE CRM</footer></main></body></html>`;
 
   return (
-    <section className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+    <section className="min-h-screen text-slate-900">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Super Admin Console</p>
@@ -316,7 +325,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
                 </div>
                 <label className="block text-xs font-medium text-slate-700">
                   Template name
-                  <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={191} disabled={!isCreating} placeholder="e.g. demo_received" className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:opacity-100" />
+                  <input value={name} onChange={(event) => setName(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} required maxLength={191} disabled={!isCreating} placeholder="e.g. demo_received" className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:opacity-100" />
                 </label>
                 <label className="block text-xs font-medium text-slate-700">
                   Subject
@@ -366,7 +375,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
                   title="Email template preview"
                   sandbox=""
                   srcDoc={previewDocument}
-                  className="h-[34rem] w-full bg-slate-100"
+                  className="h-96 sm:h-[34rem] w-full bg-slate-100 rounded-b-xl"
                 />
               </section>
             </div>

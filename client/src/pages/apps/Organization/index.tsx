@@ -28,7 +28,7 @@ const CURRENCIES = [
 ];
 
 const OrganizationPage: React.FC = () => {
-  const { profile, loading, saving, fetchProfile, updateProfile } = useTenantStore();
+  const { profile, loading, saving, error, fetchProfile, updateProfile } = useTenantStore();
   const [activeTab, setActiveTab] = useState<"general" | "contact" | "workspace" | "admin">("general");
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
@@ -362,7 +362,7 @@ const OrganizationPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Workspace ID</p>
-            <p className="text-xl font-bold text-gray-800 dark:text-gray-100 font-mono">#{profile?.id || 1}</p>
+            <p className="text-xl font-bold text-gray-800 dark:text-gray-100 font-mono">{profile?.id ? `#${profile.id}` : "—"}</p>
           </div>
         </div>
       </div>
