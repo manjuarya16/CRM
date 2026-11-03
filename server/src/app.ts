@@ -23,38 +23,52 @@ export function createApp(): express.Express {
     .map((o) => o.trim())
     .filter(Boolean);
 
+  const defaultAllowedHeaders = [
+    "Content-Type",
+    "Authorization",
+    "X-Authorization",
+    "x-authorization",
+    "X-Tenant-Slug",
+    "x-tenant-slug",
+    "X-Tenant-Id",
+    "x-tenant-id",
+    "X-Organization-Slug",
+    "x-organization-slug",
+    "X-Organization-Id",
+    "x-organization-id",
+    "X-Requested-With",
+    "x-requested-with",
+    "Accept",
+    "Origin",
+    "Access-Control-Allow-Origin",
+    "Access-Control-Allow-Headers",
+  ];
+
   app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
+    cors((req, callback) => {
+      const requestHeaders = req.headers["access-control-request-headers"];
+      const allowedHeaders = requestHeaders
+        ? Array.from(new Set([...defaultAllowedHeaders, ...requestHeaders.split(",").map((h) => h.trim())]))
+        : defaultAllowedHeaders;
 
-        if (
-          origin.startsWith("http://localhost") ||
-          origin.startsWith("http://127.0.0.1") ||
-          origin.startsWith("https://localhost") ||
-          allowedOrigins.length === 0 ||
-          allowedOrigins.includes(origin) ||
-          allowedOrigins.includes("*")
-        ) {
-          return callback(null, true);
-        }
-
-        callback(null, true);
-      },
-      credentials: true,
-      allowedHeaders: [
-        "Content-Type",
-        "Authorization",
-        "X-Authorization",
-        "x-authorization",
-        "X-Tenant-Slug",
-        "x-tenant-slug",
-        "X-Requested-With",
-        "Accept",
-        "Origin",
-        "Access-Control-Allow-Origin",
-        "Access-Control-Allow-Headers",
-      ],
+      callback(null, {
+        origin: (origin, cb) => {
+          if (!origin) return cb(null, true);
+          if (
+            origin.includes("localhost") ||
+            origin.includes("127.0.0.1") ||
+            allowedOrigins.length === 0 ||
+            allowedOrigins.includes(origin) ||
+            allowedOrigins.includes("*")
+          ) {
+            return cb(null, true);
+          }
+          cb(null, true);
+        },
+        credentials: true,
+        allowedHeaders,
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+      });
     })
   );
   app.use(express.json({
@@ -101,7 +115,6 @@ export function createApp(): express.Express {
   });
 
   app.use('/api', routes);
-
 
   app.use(notFoundHandler);
   app.use(errorHandler);

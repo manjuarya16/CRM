@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import adminApi from "../../lib/adminApi";
+import { buildTenantUrl, getTenantDisplayDomain } from "@/utils/subdomain";
 import Swal from "sweetalert2";
 import { PageBreadcrumb, PaginationControls } from "../../components";
 import { InvoiceModal } from "../../components/InvoiceModal";
@@ -90,25 +91,15 @@ const SuperAdminDomains = () => {
 
   // Helper functions for Domain construction
   const getTenantDomain = (slug: string) => {
-    const protocol = window.location.protocol;
-    const port = window.location.port ? `:${window.location.port}` : "";
-    const host = window.location.hostname;
-    if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
-      return `${slug}.localhost${port}`;
-    }
-    const parts = host.split(".");
-    const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
-    return `${slug}.${rootDomain}${port}`;
+    return getTenantDisplayDomain(slug);
   };
 
   const getFullTenantUrl = (slug: string) => {
-    const protocol = window.location.protocol;
-    return `${protocol}//${getTenantDomain(slug)}/auth/login`;
+    return buildTenantUrl(slug, "/auth/login");
   };
 
   const getPaymentUrl = (slug: string) => {
-    const protocol = window.location.protocol;
-    return `${protocol}//${getTenantDomain(slug)}/subscription`;
+    return buildTenantUrl(slug, "/subscription");
   };
 
   const handleCopy = (text: string, label: string) => {
@@ -129,29 +120,19 @@ const SuperAdminDomains = () => {
       if (response.data && response.data.success) {
         const { token, user, organization } = response.data;
 
-        // Build organization subdomain URL
-        const protocol = window.location.protocol;
-        const port = window.location.port ? `:${window.location.port}` : "";
-        const host = window.location.hostname;
+        // Build organization workspace URL
         const slug = organization?.slug || org.slug || "";
         let targetUrl = "/dashboard";
 
         if (slug) {
-          if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
-            targetUrl = `${protocol}//${slug}.localhost${port}/dashboard`;
-          } else {
-            const parts = host.split(".");
-            const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
-            targetUrl = `${protocol}//${slug}.${rootDomain}${port}/dashboard`;
-          }
-          const query = new URLSearchParams({
+          const queryParams: Record<string, string> = {
             impersonate_token: token,
             token: token,
             org_name: organization?.name || org.name || "",
             org_slug: slug,
             user: JSON.stringify(user),
-          }).toString();
-          targetUrl = `${targetUrl}?${query}`;
+          };
+          targetUrl = buildTenantUrl(slug, "/dashboard", queryParams);
         }
 
         Swal.fire({

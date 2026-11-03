@@ -600,11 +600,20 @@ router.post('/organizations/:id/send-payment-link', async (req: Request, res: Re
         if (u.port) portStr = `:${u.port}`;
       } catch (_) {}
     }
-    const hostHeader = (req.get('host') || 'localhost:5173').toLowerCase();
+    const hostHeader = (req.get('host') || 'localhost:5173').toLowerCase().split(':')[0];
     const isLocal = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1');
+    let baseDomain = hostHeader;
+    if (hostHeader === 'dev.morsecrm.com' || hostHeader.endsWith('.dev.morsecrm.com')) {
+      baseDomain = 'dev.morsecrm.com';
+    } else if (hostHeader === 'staging.morsecrm.com' || hostHeader.endsWith('.staging.morsecrm.com')) {
+      baseDomain = 'staging.morsecrm.com';
+    } else {
+      const parts = hostHeader.split('.');
+      baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : hostHeader;
+    }
     const paymentUrl = isLocal
       ? `http://${profile.slug}.localhost${portStr}/payment`
-      : `https://${profile.slug}.${hostHeader.split('.').slice(-2).join('.')}/payment`;
+      : `https://${profile.slug}.${baseDomain}/payment`;
 
     const adminName = profile.admin?.name || 'Administrator';
     const customMessage = req.body.custom_message ? String(req.body.custom_message).trim() : '';

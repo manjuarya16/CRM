@@ -26,14 +26,16 @@ export function extractTenantSlug(req: Request): string | null {
     return req.query.slug.trim().toLowerCase();
   }
 
-  // 3. From Origin or Referer header (e.g. http://acme.localhost:5173 or https://acme.yourcrm.com)
+  const reservedSubdomains = new Set(['localhost', 'www', 'admin', 'superadmin', 'super-admin', 'dev', 'staging', 'api', 'portal', 'crm', 'app']);
+
+  // 3. From Origin or Referer header (e.g. http://acme.localhost:5173 or https://acme.dev.morsecrm.com)
   const origin = (req.headers.origin as string) || (req.headers.referer as string) || '';
   if (origin) {
     try {
       const url = new URL(origin);
-      const host = url.hostname; // e.g. "acme.localhost" or "acme.yourcrm.com"
+      const host = url.hostname;
       const parts = host.split('.');
-      if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== 'www' && parts[0] !== 'admin') {
+      if (parts.length > 1 && !reservedSubdomains.has(parts[0].toLowerCase())) {
         return parts[0].toLowerCase();
       }
     } catch {
@@ -46,7 +48,7 @@ export function extractTenantSlug(req: Request): string | null {
   if (host) {
     const hostname = host.split(':')[0]; // strip port
     const parts = hostname.split('.');
-    if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== 'www' && parts[0] !== 'admin') {
+    if (parts.length > 1 && !reservedSubdomains.has(parts[0].toLowerCase())) {
       return parts[0].toLowerCase();
     }
   }
