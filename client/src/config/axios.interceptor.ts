@@ -85,9 +85,15 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       if (!token) {
         token = getTokenFromLocalStorageAuthStore();
         if (token && !isTokenExpired(token)) {
-          sessionStorage.setItem("token", token); // sync to sessionStorage
+          sessionStorage.setItem('token', token);
         } else {
           token = null;
+        }
+      }
+      if (!token) {
+        const saToken = getSuperAdminToken();
+        if (saToken && !isTokenExpired(saToken)) {
+          token = saToken;
         }
       }
 
@@ -114,8 +120,24 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
       // Inject tenant slug header if available and not explicitly provided
       if (!config.headers["X-Tenant-Slug"]) {
         const { slug } = getSubdomain();
-        if (slug) {
-          config.headers["X-Tenant-Slug"] = slug;
+        const savedSlug =
+          typeof window !== "undefined"
+            ? (sessionStorage.getItem("active_tenant_slug") || localStorage.getItem("active_tenant_slug"))
+            : null;
+        const effectiveSlug = slug || savedSlug;
+        if (effectiveSlug) {
+          config.headers["X-Tenant-Slug"] = effectiveSlug;
+        }
+      }
+
+      // Inject tenant ID header if available and not explicitly provided
+      if (!config.headers["X-Tenant-Id"]) {
+        const savedId =
+          typeof window !== "undefined"
+            ? (sessionStorage.getItem("active_tenant_id") || localStorage.getItem("active_tenant_id"))
+            : null;
+        if (savedId) {
+          config.headers["X-Tenant-Id"] = savedId;
         }
       }
 

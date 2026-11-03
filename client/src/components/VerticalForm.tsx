@@ -7,6 +7,7 @@ interface VerticalFormProps<TFormValues extends FieldValues> {
   children?: ReactNode;
   onSubmit: any;
   formClass?: string;
+  autoComplete?: string;
 }
 
 const VerticalForm = <
@@ -17,6 +18,7 @@ const VerticalForm = <
   children,
   onSubmit,
   formClass,
+  autoComplete = "off",
 }: VerticalFormProps<TFormValues>) => {
   /*
    * form methods
@@ -31,7 +33,7 @@ const VerticalForm = <
   } = methods;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className={formClass ?? ''} noValidate>
+    <form onSubmit={handleSubmit(onSubmit)} className={formClass ?? ''} noValidate autoComplete={autoComplete}>
       {Array.isArray(children)
         ? children.map((child) => {
           return child.props && child.props.name

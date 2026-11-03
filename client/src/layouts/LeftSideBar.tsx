@@ -8,7 +8,7 @@ import { MenuItemTypes } from "../constants/menu";
 import AppMenu from "./Menu";
 import * as LayoutConstants from "../constants/layout";
 
-import { useLayoutStore, useAuthStore, useConfigStore } from "../store";
+import { useLayoutStore, useAuthStore, useConfigStore, useTenantStore } from "../store";
 import { useAppLogo } from "../hooks";
 import useRoleStore from "../store/roleStore";
 import useAccessManagementStore from "../store/accessManagementStore";
@@ -181,6 +181,22 @@ const HoverMenuToggler = () => {
 const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
   const { logoLight, logoDark, logoSm } = useAppLogo();
   const { layoutTheme } = useLayoutStore();
+  const profile = useTenantStore((s) => s.profile);
+  const fetchProfile = useTenantStore((s) => s.fetchProfile);
+
+  useEffect(() => {
+    if (!profile) {
+      fetchProfile();
+    }
+  }, [profile, fetchProfile]);
+
+  const isTrial = Boolean(
+    profile?.is_trial ||
+    profile?.status === "trial" ||
+    profile?.computed_status === "Trial" ||
+    profile?.sub_status === "trialing" ||
+    (profile?.plan && profile.plan.toLowerCase().includes("trial"))
+  );
   const isDarkMode = layoutTheme === "dark";
   const logoUrl = logoLight || logoDark;
   const activeLogoUrl = isCondensed ? logoSm || logoUrl : logoUrl;
@@ -204,16 +220,23 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
           }}
         >
           {activeLogoUrl ? (
-            <img
-              src={activeLogoUrl}
-              alt="Logo"
-              className={
-                isCondensed
-                  ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
-                  : "h-full max-h-[70px] max-w-[240px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
-              }
-              style={{ maxHeight: isCondensed ? "42px" : "70px" }}
-            />
+            <div className="flex items-center gap-2">
+              <img
+                src={activeLogoUrl}
+                alt="Logo"
+                className={
+                  isCondensed
+                    ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
+                    : "h-full max-h-[70px] max-w-[200px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
+                }
+                style={{ maxHeight: isCondensed ? "42px" : "70px" }}
+              />
+              {!isCondensed && isTrial && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40 shrink-0">
+                  Trial
+                </span>
+              )}
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
@@ -222,6 +245,11 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
                 <path d="M12.5 17.5L19.5 24.5L12.5 31.5L5.5 24.5L12.5 17.5Z" fill="#38bdf8" />
               </svg>
               <span className="text-xl font-bold tracking-tight text-white">CRM</span>
+              {!isCondensed && isTrial && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/40 shrink-0">
+                  Trial
+                </span>
+              )}
             </div>
           )}
         </Link>

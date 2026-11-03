@@ -27,7 +27,7 @@ export function getSubdomain(): SubdomainInfo {
   }
 
   // Path-based Super Admin: e.g. /super-admin
-  if (path.startsWith('/super-admin')) {
+  if (path.startsWith('/super-admin') || path.startsWith('/admin')) {
     return { type: 'admin', host: hostname };
   }
 
@@ -43,7 +43,7 @@ export function getSubdomain(): SubdomainInfo {
     }
 
     // Check if a tenant was previously selected in this session on plain localhost
-    const savedTenant = sessionStorage.getItem('active_tenant_slug');
+    const savedTenant = sessionStorage.getItem('active_tenant_slug') || localStorage.getItem('active_tenant_slug');
     if (savedTenant && path !== '/' && !path.startsWith('/finder')) {
       return { type: 'tenant', slug: savedTenant, host: hostname };
     }

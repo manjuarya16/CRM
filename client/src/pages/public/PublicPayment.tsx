@@ -1,0 +1,800 @@
+import React, { useState, useEffect } from "react";
+import { Link, useSearchParams, useParams } from "react-router-dom";
+import API from "../../config";
+import Swal from "sweetalert2";
+
+// Helper to dynamically load Razorpay script
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
+const DEFAULT_CRM_PLANS = [
+  {
+    id: 1,
+    code: "starter",
+    name: "Starter",
+    category: "STARTER",
+    tagline: "A clear workspace for a focused sales team.",
+    price_inr: 9999,
+    price_usd: 149,
+    billing_period: "per year",
+    description: "A clear workspace for a focused sales team.",
+    trial_days: 14,
+    is_popular: false,
+    features: [
+      "Leads and pipeline",
+      "Persons and organizations",
+      "Activities and tasks",
+      "Up to 3 teammates"
+    ]
+  },
+  {
+    id: 2,
+    code: "growth",
+    name: "Growth",
+    category: "GROWTH",
+    tagline: "For teams ready to standardize customer work.",
+    price_inr: 19999,
+    price_usd: 299,
+    billing_period: "per year",
+    description: "For teams ready to standardize customer work.",
+    trial_days: 14,
+    is_popular: true,
+    features: [
+      "Everything in Starter",
+      "Automation workflows",
+      "Custom attributes",
+      "Reporting and visibility"
+    ]
+  },
+  {
+    id: 3,
+    code: "business",
+    name: "Business",
+    category: "BUSINESS",
+    tagline: "For service-heavy sales teams with more complexity.",
+    price_inr: 29999,
+    price_usd: 449,
+    billing_period: "per year",
+    description: "For service-heavy sales teams with more complexity.",
+    trial_days: 14,
+    is_popular: false,
+    features: [
+      "Everything in Growth",
+      "Advanced integrations",
+      "Quoted products and warehouses",
+      "Prioritized onboarding"
+    ]
+  }
+];
+
+const PublicPayment: React.FC = () => {
+  const { slug: routeSlug } = useParams<{ slug?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [slug, setSlug] = useState<string>("");
+  const [manualSlug, setManualSlug] = useState<string>("");
+  const [orgData, setOrgData] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>(DEFAULT_CRM_PLANS);
+  const [loading, setLoading] = useState(true);
+  const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<"INR" | "USD">("INR");
+  const [activePaymentTab, setActivePaymentTab] = useState<"online" | "offline">("online");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Sync default custom enterprise amount when currency toggles
+  const handleCurrencyChange = (newCurr: "INR" | "USD") => {
+    if (newCurr !== currency) {
+      setCurrency(newCurr);
+    }
+  };
+
+  // Extract subdomain helper
+  const getSubdomain = () => {
+    if (typeof window === "undefined") return "";
+    const hostname = window.location.hostname;
+    const parts = hostname.split(".");
+    if (parts.length <= 1 || (parts.length === 2 && parts[1] === "localhost")) {
+      if (parts.length === 2 && parts[1] === "localhost") {
+        return parts[0];
+      }
+      return "";
+    }
+    return parts[0];
+  };
+
+  const currentSlug = routeSlug || searchParams.get("slug") || searchParams.get("org") || searchParams.get("id") || getSubdomain() || "arya-group";
+
+  const fetchPaymentDetails = async (targetSlug: string) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const url = targetSlug
+        ? `/subscription/public-info?slug=${encodeURIComponent(targetSlug)}`
+        : "/subscription/public-info";
+
+      const res = await API.get(url);
+      if (res.data && res.data.success) {
+        const org = res.data.data.organization || res.data.data.tenant;
+        setOrgData(org);
+        const fetched = res.data.data.plans;
+        if (Array.isArray(fetched) && fetched.length > 0 && !fetched.some((p: any) => p.description?.includes("NGO"))) {
+          setPlans(fetched);
+        } else {
+          setPlans(DEFAULT_CRM_PLANS);
+        }
+        if (targetSlug && !org) {
+          setErrorMsg(`No organization found matching subdomain: "${targetSlug}"`);
+        }
+      } else {
+        setPlans(DEFAULT_CRM_PLANS);
+        setErrorMsg(res.data?.message || "Failed to load payment details");
+      }
+    } catch (err: any) {
+      console.error("Error fetching public payment info:", err);
+      setErrorMsg("Failed to connect to payment server. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setSlug(currentSlug);
+    setManualSlug(currentSlug);
+    fetchPaymentDetails(currentSlug);
+  }, [currentSlug]);
+
+  const handleManualSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualSlug.trim()) {
+      setSlug(manualSlug.trim());
+      fetchPaymentDetails(manualSlug.trim());
+    }
+  };
+
+  const getLoginUrl = (orgSlug: string) => {
+    const protocol = window.location.protocol;
+    const port = window.location.port ? `:${window.location.port}` : "";
+    const host = window.location.hostname;
+    if (host === "localhost" || host.endsWith(".localhost") || host === "127.0.0.1") {
+      return `${protocol}//${orgSlug}.localhost${port}/auth/login`;
+    }
+    const parts = host.split(".");
+    const rootDomain = parts.length > 2 ? parts.slice(1).join(".") : host;
+    return `${protocol}//${orgSlug}.${rootDomain}${port}/auth/login`;
+  };
+
+  const handlePayNow = async (plan: any, customAmt?: number) => {
+    const effectiveSlug = orgData?.slug || slug;
+    if (!effectiveSlug) {
+      Swal.fire("Organization Required", "Please specify your organization subdomain to proceed.", "warning");
+      return;
+    }
+
+    setProcessingPlan(plan.code);
+
+    const isLoaded = await loadRazorpayScript();
+    if (!isLoaded) {
+      Swal.fire("Error", "Failed to load Razorpay payment gateway. Please check your internet connection.", "error");
+      setProcessingPlan(null);
+      return;
+    }
+
+    try {
+      // 1. Create Public Razorpay order
+      const orderRes = await API.post("/subscription/public-create-order", {
+        slug: effectiveSlug,
+        plan_code: plan.code,
+        currency,
+      });
+
+      if (!orderRes.data || !orderRes.data.success) {
+        throw new Error(orderRes.data?.message || "Failed to create payment order");
+      }
+
+      const {
+        order_id,
+        amount,
+        key_id,
+        is_upgrade,
+        upgrade_amount,
+        total_valuation,
+        current_plan_price,
+        original_amount,
+        current_plan_name,
+      } = orderRes.data.data;
+
+      const formattedPayAmount = currency === "USD" 
+        ? `$${upgrade_amount || Number(plan.price_usd)}` 
+        : `₹${Number(upgrade_amount || plan.price_inr).toLocaleString()}`;
+
+      // Handle Mock / Sandbox mode fallback
+      if (!key_id || key_id === "rzp_test_placeholder" || order_id.startsWith("order_mock_")) {
+        const mockConfirm = await Swal.fire({
+          title: is_upgrade ? "Confirm Plan Upgrade" : "Razorpay Sandbox / Direct Pay",
+          html: `
+            <div class="text-left text-xs space-y-2.5 text-slate-700 dark:text-slate-200">
+              <p>Organization: <strong class="text-primary">${orgData?.name || effectiveSlug}</strong></p>
+              ${
+                is_upgrade
+                  ? `
+                <div class="bg-indigo-50 dark:bg-indigo-950/40 p-3.5 rounded-lg border border-indigo-200 dark:border-indigo-800 space-y-1.5">
+                  <div class="flex justify-between font-semibold text-slate-700 dark:text-slate-200">
+                    <span>${plan.name} Standard:</span>
+                    <span>${currency === "USD" ? `$${original_amount}` : `₹${Number(original_amount).toLocaleString()}`}</span>
+                  </div>
+                  <div class="flex justify-between text-emerald-600 dark:text-emerald-400">
+                    <span>${current_plan_name || orgData?.plan_name || "Current Plan"} Credit:</span>
+                    <span>-${currency === "USD" ? `$${original_amount - upgrade_amount}` : `₹${Number(original_amount - upgrade_amount).toLocaleString()}`}</span>
+                  </div>
+                  <div class="flex justify-between font-bold text-sm text-primary pt-1 border-t border-indigo-200 dark:border-indigo-700">
+                    <span>Payable Today:</span>
+                    <span class="text-emerald-600 dark:text-emerald-400">${formattedPayAmount}</span>
+                  </div>
+                </div>
+                <p class="text-[11px] text-gray-500">
+                  ✨ Your active subscription period (valid until <strong>${orgData?.subscription_expiry_date ? new Date(orgData.subscription_expiry_date).toLocaleDateString() : 'N/A'}</strong>) will be upgraded to <strong>${plan.name}</strong> immediately.
+                </p>
+              `
+                  : `
+                <p class="font-semibold text-emerald-600 dark:text-emerald-400">
+                  Confirm payment of <strong>${formattedPayAmount}</strong> for <strong>${plan.name} Plan (1 Year)</strong>?
+                </p>
+              `
+              }
+            </div>
+          `,
+          icon: is_upgrade ? "question" : "info",
+          showCancelButton: true,
+          confirmButtonText: is_upgrade ? `Pay ${formattedPayAmount} & Upgrade` : "Simulate Payment & Activate",
+          confirmButtonColor: "#10b981",
+          cancelButtonText: "Cancel",
+        });
+
+        if (mockConfirm.isConfirmed) {
+          Swal.fire({
+            title: is_upgrade ? "Upgrading Plan..." : "Activating Subscription...",
+            text: is_upgrade ? "Applying plan upgrade..." : "Processing payment and extending validity...",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading(),
+          });
+
+          const verifyRes = await API.post("/subscription/public-verify-payment", {
+            slug: effectiveSlug,
+            plan_code: plan.code,
+            currency,
+            razorpay_order_id: order_id,
+            razorpay_payment_id: `pay_mock_${Date.now()}`,
+            razorpay_signature: "mock_signature_public_payment",
+          });
+
+          if (verifyRes.data && verifyRes.data.success) {
+            const loginUrl = getLoginUrl(effectiveSlug);
+            Swal.fire({
+              title: is_upgrade ? "Plan Upgraded! 🎉" : "Payment Successful! 🎉",
+              html: `
+                <div class="text-left text-xs space-y-2.5 mt-2 bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
+                  <p><strong>Organization:</strong> ${orgData?.name || effectiveSlug}</p>
+                  <p><strong>Active Plan:</strong> ${plan.name} Plan</p>
+                  <p><strong>Validity Expiry:</strong> ${new Date(verifyRes.data.data.subscription_expiry_date).toLocaleDateString()}</p>
+                  <div class="pt-2 border-t border-emerald-200 dark:border-emerald-800">
+                    <p class="font-semibold mb-1">Your organization space is now fully upgraded!</p>
+                    <a href="${loginUrl}" class="inline-block w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-center transition">
+                      Go to Organization Login →
+                    </a>
+                  </div>
+                </div>
+              `,
+              icon: "success",
+              confirmButtonText: "Done",
+              confirmButtonColor: "#10b981",
+            });
+            fetchPaymentDetails(effectiveSlug);
+          } else {
+            throw new Error(verifyRes.data?.message || "Failed to verify payment");
+          }
+        }
+        setProcessingPlan(null);
+        return;
+      }
+
+      // Live Razorpay options
+      const options = {
+        key: key_id,
+        amount: amount,
+        currency: currency.toUpperCase(),
+        name: "CRM SaaS Platform",
+        description: is_upgrade
+          ? `Upgrade to ${plan.name} Plan - ${orgData?.name || effectiveSlug}`
+          : `${plan.name} Subscription Renewal - ${orgData?.name || effectiveSlug}`,
+        image: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png",
+        order_id: order_id,
+        handler: async function (response: any) {
+          try {
+            Swal.fire({
+              title: "Verifying Payment...",
+              text: "Confirming transaction with Razorpay...",
+              allowOutsideClick: false,
+              didOpen: () => Swal.showLoading(),
+            });
+
+            const verifyRes = await API.post("/subscription/public-verify-payment", {
+              slug: effectiveSlug,
+              plan_code: plan.code,
+              currency,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verifyRes.data && verifyRes.data.success) {
+              const loginUrl = getLoginUrl(effectiveSlug);
+              Swal.fire({
+                title: is_upgrade ? "Plan Upgraded! 🎉" : "Payment Received! 🎉",
+                html: `
+                  <div class="text-left text-xs space-y-2 mt-2 bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
+                    <p><strong>Organization:</strong> ${orgData?.name || effectiveSlug}</p>
+                    <p><strong>Upgraded Plan:</strong> ${plan.name}</p>
+                    <p><strong>Expiry Date:</strong> ${new Date(verifyRes.data.data.subscription_expiry_date).toLocaleDateString()}</p>
+                    <div class="pt-2">
+                      <a href="${loginUrl}" class="inline-block w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-center transition">
+                        Log In to Your CRM Workspace →
+                      </a>
+                    </div>
+                  </div>
+                `,
+                icon: "success",
+                confirmButtonColor: "#10b981",
+              });
+              fetchPaymentDetails(effectiveSlug);
+            } else {
+              throw new Error(verifyRes.data?.message || "Verification failed");
+            }
+          } catch (vErr: any) {
+            Swal.fire(
+              "Verification Error",
+              vErr.response?.data?.message || vErr.message || "Failed to verify payment transaction.",
+              "error"
+            );
+          }
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+      };
+
+      const rzpWindow = new (window as any).Razorpay(options);
+      rzpWindow.on("payment.failed", function (failRes: any) {
+        Swal.fire({
+          title: "Payment Failed",
+          text: failRes.error?.description || "Transaction was cancelled or declined by your bank.",
+          icon: "error",
+          confirmButtonColor: "#ef4444",
+        });
+      });
+      rzpWindow.open();
+    } catch (err: any) {
+      console.error("Payment error:", err);
+      Swal.fire(
+        "Payment Error",
+        err.response?.data?.message || err.message || "Unable to initialize payment checkout.",
+        "error"
+      );
+    } finally {
+      setProcessingPlan(null);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col justify-between">
+      {/* Public Header */}
+      <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md">
+              <i className="mgc_shield_line text-xl"></i>
+            </div>
+            <div>
+              <span className="font-extrabold text-slate-900 dark:text-white text-lg tracking-tight">CRM Platform</span>
+              <span className="text-[10px] uppercase font-bold tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-2">
+                Payment Portal
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {orgData ? (
+              <a
+                href={getLoginUrl(orgData.slug)}
+                className="btn btn-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-bold rounded-lg px-3 py-1.5 transition flex items-center gap-1.5"
+              >
+                <i className="mgc_enter_door_line text-sm"></i>
+                <span>Sign In to {orgData.name}</span>
+              </a>
+            ) : (
+              <Link
+                to="/auth/login"
+                className="btn btn-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-bold rounded-lg px-3 py-1.5 transition flex items-center gap-1.5"
+              >
+                <i className="mgc_enter_door_line text-sm"></i>
+                <span>Sign In</span>
+              </Link>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {loading ? (
+          <div className="flex flex-col justify-center items-center py-24 space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="text-sm text-gray-500 font-medium">Loading organization payment details...</p>
+          </div>
+        ) : (
+          <div>
+            {/* Organization Hero Banner */}
+            {orgData ? (
+              <div className="card p-6 mb-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-xl border border-indigo-900/50">
+                <div className="flex flex-wrap justify-between items-center gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs uppercase tracking-widest font-bold text-indigo-300">Organization Space</span>
+                      <span className={`inline-flex items-center gap-1.5 py-0.5 px-3 rounded-full text-xs font-bold ${
+                        orgData.computed_status === "Active"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          : orgData.computed_status === "Trial"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                      }`}>
+                        <i className={
+                          orgData.computed_status === "Active"
+                            ? "mgc_check_circle_fill text-xs"
+                            : orgData.computed_status === "Trial"
+                            ? "mgc_time_fill text-xs"
+                            : "mgc_alarm_1_fill text-xs"
+                        }></i>
+                        <span>{orgData.computed_status === "Trial" ? "Active Trial" : orgData.computed_status}</span>
+                      </span>
+                    </div>
+
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                      {orgData.name}
+                    </h1>
+
+                    <p className="text-xs text-slate-300 max-w-xl leading-relaxed flex items-center gap-2">
+                      <span>Subdomain:</span>
+                      <span className="font-mono bg-indigo-900/60 text-indigo-300 px-2 py-0.5 rounded font-semibold">
+                        {orgData.slug}
+                      </span>
+                      <span>• Current Plan: <strong>{orgData.plan_name}</strong></span>
+                    </p>
+                  </div>
+
+                  <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 text-right min-w-[220px]">
+                    <span className="text-xs text-indigo-200 block mb-1">Subscription Validity</span>
+                    <div className="text-lg font-bold text-white">
+                      {orgData.subscription_expiry_date ? (
+                        new Date(orgData.subscription_expiry_date).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      ) : (
+                        "No Expiry / Unregistered"
+                      )}
+                    </div>
+                    <div className="text-xs font-semibold mt-1">
+                      {orgData.days_remaining !== null && orgData.days_remaining >= 0 ? (
+                        <span className="text-amber-300 flex items-center justify-end gap-1">
+                          <i className="mgc_time_line text-xs"></i>
+                          <span>{orgData.days_remaining} Days Remaining</span>
+                        </span>
+                      ) : (
+                        <span className="text-rose-400 flex items-center justify-end gap-1">
+                          <i className="mgc_alarm_1_line text-xs"></i>
+                          <span>Subscription Expired</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="card p-6 mb-8 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-center max-w-2xl mx-auto shadow-sm">
+                <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <i className="mgc_search_line text-2xl"></i>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Find Your Organization Space</h3>
+                <p className="text-xs text-gray-500 mb-4">Enter your organization subdomain slug to view renewal packages and pay directly.</p>
+                <form onSubmit={handleManualSearch} className="flex gap-2 max-w-md mx-auto">
+                  <input
+                    type="text"
+                    placeholder="e.g. arya-group"
+                    value={manualSlug}
+                    onChange={(e) => setManualSlug(e.target.value)}
+                    className="form-input text-sm flex-1 rounded-xl"
+                  />
+                  <button type="submit" className="btn bg-primary hover:bg-primary-600 text-white text-xs px-4 py-2 rounded-xl font-bold">
+                    Lookup
+                  </button>
+                </form>
+                {errorMsg && <p className="text-xs text-rose-500 mt-3 font-medium">{errorMsg}</p>}
+              </div>
+            )}
+
+            {/* Plans Selection & Tabs Header */}
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                  Select Subscription Plan / Annual Renewal
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Instant activation upon online payment via Razorpay or direct bank/UPI transfer.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Online vs Offline Tab */}
+                <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      activePaymentTab === "online"
+                        ? "bg-white dark:bg-slate-700 text-primary shadow-sm"
+                        : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                    onClick={() => setActivePaymentTab("online")}
+                  >
+                    <i className="mgc_bank_card_line text-sm"></i> Online Payment
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      activePaymentTab === "offline"
+                        ? "bg-white dark:bg-slate-700 text-primary shadow-sm"
+                        : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                    onClick={() => setActivePaymentTab("offline")}
+                  >
+                    <i className="mgc_bank_line text-sm"></i> Bank / UPI Transfer
+                  </button>
+                </div>
+
+                {/* Currency Switcher */}
+                <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      currency === "INR"
+                        ? "bg-white dark:bg-slate-700 text-primary shadow-sm"
+                        : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                    onClick={() => handleCurrencyChange("INR")}
+                  >
+                    INR (₹)
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      currency === "USD"
+                        ? "bg-white dark:bg-slate-700 text-primary shadow-sm"
+                        : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                    onClick={() => handleCurrencyChange("USD")}
+                  >
+                    USD ($)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tab 1: Online Plans */}
+            {activePaymentTab === "online" && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch mb-12">
+                {(() => {
+                  const currentPlanObj = plans.find((p) => p.code === orgData?.plan_code);
+                  const isOrgActivePaid =
+                    orgData &&
+                    (orgData.computed_status === "Active" ||
+                      (orgData.subscription_expiry_date && new Date(orgData.subscription_expiry_date) > new Date())) &&
+                    !orgData.is_trial &&
+                    orgData.plan_code !== "free_trial" &&
+                    orgData.plan_code !== "trial" &&
+                    orgData.computed_status !== "Trial";
+
+                  const currentPlanPrice = currentPlanObj
+                    ? currency === "USD"
+                      ? Number(currentPlanObj.price_usd)
+                      : Number(currentPlanObj.price_inr)
+                    : 0;
+
+                  return plans
+                    .filter((p) => p.code !== "free_trial")
+                    .map((plan) => {
+                      const isCurrent = orgData?.plan_code === plan.code;
+                      const planPrice = currency === "USD" ? Number(plan.price_usd) : Number(plan.price_inr);
+                      const isUpgradeEligible = isOrgActivePaid && !isCurrent && planPrice > currentPlanPrice;
+                      const upgradeDiffAmount = isUpgradeEligible ? planPrice - currentPlanPrice : 0;
+
+                      return (
+                        <div
+                          key={plan.id}
+                          className={`card p-7 flex flex-col justify-between rounded-2xl border transition-all relative ${
+                            plan.code === "growth" || plan.is_popular
+                              ? "border-2 border-indigo-500 shadow-xl ring-4 ring-indigo-500/10 bg-white dark:bg-slate-800"
+                              : isCurrent
+                              ? "border-2 border-emerald-500 shadow-md bg-white dark:bg-slate-800"
+                              : "border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-slate-800 hover:shadow-md"
+                          }`}
+                        >
+                          <div>
+                            {/* Card Top Category & Active Badge (Exact match to screenshot) */}
+                            <div className="flex justify-between items-center mb-3">
+                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase">
+                                {plan.category || plan.name.toUpperCase()}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {isCurrent && (
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full">
+                                    Current Plan
+                                  </span>
+                                )}
+                                <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                  Active
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Plan Name */}
+                            <h3 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
+                              {plan.name}
+                            </h3>
+
+                            {/* Price / per year */}
+                            <div className="flex items-baseline gap-1 mt-3">
+                              <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-slate-100">
+                                {currency === "USD" ? `$${plan.price_usd}` : `₹${Number(plan.price_inr).toLocaleString()}`}
+                              </span>
+                              <span className="text-xs text-gray-500 font-medium">/per year</span>
+                            </div>
+
+                            {/* Tagline / Subtitle */}
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-6 min-h-[34px] leading-relaxed">
+                              {plan.tagline || plan.description}
+                            </p>
+
+                            {/* Features List with Indigo Checkmark */}
+                            <ul className="space-y-3 mb-6 border-t border-gray-100 dark:border-gray-700/80 pt-5">
+                              {(plan.features || []).map((feat: string, idx: number) => (
+                                <li key={idx} className="flex items-start text-xs text-slate-700 dark:text-slate-300 gap-2.5">
+                                  <i className="mgc_check_line text-indigo-600 dark:text-indigo-400 text-base flex-shrink-0 mt-0.5 font-bold"></i>
+                                  <span className="leading-snug">{feat}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Footer with 14-day trial & action button */}
+                          <div className="pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-500 font-medium">{plan.trial_days || 14}-day trial</span>
+                              {isUpgradeEligible && (
+                                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                                  Upgrade diff: {currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={processingPlan === plan.code}
+                              className={`w-full py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md ${
+                                plan.code === "growth" || plan.is_popular
+                                  ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                  : isCurrent
+                                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  : "bg-primary hover:bg-primary-600 text-white"
+                              }`}
+                              onClick={() => handlePayNow(plan)}
+                            >
+                              {processingPlan === plan.code ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              ) : isUpgradeEligible ? (
+                                <>
+                                  <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}) →
+                                </>
+                              ) : isCurrent ? (
+                                <>
+                                  <i className="mgc_refresh_3_line text-base"></i> Renew {plan.name} Plan →
+                                </>
+                              ) : (
+                                <>
+                                  <i className="mgc_bank_card_line text-base"></i> Pay Online with Razorpay →
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    });
+                })()}
+              </div>
+            )}
+
+            {/* Tab 2: Bank / UPI Details */}
+            {activePaymentTab === "offline" && (
+              <div className="card p-8 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 shadow-sm mb-12">
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <i className="mgc_bank_line text-2xl"></i>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Direct Bank & UPI Transfer</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Transfer subscription fees directly via NEFT/RTGS/IMPS or scan UPI QR. Send the payment reference to activate instantly.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900/60 p-5 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Beneficiary Account Name:</span>
+                      <strong className="text-slate-800 dark:text-slate-200 text-sm">CRM Platform Solutions Private Limited</strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Bank Name:</span>
+                      <strong className="text-slate-800 dark:text-slate-200 text-sm">HDFC Bank Ltd</strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Account Number:</span>
+                      <strong className="text-slate-800 dark:text-slate-200 font-mono text-sm">50200084920192</strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">IFSC Code:</span>
+                      <strong className="text-slate-800 dark:text-slate-200 font-mono text-sm">HDFC0001234</strong>
+                    </div>
+                    <div className="sm:col-span-2 pt-2 border-t border-gray-200 dark:border-gray-800">
+                      <span className="text-gray-500 block">UPI ID (VPA):</span>
+                      <strong className="text-primary font-mono text-sm">crmplatform@hdfcbank</strong>
+                    </div>
+                  </div>
+
+                  <div className="bg-indigo-50 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 text-xs text-indigo-900 dark:text-indigo-200 space-y-1.5">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <i className="mgc_information_line text-sm"></i> How to activate after bank transfer:
+                    </p>
+                    <p>
+                      1. After completing the payment, email your transaction screenshot or UTR number to <strong className="underline">billing@crmsaas.com</strong> or WhatsApp to <strong>+91 98765 43210</strong>.
+                    </p>
+                    <p>
+                      2. Mention your organization slug: <strong className="font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{orgData?.slug || slug || "your-subdomain"}</strong>.
+                    </p>
+                    <p>3. Super Admin will verify and activate your annual subscription immediately.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-gray-800 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
+        <div className="max-w-7xl mx-auto px-4">
+          <p>© {new Date().getFullYear()} CRM Management Platform. All transactions are SSL encrypted and 100% secure.</p>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default PublicPayment;

@@ -365,9 +365,34 @@
 }
 
 /* Responsive adjustments */
+/* Responsive mobile enhancements */
+.super-admin-theme table {
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 1279px) {
-  .super-admin-theme nav[aria-label="Super admin menu"] {
-    background: #ffffff;
-    border-bottom: 1px solid #e2e8f0;
+  .super-admin-theme aside {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-theme .super-admin-action-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .super-admin-theme th,
+  .super-admin-theme td {
+    padding: 0.625rem 0.75rem !important;
+  }
+
+  .super-admin-theme input:not([type="checkbox"]):not([type="radio"]),
+  .super-admin-theme select,
+  .super-admin-theme textarea {
+    font-size: 14px !important;
   }
 }

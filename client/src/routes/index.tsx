@@ -36,6 +36,7 @@ import PrivateRoute from "./PrivateRoute";
 const Login = React.lazy(() => import("../pages/auth/Login"));
 const RecoverPassword = React.lazy(() => import("../pages/auth/RecoverPassword"));
 const PublicFormPage = React.lazy(() => import("../pages/public/PublicFormPage"));
+const PublicPayment = React.lazy(() => import("../pages/public/PublicPayment"));
 
 // dashboard
 const Dashboard = React.lazy(() => import("../pages/dashboard/index"));
@@ -267,6 +268,36 @@ const marketingRoutes: RoutesProps[] = [
     element: <PricingPage />,
   },
   {
+    path: "/payment",
+    name: "Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/payment/:slug",
+    name: "Organization Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/pay",
+    name: "Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/pay/:slug",
+    name: "Organization Payment",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/subscription",
+    name: "Subscription Payment",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/subscription/:slug",
+    name: "Organization Subscription Payment",
+    element: <PublicPayment />,
+  },
+  {
     path: "/book-demo",
     name: "Book a Demo",
     element: <BookDemoPage />,
@@ -374,6 +405,26 @@ const publicRoutes: RoutesProps[] = [
     path: "/forms/:form_id",
     name: "Public Web Form",
     element: <PublicFormPage />,
+  },
+  {
+    path: "/payment",
+    name: "Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/payment/:slug",
+    name: "Organization Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/pay",
+    name: "Payment Portal",
+    element: <PublicPayment />,
+  },
+  {
+    path: "/pay/:slug",
+    name: "Organization Payment",
+    element: <PublicPayment />,
   },
   {
     path: "/book-demo",

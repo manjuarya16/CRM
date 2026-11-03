@@ -29,6 +29,13 @@ export interface TenantProfile {
   domain?: string | null;
   status: string;
   plan: string;
+  is_trial?: boolean;
+  trial_days_remaining?: number | null;
+  computed_status?: string;
+  sub_status?: string | null;
+  subscription_expiry_date?: string | null;
+  subscription_start_date?: string | null;
+  tier_name?: string | null;
   logo_url?: string | null;
   settings: Record<string, any>;
   email?: string;
@@ -54,8 +61,18 @@ export interface TenantState {
   updateProfile: (data: Partial<TenantProfile>) => Promise<boolean>;
 }
 
+const getInitialProfile = (): TenantProfile | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem("current_tenant_profile") || localStorage.getItem("current_tenant_profile");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const useTenantStore = create<TenantState>((set, get) => ({
-  profile: null,
+  profile: getInitialProfile(),
   loading: false,
   saving: false,
   error: null,
@@ -65,8 +82,23 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     try {
       const res = await API.get("/tenant/current");
       if (res.data?.success && res.data?.data) {
-        set({ profile: res.data.data, loading: false });
-        return res.data.data;
+        const data = res.data.data;
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("current_tenant_profile", JSON.stringify(data));
+            localStorage.setItem("current_tenant_profile", JSON.stringify(data));
+            if (data.slug) {
+              sessionStorage.setItem("active_tenant_slug", data.slug);
+              localStorage.setItem("active_tenant_slug", data.slug);
+            }
+            if (data.id) {
+              sessionStorage.setItem("active_tenant_id", String(data.id));
+              localStorage.setItem("active_tenant_id", String(data.id));
+            }
+          } catch {}
+        }
+        set({ profile: data, loading: false });
+        return data;
       }
       throw new Error(res.data?.message || "Failed to load organization profile");
     } catch (err: any) {
@@ -81,7 +113,14 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     try {
       const res = await API.put("/tenant/current", data);
       if (res.data?.success && res.data?.data) {
-        set({ profile: res.data.data, saving: false });
+        const data = res.data.data;
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("current_tenant_profile", JSON.stringify(data));
+            localStorage.setItem("current_tenant_profile", JSON.stringify(data));
+          } catch {}
+        }
+        set({ profile: data, saving: false });
         Swal.fire({
           icon: "success",
           title: "Organization Updated",

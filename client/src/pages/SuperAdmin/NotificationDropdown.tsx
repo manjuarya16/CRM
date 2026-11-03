@@ -107,12 +107,13 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
     if (notification.type === "demo_request") navigate("/demos");
   };
 
-  const relativeTime = (date: string) => {
-    const seconds = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 1000));
-    if (seconds < 60) return "just now";
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
+  const formatDateOnly = (date: string) => {
+    try {
+      const d = new Date(date);
+      return isNaN(d.getTime()) ? date : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return date;
+    }
   };
 
   return (
@@ -169,7 +170,7 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
               >
                 <span className="flex items-start justify-between gap-3">
                   <span className="text-sm font-medium text-gray-900">{notification.title}</span>
-                  <span className="shrink-0 text-[10px] text-gray-400">{relativeTime(notification.created_at)}</span>
+                  <span className="shrink-0 text-[10px] text-gray-400">{formatDateOnly(notification.created_at)}</span>
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-gray-600">{notification.message}</span>
                 <span className="mt-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#040975]">

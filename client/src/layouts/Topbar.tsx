@@ -10,7 +10,7 @@ import {
   NotificationDropdown,
   ProfileDropDown,
 } from "../components";
-import { useAuthStore } from "../store";
+import { useAuthStore, useTenantStore } from "../store";
 import { useEffect, useState, useRef } from "react";
 import { MegaSearch } from "../components/MegaSearch";
 import {
@@ -159,6 +159,22 @@ const Topbar = () => {
         .catch(() => {});
     });
   }, [user?.id, (user as any)?.profile_img]);
+
+  const profile = useTenantStore((s) => s.profile);
+  const fetchProfile = useTenantStore((s) => s.fetchProfile);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const isTrial = Boolean(
+    profile?.is_trial ||
+    profile?.status === "trial" ||
+    profile?.computed_status === "Trial" ||
+    profile?.sub_status === "trialing" ||
+    (profile?.plan && profile.plan.toLowerCase().includes("trial"))
+  );
+  const daysRemaining = profile?.trial_days_remaining ?? (isTrial ? 14 : null);
 
   const { logoLight, logoDark, logoSm } = useAppLogo();
   const logoUrl = logoLight || logoDark;
@@ -340,6 +356,36 @@ const Topbar = () => {
 
         {/* Right side controls */}
         <div className="flex items-center gap-1.5 sm:gap-3 ml-auto shrink-0">
+          {/* Trial Organization Pill */}
+          {isTrial && (
+            <div
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-600/60 shadow-xs"
+            >
+              <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+              <span className="whitespace-nowrap font-medium text-[11px] sm:text-xs">
+                {daysRemaining !== null ? (
+                  daysRemaining <= 0 ? (
+                    <span className="text-rose-600 dark:text-rose-400 font-bold">Trial expired</span>
+                  ) : (
+                    <>
+                      Trial ends in <strong className="font-bold text-amber-950 dark:text-amber-100">{daysRemaining} {daysRemaining === 1 ? 'day' : 'days'}</strong>
+                    </>
+                  )
+                ) : (
+                  <span className="font-bold">Free Trial</span>
+                )}
+              </span>
+              <Link
+                to="/subscription"
+                title="Renew or upgrade your organization subscription"
+                className="inline-flex items-center gap-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-full px-2.5 py-0.5 ml-0.5 shadow-xs transition-colors"
+              >
+                Renew
+                <i className="mgc_refresh_3_line text-[11px]"></i>
+              </Link>
+            </div>
+          )}
+
           <NotificationDropdown />
 
           <button

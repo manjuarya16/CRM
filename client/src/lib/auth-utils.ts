@@ -41,7 +41,113 @@ export const getTokenFromLocalStorageAuthStore = (): string | null => {
   }
 };
 
+export const processUrlAuthToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token =
+      params.get("impersonate_token") ||
+      params.get("token") ||
+      params.get("auth_token");
+
+    if (token && !isTokenExpired(token)) {
+      // 1. Store token in sessionStorage
+      sessionStorage.setItem("token", token);
+
+      // Save tenant slug and id if present
+      const orgSlug = params.get("org_slug") || params.get("tenant");
+      if (orgSlug) {
+        sessionStorage.setItem("active_tenant_slug", orgSlug.toLowerCase().trim());
+        try {
+          localStorage.setItem("active_tenant_slug", orgSlug.toLowerCase().trim());
+        } catch {}
+      }
+      const orgId = params.get("org_id") || params.get("tenant_id");
+      if (orgId) {
+        sessionStorage.setItem("active_tenant_id", orgId.trim());
+        try {
+          localStorage.setItem("active_tenant_id", orgId.trim());
+        } catch {}
+      }
+
+      // 2. Parse user data
+      let userData: any = null;
+      const userParam = params.get("user");
+      if (userParam) {
+        try {
+          userData = JSON.parse(userParam);
+        } catch {
+          userData = null;
+        }
+      }
+      if (!userData) {
+        const payload = parseJwt(token);
+        if (payload) {
+          userData = {
+            id: payload.sub,
+            name: payload.name || payload.email || "Admin",
+            email: payload.email,
+            role: payload.role || "admin",
+            tenant_id: payload.tenant_id,
+          };
+        }
+      }
+
+      if (userData) {
+        if (!userData.role_id) userData.role_id = 1;
+        if (!userData.role) userData.role = "admin";
+        sessionStorage.setItem(
+          "app_user",
+          JSON.stringify({
+            token,
+            ...userData,
+          })
+        );
+        try {
+          localStorage.setItem(
+            "auth-store",
+            JSON.stringify({
+              state: {
+                user: userData,
+                token: token,
+                userLoggedIn: true,
+              },
+              version: 0,
+            })
+          );
+        } catch (e) {
+          console.warn("Failed to write auth-store to localStorage", e);
+        }
+      }
+
+      // 3. Set cookie
+      document.cookie = `authToken=${token}; path=/; max-age=7200; SameSite=Lax`;
+
+      // 4. Clean search params from URL address bar without reloading
+      params.delete("impersonate_token");
+      params.delete("token");
+      params.delete("auth_token");
+      params.delete("user");
+      params.delete("org_name");
+      params.delete("org_slug");
+      params.delete("org_id");
+      params.delete("tenant_id");
+      const cleanSearch = params.toString() ? `?${params.toString()}` : "";
+      const cleanUrl = `${window.location.pathname}${cleanSearch}${window.location.hash}`;
+      window.history.replaceState({}, "", cleanUrl);
+
+      return token;
+    }
+  } catch (err) {
+    console.warn("Failed to process URL auth token:", err);
+  }
+  return null;
+};
+
 export const getToken = (): string | null => {
+  const urlToken = processUrlAuthToken();
+  if (urlToken) return urlToken;
+
   return (
     getTokenFromSession() ||
     getTokenFromCookie() ||
