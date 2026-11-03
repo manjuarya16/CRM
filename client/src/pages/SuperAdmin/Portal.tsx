@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import { useSuperAdminStore } from "@/store/superAdminStore";
 import SuperAdminDashboard from "@/pages/SuperAdmin/Dashboard";
@@ -36,7 +36,6 @@ import {
 
 const menuItems = [
   { key: "dashboard", permission: "platform.dashboard.view", label: "Dashboard", icon: LayoutDashboard },
-  { key: "organizations", permission: "platform.organizations.view", label: "Organizations", icon: Building2 },
   { key: "domains", permission: "platform.domains.view", label: "Domains & Subdomains", icon: Globe2 },
   { key: "subscriptions", permission: "platform.subscriptions.view", label: "Subscriptions", icon: Gem },
   { key: "payments", permission: "platform.payments.view", label: "Payment Details", icon: Receipt },
