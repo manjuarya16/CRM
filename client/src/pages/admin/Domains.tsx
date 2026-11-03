@@ -366,9 +366,12 @@ const SuperAdminDomains = () => {
               Search Domain / Organization
             </label>
             <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <i className="mgc_search_line text-base"></i>
+              </div>
               <input
                 type="text"
-                className="form-input text-sm w-full pl-9"
+                className="form-input text-sm w-full !pl-10"
                 placeholder="Domain, slug, org name..."
                 value={search}
                 onChange={(e) => {
@@ -376,7 +379,6 @@ const SuperAdminDomains = () => {
                   setCurrentPage(1);
                 }}
               />
-              <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
             </div>
           </div>
 
@@ -504,6 +506,7 @@ const SuperAdminDomains = () => {
               <table className="min-w-full min-w-[800px] divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/60 text-xs text-gray-500 uppercase font-semibold">
                   <tr>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-16">Sr. No.</th>
                     <th className="px-4 py-3 text-left">Domain / Tenant URL</th>
                     <th className="px-4 py-3 text-left">Organization</th>
                     <th className="px-3 py-3 text-left">Plan</th>
@@ -514,7 +517,7 @@ const SuperAdminDomains = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
-                  {paginatedOrganizations.map((org) => {
+                  {paginatedOrganizations.map((org, index) => {
                     const domainHost = getTenantDomain(org.slug);
                     const fullUrl = getFullTenantUrl(org.slug);
                     const paymentUrl = getPaymentUrl(org.slug);
@@ -522,6 +525,9 @@ const SuperAdminDomains = () => {
 
                     return (
                       <tr key={org.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/60 transition">
+                        <td className="px-3 py-3.5 text-center text-xs text-gray-500 dark:text-gray-400 font-mono font-medium w-16">
+                          {startIndex + index + 1}
+                        </td>
                         {/* Domain & Link */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">

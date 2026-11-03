@@ -849,21 +849,23 @@ const SuperAdminOrganizations = () => {
       {/* Filters Card */}
       <div className="card mb-6 p-5 shadow-xs border border-gray-100 dark:border-gray-800 rounded-2xl bg-white dark:bg-slate-800">
         <form onSubmit={handleSearchSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {/* Search */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                 Search
               </label>
               <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                  <i className="mgc_search_line text-base"></i>
+                </div>
                 <input
                   type="text"
-                  className="form-input text-sm w-full pl-9"
+                  className="form-input text-sm w-full !pl-10"
                   placeholder="Name, slug, email..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <i className="mgc_search_line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
               </div>
             </div>
 
@@ -904,20 +906,7 @@ const SuperAdminOrganizations = () => {
               </select>
             </div>
 
-            {/* Date Type Filter */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Filter Date By
-              </label>
-              <select
-                className="form-select text-sm w-full"
-                value={dateField}
-                onChange={(e) => setDateField(e.target.value)}
-              >
-                <option value="expiry">Expiry / Renewal Date</option>
-                <option value="created">Registration Date</option>
-              </select>
-            </div>
+
 
             {/* From Date */}
             <div>
@@ -1004,6 +993,7 @@ const SuperAdminOrganizations = () => {
                   <table className="min-w-full min-w-[850px] divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-700">
                       <tr>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-16">Sr. No.</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Organization</th>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Payment</th>
@@ -1015,8 +1005,11 @@ const SuperAdminOrganizations = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {paginatedOrganizations.map((org) => (
+                      {paginatedOrganizations.map((org, index) => (
                         <tr key={org.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                          <td className="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400 font-mono font-medium w-16">
+                            {startIndex + index + 1}
+                          </td>
                           {/* Organization Name & Subdomain Link */}
                           <td className="px-4 py-3">
                             <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[240px]" title={org.name}>

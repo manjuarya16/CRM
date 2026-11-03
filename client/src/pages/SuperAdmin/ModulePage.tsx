@@ -17,8 +17,10 @@ import {
   Pencil,
   Power,
   RefreshCw,
+  Search,
   Send,
   Trash2,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -347,6 +349,13 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [trialDays, setTrialDays] = useState("14");
   const [trialPassword, setTrialPassword] = useState("");
   const [trialPlanId, setTrialPlanId] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    setSearchTerm("");
+    setStatusFilter("all");
+  }, [moduleKey]);
 
   const config = ENDPOINTS[moduleKey];
   const scoped = TENANT_SCOPED.has(moduleKey);
@@ -895,7 +904,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const visibleColumns = useMemo(() => {
     if (moduleKey === "organizations") return ["name", "slug", "plan", "status", "email", "created_at"];
     if (moduleKey === "users") return ["name", "email", "role_name", "status", "created_at"];
-    if (moduleKey === "roles") return ["id", "name", "description", "parent_role_name", "permission_type", "created_at"];
+    if (moduleKey === "roles") return ["name", "description", "parent_role_name", "permission_type", "created_at"];
     if (moduleKey === "subscriptions") return ["tenant_name", "tier_name", "status", "payment_status", "starts_at", "ends_at", "amount_cents", "currency"];
     if (moduleKey === "demos") return [
       "name",
@@ -913,13 +922,53 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     const first = records.find((item) => Object.keys(item).length > 0);
     return first
       ? Object.keys(first)
-          .filter((key) => !SECRET_KEY.test(key) && !(moduleKey === "roles" && key === "permissions"))
+          .filter((key) => key !== "id" && !SECRET_KEY.test(key) && !(moduleKey === "roles" && key === "permissions"))
           .slice(0, 6)
       : [];
   }, [moduleKey, records]);
-  const displayedRecords = moduleKey === "subscriptions" && tenantId
-    ? records.filter((record) => String(record.tenant_id) === tenantId)
-    : records;
+  const baseRecords = useMemo(() => {
+    return moduleKey === "subscriptions" && tenantId
+      ? records.filter((record) => String(record.tenant_id) === tenantId)
+      : records;
+  }, [moduleKey, tenantId, records]);
+
+  const availableStatuses = useMemo(() => {
+    const set = new Set<string>();
+    baseRecords.forEach((record) => {
+      const s = record.status ?? record.state;
+      if (typeof s === "string" && s.trim()) {
+        set.add(s.trim());
+      }
+    });
+    return Array.from(set);
+  }, [baseRecords]);
+
+  const displayedRecords = useMemo(() => {
+    if (moduleKey === "payments") return baseRecords;
+
+    return baseRecords.filter((record) => {
+      if (statusFilter !== "all") {
+        const rawStatus = String(record.status ?? record.state ?? "").toLowerCase();
+        if (rawStatus !== statusFilter.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const matches = Object.entries(record).some(([k, v]) => {
+          if (v === null || v === undefined) return false;
+          if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+            return String(v).toLowerCase().includes(q);
+          }
+          return false;
+        });
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+  }, [moduleKey, baseRecords, searchTerm, statusFilter]);
 
   const createLabel = moduleKey === "organizations"
     ? "Create Organization"
@@ -985,7 +1034,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </label>
           )}
           {moduleKey !== "smtp" && <button type="button" onClick={() => void load()} className="self-end rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Refresh</button>}
-          {moduleKey !== "smtp" && canCreate && (!scoped || tenantId || moduleKey === "subscriptions") && (
+          {moduleKey !== "smtp" && moduleKey !== "notifications" && canCreate && (!scoped || tenantId || moduleKey === "subscriptions") && (
             <button type="button" onClick={beginCreate} className="self-end rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">{createLabel}</button>
           )}
           {moduleKey === "notifications" && records.length > 0 && (
@@ -1337,16 +1386,88 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         <p role="status" className="max-w-5xl rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading mail server settings…</p>
       )}
 
+      {moduleKey !== "smtp" && moduleKey !== "payments" && !showForm && !viewing && (
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-700/80 bg-white dark:bg-slate-900 p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search size={16} />
+              </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={`Search ${title.toLowerCase()}...`}
+                className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                  aria-label="Clear search"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter Dropdown */}
+            {availableStatuses.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  aria-label="Filter by status"
+                >
+                  <option value="all">All statuses</option>
+                  {availableStatuses.map((st) => (
+                    <option key={st} value={st}>
+                      {st.charAt(0).toUpperCase() + st.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Reset Filters */}
+            {(searchTerm || statusFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("all");
+                }}
+                className="self-start sm:self-auto text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline py-1 px-1.5"
+              >
+                Reset filters
+              </button>
+            )}
+          </div>
+
+          {/* Counts */}
+          <div className="text-xs text-slate-500 dark:text-slate-400 self-end sm:self-auto shrink-0">
+            {displayedRecords.length === baseRecords.length ? (
+              <span>Total: <strong className="text-slate-700 dark:text-slate-200">{baseRecords.length}</strong></span>
+            ) : (
+              <span>Showing <strong className="text-indigo-600 dark:text-indigo-400">{displayedRecords.length}</strong> of {baseRecords.length}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {moduleKey !== "smtp" && moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
         {loading ? (
           <div role="status" className="space-y-3 p-5"><div className="h-4 w-40 animate-pulse rounded bg-slate-800" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><span className="sr-only">Loading {title.toLowerCase()}…</span></div>
         ) : scoped && !tenantId && moduleKey !== "subscriptions" ? (
           <div className="p-10 text-center"><h2 className="font-semibold text-slate-800 dark:text-white">Select a tenant</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose a tenant above to load its {title.toLowerCase()}.</p></div>
         ) : displayedRecords.length === 0 ? (
-          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-slate-800 dark:text-white">{error ? "Unable to load records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{error ? "Check the error above and retry." : `No ${title.toLowerCase()} were found.`}</p></div>
+          <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-slate-800 dark:text-white">{error ? "Unable to load records" : (searchTerm || statusFilter !== "all") ? "No matching records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{error ? "Check the error above and retry." : (searchTerm || statusFilter !== "all") ? "Try adjusting your search or filter criteria." : `No ${title.toLowerCase()} were found.`}</p>{(searchTerm || statusFilter !== "all") && (<button type="button" onClick={() => { setSearchTerm(""); setStatusFilter("all"); }} className="mt-4 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold !text-white hover:bg-indigo-500 shadow-sm transition">Reset filters</button>)}</div>
         ) : moduleKey === "pricing" ? (
           <div className="grid gap-5 p-4 sm:grid-cols-2 sm:p-6 2xl:grid-cols-3">
-            {records.map((record, index) => {
+            {displayedRecords.map((record, index) => {
               const features = Array.isArray(record.features) ? record.features : [];
               const interval = record.billing_interval === "yearly"
                 ? "per year"
@@ -1430,10 +1551,11 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           <>
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
+                <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold text-center w-16">Sr. No.</th>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-800">
                   {displayedRecords.map((record, index) => (
                     <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">
+                      <td className="px-4 py-3 text-center font-mono text-xs text-slate-400 w-16">{index + 1}</td>
                       {visibleColumns.map((column) => (
                         <td key={column} className="max-w-xs px-4 py-3 text-slate-300">
                           <span className="block truncate">

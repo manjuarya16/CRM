@@ -20,7 +20,7 @@
 
 /* Background Gradients (Login / Splash) */
 .super-admin-theme[class*="bg-gradient-"] {
-  background: radial-gradient(circle at 50% 20%, #1e3a8a 0%, #0b0f1a 70%) !important;
+  background: radial-gradient(circle at 50% 20%, #1e3a5f 0%, #142236 50%, #0d1724 100%) !important;
 }
 
 /* Base surface mappings (replacing dark slate classes with clean domain theme surfaces) */
@@ -73,9 +73,9 @@
 }
 
 /* Neutral white text inside standard cards mapped to dark slate text */
-.super-admin-theme [class*="bg-slate-900"] [class*="text-white"],
-.super-admin-theme [class*="bg-slate-800"] [class*="text-white"],
-.super-admin-theme header [class*="text-white"],
+.super-admin-theme [class*="bg-slate-900"] [class*="text-white"]:not(button):not(button *):not(a):not(a *),
+.super-admin-theme [class*="bg-slate-800"] [class*="text-white"]:not(button):not(button *):not(a):not(a *),
+.super-admin-theme header [class*="text-white"]:not(button):not(button *):not(a):not(a *),
 .super-admin-theme h1[class*="text-white"],
 .super-admin-theme h2[class*="text-white"],
 .super-admin-theme h3[class*="text-white"],
@@ -121,32 +121,51 @@
   color: #7c3aed !important;
 }
 
-/* Primary Action Buttons (Brand Navy #040975) */
-.super-admin-theme button[class*="bg-indigo-600"],
-.super-admin-theme button[class*="bg-indigo-500"],
-.super-admin-theme a[class*="bg-indigo-600"],
-.super-admin-theme a[class*="bg-indigo-500"],
-.super-admin-theme .btn-primary {
+/* Primary Action Buttons (Brand Navy #040975) - Always Crisp White Text */
+.super-admin-theme button[class*="bg-indigo-"],
+.super-admin-theme a[class*="bg-indigo-"],
+.super-admin-theme button[class*="bg-primary"],
+.super-admin-theme a[class*="bg-primary"],
+.super-admin-theme .btn-primary,
+.super-admin-theme button[type="submit"]:not([class*="bg-white"]):not([class*="border-"]),
+.super-admin-theme [class*="bg-slate-900"] button[class*="bg-indigo-"],
+.super-admin-theme [class*="bg-slate-800"] button[class*="bg-indigo-"] {
   background-color: var(--brand-color, #040975) !important;
   border-color: var(--brand-color, #040975) !important;
   color: #ffffff !important;
   box-shadow: 0 1px 3px 0 rgba(4, 9, 117, 0.25) !important;
 }
 
-.super-admin-theme button[class*="bg-indigo-600"]:hover,
-.super-admin-theme button[class*="bg-indigo-500"]:hover,
-.super-admin-theme a[class*="bg-indigo-600"]:hover,
-.super-admin-theme a[class*="bg-indigo-500"]:hover,
+.super-admin-theme button[class*="bg-indigo-"]:hover,
+.super-admin-theme a[class*="bg-indigo-"]:hover,
+.super-admin-theme button[class*="bg-primary"]:hover,
+.super-admin-theme a[class*="bg-primary"]:hover,
 .super-admin-theme .btn-primary:hover {
   background-color: var(--brand-color-hover, #232894) !important;
   border-color: var(--brand-color-hover, #232894) !important;
   color: #ffffff !important;
 }
 
-.super-admin-theme button[class*="bg-indigo-600"] *,
-.super-admin-theme button[class*="bg-indigo-500"] *,
+.super-admin-theme button[class*="bg-indigo-"] *,
+.super-admin-theme a[class*="bg-indigo-"] *,
+.super-admin-theme button[class*="bg-primary"] *,
+.super-admin-theme a[class*="bg-primary"] *,
 .super-admin-theme .btn-primary * {
   color: #ffffff !important;
+}
+
+/* Disabled button state - clear readable contrast */
+.super-admin-theme button:disabled,
+.super-admin-theme button[disabled],
+.super-admin-theme button[class*="bg-indigo-"]:disabled,
+.super-admin-theme button[class*="bg-indigo-"][disabled],
+.super-admin-theme button.btn-primary:disabled,
+.super-admin-theme button.btn-primary[disabled] {
+  background-color: #475569 !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
 }
 
 /* Secondary & Ghost Buttons */

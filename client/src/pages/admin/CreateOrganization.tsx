@@ -196,6 +196,8 @@ const CreateOrganization = () => {
     // 2. Legal
     if (!registrationNo.trim()) {
       newErrors.registrationNo = "Registration number is required.";
+    } else if (!/^[A-Za-z0-9-]+$/.test(registrationNo.trim())) {
+      newErrors.registrationNo = "Registration number can only contain letters, digits, and hyphens (-).";
     }
 
     // 3. Contact
@@ -660,7 +662,7 @@ const CreateOrganization = () => {
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
-                      className={`form-input text-xs w-full pr-8 ${errors.adminPassword ? "border-red-500 focus:ring-red-500" : ""}`}
+                      className={`form-input text-xs w-full !pr-10 ${errors.adminPassword ? "border-red-500 focus:ring-red-500" : ""}`}
                       placeholder="Min 6 characters"
                       maxLength={50}
                       value={adminPassword}
@@ -673,9 +675,10 @@ const CreateOrganization = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      <i className={showPassword ? "mgc_eye_close_line" : "mgc_eye_line"}></i>
+                      <i className={`${showPassword ? "mgc_eye_close_line" : "mgc_eye_line"} text-base`}></i>
                     </button>
                   </div>
                   {errors.adminPassword && <p className="text-xs text-red-500 mt-0.5">{errors.adminPassword}</p>}
@@ -884,7 +887,8 @@ const CreateOrganization = () => {
                   placeholder="e.g. REG-2024-8891"
                   value={registrationNo}
                   onChange={(e) => {
-                    setRegistrationNo(e.target.value);
+                    const cleanVal = e.target.value.replace(/[^a-zA-Z0-9-]/g, "").toUpperCase();
+                    setRegistrationNo(cleanVal);
                     clearFieldError("registrationNo");
                   }}
                   disabled={modalLoading}
