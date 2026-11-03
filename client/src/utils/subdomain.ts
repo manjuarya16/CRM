@@ -51,11 +51,16 @@ export function getSubdomain(): SubdomainInfo {
     return { type: 'root', host: hostname };
   }
 
-  // Production domain: e.g. "acme.yourcrm.com" or "admin.yourcrm.com"
+  // Production domain: e.g. "acme.morsecrm.com" or "admin.morsecrm.com"
   const parts = hostname.split('.');
   if (parts.length >= 3) {
     const sub = parts[0];
-    if (sub === 'www') {
+    // Known root/platform subdomains (dev.morsecrm.com, crm.morsecrm.com, etc.)
+    if (sub === 'www' || sub === 'dev' || sub === 'crm' || sub === 'app') {
+      const savedTenant = sessionStorage.getItem('active_tenant_slug') || localStorage.getItem('active_tenant_slug');
+      if (savedTenant && path !== '/' && !path.startsWith('/finder') && !path.startsWith('/super-admin')) {
+        return { type: 'tenant', slug: savedTenant, host: hostname };
+      }
       return { type: 'root', host: hostname };
     }
     if (sub === 'admin') {

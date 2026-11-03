@@ -1,19 +1,16 @@
 import axios from "axios";
 import { getSubdomain } from "@/utils/subdomain";
 
-// Resolve API base URL dynamically
+// Resolve API base URL purely from .env (no hardcoded static domains)
 const getBaseApiUrl = (): string => {
-  const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined;
-  if (configuredApiUrl) return configuredApiUrl;
-
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname.toLowerCase();
-    // Keep local subdomains on the configured development API unless overridden.
-    if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1") {
-      return "http://localhost:3040/api";
-    }
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim();
   }
-  return "http://localhost:3040/api";
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/api`;
+  }
+  return "/api";
 };
 
 export const API_URL = getBaseApiUrl();
