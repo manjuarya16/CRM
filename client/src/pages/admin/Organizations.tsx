@@ -361,6 +361,15 @@ const SuperAdminOrganizations = () => {
 
   // Open Edit Expiry / Custom Trial Days Modal
   const openExpiryModal = (org: Organization) => {
+    if (isOrgPaid(org)) {
+      Swal.fire({
+        icon: "info",
+        title: "Active Paid Subscription",
+        text: `"${org.name}" has an active paid subscription. Trial duration adjustments are disabled for paid accounts. Use "Change plan" or the payment portal to update subscription.`,
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
     setSelectedOrgForExpiry(org);
     setSendEmailNotification(true);
     if (org.subscription_expiry_date) {
@@ -614,6 +623,15 @@ const SuperAdminOrganizations = () => {
     if (!status) return false;
     const lower = status.trim().toLowerCase();
     return lower === "paid" || lower === "success" || lower === "completed" || lower === "captured";
+  };
+
+  const isOrgPaid = (org?: Organization | null) => {
+    if (!org) return false;
+    if (isPaidStatus(org.payment_status)) return true;
+    if (org.payment_status === "Paid") return true;
+    const plan = (org.plan_name || org.plan_code || "").toLowerCase();
+    if (org.computed_status === "Active" && !plan.includes("trial")) return true;
+    return false;
   };
 
   const renderPaymentRowStatusBadge = (paymentStatus?: string | null) => {
@@ -1037,14 +1055,16 @@ const SuperAdminOrganizations = () => {
                               ) : (
                                 <span className="text-gray-400 italic">No expiry</span>
                               )}
-                              <button
-                                type="button"
-                                className="text-primary hover:text-primary-700 text-xs p-0.5 rounded hover:bg-primary/10 transition-all"
-                                title="Manually update expiry date"
-                                onClick={() => openExpiryModal(org)}
-                              >
-                                <i className="mgc_edit_line text-xs"></i>
-                              </button>
+                              {!isOrgPaid(org) && (
+                                <button
+                                  type="button"
+                                  className="text-primary hover:text-primary-700 text-xs p-0.5 rounded hover:bg-primary/10 transition-all"
+                                  title="Extend or update trial days"
+                                  onClick={() => openExpiryModal(org)}
+                                >
+                                  <i className="mgc_edit_line text-xs"></i>
+                                </button>
+                              )}
                             </div>
                           </td>
 
@@ -1223,6 +1243,15 @@ const SuperAdminOrganizations = () => {
               </div>
 
               {/* Custom Trial Days Input */}
+              {isOrgPaid(selectedOrgForExpiry) ? (
+                <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                  <i className="mgc_information_line text-base text-blue-600 shrink-0 mt-0.5"></i>
+                  <div>
+                    <strong className="block font-semibold">Active Paid Plan</strong>
+                    <span>This organization has an active paid subscription. Trial duration adjustments are disabled.</span>
+                  </div>
+                </div>
+              ) : (
               <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3.5 rounded-xl border border-amber-200/80 dark:border-amber-900/40 space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
@@ -1281,6 +1310,8 @@ const SuperAdminOrganizations = () => {
                   </div>
                 </div>
               </div>
+
+              )}
 
               {/* Exact Expiry Date Picker */}
               <div>

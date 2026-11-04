@@ -170,6 +170,133 @@ const SubscriptionBillingPage = () => {
         return;
       }
 
+      
+      const isUpgrade = isOrgActive && !isCurrent && planAmount > currentAmount;
+      const upgradeDiffAmount = isUpgrade ? planAmount - currentAmount : planAmount;
+      const formattedPrice = formatAmount(isUpgrade ? upgradeDiffAmount : plan.amount_cents, plan.currency);
+
+      // ALWAYS ASK PAYMENT MODE: Cash or Online (for regular payment and upgrades!)
+      const choice: any = await Swal.fire({
+        title: isUpgrade ? "Plan Upgrade: Select Payment Mode" : "Select Payment Mode",
+        html: `
+          <div class="text-left text-xs space-y-3 pt-1 text-slate-700">
+            <div class="p-3 bg-indigo-50 rounded-xl border border-indigo-200 space-y-1">
+              <span class="text-xs text-indigo-900 font-bold block">
+                ${isUpgrade ? `Upgrade to ${plan.name} Plan` : `${plan.name} Plan`}
+              </span>
+              ${isUpgrade ? `
+                <div class="flex justify-between text-slate-600 pt-1">
+                  <span>Current Plan Credit:</span>
+                  <span>-${formatAmount(currentAmount, plan.currency)}</span>
+                </div>
+                <div class="flex justify-between font-bold text-sm text-indigo-950 pt-1 border-t border-indigo-200">
+                  <span>Upgrade Difference:</span>
+                  <span class="text-emerald-600">${formattedPrice}</span>
+                </div>
+              ` : `
+                <span class="text-xl font-extrabold text-indigo-950 mt-1 block">${formattedPrice}</span>
+              `}
+            </div>
+            <p class="text-center font-bold text-xs text-slate-700">
+              ${isUpgrade ? "Select payment mode to pay the upgrade difference:" : "Please choose how you want to make this payment:"}
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <button id="swal-bill-cash" type="button" class="p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 hover:bg-emerald-100 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-bold">💵</span>
+                  <strong class="text-sm font-bold text-emerald-950">Cash Payment</strong>
+                </div>
+                <p class="text-[11px] text-gray-600 leading-snug">
+                  ${isUpgrade ? "Pay upgrade difference in cash." : "Pay via cash handover or physical receipt."}
+                </p>
+                <div class="mt-3 pt-2 border-t border-emerald-200 text-[11px] font-bold text-emerald-700">
+                  Pay with Cash (${formattedPrice}) →
+                </div>
+              </button>
+              <button id="swal-bill-online" type="button" class="p-3.5 rounded-xl border-2 border-indigo-500 bg-indigo-50 hover:bg-indigo-100 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">💳</span>
+                  <strong class="text-sm font-bold text-indigo-950">Online Payment</strong>
+                </div>
+                <p class="text-[11px] text-gray-600 leading-snug">
+                  ${isUpgrade ? "Pay upgrade difference online via Razorpay." : "Instant online checkout via Razorpay."}
+                </p>
+                <div class="mt-3 pt-2 border-t border-indigo-200 text-[11px] font-bold text-indigo-700">
+                  Pay Online (${formattedPrice}) →
+                </div>
+              </button>
+            </div>
+          </div>
+        `,
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: "Cancel",
+        cancelButtonColor: "#94a3b8",
+        didOpen: () => {
+          const cashBtn = document.getElementById("swal-bill-cash");
+          const onlineBtn = document.getElementById("swal-bill-online");
+          if (cashBtn) cashBtn.onclick = () => (Swal as any).close({ value: "cash" });
+          if (onlineBtn) onlineBtn.onclick = () => (Swal as any).close({ value: "online" });
+        },
+      });
+
+      if (!choice || !choice.value) {
+        return;
+      }
+
+      if (choice.value === "cash") {
+        const { value: cashDetails } = await Swal.fire({
+          title: isUpgrade ? "Record Cash Payment for Upgrade" : "Record Cash Payment",
+          html: `
+            <div class="text-left text-xs space-y-3 pt-2">
+              <p>Plan: <strong>${plan.name}</strong> (${formattedPrice})</p>
+              <div>
+                <label class="block font-semibold mb-1">Receipt / Voucher Ref #:</label>
+                <input id="swal-cash-ref" class="form-input text-xs w-full py-2 rounded-lg border border-gray-300" placeholder="e.g. CASH-${Date.now().toString().slice(-6)}" value="CASH-${Date.now().toString().slice(-6)}" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1">Notes / Remarks:</label>
+                <input id="swal-cash-notes" class="form-input text-xs w-full py-2 rounded-lg border border-gray-300" placeholder="e.g. Paid cash for plan upgrade" />
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: "Confirm Cash Payment",
+          confirmButtonColor: "#10b981",
+          preConfirm: () => {
+            const ref = (document.getElementById("swal-cash-ref") as HTMLInputElement)?.value;
+            const notes = (document.getElementById("swal-cash-notes") as HTMLInputElement)?.value;
+            return { reference: ref, notes };
+          },
+        });
+
+        if (cashDetails) {
+          Swal.fire({ title: "Recording Payment...", didOpen: () => Swal.showLoading() });
+          const tenantSlug = data?.tenant?.slug || localStorage.getItem("active_tenant_slug") || "";
+          const cashRes = await API.post("/subscription/public-cash-payment", {
+            slug: tenantSlug,
+            plan_code: plan.name.toLowerCase(),
+            currency: plan.currency,
+            payer_name: data?.tenant?.name || "Admin",
+            reference: cashDetails.reference,
+            notes: cashDetails.notes,
+          });
+
+          if (cashRes.data && cashRes.data.success) {
+            Swal.fire({
+              icon: "success",
+              title: isUpgrade ? "Plan Upgraded Successfully! 🎉" : "Cash Payment Recorded!",
+              text: `Invoice: ${cashRes.data.data?.invoice_number || 'Generated'}. Your subscription is now upgraded!`,
+              confirmButtonColor: "#10b981",
+            });
+            await loadBillingData();
+          } else {
+            throw new Error(cashRes.data?.message || "Failed to record cash payment");
+          }
+        }
+        return;
+      }
+
       setProcessingPlanId(plan.id);
 
       // 1. Initiate order creation

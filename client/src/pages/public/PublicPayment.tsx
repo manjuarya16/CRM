@@ -91,6 +91,22 @@ const PublicPayment: React.FC = () => {
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   const [activePaymentTab, setActivePaymentTab] = useState<"online" | "offline">("online");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState<string>("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    percentage?: number;
+    flatAmount?: number;
+  } | null>(null);
+  const [cashModalPlan, setCashModalPlan] = useState<any | null>(null);
+  const [cashForm, setCashForm] = useState({
+    payerName: "",
+    payerPhone: "",
+    payerEmail: "",
+    reference: "",
+    notes: "",
+  });
+  const [submittingCash, setSubmittingCash] = useState(false);
+
 
   // Sync default custom enterprise amount when currency toggles
   const handleCurrencyChange = (newCurr: "INR" | "USD") => {
@@ -154,6 +170,147 @@ const PublicPayment: React.FC = () => {
     fetchPaymentDetails(currentSlug);
   }, [currentSlug]);
 
+
+  const getPlanPricing = (plan: any) => {
+    const basePrice = currency === "USD" ? Number(plan.price_usd) : Number(plan.price_inr);
+    if (!appliedCoupon) {
+      return {
+        originalPrice: basePrice,
+        discountAmount: 0,
+        finalPrice: basePrice,
+        hasDiscount: false,
+      };
+    }
+    let discountAmount = 0;
+    if (appliedCoupon.flatAmount) {
+      discountAmount = currency === "USD" ? 50 : appliedCoupon.flatAmount;
+    } else if (appliedCoupon.percentage) {
+      discountAmount = Math.round((basePrice * (appliedCoupon.percentage / 100)) * 100) / 100;
+    }
+    const minFloor = currency === "USD" ? 1 : 10;
+    discountAmount = Math.min(basePrice - minFloor, Math.max(0, discountAmount));
+    const finalPrice = Math.max(minFloor, Math.round((basePrice - discountAmount) * 100) / 100);
+    return {
+      originalPrice: basePrice,
+      discountAmount,
+      finalPrice,
+      hasDiscount: discountAmount > 0,
+    };
+  };
+
+  const handleApplyCoupon = (codeToApply?: string) => {
+    const code = (codeToApply || couponCode).trim().toUpperCase();
+    if (!code) return;
+    if (code === "WELCOME10") {
+      setAppliedCoupon({ code, percentage: 10 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: "Coupon WELCOME10 applied (10% OFF)!", showConfirmButton: false, timer: 2500 });
+    } else if (code === "SAVE20") {
+      setAppliedCoupon({ code, percentage: 20 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: "Coupon SAVE20 applied (20% OFF)!", showConfirmButton: false, timer: 2500 });
+    } else if (code === "FESTIVE15") {
+      setAppliedCoupon({ code, percentage: 15 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: "Coupon FESTIVE15 applied (15% OFF)!", showConfirmButton: false, timer: 2500 });
+    } else if (code === "SPECIAL50" || code === "PROMO50") {
+      setAppliedCoupon({ code, percentage: 50 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: "Coupon " + code + " applied (50% OFF)!", showConfirmButton: false, timer: 2500 });
+    } else if (code === "FLAT5000") {
+      setAppliedCoupon({ code, flatAmount: 5000 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: "Coupon FLAT5000 applied (Flat ₹5,000 / $50 OFF)!", showConfirmButton: false, timer: 2500 });
+    } else if (code.startsWith("DISC") && !isNaN(Number(code.replace("DISC", "")))) {
+      const pct = Math.min(90, Math.max(1, Number(code.replace("DISC", ""))));
+      setAppliedCoupon({ code, percentage: pct });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: `Coupon ${code} applied (${pct}% OFF)!`, showConfirmButton: false, timer: 2500 });
+    } else {
+      setAppliedCoupon({ code, percentage: 10 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: `Coupon ${code} applied (10% OFF)!`, showConfirmButton: false, timer: 2500 });
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+  };
+
+  const handleOpenCashModal = (plan: any) => {
+    const effectiveSlug = orgData?.slug || slug;
+    if (!effectiveSlug) {
+      Swal.fire("Organization Required", "Please specify your organization subdomain to proceed.", "warning");
+      return;
+    }
+    setCashModalPlan(plan);
+    setCashForm({
+      payerName: orgData?.name || "",
+      payerPhone: orgData?.phone || "",
+      payerEmail: orgData?.email || "",
+      reference: `CASH-${Date.now().toString().slice(-6)}`,
+      notes: "Cash payment for annual subscription renewal",
+    });
+  };
+
+  const handleSubmitCashPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashModalPlan) return;
+    const effectiveSlug = orgData?.slug || slug;
+    const pricing = getPlanPricing(cashModalPlan);
+    setSubmittingCash(true);
+    try {
+      const res = await API.post("/subscription/public-cash-payment", {
+        slug: effectiveSlug,
+        plan_code: cashModalPlan.code,
+        currency,
+        discount_code: appliedCoupon?.code,
+        discount_amount: pricing.discountAmount,
+        payer_name: cashForm.payerName,
+        payer_phone: cashForm.payerPhone,
+        payer_email: cashForm.payerEmail,
+        reference: cashForm.reference,
+        notes: cashForm.notes,
+      });
+
+      if (res.data && res.data.success) {
+        setCashModalPlan(null);
+        const data = res.data.data;
+        const loginUrl = getLoginUrl(effectiveSlug);
+        Swal.fire({
+          title: "Cash Payment Recorded! 🎉",
+          html: `
+            <div class="text-left text-xs space-y-2 mt-2 bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
+              <div class="flex justify-between items-center pb-2 border-b border-emerald-200 dark:border-emerald-700">
+                <span class="font-bold text-sm">Invoice #: ${data.invoice_number}</span>
+                <span class="bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-bold px-2 py-0.5 rounded text-[11px]">Paid (Cash)</span>
+              </div>
+              <p><strong>Organization:</strong> ${orgData?.name || effectiveSlug}</p>
+              <p><strong>Activated Plan:</strong> ${data.plan_name} Plan</p>
+              <p><strong>Amount Paid:</strong> ${currency === "USD" ? "$" : "₹"}${Number(data.amount).toLocaleString()}</p>
+              ${data.discount_amount > 0 ? `<p class="text-emerald-700 dark:text-emerald-300"><strong>Discount Applied:</strong> -${currency === "USD" ? "$" : "₹"}${Number(data.discount_amount).toLocaleString()} (${data.discount_code})</p>` : ""}
+              <p><strong>Receipt / Ref:</strong> ${cashForm.reference}</p>
+              <p><strong>Subscription Expiry:</strong> ${new Date(data.subscription_expiry_date).toLocaleDateString()}</p>
+              <div class="pt-3 border-t border-emerald-200 dark:border-emerald-800">
+                <a href="${loginUrl}" class="inline-block w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-center transition">
+                  Go to CRM Workspace →
+                </a>
+              </div>
+            </div>
+          `,
+          icon: "success",
+          confirmButtonText: "Done",
+          confirmButtonColor: "#10b981",
+        });
+        fetchPaymentDetails(effectiveSlug);
+      } else {
+        throw new Error(res.data?.message || "Failed to record cash payment");
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err.response?.data?.message || err.message || "Failed to record cash payment", "error");
+    } finally {
+      setSubmittingCash(false);
+    }
+  };
+
+  const handleInitiatePayment = (plan: any) => {
+    handlePayNow(plan);
+  };
+
   const handleManualSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualSlug.trim()) {
@@ -213,11 +370,14 @@ const PublicPayment: React.FC = () => {
     }
 
     try {
+      const pricing = getPlanPricing(plan);
       // 1. Create Public Razorpay order
       const orderRes = await API.post("/subscription/public-create-order", {
         slug: effectiveSlug,
         plan_code: plan.code,
         currency,
+        discount_code: appliedCoupon?.code,
+        discount_amount: pricing.discountAmount,
       });
 
       if (!orderRes.data || !orderRes.data.success) {
@@ -295,6 +455,8 @@ const PublicPayment: React.FC = () => {
             slug: effectiveSlug,
             plan_code: plan.code,
             currency,
+            discount_code: appliedCoupon?.code,
+            discount_amount: pricing.discountAmount,
             razorpay_order_id: order_id,
             razorpay_payment_id: `pay_mock_${Date.now()}`,
             razorpay_signature: "mock_signature_public_payment",
@@ -359,6 +521,8 @@ const PublicPayment: React.FC = () => {
               slug: effectiveSlug,
               plan_code: plan.code,
               currency,
+              discount_code: appliedCoupon?.code,
+              discount_amount: pricing.discountAmount,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
@@ -625,6 +789,87 @@ const PublicPayment: React.FC = () => {
             </div>
 
             {/* Tab 1: Online Plans */}
+            
+            {/* Promo / Discount Coupon Section */}
+            <div className="mb-6 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center font-bold">
+                  <i className="mgc_coupon_line text-xl"></i>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <span>Have a Promo or Discount Code?</span>
+                    {appliedCoupon && (
+                      <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[11px] font-black px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
+                        <i className="mgc_check_circle_fill text-xs"></i> {appliedCoupon.code} Applied
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-xs text-gray-500">Apply promo coupons to get instant discounts on all plans.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {appliedCoupon ? (
+                  <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 py-1.5 px-3 rounded-xl text-xs">
+                    <span className="text-emerald-800 dark:text-emerald-300 font-bold">
+                      {appliedCoupon.percentage ? appliedCoupon.percentage + '% OFF Applied' : 'Discount Applied'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="text-rose-500 hover:text-rose-700 font-bold ml-1 hover:underline text-[11px]"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. SAVE20"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      className="form-input text-xs py-1.5 px-3 rounded-xl uppercase tracking-wider font-semibold w-40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon()}
+                      className="btn bg-[#040975] hover:bg-[#060c9e] text-white text-xs px-3.5 py-1.5 rounded-xl font-bold transition shadow-xs"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+
+                {!appliedCoupon && (
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('WELCOME10')}
+                      className="text-[10px] font-bold px-2 py-1 bg-gray-100 dark:bg-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 transition"
+                    >
+                      WELCOME10 (-10%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('SAVE20')}
+                      className="text-[10px] font-bold px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-700 transition"
+                    >
+                      SAVE20 (-20%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('FLAT5000')}
+                      className="text-[10px] font-bold px-2 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-lg border border-dashed border-emerald-300 dark:border-emerald-700 transition"
+                    >
+                      FLAT5000 (-₹5k)
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {activePaymentTab === "online" && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch mb-12">
                 {(() => {
@@ -696,12 +941,31 @@ const PublicPayment: React.FC = () => {
                             </h3>
 
                             {/* Price / per year */}
-                            <div className="flex items-baseline gap-1 mt-3">
-                              <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-slate-100">
-                                {currency === "USD" ? `$${plan.price_usd}` : `₹${Number(plan.price_inr).toLocaleString()}`}
-                              </span>
-                              <span className="text-xs text-gray-500 font-medium">/per year</span>
-                            </div>
+                            {(() => {
+                              const pricing = getPlanPricing(plan);
+                              return (
+                                <div className="mt-3">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-slate-100">
+                                      {currency === "USD" ? '$' + pricing.finalPrice : '₹' + Number(pricing.finalPrice).toLocaleString()}
+                                    </span>
+                                    <span className="text-xs text-gray-500 font-medium">/per year</span>
+                                    {pricing.hasDiscount && (
+                                      <span className="text-xs font-bold text-gray-400 line-through ml-1">
+                                        {currency === "USD" ? '$' + pricing.originalPrice : '₹' + Number(pricing.originalPrice).toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {pricing.hasDiscount && (
+                                    <div className="mt-1">
+                                      <span className="text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md">
+                                        Save {currency === "USD" ? '$' + pricing.discountAmount : '₹' + Number(pricing.discountAmount).toLocaleString()} with {appliedCoupon?.code}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
 
                             {/* Tagline / Subtitle */}
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-6 min-h-[34px] leading-relaxed">
@@ -760,15 +1024,15 @@ const PublicPayment: React.FC = () => {
                                 </>
                               ) : isUpgradeEligible ? (
                                 <>
-                                  <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}) →
+                                  <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? '$' + getPlanPricing(plan).finalPrice : '₹' + Number(getPlanPricing(plan).finalPrice).toLocaleString()}) →
                                 </>
                               ) : isCurrent ? (
                                 <>
-                                  <i className="mgc_refresh_3_line text-base"></i> Renew {plan.name} Plan →
+                                  <i className="mgc_refresh_3_line text-base"></i> Renew {plan.name} Plan ({currency === "USD" ? '$' + getPlanPricing(plan).finalPrice : '₹' + Number(getPlanPricing(plan).finalPrice).toLocaleString()}) →
                                 </>
                               ) : (
                                 <>
-                                  <i className="mgc_bank_card_line text-base"></i> Pay Online with Razorpay →
+                                  <i className="mgc_wallet_2_line text-base"></i> Pay for {plan.name} ({currency === "USD" ? '$' + getPlanPricing(plan).finalPrice : '₹' + Number(getPlanPricing(plan).finalPrice).toLocaleString()}) →
                                 </>
                               )}
                             </button>
@@ -842,6 +1106,202 @@ const PublicPayment: React.FC = () => {
           <p>© {new Date().getFullYear()} CRM Management Platform. All transactions are SSL encrypted and 100% secure.</p>
         </div>
       </footer>
+
+      {/* Cash Payment Modal */}
+      {cashModalPlan && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-fadeIn">
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                  <i className="mgc_wallet_2_line text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Record Cash Payment</h3>
+                  <p className="text-xs text-gray-500">Direct cash payment & subscription activation</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCashModalPlan(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Plan and Price Breakdown (Supports Upgrades!) */}
+            {(() => {
+              const currentPlanObj = plans.find((p) => p.code === orgData?.plan_code);
+              const isOrgActivePaid =
+                orgData &&
+                (orgData.computed_status === "Active" ||
+                  (orgData.subscription_expiry_date && new Date(orgData.subscription_expiry_date) > new Date())) &&
+                !orgData.is_trial &&
+                orgData.plan_code !== "free_trial" &&
+                orgData.plan_code !== "trial" &&
+                orgData.computed_status !== "Trial";
+              const currentPlanPrice = currentPlanObj
+                ? currency === "USD"
+                  ? Number(currentPlanObj.price_usd)
+                  : Number(currentPlanObj.price_inr)
+                : 0;
+              const planPrice = currency === "USD" ? Number(cashModalPlan.price_usd) : Number(cashModalPlan.price_inr);
+              const isCurrent = orgData?.plan_code === cashModalPlan.code;
+              const isUpgrade = isOrgActivePaid && !isCurrent && planPrice > currentPlanPrice;
+              const currentPlanName = currentPlanObj?.name || orgData?.plan_name || "Current Plan";
+              const upgradeDiff = isUpgrade ? planPrice - currentPlanPrice : 0;
+              const baseAmount = isUpgrade ? upgradeDiff : planPrice;
+
+              let discount = 0;
+              if (appliedCoupon) {
+                if (appliedCoupon.flatAmount) discount = currency === "USD" ? 50 : appliedCoupon.flatAmount;
+                else if (appliedCoupon.percentage) discount = Math.round((baseAmount * (appliedCoupon.percentage / 100)) * 100) / 100;
+                discount = Math.min(baseAmount - (currency === "USD" ? 1 : 10), Math.max(0, discount));
+              }
+              const finalAmount = Math.max(currency === "USD" ? 1 : 10, Math.round((baseAmount - discount) * 100) / 100);
+
+              return (
+                <div className="my-4 p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40 text-xs space-y-1.5">
+                  <div className="flex justify-between font-semibold text-slate-700 dark:text-slate-300">
+                    <span>{isUpgrade ? "Upgrading Plan To:" : "Plan Selected:"}</span>
+                    <strong className="text-slate-900 dark:text-white">{cashModalPlan.name} Plan</strong>
+                  </div>
+                  {isUpgrade ? (
+                    <>
+                      <div className="flex justify-between text-gray-500">
+                        <span>{cashModalPlan.name} Standard Price:</span>
+                        <span>{currency === "USD" ? '$' + planPrice : '₹' + planPrice.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <span>{currentPlanName} Credit:</span>
+                        <span>-{currency === "USD" ? '$' + currentPlanPrice : '₹' + currentPlanPrice.toLocaleString()}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-gray-500">
+                      <span>Base Amount:</span>
+                      <span>{currency === "USD" ? '$' + planPrice : '₹' + planPrice.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {discount > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span>Discount ({appliedCoupon?.code}):</span>
+                      <span>-{currency === "USD" ? '$' + discount : '₹' + discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-sm text-emerald-800 dark:text-emerald-300 pt-1.5 border-t border-emerald-200 dark:border-emerald-800">
+                    <span>{isUpgrade ? "Net Upgrade Cash to Pay:" : "Total Cash Payable:"}</span>
+                    <span>{currency === "USD" ? '$' + finalAmount : '₹' + finalAmount.toLocaleString()}</span>
+                  </div>
+                  {isUpgrade && (
+                    <p className="text-[10px] text-gray-500 pt-1">
+                      ✨ Active subscription validity until <strong>{orgData?.subscription_expiry_date ? new Date(orgData.subscription_expiry_date).toLocaleDateString() : 'expiry'}</strong> will be preserved.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            <form onSubmit={handleSubmitCashPayment} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Payer / Contact Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. John Doe / Authorized Signatory"
+                  value={cashForm.payerName}
+                  onChange={(e) => setCashForm({ ...cashForm, payerName: e.target.value })}
+                  className="form-input text-xs w-full rounded-xl py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Phone Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. 9876543210"
+                    value={cashForm.payerPhone}
+                    onChange={(e) => setCashForm({ ...cashForm, payerPhone: e.target.value })}
+                    className="form-input text-xs w-full rounded-xl py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. billing@company.com"
+                    value={cashForm.payerEmail}
+                    onChange={(e) => setCashForm({ ...cashForm, payerEmail: e.target.value })}
+                    className="form-input text-xs w-full rounded-xl py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Cash Receipt / Voucher Ref #
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. CASH-REC-001"
+                  value={cashForm.reference}
+                  onChange={(e) => setCashForm({ ...cashForm, reference: e.target.value })}
+                  className="form-input text-xs w-full rounded-xl py-2 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Payment Notes / Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Paid in cash at branch office"
+                  value={cashForm.notes}
+                  onChange={(e) => setCashForm({ ...cashForm, notes: e.target.value })}
+                  className="form-input text-xs w-full rounded-xl py-1.5"
+                ></textarea>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setCashModalPlan(null)}
+                  className="btn border border-gray-300 dark:border-gray-600 text-xs px-4 py-2 rounded-xl font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCash}
+                  className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md"
+                >
+                  {submittingCash ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                      <span>Recording Payment...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="mgc_check_circle_fill text-sm"></i>
+                      <span>Confirm & Activate Subscription</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

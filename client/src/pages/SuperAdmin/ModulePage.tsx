@@ -820,6 +820,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   };
 
   const updateExpiry = async (record: RecordValue) => {
+    const isPaid = String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"));
+    if (isPaid) {
+      await Swal.fire({
+        icon: "info",
+        title: "Active Paid Subscription",
+        text: `"${record.name || 'Organization'}" is on an active paid plan. Manual trial adjustments are disabled for paid accounts. Use "Change plan" or the payment portal to modify subscriptions.`,
+        confirmButtonColor: "#4f46e5",
+      });
+      return;
+    }
     const { value: date } = await Swal.fire({
       title: "Update Subscription Expiry",
       input: "date",
@@ -836,6 +846,418 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         await load();
       } catch (err) {
         setError(errorMessage(err));
+      }
+    }
+  };
+
+  const handleUpdateTrial = async (record: RecordValue) => {
+    const orgName = String(record.tenant_name || record.name || "Organization");
+    const tenantId = Number(record.tenant_id || record.id);
+    const currentExpiry = record.ends_at ? String(record.ends_at).substring(0, 10) : "";
+
+    const { value: selectedDate } = await Swal.fire({
+      title: `Update Trial Period`,
+      html: `
+        <div class="text-left text-xs space-y-3.5 text-slate-700 dark:text-slate-300">
+          <p>Extend or adjust the active trial period for <strong>${orgName}</strong>.</p>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300 uppercase tracking-wide">Quick Extend Presets:</label>
+            <div class="flex flex-wrap gap-1.5" id="swal-trial-btn-container">
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="7">+7 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="14">+14 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="30">+30 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="60">+60 Days</button>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300 uppercase tracking-wide">Trial End Date:</label>
+            <input id="swal-trial-expiry" type="date" class="swal2-input !mt-0 !w-full !text-xs !h-9 !py-1 !px-3" value="${currentExpiry || new Date(Date.now() + 14 * 86400000).toISOString().substring(0, 10)}" />
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const dateInput = document.getElementById("swal-trial-expiry") as HTMLInputElement;
+        const btns = document.querySelectorAll(".swal-trial-btn");
+        btns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const days = Number(btn.getAttribute("data-days") || 14);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            if (dateInput) {
+              dateInput.value = targetDate.toISOString().substring(0, 10);
+            }
+          });
+        });
+      },
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Update Trial Period ⏱️",
+      confirmButtonColor: "#d97706",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const input = (document.getElementById("swal-trial-expiry") as HTMLInputElement)?.value;
+        if (!input) {
+          Swal.showValidationMessage("Please pick a trial end date.");
+          return false;
+        }
+        return input;
+      },
+    });
+
+    if (!selectedDate) return;
+
+    try {
+      Swal.fire({
+        title: "Updating Trial...",
+        text: `Applying trial extension to ${orgName}...`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      await request("patch", `/super-admin/tenants/${tenantId}/expiry`, { expiry_date: selectedDate });
+
+      await Swal.fire({
+        icon: "success",
+        title: "Trial Period Updated! 🎉",
+        text: `Trial for ${orgName} is now active until ${new Date(selectedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`,
+        confirmButtonColor: "#059669",
+      });
+
+      await load();
+    } catch (err: unknown) {
+      Swal.fire("Error", errorMessage(err) || "Failed to update trial", "error");
+    }
+  };
+
+  
+  const handleChangePlan = async (record: RecordValue) => {
+    const orgName = String(record.tenant_name || record.name || "Organization");
+    const currentPlan = String(record.tier_name || record.plan || "Growth");
+    const orgSlug = String(record.tenant_slug || record.slug || "");
+    const orgId = Number(record.tenant_id || record.id);
+    const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${orgId}`;
+
+    const statusStr = String(record.status || "trialing").toLowerCase();
+    const isTrial = statusStr === "trial" || statusStr === "trialing";
+    const rawExpiry = record.ends_at;
+    const expiryDate = rawExpiry ? new Date(String(rawExpiry)) : null;
+    const isExpired = expiryDate ? expiryDate.getTime() < Date.now() : false;
+    const isActivePaid = (statusStr === "active" || statusStr === "paid") && !isExpired;
+
+    const allPlans = [
+      { name: "Starter", price: 9999, rank: 1, label: "Starter Plan (₹9,999/yr)" },
+      { name: "Growth", price: 19999, rank: 2, label: "Growth Plan (₹19,999/yr)" },
+      { name: "Business", price: 29999, rank: 3, label: "Business Plan (₹29,999/yr)" },
+    ];
+
+    const currentPlanLower = currentPlan.toLowerCase();
+    const currentMeta = allPlans.find((p) => currentPlanLower.includes(p.name.toLowerCase())) || allPlans[0];
+    const currentPrice = currentMeta.price;
+    const currentRank = currentMeta.rank;
+
+    let availablePlans = allPlans;
+    let isUpgradeFlow = false;
+
+    if (isActivePaid) {
+      isUpgradeFlow = true;
+      // Lower packages not allowed to update; only upper plans allowed
+      availablePlans = allPlans.filter((p) => p.rank > currentRank);
+    }
+
+    if (isActivePaid && availablePlans.length === 0) {
+      await Swal.fire({
+        icon: "info",
+        title: "Already on Highest Plan",
+        html: `
+          <div class="text-left text-xs space-y-2 text-slate-700 dark:text-slate-300">
+            <p><strong>${orgName}</strong> is currently active on the highest available plan (<strong>${currentMeta.name} Plan</strong>).</p>
+            <p>Downgrading to a lower package is not permitted during an active subscription period.</p>
+            <p class="text-slate-500">Subscription Expiry: <strong>${expiryDate ? expiryDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</strong></p>
+          </div>
+        `,
+        confirmButtonColor: "#4f46e5",
+      });
+      return;
+    }
+
+    const defaultTargetPlan = availablePlans[0];
+    const defaultNetPrice = Math.max(0, defaultTargetPlan.price - (isUpgradeFlow ? currentPrice : 0));
+    const expiryDisplay = expiryDate ? expiryDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+    // 1. FIRST SHOW PAYMENT MODE: Cash or Online?
+    const modeChoice: any = await Swal.fire({
+      title: `Change Plan - ${orgName}`,
+      customClass: {
+        popup: "rounded-2xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-xl",
+        cancelButton: "!rounded-xl !px-5 !py-2 !text-xs !font-semibold",
+      },
+      html: `
+        <div class="text-left text-xs space-y-3.5 pt-1 text-slate-700 dark:text-slate-300">
+          <div class="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 text-center">
+            <span class="text-xs text-gray-500 block">Organization: <strong>${orgName}</strong></span>
+            <span class="text-xs text-indigo-900 dark:text-indigo-200 font-semibold block mt-0.5">
+              Current Plan: <strong>${currentMeta.name} Plan (₹${currentPrice.toLocaleString()}/yr)</strong>
+            </span>
+            <span class="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium block mt-0.5">
+              ${isActivePaid ? `Active • Expiry: ${expiryDisplay}` : isTrial ? `Trial (${record.trial_days || 14} days)` : "Expired"}
+            </span>
+          </div>
+
+          <p class="text-center font-bold text-xs text-slate-800 dark:text-slate-100">
+            Select payment mode to change or upgrade plan:
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <button id="swal-change-cash" type="button" class="p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-bold">💵</span>
+                <strong class="text-sm font-bold text-emerald-950 dark:text-emerald-200">Cash Payment</strong>
+              </div>
+              <p class="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                Record an offline cash payment, deduct existing plan credit, and upgrade plan directly.
+              </p>
+              <div class="mt-3 pt-2 border-t border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                Record Cash Payment →
+              </div>
+            </button>
+
+            <button id="swal-change-online" type="button" class="p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">💳</span>
+                <strong class="text-sm font-bold text-indigo-950 dark:text-indigo-200">Online Payment</strong>
+              </div>
+              <p class="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                Redirect to the secure hosted payment link / checkout portal via Razorpay.
+              </p>
+              <div class="mt-3 pt-2 border-t border-indigo-200 dark:border-indigo-800 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                Go to Payment Link →
+              </div>
+            </button>
+          </div>
+        </div>
+      `,
+      showConfirmButton: false,
+      showCancelButton: true,
+      cancelButtonText: "Cancel",
+      cancelButtonColor: "#94a3b8",
+      didOpen: () => {
+        const cashBtn = document.getElementById("swal-change-cash");
+        const onlineBtn = document.getElementById("swal-change-online");
+        if (cashBtn) {
+          cashBtn.onclick = () => (Swal as any).close({ value: "cash" });
+        }
+        if (onlineBtn) {
+          onlineBtn.onclick = () => (Swal as any).close({ value: "online" });
+        }
+      },
+    });
+
+    if (!modeChoice || !modeChoice.value) return;
+
+    // IF ONLINE -> REDIRECT TO PAYMENT LINK / CHECKOUT PAGE!
+    if (modeChoice.value === "online") {
+      const win = window.open(paymentUrl, "_blank");
+      if (!win || win.closed || typeof win.closed === "undefined") {
+        window.location.href = paymentUrl;
+      }
+      return;
+    }
+
+    // IF CASH -> RECORD CASH PAYMENT AND ACTIVATE PLAN!
+    if (modeChoice.value === "cash") {
+      const { value: cashData } = await Swal.fire({
+        title: `Record Cash Payment - ${orgName}`,
+        customClass: {
+          popup: "rounded-2xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-xl",
+          confirmButton: "!rounded-xl !px-5 !py-2.5 !font-semibold !text-xs !bg-emerald-600 hover:!bg-emerald-500 !shadow-sm transition",
+          cancelButton: "!rounded-xl !px-5 !py-2.5 !font-semibold !text-xs !bg-slate-200 dark:!bg-slate-700 !text-slate-800 dark:!text-slate-200 hover:!bg-slate-300 dark:hover:!bg-slate-600 transition",
+        },
+        html: `
+          <div class="text-left text-xs space-y-3 pt-1 text-slate-700 dark:text-slate-300">
+            <!-- PREVIOUS / CURRENT PLAN BOX -->
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+              <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">Previous / Current Plan:</span>
+                <span class="font-bold text-slate-900 dark:text-slate-100">${currentMeta.name} Plan (₹${currentPrice.toLocaleString()}/yr)</span>
+              </div>
+              <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500">Status & Expiry:</span>
+                <span class="font-semibold ${isActivePaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600'}">
+                  ${isActivePaid ? `Active (Expires: ${expiryDisplay})` : isTrial ? `Trial (${record.trial_days || 14} days)` : "Expired"}
+                </span>
+              </div>
+              ${isUpgradeFlow ? `
+                <div class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-[11px] text-indigo-700 dark:text-indigo-300 font-medium flex items-center justify-between">
+                  <span>Current Plan Credit Deducted:</span>
+                  <strong class="font-mono text-emerald-600">-₹${currentPrice.toLocaleString()}</strong>
+                </div>
+                <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  ℹ️ Expiry date will remain the same (${expiryDisplay}). Lower packages cannot be selected.
+                </div>
+              ` : ''}
+            </div>
+
+            <div>
+              <label class="block font-semibold mb-1">Select New Plan <span class="text-rose-500">*</span></label>
+              <select id="swal-cash-plan" class="swal2-select !w-full !text-xs !h-9 !py-1 !px-2 !m-0 rounded-lg border border-gray-300">
+                ${availablePlans.map((p, idx) => {
+                  const rem = Math.max(0, p.price - (isUpgradeFlow ? currentPrice : 0));
+                  const label = isUpgradeFlow
+                    ? `${p.name} Plan (₹${p.price.toLocaleString()} - ₹${currentPrice.toLocaleString()} credit = ₹${rem.toLocaleString()} payable)`
+                    : `${p.name} Plan (₹${p.price.toLocaleString()}/yr)`;
+                  return `<option value="${p.name}" data-price="${rem}" data-full="${p.price}" ${idx === 0 ? "selected" : ""}>${label}</option>`;
+                }).join("")}
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-semibold mb-1">${isUpgradeFlow ? "Remaining Upgrade (₹):" : "Plan Amount (₹):"}</label>
+                <input id="swal-cash-amount" type="number" class="swal2-input !w-full !text-xs !h-9 !py-1 !px-2 !m-0 rounded-lg border border-gray-300 font-mono font-bold" value="${defaultNetPrice}" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1">Discount Amount (₹):</label>
+                <input id="swal-cash-discount" type="number" class="swal2-input !w-full !text-xs !h-9 !py-1 !px-2 !m-0 rounded-lg border border-gray-300 font-mono text-emerald-600 font-bold" value="0" />
+              </div>
+            </div>
+
+            <div class="p-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-xs">
+              <span class="font-bold text-emerald-950 dark:text-emerald-200">Net Payable in Cash:</span>
+              <span id="swal-cash-net" class="font-mono font-extrabold text-sm text-emerald-700 dark:text-emerald-300">₹${defaultNetPrice.toLocaleString()}</span>
+            </div>
+
+            <div>
+              <label class="block font-semibold mb-1">Receipt / Voucher Ref #:</label>
+              <input id="swal-cash-ref" class="swal2-input !w-full !text-xs !h-9 !py-1 !px-2 !m-0 rounded-lg border border-gray-300 font-mono" placeholder="e.g. CASH-REC-${Date.now().toString().slice(-5)}" value="CASH-REC-${Date.now().toString().slice(-5)}" />
+            </div>
+            <div>
+              <label class="block font-semibold mb-1">Notes / Remarks:</label>
+              <input id="swal-cash-notes" class="swal2-input !w-full !text-xs !h-9 !py-1 !px-2 !m-0 rounded-lg border border-gray-300" placeholder="e.g. Paid in cash at office, plan upgraded" value="${isUpgradeFlow ? `Upgrade from ${currentMeta.name} Plan recorded in cash` : "Plan recorded in cash by Super Admin"}" />
+            </div>
+          </div>
+        `,
+        didOpen: () => {
+          const planSelect = document.getElementById("swal-cash-plan") as HTMLSelectElement;
+          const amountInput = document.getElementById("swal-cash-amount") as HTMLInputElement;
+          const discountInput = document.getElementById("swal-cash-discount") as HTMLInputElement;
+          const netDisplay = document.getElementById("swal-cash-net");
+
+          const updateNet = () => {
+            const amt = Number(amountInput?.value) || 0;
+            const disc = Number(discountInput?.value) || 0;
+            const net = Math.max(0, amt - disc);
+            if (netDisplay) {
+              netDisplay.textContent = `₹${net.toLocaleString()}`;
+            }
+          };
+
+          if (planSelect && amountInput) {
+            planSelect.onchange = () => {
+              const selectedOpt = planSelect.options[planSelect.selectedIndex];
+              const price = selectedOpt.getAttribute("data-price") || "0";
+              amountInput.value = price;
+              updateNet();
+            };
+          }
+
+          if (amountInput) {
+            amountInput.oninput = updateNet;
+          }
+          if (discountInput) {
+            discountInput.oninput = updateNet;
+          }
+        },
+        showCancelButton: true,
+        confirmButtonText: "Confirm Cash Payment & Update Plan 💵",
+        confirmButtonColor: "#059669",
+        cancelButtonText: "Cancel",
+        cancelButtonColor: "#64748b",
+        preConfirm: () => {
+          const planSelect = document.getElementById("swal-cash-plan") as HTMLSelectElement;
+          const amountInput = document.getElementById("swal-cash-amount") as HTMLInputElement;
+          const discountInput = document.getElementById("swal-cash-discount") as HTMLInputElement;
+          const refInput = document.getElementById("swal-cash-ref") as HTMLInputElement;
+          const notesInput = document.getElementById("swal-cash-notes") as HTMLInputElement;
+
+          const planName = planSelect?.value || defaultTargetPlan.name;
+          const amount = Number(amountInput?.value) || defaultNetPrice;
+          const discount = Number(discountInput?.value) || 0;
+          const reference = refInput?.value || `CASH-REC-${Date.now().toString().slice(-5)}`;
+          const notes = notesInput?.value || "Plan changed via Cash Payment";
+
+          return { planName, amount, discount, reference, notes };
+        },
+      });
+
+      if (!cashData) return;
+
+      try {
+        Swal.fire({
+          title: "Updating Plan & Recording Payment...",
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
+        const res = await API.post("/admin/payments/record", {
+          organization_id: orgId,
+          plan_name: cashData.planName,
+          amount: cashData.amount,
+          discount_amount: cashData.discount,
+          currency: "INR",
+          payment_method: "Cash",
+          reference: cashData.reference,
+          notes: cashData.notes,
+        });
+
+        if (res.data && res.data.success) {
+          const netPaid = Math.max(0, cashData.amount - cashData.discount);
+          await Swal.fire({
+            icon: "success",
+            title: "Plan Changed Successfully! 🎉",
+            confirmButtonText: "Done",
+            confirmButtonColor: "#4f46e5",
+            customClass: {
+              popup: "rounded-2xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl !p-6",
+              confirmButton: "!rounded-xl !px-7 !py-2.5 !font-semibold !text-xs !bg-indigo-600 hover:!bg-indigo-500 !shadow-sm transition",
+            },
+            html: `
+              <div class="space-y-3.5 pt-1 text-slate-700 dark:text-slate-300">
+                <p class="text-sm text-slate-600 dark:text-slate-400 text-center leading-relaxed">
+                  <strong>${orgName}</strong> is now updated to the <strong class="text-indigo-600 dark:text-indigo-400 font-bold">${cashData.planName} Plan</strong>.
+                </p>
+
+                <div class="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 text-xs space-y-2.5 text-left shadow-2xs">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Cash Payment Received:</span>
+                    <span class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">₹${netPaid.toLocaleString()}</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Updated Plan:</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200">${cashData.planName} (Yearly)</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Subscription Expiry:</span>
+                    <span class="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <span>${isActivePaid ? expiryDisplay : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      ${isActivePaid ? `<span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">Preserved</span>` : `<span class="text-[10px] bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 px-2 py-0.5 rounded-full font-bold">1 Year Added</span>`}
+                    </span>
+                  </div>
+                  ${cashData.reference ? `
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Receipt / Ref #:</span>
+                    <span class="font-mono text-slate-600 dark:text-slate-400">${cashData.reference}</span>
+                  </div>
+                  ` : ""}
+                </div>
+              </div>
+            `,
+          });
+          await load();
+        } else {
+          throw new Error(res.data?.message || "Failed to record cash payment");
+        }
+      } catch (err: any) {
+        Swal.fire("Error", errorMessage(err) || "Failed to change plan via cash payment", "error");
       }
     }
   };
@@ -1827,9 +2249,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       const planName = String(record.tier_name || record.plan || "Growth");
                       const billingCycle = isTrial
                         ? `${record.trial_days || 14}-day trial`
-                        : record.billing_interval
-                          ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1)
-                          : "Monthly";
+                        : "Yearly";
 
                       let renewalDateStr = "—";
                       if (record.ends_at) {
@@ -1890,21 +2310,24 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {(() => {
-                                const orgSlug = String(record.tenant_slug || record.slug || "");
-                                const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
-                                return (
-                                  <a
-                                    href={paymentUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs inline-flex items-center justify-center text-center"
-                                    title={`Open payment & plan upgrade page for ${orgName}`}
-                                  >
-                                    Change plan
-                                  </a>
-                                );
-                              })()}
+                              {isTrial && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleUpdateTrial(record)}
+                                  className="px-3.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs"
+                                  title={`Extend or update trial for ${orgName}`}
+                                >
+                                  Update trial
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => void handleChangePlan(record)}
+                                className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs inline-flex items-center justify-center text-center cursor-pointer"
+                                title={`Change plan for ${orgName}`}
+                              >
+                                Change plan
+                              </button>
                               <Link
                                 to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
                                 className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs"
@@ -1935,7 +2358,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           {moduleKey === "organizations" && <>
                             <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
                             <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
-                            <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
+                              <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            )}
                             {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                             {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                             {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
@@ -1972,7 +2397,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 const isActive = statusStr === "active";
                 const orgName = String(record.tenant_name || record.name || "Organization");
                 const planName = String(record.tier_name || record.plan || "Growth");
-                const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : record.billing_interval ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1) : "Monthly";
+                const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : "Yearly";
                 let renewalDateStr = "—";
                 if (record.ends_at) {
                   const d = new Date(String(record.ends_at));
@@ -2000,21 +2425,23 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       <div><span className="text-slate-400 block text-[10px] uppercase">Next Renewal</span><span className="font-mono">{renewalDateStr}</span></div>
                     </div>
                     <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-slate-800">
-                      {(() => {
-                        const orgSlug = String(record.tenant_slug || record.slug || "");
-                        const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
-                        return (
-                          <a
-                            href={paymentUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center inline-flex items-center justify-center"
-                            title={`Open payment & plan upgrade page for ${orgName}`}
-                          >
-                            Change plan
-                          </a>
-                        );
-                      })()}
+                      {isTrial && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateTrial(record)}
+                          className="flex-1 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 text-center"
+                        >
+                          Update trial
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleChangePlan(record)}
+                        className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center inline-flex items-center justify-center cursor-pointer"
+                        title={`Change plan for ${orgName}`}
+                      >
+                        Change plan
+                      </button>
                       <Link
                         to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
                         className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center"
@@ -2042,7 +2469,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     {moduleKey === "organizations" && <>
                     <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
                     <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
-                    <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                    {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
+                              <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            )}
                     {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                     {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                     {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}

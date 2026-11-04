@@ -229,6 +229,62 @@ router.get('/public-info', handler(async (req, res) => {
   });
 }));
 
+
+function calculateDiscount(baseAmount: number, code?: string, explicitDiscount?: number, isUsd: boolean = false) {
+  let discountAmount = 0;
+  const normalizedCode = (code || '').trim().toUpperCase();
+
+  if (normalizedCode === 'WELCOME10') {
+    discountAmount = Math.round(baseAmount * 0.10 * 100) / 100;
+  } else if (normalizedCode === 'SAVE20') {
+    discountAmount = Math.round(baseAmount * 0.20 * 100) / 100;
+  } else if (normalizedCode === 'FESTIVE15') {
+    discountAmount = Math.round(baseAmount * 0.15 * 100) / 100;
+  } else if (normalizedCode === 'SPECIAL50' || normalizedCode === 'PROMO50') {
+    discountAmount = Math.round(baseAmount * 0.50 * 100) / 100;
+  } else if (normalizedCode === 'FLAT5000') {
+    discountAmount = isUsd ? 50 : 5000;
+  } else if (explicitDiscount && Number(explicitDiscount) > 0) {
+    discountAmount = Math.min(baseAmount - (isUsd ? 1 : 10), Number(explicitDiscount));
+  } else if (normalizedCode.startsWith('DISC') && !isNaN(Number(normalizedCode.replace('DISC', '')))) {
+    const pct = Math.min(90, Math.max(1, Number(normalizedCode.replace('DISC', ''))));
+    discountAmount = Math.round(baseAmount * (pct / 100) * 100) / 100;
+  } else if (normalizedCode) {
+    discountAmount = Math.round(baseAmount * 0.10 * 100) / 100;
+  }
+
+  const minFloor = isUsd ? 1 : 10;
+  discountAmount = Math.min(baseAmount - minFloor, Math.max(0, discountAmount));
+  const finalAmount = Math.max(minFloor, Math.round((baseAmount - discountAmount) * 100) / 100);
+
+  return {
+    discountAmount,
+    finalAmount,
+    discountCode: normalizedCode || (discountAmount > 0 ? 'CUSTOM' : null),
+  };
+}
+
+// Public: Validate discount coupon
+router.post('/validate-discount', handler(async (req, res) => {
+  const { code, amount, currency = 'INR' } = req.body;
+  const isUsd = String(currency).toUpperCase() === 'USD';
+  const baseAmount = Number(amount) || (isUsd ? 149 : 9999);
+  const result = calculateDiscount(baseAmount, code, 0, isUsd);
+  if (result.discountAmount <= 0) {
+    throw new ApiError(400, 'Invalid or expired discount code. Try WELCOME10, SAVE20, or FLAT5000.');
+  }
+  res.json({
+    success: true,
+    data: {
+      code: result.discountCode,
+      discount_amount: result.discountAmount,
+      final_amount: result.finalAmount,
+      original_amount: baseAmount,
+      percentage: Math.round((result.discountAmount / baseAmount) * 100),
+    },
+  });
+}));
+
 // Public: Create order without login
 router.post('/public-create-order', handler(async (req, res) => {
   const slug = resolveSlugFromReq(req);
@@ -244,7 +300,7 @@ router.post('/public-create-order', handler(async (req, res) => {
   if (!rows[0]) throw new ApiError(404, 'Organization not found for this subdomain');
 
   const org = rows[0];
-  const { plan_code, currency = 'INR', custom_amount } = req.body;
+  const { plan_code, currency = 'INR', custom_amount, discount_code, discount_amount: reqDiscountAmount } = req.body;
   if (!plan_code) throw new ApiError(400, 'plan_code is required');
 
   const isUsd = String(currency).toUpperCase() === 'USD';
@@ -325,6 +381,16 @@ router.post('/public-create-order', handler(async (req, res) => {
     }
   }
 
+  
+  // Calculate discount if applicable
+  const { discountAmount, finalAmount: discountedFinalPayAmount, discountCode } = calculateDiscount(
+    finalPayAmount,
+    discount_code,
+    reqDiscountAmount,
+    isUsd
+  );
+  finalPayAmount = discountedFinalPayAmount;
+
   const amountInSubunits = Math.round(finalPayAmount * 100);
   const orderCurrency = isUsd ? 'USD' : 'INR';
   const receipt = `rcpt_pub_${org.id}_${Date.now()}`;
@@ -349,6 +415,7 @@ router.post('/public-create-order', handler(async (req, res) => {
         upgrade_amount: String(finalPayAmount),
         original_amount: String(targetAmount),
         payment_source: 'direct_public_payment_link',
+        discount_amount: String(discountAmount),
       },
     });
   } catch (rzpErr: any) {
@@ -509,8 +576,11 @@ router.post('/public-verify-payment', handler(async (req, res) => {
 
   // If upgrading an active package, keep the existing expiry date intact!
   // Otherwise, set 1 year from now.
+  // NEXT RENEWAL date change ONLY if package has ended/expired!
+  // Otherwise, expiry date remains exactly the same as with the old package.
+  const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
   let targetExpiry: Date;
-  if (isUpgrade && existingExpiry) {
+  if (!isPackageEnded && existingExpiry) {
     targetExpiry = existingExpiry;
   } else {
     const now = new Date();
@@ -653,6 +723,216 @@ router.post('/public-verify-payment', handler(async (req, res) => {
       invoice_number: generatedInvoice,
       is_upgrade: isUpgrade,
       paid_amount: finalPayAmount,
+    },
+  });
+}));
+
+
+// Public: Submit / Record Cash Payment
+router.post('/public-cash-payment', handler(async (req, res) => {
+  const slug = resolveSlugFromReq(req);
+  if (!slug) throw new ApiError(400, 'Subdomain or organization slug is required');
+
+  const { rows } = await pool.query(
+    `SELECT id, name, slug, plan, status, settings FROM public.saas_tenants 
+      WHERE LOWER(slug)=LOWER($1) 
+         OR LOWER(REPLACE(slug, '-', ''))=LOWER(REPLACE($1, '-', ''))
+      LIMIT 1`,
+    [slug]
+  );
+  if (!rows[0]) throw new ApiError(404, 'Organization not found for this subdomain');
+
+  const org = rows[0];
+  const {
+    plan_code = 'starter',
+    currency = 'INR',
+    discount_code,
+    discount_amount: reqDiscountAmount,
+    payer_name,
+    payer_phone,
+    payer_email,
+    reference,
+    notes,
+  } = req.body;
+
+  const isUsd = String(currency).toUpperCase() === 'USD';
+  let targetAmount = 9999;
+  let planName = 'Starter';
+
+  if (plan_code === 'growth' || plan_code === 'professional') {
+    targetAmount = isUsd ? 299 : 19999;
+    planName = 'Growth';
+  } else if (plan_code === 'business' || plan_code === 'enterprise') {
+    targetAmount = isUsd ? 449 : 29999;
+    planName = 'Business';
+  } else {
+    targetAmount = isUsd ? 149 : 9999;
+    planName = 'Starter';
+  }
+
+  // Resolve tier
+  const { rows: tierRows } = await pool.query<{ id: number; name: string }>(
+    `SELECT id, name FROM public.platform_pricing_tiers 
+      WHERE active=TRUE 
+        AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2)
+      ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END, id ASC 
+      LIMIT 1`,
+    [planName, `%${planName.toLowerCase()}%`]
+  );
+  const tierId: number | null = tierRows[0]?.id ? Number(tierRows[0].id) : null;
+
+  // Check active subscription & upgrades
+  const { rows: subRows } = await pool.query(
+    `SELECT s.id, s.pricing_tier_id, s.status, s.ends_at, t.name as tier_name
+       FROM public.platform_subscriptions s
+       LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
+      WHERE s.tenant_id = $1
+      ORDER BY s.id DESC
+      LIMIT 1`,
+    [org.id]
+  );
+
+  const existingSub = subRows[0];
+  const expiryDateStr = existingSub?.ends_at || org.settings?.subscription_expiry_date;
+  const existingExpiry = expiryDateStr ? new Date(expiryDateStr) : null;
+  const isFutureExpiry = existingExpiry && existingExpiry.getTime() > Date.now();
+  const currentPlanStr = (existingSub?.tier_name || org.plan || '').toLowerCase();
+  const isCurrentTrial = currentPlanStr.includes('trial') || org.status === 'trial';
+  const hasActivePaidPlan = (org.status === 'active' || existingSub?.status === 'active') && isFutureExpiry && !isCurrentTrial;
+
+  let isUpgrade = false;
+  let basePayAmount = targetAmount;
+  let currentPlanPrice = 0;
+  let currentPlanName = org.plan || existingSub?.tier_name || '';
+
+  if (hasActivePaidPlan) {
+    if (currentPlanStr.includes('business')) {
+      currentPlanPrice = isUsd ? 449 : 29999;
+      currentPlanName = 'Business';
+    } else if (currentPlanStr.includes('growth') || currentPlanStr.includes('professional')) {
+      currentPlanPrice = isUsd ? 299 : 19999;
+      currentPlanName = 'Growth';
+    } else if (currentPlanStr.includes('starter')) {
+      currentPlanPrice = isUsd ? 149 : 9999;
+      currentPlanName = 'Starter';
+    }
+
+    const isCurrentPlan = currentPlanStr.includes(plan_code.toLowerCase()) || (org.plan || '').toLowerCase() === plan_code.toLowerCase();
+    if (!isCurrentPlan && targetAmount < currentPlanPrice) {
+      throw new ApiError(
+        400,
+        `Your organization already has an active ${currentPlanName} plan. Downgrades are not permitted during an active subscription period.`
+      );
+    }
+
+    if (targetAmount > currentPlanPrice) {
+      isUpgrade = true;
+      basePayAmount = targetAmount - currentPlanPrice;
+    }
+  }
+
+  // Calculate discount
+  const { discountAmount, finalAmount, discountCode } = calculateDiscount(basePayAmount, discount_code, reqDiscountAmount, isUsd);
+
+  // Subscription expiry date
+  // NEXT RENEWAL date change ONLY if package has ended/expired!
+  // Otherwise, expiry date remains exactly the same as with the old package.
+  const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
+  let targetExpiry: Date;
+  if (!isPackageEnded && existingExpiry) {
+    targetExpiry = existingExpiry;
+  } else {
+    const now = new Date();
+    targetExpiry = new Date(now);
+    targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+  }
+
+  // 1. Update saas_tenants
+  await pool.query(
+    `UPDATE public.saas_tenants 
+        SET status = 'active',
+            plan = $1,
+            settings = jsonb_set(
+              COALESCE(settings, '{}'::jsonb),
+              '{subscription_expiry_date}',
+              to_jsonb($2::text)
+            ),
+            updated_at = NOW()
+      WHERE id = $3`,
+    [planName, targetExpiry.toISOString(), org.id]
+  );
+
+  // 2. Insert or update platform_subscriptions
+  let subId: string | number;
+  if (isUpgrade && existingSub?.id) {
+    const currSym = isUsd ? 'USD' : 'INR';
+    await pool.query(
+      `UPDATE public.platform_subscriptions
+          SET pricing_tier_id = $1,
+              status = 'active',
+              notes = $2,
+              updated_at = NOW()
+        WHERE id = $3`,
+      [tierId, `Upgraded to ${planName} via Cash (Paid: ${currSym} ${finalAmount}${discountCode ? `, Code: ${discountCode}` : ''})`, existingSub.id]
+    );
+    subId = existingSub.id;
+  } else {
+    const subRes = await pool.query(
+      `INSERT INTO public.platform_subscriptions (
+          tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at
+       ) VALUES ($1, $2, 'active', NOW(), $3, TRUE, $4, NOW(), NOW())
+       RETURNING id`,
+      [org.id, tierId, targetExpiry.toISOString(), `Cash payment subscription for ${planName} Plan`]
+    );
+    subId = subRes.rows[0]?.id;
+  }
+
+  // 3. Record in platform_payments
+  const generatedInvoice = `INV-${new Date().getFullYear()}-${String(org.id).padStart(2, '0')}${Math.floor(1000 + Math.random() * 9000)}`;
+  const cashRef = reference || `CASH-${Date.now().toString().slice(-6)}`;
+  const currSymbol = isUsd ? 'USD' : 'INR';
+  const paymentNotes = [
+    `Cash payment for ${planName} Plan.`,
+    discountCode ? `Discount Applied: ${discountCode} (-${currSymbol} ${discountAmount}).` : '',
+    payer_name ? `Payer: ${payer_name}` : '',
+    payer_phone ? `Phone: ${payer_phone}` : '',
+    payer_email ? `Email: ${payer_email}` : '',
+    notes ? `Note: ${notes}` : '',
+  ].filter(Boolean).join(' ');
+
+  const amountInSubunits = Math.round(finalAmount * 100);
+
+  const paymentInsert = await pool.query(
+    `INSERT INTO public.platform_payments
+       (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method, reference, notes, paid_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, 'paid', 'cash', $6, $7, NOW(), NOW(), NOW())
+     RETURNING id`,
+    [
+      org.id,
+      subId,
+      tierId,
+      amountInSubunits,
+      isUsd ? 'USD' : 'INR',
+      cashRef,
+      paymentNotes,
+    ]
+  );
+
+  res.json({
+    success: true,
+    message: 'Cash payment successfully recorded and subscription activated.',
+    data: {
+      payment_id: paymentInsert.rows[0]?.id,
+      invoice_number: generatedInvoice,
+      amount: finalAmount,
+      original_amount: basePayAmount,
+      discount_amount: discountAmount,
+      discount_code: discountCode,
+      currency: isUsd ? 'USD' : 'INR',
+      payment_method: 'Cash',
+      subscription_expiry_date: targetExpiry.toISOString(),
+      plan_name: planName,
+      is_upgrade: isUpgrade,
     },
   });
 }));

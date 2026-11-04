@@ -1,3 +1,4 @@
+import { ApiError } from '@/middleware/errorHandler';
 import { Router, Request, Response, NextFunction } from 'express';
 import { pool } from '@/config/db';
 import { requireSuperAdmin } from '@/middleware/superAdminAuth';
@@ -868,6 +869,191 @@ router.get('/payments', async (req: Request, res: Response, next: NextFunction) 
 
     const { rows } = await pool.query(query, params);
     res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+/**
+ * POST /api/admin/payments/record
+ * Record manual/cash/offline payment from Super Admin
+ */
+router.post('/payments/record', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {
+      organization_id,
+      plan_name = 'Starter',
+      amount,
+      discount_amount = 0,
+      currency = 'INR',
+      payment_method = 'Cash',
+      reference,
+      notes,
+      paid_at,
+    } = req.body;
+
+    const orgId = Number(organization_id);
+    if (!orgId) throw new ApiError(400, 'Organization ID is required');
+
+    const orgRes = await pool.query(`SELECT id, name, slug, plan, status, settings FROM public.saas_tenants WHERE id = $1`, [orgId]);
+    if (!orgRes.rows[0]) throw new ApiError(404, 'Organization not found');
+    const org = orgRes.rows[0];
+
+    // Find existing subscription
+    const subCheck = await pool.query(
+      `SELECT s.id, s.pricing_tier_id, s.status, s.ends_at, t.name AS tier_name
+         FROM public.platform_subscriptions s
+         LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
+        WHERE s.tenant_id = $1
+        ORDER BY s.id DESC
+        LIMIT 1`,
+      [org.id]
+    );
+    const existingSub = subCheck.rows[0];
+    const rawExpiry = existingSub?.ends_at || org.settings?.subscription_expiry_date;
+    const existingExpiry = rawExpiry ? new Date(rawExpiry) : null;
+    const hasActivePaidPlan = (org.status === 'active' || existingSub?.status === 'active' || existingSub?.status === 'paid')
+      && (!existingExpiry || existingExpiry.getTime() > Date.now());
+
+    const isUsd = String(currency).toUpperCase() === 'USD';
+
+    const planRanks: Record<string, { rank: number; inr: number; usd: number; name: string }> = {
+      starter: { rank: 1, inr: 9999, usd: 149, name: 'Starter' },
+      growth: { rank: 2, inr: 19999, usd: 299, name: 'Growth' },
+      business: { rank: 3, inr: 29999, usd: 449, name: 'Business' },
+    };
+
+    const currentPlanKey = String(org.plan || existingSub?.tier_name || 'starter').toLowerCase();
+    const currentMeta = currentPlanKey.includes('business') ? planRanks.business : currentPlanKey.includes('growth') ? planRanks.growth : planRanks.starter;
+    const targetPlanKey = String(plan_name).toLowerCase();
+    const targetMeta = targetPlanKey.includes('business') ? planRanks.business : targetPlanKey.includes('growth') ? planRanks.growth : planRanks.starter;
+
+    let isUpgrade = false;
+    let basePayAmount = isUsd ? targetMeta.usd : targetMeta.inr;
+    let targetExpiry: Date;
+
+    if (hasActivePaidPlan) {
+      if (targetMeta.rank < currentMeta.rank) {
+        throw new ApiError(400, `Organization already has an active ${currentMeta.name} Plan. Downgrading to a lower package is not permitted during an active subscription.`);
+      }
+      if (targetMeta.rank > currentMeta.rank) {
+        isUpgrade = true;
+        const currentCredit = isUsd ? currentMeta.usd : currentMeta.inr;
+        basePayAmount = Math.max(0, (isUsd ? targetMeta.usd : targetMeta.inr) - currentCredit);
+      }
+    }
+
+    // NEXT RENEWAL date change ONLY if package has ended/expired!
+    // Otherwise, expiry date remains exactly the same as with the old package.
+    const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
+    if (!isPackageEnded && existingExpiry) {
+      targetExpiry = existingExpiry;
+    } else {
+      const now = new Date();
+      targetExpiry = new Date(now);
+      targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+    }
+
+    const grossAmount = Number(amount) !== undefined && Number(amount) > 0 ? Number(amount) : basePayAmount;
+    const discountVal = Math.max(0, Number(discount_amount) || 0);
+    const netAmount = Math.max(0, grossAmount - discountVal);
+    const amountInSubunits = Math.round(netAmount * 100);
+
+    // Resolve tier
+    const tierRes = await pool.query<{ id: number; name: string }>(
+      `SELECT id, name FROM public.platform_pricing_tiers 
+        WHERE active=TRUE 
+          AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2)
+        ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END, id ASC 
+        LIMIT 1`,
+      [targetMeta.name, `%${targetMeta.name.toLowerCase()}%`]
+    );
+    const tierId = tierRes.rows[0]?.id ? Number(tierRes.rows[0].id) : null;
+
+    // 1. Update saas_tenants
+    await pool.query(
+      `UPDATE public.saas_tenants
+          SET status = 'active',
+              plan = $1,
+              settings = jsonb_set(
+                COALESCE(settings, '{}'::jsonb),
+                '{subscription_expiry_date}',
+                to_jsonb($2::text)
+              ),
+              updated_at = NOW()
+        WHERE id = $3`,
+      [targetMeta.name, targetExpiry.toISOString(), org.id]
+    );
+
+    // 2. Update or Insert platform_subscriptions
+    let subId: number | string;
+    if (isUpgrade && existingSub?.id) {
+      await pool.query(
+        `UPDATE public.platform_subscriptions
+            SET pricing_tier_id = $1,
+                status = 'active',
+                ends_at = $2,
+                notes = $3,
+                updated_at = NOW()
+          WHERE id = $4`,
+        [tierId, targetExpiry.toISOString(), `Upgraded to ${targetMeta.name} via ${payment_method}`, existingSub.id]
+      );
+      subId = existingSub.id;
+    } else {
+      const subRes = await pool.query(
+        `INSERT INTO public.platform_subscriptions (
+            tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at
+         ) VALUES ($1, $2, 'active', NOW(), $3, TRUE, $4, NOW(), NOW())
+         RETURNING id`,
+        [org.id, tierId, targetExpiry.toISOString(), `Payment recorded by admin via ${payment_method}`]
+      );
+      subId = subRes.rows[0]?.id;
+    }
+
+    // 3. Insert platform_payments
+    const refStr = reference || `REC-${Date.now().toString().slice(-6)}`;
+    const currSym = isUsd ? 'USD' : 'INR';
+    const fullNotes = [
+      `Payment recorded by admin for ${targetMeta.name} Plan (${payment_method}).`,
+      isUpgrade ? `Upgrade from ${currentMeta.name}: Deducted current plan credit (-${currSym} ${isUsd ? currentMeta.usd : currentMeta.inr}). Expiry preserved: ${targetExpiry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '',
+      discountVal > 0 ? `Discount: -${currSym} ${discountVal} (Gross: ${currSym} ${grossAmount}).` : '',
+      notes || '',
+    ].filter(Boolean).join(' ');
+
+    const paymentRes = await pool.query(
+      `INSERT INTO public.platform_payments
+         (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method, reference, notes, paid_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, 'paid', $6, $7, $8, $9, NOW(), NOW())
+       RETURNING id`,
+      [
+        org.id,
+        subId,
+        tierId,
+        amountInSubunits,
+        isUsd ? 'USD' : 'INR',
+        payment_method.toLowerCase(),
+        refStr,
+        fullNotes,
+        paid_at ? new Date(paid_at) : new Date(),
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Payment successfully recorded and organization subscription updated.',
+      data: {
+        payment_id: paymentRes.rows[0]?.id,
+        net_amount: netAmount,
+        gross_amount: grossAmount,
+        discount_amount: discountVal,
+        organization_name: org.name,
+        plan_name: targetMeta.name,
+        is_upgrade: isUpgrade,
+        subscription_expiry_date: targetExpiry.toISOString(),
+        payment_method,
+      },
+    });
   } catch (err) {
     next(err);
   }

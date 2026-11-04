@@ -164,7 +164,7 @@ const tierSchema = z.object({
   description: z.string().max(5000).nullable().optional(),
   amount_cents: amountSchema,
   currency: z.string().trim().length(3).transform((value) => value.toUpperCase()).default('USD'),
-  billing_interval: z.enum(['monthly', 'yearly', 'one_time']).default('monthly'),
+  billing_interval: z.enum(['monthly', 'yearly', 'one_time']).default('yearly'),
   trial_days: z.number().int().min(0).max(365).default(14),
   features: z.array(z.unknown()).max(100).default([]),
   limits: z.record(z.string(), z.unknown()).default({}),
@@ -597,7 +597,7 @@ router.get('/subscriptions', handler(async (req, res) => {
             COALESCE(t.name, st.plan, 'Starter') AS tier_name,
             t.amount_cents,
             t.currency,
-            COALESCE(t.billing_interval, 'monthly') AS billing_interval,
+            'yearly' AS billing_interval,
             COALESCE(t.trial_days, 14) AS trial_days,
             payment.status AS payment_status,
             payment.provider_payment_link_url,
@@ -660,7 +660,7 @@ router.get('/tenants/:tenantId/subscriptions', handler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT s.id, s.tenant_id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at,
             s.auto_renew, s.notes, s.created_at, s.updated_at,
-            t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval, t.trial_days,
+            t.name AS tier_name, t.amount_cents, t.currency, 'yearly' AS billing_interval, t.trial_days,
             st.name AS tenant_name, st.slug AS tenant_slug, payment.status AS payment_status,
             payment.provider_payment_link_url, payment.provider_payment_link_id
        FROM public.platform_subscriptions s
