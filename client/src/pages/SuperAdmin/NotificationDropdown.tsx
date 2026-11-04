@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { API } from "@/config";
 import { getSuperAdminToken } from "@/lib/auth-utils";
 
@@ -31,6 +31,18 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
   const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
 
   const fetchNotifications = useCallback(async () => {
     const token = getSuperAdminToken();
@@ -117,7 +129,7 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
@@ -139,7 +151,7 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
               <h2 className="text-sm font-bold text-gray-800">Notifications</h2>
               <p className="text-xs text-gray-500">{unreadCount} unread</p>
             </div>
-            <div className="flex gap-2 text-xs">
+            <div className="flex items-center gap-2 text-xs">
               <button type="button" onClick={() => setShowAll((current) => !current)} className="font-semibold text-[#040975] hover:text-[#232894]">
                 {showAll ? "Unread" : "All"}
               </button>
@@ -153,6 +165,15 @@ const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps)
                   Clear
                 </button>
               )}
+              <button
+                type="button"
+                aria-label="Close notifications"
+                title="Close"
+                onClick={() => setOpen(false)}
+                className="ml-1 rounded-lg p-1 text-gray-400 hover:bg-gray-200/80 hover:text-gray-700 transition-colors"
+              >
+                <X size={15} />
+              </button>
             </div>
           </header>
           {error && <p role="alert" className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}

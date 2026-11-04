@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { API } from "@/config";
 import { getSuperAdminToken } from "@/lib/auth-utils";
@@ -8,6 +9,7 @@ import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
 import { buildTenantUrl } from "@/utils/subdomain";
 import Swal from "sweetalert2";
 import {
+  ArrowLeft,
   Calendar,
   Check,
   ExternalLink,
@@ -89,7 +91,7 @@ const ENDPOINTS: Record<string, ModuleConfig> = {
     fields: [
       { name: "name", label: "Full name", required: true },
       { name: "email", label: "Email", type: "email", required: true },
-      { name: "phone", label: "Phone number", type: "text", required: false },
+      { name: "phone", label: "Phone number", type: "text", required: true },
       { name: "password", label: "Password", type: "text", required: true, secret: true },
       { name: "platform_role_id", label: "Role", type: "select", required: true },
       { name: "status", label: "Account status", type: "select", options: ["active", "suspended"], required: true },
@@ -539,8 +541,29 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
     }
     if (name.includes("phone") || name.includes("mobile") || name.includes("contact")) {
-      if (val && !/^[0-9]{10}$/.test(val)) {
+      if (!val || !val.trim()) {
+        if (moduleKey === "users") return "Phone number is required.";
+        return "";
+      }
+      const digits = val.replace(/\D/g, "");
+      if (!digits) {
+        if (moduleKey === "users") return "Phone number is required.";
+        return "";
+      }
+      if (digits.startsWith("0") || /^0+$/.test(digits)) {
+        return "Phone number cannot start with 0 or be all zeroes.";
+      }
+      if (!/^[6-9]/.test(digits)) {
+        return "Phone number must start with 6, 7, 8, or 9.";
+      }
+      if (digits.length !== 10) {
         return "Phone number must be exactly 10 digits.";
+      }
+      if (/^(\d)\1{9}$/.test(digits)) {
+        return "Phone number cannot contain all identical digits.";
+      }
+      if (!/^[6-9]\d{9}$/.test(digits)) {
+        return "Phone number must be a valid 10-digit number starting with 6, 7, 8, or 9.";
       }
     }
     if (name === "password" || name === "admin_password") {
@@ -665,8 +688,11 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       }
       setShowForm(false);
       setForm({});
+      const roleObj = platformRoles.find((r) => String(r.id) === String(form.platform_role_id || editing?.platform_role_id));
+      const roleName = roleObj?.name ? String(roleObj.name).trim() : (editing?.role_name ? String(editing.role_name).trim() : "User");
+      const entityName = /user|admin/i.test(roleName) ? roleName : `${roleName} user`;
       const successMessage = moduleKey === "users"
-        ? editing ? "Super Admin user updated successfully." : "Super Admin user created successfully."
+        ? editing ? `${entityName} updated successfully.` : `${entityName} created successfully.`
         : editing ? "Role updated successfully." : "Role created successfully.";
       const emailFailed = actionResult?.email_sent === false;
       const subscriptionEmailFailure = moduleKey === "subscriptions" && !editing && emailFailed;
@@ -718,12 +744,12 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           return;
         }
         const confirmation = await showConfirmDialog(
-          "Delete Super Admin user?",
+          "Delete User?",
           `Delete ${String(record.name || record.email || "this user")}? This action cannot be undone.`
         );
         if (!confirmation.isConfirmed) return;
         await request("delete", `/platform-users/${id}`);
-        setNotice("Super Admin user deleted successfully.");
+        setNotice("User deleted successfully.");
       } else if (moduleKey === "demos") {
         const status = ({ new: "contacted", contacted: "qualified", qualified: "closed", closed: "new" } as Record<string, string>)[currentStatus] || "contacted";
         await request("patch", `/demo-requests/${id}/status`, { status });
@@ -999,6 +1025,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     ? "Create Organization"
     : moduleKey === "users"
     ? "Add User"
+    : moduleKey === "roles"
+    ? "Add Role"
     : moduleKey === "payments"
       ? "Create manual payment"
       : moduleKey === "subscriptions"
@@ -1071,7 +1099,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
 
       {moduleKey === "subscriptions" && <div className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 text-xs sm:text-sm text-indigo-950 dark:border-indigo-500/25 dark:bg-indigo-500/5 dark:text-indigo-200">Choose an organization and plan to create a pending subscription. The customer pays through a hosted Razorpay link emailed to its administrator; access activates only after Razorpay confirms payment.</div>}
       {moduleKey === "smtp" && smtpTestResult && <div role={smtpTestResult.success ? "status" : "alert"} className={`mb-4 rounded-lg border px-4 py-3 text-sm ${smtpTestResult.success ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>{smtpTestResult.message}</div>}
-      {moduleKey === "domains" && paymentLinkTenant && (
+      {(moduleKey === "domains" || moduleKey === "subscriptions") && paymentLinkTenant && (
         <PaymentLinkDialog
           tenantId={Number(paymentLinkTenant.id)}
           tenantName={String(paymentLinkTenant.name || `Organization ${paymentLinkTenant.id}`)}
@@ -1092,16 +1120,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 setTrialPlanId(id);
                 const plan = planOptions.find((item) => String(item.id) === id);
                 if (plan?.trial_days) setTrialDays(String(plan.trial_days));
-              }} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+              }} className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700">
                 <option value="">No plan / trial only</option>
                 {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)}</option>)}
               </select>
             </label>
             <label className="text-xs font-medium text-slate-300">Trial duration (days)
-              <input type="number" min="1" max="365" required value={trialDays} onChange={(event) => setTrialDays(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+              <input type="number" min="1" max="365" required value={trialDays} onChange={(event) => setTrialDays(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700" />
             </label>
             <label className="text-xs font-medium text-slate-300">Temporary admin password
-              <input type="password" minLength={8} maxLength={50} required value={trialPassword} onChange={(event) => setTrialPassword(event.target.value)} autoComplete="new-password" className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+              <input type="password" minLength={8} maxLength={50} required value={trialPassword} onChange={(event) => setTrialPassword(event.target.value)} autoComplete="new-password" className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700" />
             </label>
           </div>
           <div className="mt-4 flex justify-end gap-2">
@@ -1123,22 +1151,22 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         >
           <label className="text-xs font-medium text-slate-300">
             Search payments
-            <input value={paymentFilterDraft.search} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Organization, reference, payment ID" className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            <input value={paymentFilterDraft.search} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Organization, reference, payment ID" className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700" />
           </label>
           <label className="text-xs font-medium text-slate-300">
             Status
-            <select value={paymentFilterDraft.status} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, status: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            <select value={paymentFilterDraft.status} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, status: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700">
               <option value="">All statuses</option>
               {["created", "recorded", "pending", "paid", "failed", "refunded"].map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
           </label>
           <label className="text-xs font-medium text-slate-300">
             From
-            <input type="date" value={paymentFilterDraft.date_from} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, date_from: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            <input type="date" value={paymentFilterDraft.date_from} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, date_from: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700" />
           </label>
           <label className="text-xs font-medium text-slate-300">
             To
-            <input type="date" value={paymentFilterDraft.date_to} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, date_to: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            <input type="date" value={paymentFilterDraft.date_to} onChange={(event) => setPaymentFilterDraft((current) => ({ ...current, date_to: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700" />
           </label>
           <div className="flex items-end gap-2">
             <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Apply filters</button>
@@ -1148,33 +1176,70 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       )}
 
       {viewing && moduleKey === "users" && (
-        <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5" aria-labelledby="user-details-heading">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">Super Admin User</p>
-              <h2 id="user-details-heading" className="mt-1 text-lg font-semibold text-white">User details</h2>
+        <section className="mb-6 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 p-5 sm:p-7 shadow-sm transition-all" aria-labelledby="user-details-heading">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700/80 pb-5">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-lg font-black text-white shadow-sm ring-4 ring-indigo-50 dark:ring-indigo-950/40">
+                {String(viewing.name || "U").charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-block text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 px-2.5 py-0.5 rounded-full border border-indigo-200/80 dark:border-indigo-800/80">
+                    {String(viewing.role_name || "Platform Staff")}
+                  </span>
+                  <span className={`inline-block text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                    String(viewing.status || "").toLowerCase() === "active"
+                      ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/80"
+                      : "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800/80"
+                  }`}>
+                    {String(viewing.status || "active")}
+                  </span>
+                </div>
+                <h2 id="user-details-heading" className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight mt-1">
+                  {String(viewing.name || "User Details")}
+                </h2>
+                {Boolean(viewing.email) && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{String(viewing.email)}</p>
+                )}
+              </div>
             </div>
-            <button type="button" onClick={() => setViewing(null)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800">Back to users</button>
+            <button
+              type="button"
+              onClick={() => setViewing(null)}
+              className="rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 shadow-2xs transition flex items-center gap-1.5"
+            >
+              <ArrowLeft aria-hidden="true" size={14} />
+              <span>Back to users</span>
+            </button>
           </div>
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {userDetails.map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-                <dd className="mt-1 break-words text-sm text-slate-200">{displayValue(value, label)}</dd>
+              <div key={label} className="rounded-xl border border-gray-200/90 dark:border-gray-700/80 bg-slate-50/70 dark:bg-slate-900/60 p-4 transition hover:border-gray-300 dark:hover:border-gray-600">
+                <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</dt>
+                <dd className="mt-1.5 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {displayValue(value, label) || "—"}
+                </dd>
               </div>
             ))}
           </dl>
-          <div className="mt-5 flex justify-end">
-            <button type="button" onClick={() => beginEdit(viewing)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Edit user</button>
+          <div className="mt-6 flex justify-end border-t border-gray-100 dark:border-gray-700/80 pt-4">
+            <button
+              type="button"
+              onClick={() => beginEdit(viewing)}
+              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 text-xs font-bold shadow-md transition flex items-center gap-1.5"
+            >
+              <Pencil aria-hidden="true" size={14} />
+              <span>Edit user</span>
+            </button>
           </div>
         </section>
       )}
 
       {showForm && (
-        <form noValidate onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
+        <form noValidate onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 p-5 sm:p-7 shadow-sm transition-all">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-white">{editing ? "Edit record" : createLabel}</h2>
-            <button type="button" onClick={() => setShowForm(false)} className="text-sm text-slate-400 hover:text-white">Close</button>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{editing ? "Edit Record" : createLabel}</h2>
+            <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 transition shadow-2xs">Close</button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {fields.filter((field) =>
@@ -1189,7 +1254,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
 
               return (
                 <div key={field.name} className={`${field.type === "textarea" ? "sm:col-span-2" : ""}`}>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
                     {field.label}
                     {field.required && !(moduleKey === "users" && editing && field.name === "password") && (
                       <span className="text-rose-400 ml-1">*</span>
@@ -1203,7 +1268,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         setForm((current) => ({ ...current, [field.name]: event.target.value }));
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
                       <option value="">Select a tenant</option>
                       {tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} (#{tenant.id})</option>)}
@@ -1215,7 +1280,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         setForm((current) => ({ ...current, [field.name]: event.target.value }));
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
                       {records
                         .filter((role) => !editing || String(role.id) !== String(editing.id))
@@ -1229,7 +1294,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
                       
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
                       <option value="">Select a platform role</option>
                       {platformRoles.map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name)}`}</option>)}
@@ -1243,7 +1308,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
                       
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
                       <option value="">{editing ? "No plan / trial only" : "Select a plan"}</option>
                       {planOptions.map((plan) => <option key={String(plan.id)} value={String(plan.id)}>{String(plan.name)} — {String(plan.currency)} {Number(plan.amount_cents || 0) / 100} / {String(plan.billing_interval)}</option>)}
@@ -1256,7 +1321,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
                       rows={5}
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     />
                   ) : field.type === "select" ? (
                     <select
@@ -1266,7 +1331,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         if (fieldErrors[field.name]) setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
                       }}
                       
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
                       <option value="">Select…</option>
                       {field.options?.filter((option) =>
@@ -1314,21 +1379,53 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         if (field.name.includes("phone") || field.name.includes("mobile") || field.name.includes("contact")) {
                           // Allow digits only (max 10 digits)
                           val = val.replace(/\D/g, "").slice(0, 10);
+                          if (val.startsWith("0")) {
+                            val = val.replace(/^0+/, "");
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              [field.name]: "Phone number cannot start with 0 or be all zeroes. Must start with 6, 7, 8, or 9.",
+                            }));
+                          } else if (val.length > 0 && !/^[6-9]/.test(val)) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              [field.name]: "Phone number must start with 6, 7, 8, or 9.",
+                            }));
+                          } else if (val.length === 10 && /^(\d)\1{9}$/.test(val)) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              [field.name]: "Phone number cannot contain all identical digits.",
+                            }));
+                          } else if (val.length === 10) {
+                            const err = validateSingleField(field.name, val);
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                          } else if (fieldErrors[field.name]) {
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: "" }));
+                          }
                         } else if (field.name === "slug") {
                           val = val.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                          if (fieldErrors[field.name]) {
+                            const err = validateSingleField(field.name, val);
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                          }
                         } else if (["name", "admin_name", "from_name"].includes(field.name)) {
                           // No invalid special characters (letters, spaces, dots, hyphens, apostrophes only)
                           val = val.replace(/[^a-zA-Z\s.'-]/g, "");
+                          if (fieldErrors[field.name]) {
+                            const err = validateSingleField(field.name, val);
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                          }
+                        } else {
+                          if (fieldErrors[field.name]) {
+                            const err = validateSingleField(field.name, val);
+                            setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                          }
                         }
                         setForm((current) => ({ ...current, [field.name]: val }));
-                        if (fieldErrors[field.name]) {
-                          const err = validateSingleField(field.name, val);
-                          setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
-                        }
                       }}
-                      onBlur={() => {
-                        const err = validateSingleField(field.name, form[field.name] || "");
-                        if (err) setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
+                      onBlur={(event) => {
+                        const currentVal = event.target.value;
+                        const err = validateSingleField(field.name, currentVal);
+                        setFieldErrors((prev) => ({ ...prev, [field.name]: err }));
                       }}
                       min={field.type === "number" ? 0 : undefined}
                       placeholder={
@@ -1340,7 +1437,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           ? "e.g. name@example.com"
                           : undefined
                       }
-                      className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none`}
+                      className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     />
                   )}
                   {fieldErrors[field.name] && (
@@ -1354,9 +1451,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             })}
             {moduleKey === "users" && editing && <p className="text-xs text-slate-400 sm:col-span-2">Leave Password blank to keep the current password.</p>}
           </div>
-          <div className="mt-5 flex justify-end gap-2">
-            <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
+          <div className="mt-6 flex justify-end gap-2.5 border-t border-gray-100 dark:border-gray-700/80 pt-4">
+            <button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 shadow-2xs transition">Cancel</button>
+            <button type="submit" disabled={saving} className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2 text-xs font-bold text-white shadow-md transition disabled:opacity-50">{saving ? "Saving…" : "Save Record"}</button>
           </div>
         </form>
       )}
@@ -1370,7 +1467,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <label htmlFor="access-role" className="text-sm text-slate-300">Select role</label>
-              <select id="access-role" value={roleId} onChange={(event) => setRoleId(event.target.value)} disabled={records.length === 0} className="min-w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50">
+              <select id="access-role" value={roleId} onChange={(event) => setRoleId(event.target.value)} disabled={records.length === 0} className="min-w-48 rounded-lg border border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 disabled:opacity-50">
                 {records.length === 0 && <option value="">No accessible roles</option>}
                 {records.map((role) => <option key={String(role.id)} value={String(role.id)}>{String(role.name || `Role ${role.id}`)}</option>)}
               </select>
@@ -1687,11 +1784,141 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           </div>
         ) : (
           <>
+            {moduleKey === "subscriptions" && (
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Subscription status by organization
+                </h2>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {displayedRecords.length} total
+                </span>
+              </div>
+            )}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold text-center w-16">Sr. No.</th>{visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}<th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
-                <tbody className="divide-y divide-slate-800">
-                  {displayedRecords.map((record, index) => (
+                {moduleKey === "subscriptions" ? (
+                  <thead className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-slate-800/60 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="px-5 py-3.5">ORGANIZATION</th>
+                      <th className="px-5 py-3.5">PLAN</th>
+                      <th className="px-5 py-3.5">BILLING CYCLE</th>
+                      <th className="px-5 py-3.5">NEXT RENEWAL</th>
+                      <th className="px-5 py-3.5">STATUS</th>
+                      <th className="px-5 py-3.5 text-right">ACTIONS</th>
+                    </tr>
+                  </thead>
+                ) : (
+                  <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-center w-16">Sr. No.</th>
+                      {visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}
+                      <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                  {moduleKey === "subscriptions" ? (
+                    displayedRecords.map((record, index) => {
+                      const statusStr = String(record.status || "trialing").toLowerCase();
+                      const isTrial = statusStr === "trial" || statusStr === "trialing";
+                      const isSuspended = statusStr === "suspended";
+                      const isActive = statusStr === "active";
+                      const orgName = String(record.tenant_name || record.name || "Organization");
+                      const planName = String(record.tier_name || record.plan || "Growth");
+                      const billingCycle = isTrial
+                        ? `${record.trial_days || 14}-day trial`
+                        : record.billing_interval
+                          ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1)
+                          : "Monthly";
+
+                      let renewalDateStr = "—";
+                      if (record.ends_at) {
+                        const d = new Date(String(record.ends_at));
+                        if (!isNaN(d.getTime())) {
+                          if (isTrial) {
+                            renewalDateStr = `Trial ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+                          } else {
+                            renewalDateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          }
+                        }
+                      }
+
+                      return (
+                        <tr key={String(record.id ?? index)} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors bg-white dark:bg-slate-900">
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                              {orgName}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className="font-mono text-xs font-medium text-slate-600 dark:text-slate-300">
+                              {planName}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className="text-sm text-slate-700 dark:text-slate-300">
+                              {billingCycle}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                              {renewalDateStr}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            {isActive ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+                                ACTIVE
+                              </span>
+                            ) : isTrial ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
+                                TRIAL
+                              </span>
+                            ) : isSuspended ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+                                SUSPENDED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+                                {statusStr.toUpperCase()}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {(() => {
+                                const orgSlug = String(record.tenant_slug || record.slug || "");
+                                const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
+                                return (
+                                  <a
+                                    href={paymentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs inline-flex items-center justify-center text-center"
+                                    title={`Open payment & plan upgrade page for ${orgName}`}
+                                  >
+                                    Change plan
+                                  </a>
+                                );
+                              })()}
+                              <Link
+                                to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
+                                className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs"
+                              >
+                                Payment history
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : null}
+
+                  {moduleKey !== "subscriptions" && displayedRecords.map((record, index) => (
                     <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">
                       <td className="px-4 py-3 text-center font-mono text-xs text-slate-400 w-16">{index + 1}</td>
                       {visibleColumns.map((column) => (
@@ -1716,7 +1943,6 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           </>}
                           {moduleKey === "users" && <>
                             <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
-                            <button type="button" aria-label="Impersonate user" title="Impersonate user" onClick={() => void impersonateUser(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
                             {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                             {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                           </>}
@@ -1739,7 +1965,66 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               </table>
             </div>
             <div className="divide-y divide-slate-800 md:hidden">
-              {displayedRecords.map((record, index) => (
+              {moduleKey === "subscriptions" ? displayedRecords.map((record, index) => {
+                const statusStr = String(record.status || "trialing").toLowerCase();
+                const isTrial = statusStr === "trial" || statusStr === "trialing";
+                const isSuspended = statusStr === "suspended";
+                const isActive = statusStr === "active";
+                const orgName = String(record.tenant_name || record.name || "Organization");
+                const planName = String(record.tier_name || record.plan || "Growth");
+                const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : record.billing_interval ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1) : "Monthly";
+                let renewalDateStr = "—";
+                if (record.ends_at) {
+                  const d = new Date(String(record.ends_at));
+                  if (!isNaN(d.getTime())) {
+                    renewalDateStr = isTrial ? `Trial ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  }
+                }
+                return (
+                  <article key={String(record.id ?? index)} className="p-4 bg-white dark:bg-slate-900 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{orgName}</span>
+                      {isActive ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ACTIVE</span>
+                      ) : isTrial ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRIAL</span>
+                      ) : isSuspended ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">SUSPENDED</span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">{statusStr.toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 block text-[10px] uppercase">Plan</span><span className="font-mono">{planName}</span></div>
+                      <div><span className="text-slate-400 block text-[10px] uppercase">Billing Cycle</span><span>{billingCycle}</span></div>
+                      <div><span className="text-slate-400 block text-[10px] uppercase">Next Renewal</span><span className="font-mono">{renewalDateStr}</span></div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-slate-800">
+                      {(() => {
+                        const orgSlug = String(record.tenant_slug || record.slug || "");
+                        const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
+                        return (
+                          <a
+                            href={paymentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center inline-flex items-center justify-center"
+                            title={`Open payment & plan upgrade page for ${orgName}`}
+                          >
+                            Change plan
+                          </a>
+                        );
+                      })()}
+                      <Link
+                        to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
+                        className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center"
+                      >
+                        Payment history
+                      </Link>
+                    </div>
+                  </article>
+                );
+              }) : displayedRecords.map((record, index) => (
                 <article key={String(record.id ?? index)} className="p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
                     {visibleColumns.map((column) => (
@@ -1765,7 +2050,6 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     </>}
                     {moduleKey === "users" && <>
                     <button type="button" aria-label="View user" title="View user" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
-                    <button type="button" aria-label="Impersonate user" title="Impersonate user" onClick={() => void impersonateUser(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
                     {canEditRecord(record) && <button type="button" aria-label="Edit user" title="Edit user" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                     {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                     </>}

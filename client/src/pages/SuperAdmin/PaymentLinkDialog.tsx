@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { superAdminApi } from "@/helpers/api/superAdmin";
-import { X } from "lucide-react";
+import { X, Copy, ExternalLink, Check } from "lucide-react";
+import Swal from "sweetalert2";
 
 type Plan = {
   id: number;
@@ -37,6 +38,7 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [paymentUrl, setPaymentUrl] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,6 +65,21 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
     };
   }, [currentPlan]);
 
+  const handleCopyLink = () => {
+    if (!paymentUrl) return;
+    navigator.clipboard.writeText(paymentUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "success",
+      title: "Payment link copied to clipboard!",
+      showConfirmButton: false,
+      timer: 2000,
+    });
+  };
+
   const sendPaymentLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedPlanId) {
@@ -81,17 +98,37 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
         email_sent?: boolean;
         data?: { email_sent?: boolean; payment_link_url?: string };
       };
-      const responseMessage = payload.message || "Payment link created.";
+      const responseMessage = payload.message || "Payment link created successfully.";
+      const linkUrl = payload.data?.payment_link_url || "";
+      setPaymentUrl(linkUrl);
+
       if (payload.email_sent === false || payload.data?.email_sent === false) {
         setError(responseMessage);
-        setPaymentUrl(payload.data?.payment_link_url || "");
+        Swal.fire({
+          icon: "warning",
+          title: "Payment Link Generated 🔗",
+          html: `<p class="text-sm">${responseMessage}</p><p class="text-xs text-gray-500 mt-2">You can copy or open the direct link below.</p>`,
+          confirmButtonColor: "#4f46e5",
+        });
       } else {
         setMessage(responseMessage);
-        setPaymentUrl(payload.data?.payment_link_url || "");
+        Swal.fire({
+          icon: "success",
+          title: "Payment Link Sent! ✉️",
+          text: responseMessage,
+          confirmButtonColor: "#059669",
+        });
       }
       onComplete();
     } catch (requestError: unknown) {
-      setError(requestErrorMessage(requestError));
+      const errMsg = requestErrorMessage(requestError);
+      setError(errMsg);
+      Swal.fire({
+        icon: "error",
+        title: "Could Not Send Payment Link",
+        text: errMsg,
+        confirmButtonColor: "#e11d48",
+      });
     } finally {
       setSending(false);
     }
@@ -103,27 +140,39 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
         role="dialog"
         aria-modal="true"
         aria-labelledby="payment-link-title"
-        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
-            <h2 id="payment-link-title" className="text-lg font-semibold text-white">Send hosted payment link</h2>
-            <p className="mt-1 text-sm text-slate-400">{tenantName}</p>
+            <h2 id="payment-link-title" className="text-lg font-bold text-white flex items-center gap-2">
+              <span>Send Hosted Payment Link</span>
+            </h2>
+            <p className="mt-1 text-sm text-slate-300 font-medium">{tenantName}</p>
           </div>
-          <button type="button" onClick={onClose} className="super-admin-action-icon" aria-label="Close dialog">
+          <button type="button" onClick={onClose} className="super-admin-action-icon text-slate-400 hover:text-white" aria-label="Close dialog">
             <X aria-hidden="true" size={20} />
           </button>
         </div>
 
+        {Boolean(currentPlan) && (
+          <div className="mt-4 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-200 flex items-start gap-2">
+            <span className="text-sm">ℹ️</span>
+            <div>
+              <strong>Active Plan: {currentPlan}</strong>
+              <p className="mt-0.5 text-amber-300/80">Generating a new payment link allows this organization to renew early or upgrade to a higher tier.</p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={(event) => void sendPaymentLink(event)}>
-          <label className="mt-5 block text-sm font-medium text-slate-300">
-            Pricing plan
+          <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-slate-300">
+            Target Pricing Plan
             <select
               value={selectedPlanId}
               onChange={(event) => setSelectedPlanId(event.target.value)}
               disabled={loadingPlans || sending || plans.length === 0}
               required
-              className="mt-2 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white disabled:opacity-60"
+              className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white disabled:opacity-60 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
               <option value="">{loadingPlans ? "Loading plans…" : "Select a plan"}</option>
               {plans.map((plan) => (
@@ -133,26 +182,56 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
               ))}
             </select>
           </label>
-          <p className="mt-2 text-xs text-slate-500">The customer completes payment on Razorpay’s hosted page. The subscription activates after Razorpay confirms payment.</p>
+          <p className="mt-2 text-xs text-slate-400">The customer completes secure payment on the hosted checkout page. The subscription activates automatically once confirmed.</p>
 
-          {error && <p role="alert" className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</p>}
-          {message && <p role="status" className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">{message}</p>}
+          {error && <p role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}
+          {message && <p role="status" className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200 font-medium">{message}</p>}
+
           {paymentUrl && (
-            <a href={paymentUrl} target="_blank" rel="noreferrer" className="mt-3 block break-all text-sm text-indigo-300 underline">
-              Open Razorpay payment link
-            </a>
+            <div className="mt-4 p-3 rounded-xl border border-indigo-500/30 bg-indigo-950/40 space-y-2">
+              <span className="text-xs font-bold text-indigo-300 block uppercase tracking-wider">Payment Link Generated</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={paymentUrl}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shrink-0 transition"
+                  title="Copy link to clipboard"
+                >
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+                <a
+                  href={paymentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white shrink-0 transition"
+                  title="Open payment link in new tab"
+                >
+                  <ExternalLink size={16} />
+                </a>
+              </div>
+            </div>
           )}
 
-          <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <button type="button" onClick={onClose} className="w-full sm:w-auto rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">
-              {message || error ? "Close" : "Cancel"}
+          <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-slate-800 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-auto rounded-xl border border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+            >
+              {message || error ? "Done" : "Cancel"}
             </button>
             <button
               type="submit"
               disabled={loadingPlans || sending || plans.length === 0 || !selectedPlanId}
-              className="w-full sm:w-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {sending ? "Sending…" : "Create and email link"}
+              {sending ? "Sending Link…" : "Generate & Email Link ✉️"}
             </button>
           </div>
         </form>

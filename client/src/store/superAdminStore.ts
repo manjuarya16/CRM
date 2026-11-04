@@ -8,11 +8,14 @@ export interface SuperAdminUser {
   id: number;
   name: string;
   email: string;
+  phone?: string | null;
   status: string;
   is_platform_owner?: boolean;
   platform_role_id?: number | null;
   role_name?: string | null;
   permissions?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface TenantRecord {
@@ -48,6 +51,7 @@ interface SuperAdminState {
 
   login: (email: string, password: string) => Promise<boolean>;
   refreshAdminProfile: () => Promise<SuperAdminUser | null>;
+  updateAdminProfile: (payload: any) => Promise<{ success: boolean; message?: string; error?: string }>;
   logout: () => void;
   fetchTenants: () => Promise<void>;
   fetchMetrics: () => Promise<void>;
@@ -113,6 +117,28 @@ export const useSuperAdminStore = create<SuperAdminState>()(
           const status = error.response?.status;
           if (status === 401 || status === 403) get().logout();
           throw new Error(error.response?.data?.message || error.message || "Could not load Super Admin access.");
+        }
+      },
+
+      updateAdminProfile: async (payload: any) => {
+        const token = get().token || getSuperAdminToken();
+        if (!token || isTokenExpired(token)) {
+          get().logout();
+          return { success: false, error: "Session expired. Please log in again." };
+        }
+        try {
+          const res = await superAdminApi.updateProfile(payload, token);
+          if (res.data?.success) {
+            const updatedAdmin = res.data.superAdmin;
+            set((state) => ({
+              admin: state.admin ? { ...state.admin, ...updatedAdmin } : updatedAdmin,
+            }));
+            return { success: true, message: res.data.message || "Profile updated successfully" };
+          }
+          return { success: false, error: res.data?.message || "Failed to update profile" };
+        } catch (err: any) {
+          const msg = err.response?.data?.message || err.message || "Failed to update profile";
+          return { success: false, error: msg };
         }
       },
 

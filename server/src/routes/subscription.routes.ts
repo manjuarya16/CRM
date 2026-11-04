@@ -250,21 +250,28 @@ router.post('/public-create-order', handler(async (req, res) => {
   const isUsd = String(currency).toUpperCase() === 'USD';
   let targetAmount = 9999;
   let planName = 'Starter';
-  let tierId = 1;
 
   if (plan_code === 'growth' || plan_code === 'professional') {
     targetAmount = isUsd ? 299 : 19999;
     planName = 'Growth';
-    tierId = 2;
   } else if (plan_code === 'business' || plan_code === 'enterprise') {
     targetAmount = isUsd ? 449 : 29999;
     planName = 'Business';
-    tierId = 3;
   } else {
     targetAmount = isUsd ? 149 : 9999;
     planName = 'Starter';
-    tierId = 1;
   }
+
+  // Dynamically resolve tier from database matching plan name
+  const { rows: tierRows } = await pool.query<{ id: number; name: string }>(
+    `SELECT id, name FROM public.platform_pricing_tiers 
+      WHERE active=TRUE 
+        AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2)
+      ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END, id ASC 
+      LIMIT 1`,
+    [planName, `%${planName.toLowerCase()}%`]
+  );
+  let tierId: number | null = tierRows[0]?.id ? Number(tierRows[0].id) : null;
 
   // Check if organization already has an active package and is upgrading
   const { rows: subRows } = await pool.query(
@@ -425,17 +432,28 @@ router.post('/public-verify-payment', handler(async (req, res) => {
   const isUsd = String(currency).toUpperCase() === 'USD';
   let targetAmount = 9999;
   let planName = 'Starter';
-  let tierId = 1;
 
   if (plan_code === 'growth' || plan_code === 'professional') {
     targetAmount = isUsd ? 299 : 19999;
     planName = 'Growth';
-    tierId = 2;
   } else if (plan_code === 'business' || plan_code === 'enterprise') {
     targetAmount = isUsd ? 449 : 29999;
     planName = 'Business';
-    tierId = 3;
+  } else {
+    targetAmount = isUsd ? 149 : 9999;
+    planName = 'Starter';
   }
+
+  // Dynamically resolve tier from database matching plan name
+  const { rows: tierRows } = await pool.query<{ id: number; name: string }>(
+    `SELECT id, name FROM public.platform_pricing_tiers 
+      WHERE active=TRUE 
+        AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2)
+      ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END, id ASC 
+      LIMIT 1`,
+    [planName, `%${planName.toLowerCase()}%`]
+  );
+  let tierId: number | null = tierRows[0]?.id ? Number(tierRows[0].id) : null;
 
   // Check if organization has an existing active subscription and whether this is an upgrade
   const { rows: subRows } = await pool.query(

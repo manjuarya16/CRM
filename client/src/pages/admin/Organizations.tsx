@@ -796,8 +796,8 @@ const SuperAdminOrganizations = () => {
           }}
           className={`flex items-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold transition shrink-0 ${
             statusFilter === "Suspended"
-              ? "bg-slate-700 text-white shadow-sm"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              ? "bg-purple-600 text-white shadow-sm"
+              : "text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
           }`}
         >
           <i className="mgc_pause_circle_line text-base"></i>
@@ -806,7 +806,7 @@ const SuperAdminOrganizations = () => {
             className={`text-xs px-2 py-0.5 rounded-full font-bold ${
               statusFilter === "Suspended"
                 ? "bg-white/20 text-white"
-                : "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
+                : "bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-200"
             }`}
           >
             {counts.suspended}
@@ -1070,29 +1070,6 @@ const SuperAdminOrganizations = () => {
                               >
                                 <i className="mgc_bill_line text-base"></i>
                               </button>
-
-                              {/* If already has active plan, show Update Plan button that redirects directly to /payment page */}
-                              {org.payment_status === "Paid" || org.computed_status === "Active" ? (
-                                <a
-                                  href={getOrgPaymentUrl(org.slug)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="p-1.5 rounded-lg text-violet-600 hover:bg-violet-600 hover:text-white dark:text-violet-400 dark:hover:bg-violet-600 transition inline-flex items-center justify-center"
-                                  title={`Update / Upgrade Plan for ${org.name} (Opens Payment Portal)`}
-                                >
-                                  <i className="mgc_arrow_up_circle_line text-base"></i>
-                                </a>
-                              ) : (
-                                <a
-                                  href={getOrgPaymentUrl(org.slug)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-600 hover:text-white dark:text-emerald-400 dark:hover:bg-emerald-600 transition inline-flex items-center justify-center"
-                                  title={`Open Direct Payment Link for ${org.name}`}
-                                >
-                                  <i className="mgc_bank_card_line text-base"></i>
-                                </a>
-                              )}
 
                               {/* Send Payment Link Email Button */}
                               <button

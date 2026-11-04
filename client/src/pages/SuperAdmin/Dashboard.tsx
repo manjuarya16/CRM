@@ -794,7 +794,7 @@ export const SuperAdminDashboard: React.FC<DashboardProps> = () => {
 
           <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center justify-between text-xs text-gray-500">
             <span>Tenant Multi-Tenancy Architecture</span>
-            <Link to={`${basePath}/organizations`} className="font-bold text-primary hover:text-primary-600 flex items-center gap-1">
+            <Link to={`${basePath}/domains`} className="font-bold text-primary hover:text-primary-600 flex items-center gap-1">
               <span>Manage Tenants</span>
               <i className="mgc_arrow_right_line"></i>
             </Link>
