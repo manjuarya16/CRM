@@ -89,6 +89,8 @@ const AllRoutes = (props: RouteProps) => {
           <Route path="/pay/:slug" element={<PublicPayment />} />
           <Route path="/subscription" element={<PublicPayment />} />
           <Route path="/subscription/:slug" element={<PublicPayment />} />
+          <Route path="/organizations" element={<Navigate to="/admin/organizations" replace />} />
+          <Route path="/domains" element={<Navigate to="/admin/domains" replace />} />
           <Route
             path="/admin/*"
             element={isSuperAdminAuthenticated ? <SuperAdminPortal /> : <SuperAdminLogin />}

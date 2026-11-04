@@ -98,18 +98,31 @@ const NotificationDropdown = () => {
                 </span>
               )}
             </div>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    markAllAsRead();
+                  }}
+                  className="text-xs text-[#0088cc] hover:underline font-medium"
+                >
+                  Mark all as read
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
-                  markAllAsRead();
+                  document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
                 }}
-                className="text-xs text-[#0088cc] hover:underline font-medium"
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+                title="Close"
               >
-                Mark all as read
+                <i className="mgc_close_line text-base"></i>
               </button>
-            )}
+            </div>
           </div>
 
           {/* List */}

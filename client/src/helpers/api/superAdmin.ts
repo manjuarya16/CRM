@@ -68,6 +68,10 @@ export const superAdminApi = {
     return API.get("/super-admin/me", authHeader(token));
   },
 
+  updateProfile: (data: any, token?: string) => {
+    return API.put("/super-admin/me", data, authHeader(token));
+  },
+
   getMetrics: (token?: string) => {
     return API.get("/super-admin/metrics", authHeader(token));
   },

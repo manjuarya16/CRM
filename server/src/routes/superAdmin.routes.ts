@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import bcrypt from 'bcrypt';
+import { pool } from '@/config/db';
 import { superAdminService } from '@/services/superAdmin.service';
 import { requireSuperAdmin, requireSuperAdminPermission } from '@/middleware/superAdminAuth';
 import { getTenantProfile } from '@/routes/tenant.routes';
@@ -28,9 +30,109 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-// Protected: Super Admin Profile
-router.get('/me', requireSuperAdmin, (req, res) => {
-  res.json({ success: true, superAdmin: (req as any).superAdmin });
+// Protected: Super Admin Profile (Full details)
+router.get('/me', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const admin = (req as any).superAdmin;
+    const { rows } = await pool.query(
+      `SELECT id, name, email, phone, status, platform_role_id, is_platform_owner, created_at, updated_at
+       FROM public.saas_super_admins WHERE id = $1`,
+      [admin.id]
+    );
+    const full = rows[0] || {};
+    res.json({
+      success: true,
+      superAdmin: {
+        ...admin,
+        phone: full.phone || null,
+        created_at: full.created_at || null,
+        updated_at: full.updated_at || null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Protected: Update Super Admin Profile & Password
+router.put('/me', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const admin = (req as any).superAdmin;
+    const { name, phone, current_password, new_password } = req.body;
+
+    const updates: string[] = ['updated_at = NOW()'];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (typeof name === 'string' && name.trim()) {
+      updates.push(`name = ${paramIndex++}`);
+      values.push(name.trim());
+    }
+
+    if (phone !== undefined) {
+      if (phone && String(phone).trim()) {
+        const digits = String(phone).trim().replace(/\D/g, '');
+        if (!/^[6-9]\d{9}$/.test(digits) || /^(\d)\1{9}$/.test(digits)) {
+          res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number starting with 6, 7, 8, or 9' });
+          return;
+        }
+        updates.push(`phone = ${paramIndex++}`);
+        values.push(digits);
+      } else {
+        updates.push('phone = NULL');
+      }
+    }
+
+    if (new_password) {
+      if (!current_password) {
+        res.status(400).json({ success: false, message: 'Current password is required to change your password' });
+        return;
+      }
+      if (new_password.length < 8) {
+        res.status(400).json({ success: false, message: 'New password must be at least 8 characters long' });
+        return;
+      }
+      const { rows } = await pool.query('SELECT password_hash FROM public.saas_super_admins WHERE id = $1', [admin.id]);
+      if (!rows.length) {
+        res.status(404).json({ success: false, message: 'Administrator record not found' });
+        return;
+      }
+      const isValid = await bcrypt.compare(current_password, rows[0].password_hash);
+      if (!isValid) {
+        res.status(400).json({ success: false, message: 'Incorrect current password' });
+        return;
+      }
+      const hash = await bcrypt.hash(new_password, 10);
+      updates.push(`password_hash = ${paramIndex++}`);
+      values.push(hash);
+    }
+
+    values.push(admin.id);
+    await pool.query(
+      `UPDATE public.saas_super_admins SET ${updates.join(', ')} WHERE id = ${paramIndex}`,
+      values
+    );
+
+    const { rows: updatedRows } = await pool.query(
+      `SELECT id, name, email, phone, status, platform_role_id, is_platform_owner, created_at, updated_at
+       FROM public.saas_super_admins WHERE id = $1`,
+      [admin.id]
+    );
+    const updated = updatedRows[0] || {};
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      superAdmin: {
+        ...admin,
+        name: updated.name || admin.name,
+        phone: updated.phone || null,
+        updated_at: updated.updated_at || null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Protected: List all Tenants

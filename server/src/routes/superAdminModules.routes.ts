@@ -354,7 +354,7 @@ router.post('/platform-users', handler(async (req, res) => {
   const input = z.object({
     name: z.string().trim().min(1).max(255),
     email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()),
-    phone: z.string().trim().max(20).optional().nullable(),
+    phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Phone number must be a valid 10-digit number starting with 6, 7, 8, or 9').refine((val) => !/^(\d)\1{9}$/.test(val), 'Phone number cannot contain all identical digits'),
     password: z.string().min(8).max(128),
     platform_role_id: idSchema,
     status: z.enum(['active', 'suspended']).default('active'),
@@ -376,7 +376,7 @@ router.patch('/platform-users/:id', handler(async (req, res) => {
   const input = z.object({
     name: z.string().trim().min(1).max(255).optional(),
     email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()).optional(),
-    phone: z.string().trim().max(20).optional().nullable(),
+    phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Phone number must be a valid 10-digit number starting with 6, 7, 8, or 9').refine((val) => !/^(\d)\1{9}$/.test(val), 'Phone number cannot contain all identical digits').optional().nullable(),
     password: z.string().min(8).max(128).optional(),
     platform_role_id: idSchema.optional(),
     status: z.enum(['active', 'suspended']).optional(),
@@ -582,23 +582,39 @@ router.get('/subscriptions', handler(async (req, res) => {
   const { limit, offset } = pageParams(req);
   const tenantId = req.query.tenant_id === undefined ? null : tenantIdFrom(String(req.query.tenant_id));
   const { rows } = await pool.query(
-    `SELECT s.id, s.tenant_id, st.name AS tenant_name, s.pricing_tier_id, s.status, s.starts_at, s.ends_at,
-            s.auto_renew, s.notes, s.created_at, s.updated_at,
-            t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval, t.trial_days,
-            st.slug AS tenant_slug, payment.status AS payment_status,
-            payment.provider_payment_link_url, payment.provider_payment_link_id
-       FROM public.platform_subscriptions s
-       LEFT JOIN public.platform_pricing_tiers t ON t.id=s.pricing_tier_id
-       LEFT JOIN public.saas_tenants st ON st.id=s.tenant_id
+    `SELECT DISTINCT ON (COALESCE(s.tenant_id, st.id))
+            COALESCE(s.id, 0) AS id,
+            st.id AS tenant_id,
+            st.name AS tenant_name,
+            st.slug AS tenant_slug,
+            COALESCE(s.pricing_tier_id, 0) AS pricing_tier_id,
+            COALESCE(s.status, CASE WHEN st.status = 'suspended' THEN 'suspended' ELSE 'trialing' END) AS status,
+            COALESCE(s.starts_at, st.created_at) AS starts_at,
+            COALESCE(s.ends_at, (st.settings->>'subscription_expiry_date')::timestamptz, st.created_at + INTERVAL '14 days') AS ends_at,
+            s.auto_renew,
+            s.notes,
+            COALESCE(s.created_at, st.created_at) AS created_at,
+            COALESCE(t.name, st.plan, 'Starter') AS tier_name,
+            t.amount_cents,
+            t.currency,
+            COALESCE(t.billing_interval, 'monthly') AS billing_interval,
+            COALESCE(t.trial_days, 14) AS trial_days,
+            payment.status AS payment_status,
+            payment.provider_payment_link_url,
+            payment.provider_payment_link_id
+       FROM public.saas_tenants st
+       LEFT JOIN public.platform_subscriptions s ON s.tenant_id = st.id
+       LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
        LEFT JOIN LATERAL (
          SELECT p.status, p.provider_payment_link_url, p.provider_payment_link_id
            FROM public.platform_payments p
-          WHERE p.subscription_id=s.id AND p.provider_payment_link_id IS NOT NULL
+          WHERE p.tenant_id = st.id AND p.provider_payment_link_id IS NOT NULL
           ORDER BY p.created_at DESC
           LIMIT 1
        ) payment ON TRUE
-      WHERE ($1::bigint IS NULL OR s.tenant_id=$1)
-      ORDER BY s.created_at DESC LIMIT $2 OFFSET $3`,
+      WHERE ($1::bigint IS NULL OR st.id = $1)
+      ORDER BY COALESCE(s.tenant_id, st.id), s.id DESC NULLS LAST
+      LIMIT $2 OFFSET $3`,
     [tenantId, limit, offset]
   );
   res.json({ success: true, data: rows });

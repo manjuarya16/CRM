@@ -38,8 +38,17 @@ const SuperAdminDomains = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [planFilter, setPlanFilter] = useState("All");
-  const [sortBy, setSortBy] = useState<"name" | "slug" | "created" | "expiry">("name");
+  const [sortBy, setSortBy] = useState<"name" | "slug" | "created" | "expiry" | "plan" | "status">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleColumnSort = (col: "name" | "slug" | "created" | "expiry" | "plan" | "status") => {
+    if (sortBy === col) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortOrder("asc");
+    }
+  };
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,6 +59,100 @@ const SuperAdminDomains = () => {
   const [orgPayments, setOrgPayments] = useState<any[]>([]);
   const [loadingOrgPayments, setLoadingOrgPayments] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
+
+  const handleSendPaymentLink = async (org: OrganizationDomain) => {
+    const defaultEmail = (org as any).email || "";
+    const isAlreadyPaid = org.status !== false && org.subscription_expiry_date && new Date(org.subscription_expiry_date) > new Date();
+
+    const { value: formValues } = await Swal.fire({
+      title: "Send Payment Link Email",
+      html: `
+        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300">
+          ${isAlreadyPaid ? `
+            <div class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+              <strong>⚠️ Active Paid Subscription:</strong> This organization already has an active ${org.plan_name || "paid"} subscription until <strong>${new Date(org.subscription_expiry_date!).toLocaleDateString("en-IN")}</strong>. Sending this link will allow them to upgrade or renew.
+            </div>
+          ` : ""}
+          <p>Send an official subscription upgrade & online payment checkout link for <strong>${org.name}</strong> (${org.slug}).</p>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300">Recipient Email Address:</label>
+            <input id="swal-input-email" class="swal2-input !mt-0 !w-full !text-xs !h-9 !py-1 !px-3" value="${defaultEmail}" placeholder="admin@example.com" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300">Optional Custom Note:</label>
+            <textarea id="swal-input-note" class="swal2-textarea !mt-0 !w-full !text-xs !h-16 !p-2" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Send Payment Email ✉️",
+      confirmButtonColor: "#059669",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const emailInput = (document.getElementById("swal-input-email") as HTMLInputElement)?.value;
+        const noteInput = (document.getElementById("swal-input-note") as HTMLTextAreaElement)?.value;
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailInput || !emailRegex.test(emailInput.trim())) {
+          Swal.showValidationMessage("Please provide a valid recipient email address (e.g. user@example.com)");
+          return false;
+        }
+        return { recipient_email: emailInput.trim(), custom_message: noteInput?.trim() };
+      },
+    });
+
+    if (!formValues) return;
+
+    Swal.fire({
+      title: "Sending Payment Link...",
+      text: `Dispatching email to ${formValues.recipient_email}...`,
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const response = await adminApi.post(`/admin/organizations/${org.id}/send-payment-link`, {
+        recipient_email: formValues.recipient_email,
+        custom_message: formValues.custom_message,
+      });
+      if (response.data && response.data.success) {
+        if (response.data.data?.email_sent === false) {
+          Swal.fire({
+            title: "Payment Link Generated ⚠️",
+            html: `<div class="text-left text-xs space-y-2 text-slate-700 dark:text-slate-200">
+              <p class="text-amber-600 dark:text-amber-400 font-semibold">${response.data.message}</p>
+              <div class="mt-2 p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <span class="text-gray-500 block mb-1 font-semibold">Direct Checkout Link:</span>
+                <span class="font-mono text-primary font-bold text-[11px] break-all select-all">${response.data.data.paymentUrl}</span>
+              </div>
+            </div>`,
+            icon: "warning",
+            confirmButtonText: "Copy Link & Close",
+            confirmButtonColor: "#2563eb",
+          }).then((res) => {
+            if (res.isConfirmed && response.data.data?.paymentUrl) {
+              navigator.clipboard.writeText(response.data.data.paymentUrl);
+            }
+          });
+        } else {
+          Swal.fire({
+            title: "Payment Link Sent! ✉️",
+            html: `<div class="text-left text-xs space-y-2 text-slate-700 dark:text-slate-200">
+              <p>${response.data.message || "Payment link email dispatched successfully."}</p>
+              ${response.data.data?.paymentUrl ? `<p class="text-slate-500 font-mono text-[11px] break-all">${response.data.data.paymentUrl}</p>` : ""}
+            </div>`,
+            icon: "success",
+            confirmButtonText: "Done",
+            confirmButtonColor: "#059669",
+          });
+        }
+      } else {
+        Swal.fire("Could not send link", response.data?.message || "Failed to dispatch email", "error");
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err.response?.data?.message || err.message || "Failed to dispatch payment link email", "error");
+    }
+  };
 
   const handleOpenPaymentDetails = async (org: OrganizationDomain) => {
     setViewPaymentOrg(org);
@@ -193,6 +296,12 @@ const SuperAdminDomains = () => {
       const expA = a.subscription_expiry_date ? new Date(a.subscription_expiry_date).getTime() : 0;
       const expB = b.subscription_expiry_date ? new Date(b.subscription_expiry_date).getTime() : 0;
       comp = expA - expB;
+    } else if (sortBy === "plan") {
+      comp = (a.plan_name || "").localeCompare(b.plan_name || "");
+    } else if (sortBy === "status") {
+      const statusA = a.computed_status || (a.status ? "Active" : "Suspended");
+      const statusB = b.computed_status || (b.status ? "Active" : "Suspended");
+      comp = statusA.localeCompare(statusB);
     }
     return sortOrder === "asc" ? comp : -comp;
   });
@@ -340,9 +449,9 @@ const SuperAdminDomains = () => {
 
       {/* Advanced Filter Toolbar */}
       <div className="card mb-6 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xs bg-white dark:bg-slate-800">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Search */}
-          <div>
+          <div className="sm:col-span-2 md:col-span-2">
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
               Search Domain / Organization
             </label>
@@ -384,55 +493,27 @@ const SuperAdminDomains = () => {
             </select>
           </div>
 
-          {/* Plan Filter */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-              Subscription Plan
-            </label>
-            <select
-              className="form-select text-sm w-full"
-              value={planFilter}
-              onChange={(e) => {
-                setPlanFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            >
-              <option value="All">All Plans</option>
-              <option value="Starter">Starter Plan</option>
-              <option value="Professional">Professional Plan</option>
-              <option value="Enterprise">Enterprise Plan</option>
-              <option value="Trial">Free Trial</option>
-            </select>
-          </div>
-
-          {/* Sort By */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-              Sort By
-            </label>
-            <select
-              className="form-select text-sm w-full"
-              value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
-            >
-              <option value="name">Organization Name</option>
-              <option value="slug">Domain / Subdomain</option>
-              <option value="created">Registration Date</option>
-              <option value="expiry">Validity / Expiry</option>
-            </select>
-          </div>
-
-          {/* Sort Direction & Reset */}
+          {/* Plan Filter & Reset Button */}
           <div className="flex items-end gap-2">
-            <button
-              type="button"
-              className="btn border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center justify-center flex-1"
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              title={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
-            >
-              <i className={sortOrder === "asc" ? "mgc_arrow_up_line text-sm" : "mgc_arrow_down_line text-sm"}></i>
-              <span className="ml-1 text-xs font-semibold">{sortOrder === "asc" ? "A-Z / Asc" : "Z-A / Desc"}</span>
-            </button>
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Subscription Plan
+              </label>
+              <select
+                className="form-select text-sm w-full"
+                value={planFilter}
+                onChange={(e) => {
+                  setPlanFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="All">All Plans</option>
+                <option value="Starter">Starter Plan</option>
+                <option value="Professional">Professional Plan</option>
+                <option value="Enterprise">Enterprise Plan</option>
+                <option value="Trial">Free Trial</option>
+              </select>
+            </div>
             <button
               type="button"
               className="btn border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -485,15 +566,90 @@ const SuperAdminDomains = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full min-w-[800px] divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700/60 text-xs text-gray-500 uppercase font-semibold">
+                <thead className="bg-gray-50 dark:bg-gray-700/60 text-xs text-gray-500 uppercase font-semibold select-none">
                   <tr>
                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-16">Sr. No.</th>
-                    <th className="px-4 py-3 text-left">Domain / Tenant URL</th>
-                    <th className="px-4 py-3 text-left">Organization</th>
-                    <th className="px-3 py-3 text-left">Plan</th>
-                    <th className="px-3 py-3 text-center">Status</th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("slug")}
+                      title="Click to sort by Domain"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>Domain / Tenant URL</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "slug" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("name")}
+                      title="Click to sort by Organization Name"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>Organization</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "name" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="px-3 py-3 text-left cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("plan")}
+                      title="Click to sort by Plan"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>Plan</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "plan" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="px-3 py-3 text-center cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("status")}
+                      title="Click to sort by Status"
+                    >
+                      <div className="inline-flex items-center justify-center gap-1.5">
+                        <span>Status</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "status" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
                     <th className="px-3 py-3 text-center">SSL / Protocol</th>
-                    <th className="px-3 py-3 text-left">Validity</th>
+                    <th
+                      className="px-3 py-3 text-left cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("expiry")}
+                      title="Click to sort by Validity / Expiry"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>Validity</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "expiry" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-right">Domain Actions</th>
                   </tr>
                 </thead>
@@ -608,16 +764,6 @@ const SuperAdminDomains = () => {
                         {/* Actions */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-right font-medium">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Open Portal & Log In */}
-                            <button
-                              type="button"
-                              onClick={() => void handleImpersonateLogin(org)}
-                              className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-600 hover:text-white dark:text-indigo-400 dark:hover:bg-indigo-600 transition inline-flex items-center justify-center"
-                              title="Log in to organization in new tab"
-                            >
-                              <i className="mgc_external_link_line text-base"></i>
-                            </button>
-
                             {/* Copy Domain URL */}
                             <button
                               type="button"

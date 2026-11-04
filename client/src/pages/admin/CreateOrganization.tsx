@@ -76,7 +76,11 @@ const CreateOrganization = () => {
     const [errors, setErrors] = useState<Record<string, string>>({});
 
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  const phoneRegex = /^[0-9]{10}$/;
+  const phoneRegex = /^[6-9]\d{9}$/;
+  const isInvalidPhone = (val: string) => {
+    const d = val.replace(/\D/g, "");
+    return !/^[6-9]\d{9}$/.test(d) || /^(\d)\1{9}$/.test(d);
+  };
   const nameRegex = /^[a-zA-Z0-9\s.,'&-]+$/;
   const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -206,8 +210,8 @@ const CreateOrganization = () => {
       newErrors.orgEmail = "Please enter a valid email address.";
     }
 
-    if (orgPhone.trim() && !phoneRegex.test(orgPhone.trim())) {
-      newErrors.orgPhone = "Organization phone must be exactly 10 digits.";
+    if (orgPhone.trim() && isInvalidPhone(orgPhone.trim())) {
+      newErrors.orgPhone = "Organization phone must be a valid 10-digit number starting with 6, 7, 8, or 9 (cannot be all identical digits).";
     }
 
     if (websiteUrl.trim()) {
@@ -224,15 +228,15 @@ const CreateOrganization = () => {
     if (ceoName.trim() && !nameRegex.test(ceoName.trim())) {
       newErrors.ceoName = "CEO name contains invalid special characters.";
     }
-    if (ceoContact.trim() && !phoneRegex.test(ceoContact.trim())) {
-      newErrors.ceoContact = "Please enter a valid 10-digit phone number for CEO.";
+    if (ceoContact.trim() && isInvalidPhone(ceoContact.trim())) {
+      newErrors.ceoContact = "Please enter a valid 10-digit phone number for CEO starting with 6, 7, 8, or 9.";
     }
 
     if (chairpersonName.trim() && !nameRegex.test(chairpersonName.trim())) {
       newErrors.chairpersonName = "Chairperson name contains invalid special characters.";
     }
-    if (chairpersonContact.trim() && !phoneRegex.test(chairpersonContact.trim())) {
-      newErrors.chairpersonContact = "Please enter a valid 10-digit phone number for Chairperson.";
+    if (chairpersonContact.trim() && isInvalidPhone(chairpersonContact.trim())) {
+      newErrors.chairpersonContact = "Please enter a valid 10-digit phone number for Chairperson starting with 6, 7, 8, or 9.";
     }
 
     // 4. Address validation
@@ -283,6 +287,13 @@ const CreateOrganization = () => {
       } else if (newErrors.orgEmail || newErrors.orgPhone || newErrors.websiteUrl || newErrors.ceoContact || newErrors.chairpersonContact) {
         setActiveTab("contact");
       }
+      const firstError = Object.values(newErrors)[0];
+      Swal.fire({
+        icon: "warning",
+        title: "Validation Error",
+        text: firstError,
+        confirmButtonColor: "#4f46e5",
+      });
       return false;
     }
     return true;
@@ -299,10 +310,11 @@ const CreateOrganization = () => {
     }
 
     const isTrial = selectedPlan === "free_trial";
+    const finalSlug = (orgSlug.trim() || orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
 
     const payload = {
       name: orgName.trim(),
-      slug: orgSlug.trim() || undefined,
+      slug: finalSlug || undefined,
       email: orgEmail.trim() || adminEmail.trim() || null,
       phone: orgPhone.trim() || null,
       ngo_type: ngoType,
@@ -339,7 +351,9 @@ const CreateOrganization = () => {
     try {
       const response = await adminApi.post("/admin/organizations", payload);
       if (response.data && response.data.success) {
-        const { slug, subscription_expiry_date } = response.data.data;
+        const tenantData = response.data.data?.tenant || response.data.data;
+        const slug = tenantData?.slug || finalSlug;
+        const subscription_expiry_date = tenantData?.subscription_expiry_date || subscriptionExpiryDate;
 
         const loginUrl = buildTenantUrl(slug, "/auth/login");
         const paymentUrl = buildTenantUrl(slug, "/subscription");
@@ -376,11 +390,17 @@ const CreateOrganization = () => {
           confirmButtonColor: "#4f46e5",
         });
 
-        navigate(`${basePath}/organizations`);
+        navigate(`${basePath}/domains`);
       }
     } catch (err: any) {
       console.error("Error saving organization:", err);
-      // Server validation suppressed - only client validation is shown
+      const errorMsg = err.response?.data?.message || err.message || "Failed to create organization";
+      await Swal.fire({
+        title: "Failed to Create Organization",
+        text: errorMsg,
+        icon: "error",
+        confirmButtonColor: "#4f46e5",
+      });
     } finally {
       setModalLoading(false);
     }
@@ -965,7 +985,9 @@ const CreateOrganization = () => {
                     placeholder="e.g. 9876543210 (10 digits)"
                     value={orgPhone}
                     onChange={(e) => {
-                      setOrgPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
+                      let val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      if (val.startsWith("0")) val = val.replace(/^0+/, "");
+                      setOrgPhone(val);
                       clearFieldError("orgPhone");
                     }}
                     disabled={modalLoading}
@@ -1038,7 +1060,9 @@ const CreateOrganization = () => {
                     placeholder="e.g. 9876543210 (10 digits)"
                     value={ceoContact}
                     onChange={(e) => {
-                      setCeoContact(e.target.value.replace(/\D/g, "").slice(0, 10));
+                      let val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      if (val.startsWith("0")) val = val.replace(/^0+/, "");
+                      setCeoContact(val);
                       clearFieldError("ceoContact");
                     }}
                     disabled={modalLoading}
@@ -1071,7 +1095,9 @@ const CreateOrganization = () => {
                     placeholder="e.g. 9876543210 (10 digits)"
                     value={chairpersonContact}
                     onChange={(e) => {
-                      setChairpersonContact(e.target.value.replace(/\D/g, "").slice(0, 10));
+                      let val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      if (val.startsWith("0")) val = val.replace(/^0+/, "");
+                      setChairpersonContact(val);
                       clearFieldError("chairpersonContact");
                     }}
                     disabled={modalLoading}

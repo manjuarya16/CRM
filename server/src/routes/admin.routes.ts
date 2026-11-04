@@ -297,7 +297,11 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
       address_type,
     } = req.body;
 
-    if (!name || !slug || !admin_name || !admin_email || !admin_password) {
+    const effectiveSlug = (slug || name)
+      ? String(slug || name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+      : '';
+
+    if (!name || !effectiveSlug || !admin_name || !admin_email || !admin_password) {
       res.status(400).json({
         success: false,
         message: 'name, slug, admin_name, admin_email, and admin_password are required',
@@ -305,9 +309,17 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
       return;
     }
 
+    if (phone && (!/^[6-9]\d{9}$/.test(String(phone).trim()) || /^(\d)\1{9}$/.test(String(phone).trim()))) {
+      res.status(400).json({
+        success: false,
+        message: 'Phone number must be a valid 10-digit number starting with 6, 7, 8, or 9 (cannot be all identical digits).',
+      });
+      return;
+    }
+
     const result = await superAdminService.createTenant({
       name,
-      slug,
+      slug: effectiveSlug,
       plan,
       admin_name,
       admin_email,
@@ -361,7 +373,11 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
     res.status(201).json({
       success: true,
       message: 'Organization and admin user created successfully',
-      data: result,
+      data: {
+        ...(result.tenant || {}),
+        tenant: result.tenant,
+        adminUser: result.adminUser,
+      },
     });
   } catch (err) {
     next(err);
