@@ -361,6 +361,15 @@ const SuperAdminOrganizations = () => {
 
   // Open Edit Expiry / Custom Trial Days Modal
   const openExpiryModal = (org: Organization) => {
+    if (isOrgPaid(org)) {
+      Swal.fire({
+        icon: "info",
+        title: "Active Paid Subscription",
+        text: `"${org.name}" has an active paid subscription. Trial duration adjustments are disabled for paid accounts. Use "Change plan" or the payment portal to update subscription.`,
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
     setSelectedOrgForExpiry(org);
     setSendEmailNotification(true);
     if (org.subscription_expiry_date) {
@@ -589,7 +598,6 @@ const SuperAdminOrganizations = () => {
           </Link>
         );
       case "Unpaid":
-      default:
         return (
           <div className="flex flex-col items-center">
             <span className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60">
@@ -607,6 +615,32 @@ const SuperAdminOrganizations = () => {
             </a>
           </div>
         );
+      default:
+        if (status.toLowerCase().includes('pay later')) {
+          return (
+            <div className="flex flex-col items-center">
+              <span className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs">
+                <i className="mgc_time_fill text-xs text-amber-600"></i>
+                <span>{status}</span>
+              </span>
+              <a
+                href={getOrgPaymentUrl(org.slug)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline mt-0.5 font-semibold flex items-center gap-0.5"
+                title="Pay now or update plan"
+              >
+                <i className="mgc_bank_card_line text-[11px]"></i> Record Payment
+              </a>
+            </div>
+          );
+        }
+        return (
+          <span className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <i className="mgc_close_circle_fill text-xs text-gray-500"></i>
+            <span>{status}</span>
+          </span>
+        );
     }
   };
 
@@ -614,6 +648,15 @@ const SuperAdminOrganizations = () => {
     if (!status) return false;
     const lower = status.trim().toLowerCase();
     return lower === "paid" || lower === "success" || lower === "completed" || lower === "captured";
+  };
+
+  const isOrgPaid = (org?: Organization | null) => {
+    if (!org) return false;
+    if (isPaidStatus(org.payment_status)) return true;
+    if (org.payment_status === "Paid") return true;
+    const plan = (org.plan_name || org.plan_code || "").toLowerCase();
+    if (org.computed_status === "Active" && !plan.includes("trial")) return true;
+    return false;
   };
 
   const renderPaymentRowStatusBadge = (paymentStatus?: string | null) => {
@@ -980,9 +1023,9 @@ const SuperAdminOrganizations = () => {
                           </td>
                           {/* Organization Name & Subdomain Link */}
                           <td className="px-4 py-3">
-                            <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[240px]" title={org.name}>
+                            <Link to={`${basePath}/organizations/view/${org.id}`} className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-600 transition truncate max-w-[240px] block" title={`View details for ${org.name}`}>
                               {org.name}
-                            </div>
+                            </Link>
                             <div className="flex flex-col gap-1 mt-1">
                               {/* Subdomain Link */}
                               <button
@@ -1037,14 +1080,16 @@ const SuperAdminOrganizations = () => {
                               ) : (
                                 <span className="text-gray-400 italic">No expiry</span>
                               )}
-                              <button
-                                type="button"
-                                className="text-primary hover:text-primary-700 text-xs p-0.5 rounded hover:bg-primary/10 transition-all"
-                                title="Manually update expiry date"
-                                onClick={() => openExpiryModal(org)}
-                              >
-                                <i className="mgc_edit_line text-xs"></i>
-                              </button>
+                              {!isOrgPaid(org) && (
+                                <button
+                                  type="button"
+                                  className="text-primary hover:text-primary-700 text-xs p-0.5 rounded hover:bg-primary/10 transition-all"
+                                  title="Extend or update trial days"
+                                  onClick={() => openExpiryModal(org)}
+                                >
+                                  <i className="mgc_edit_line text-xs"></i>
+                                </button>
+                              )}
                             </div>
                           </td>
 
@@ -1061,6 +1106,14 @@ const SuperAdminOrganizations = () => {
                           {/* Actions */}
                           <td className="px-4 py-3 whitespace-nowrap text-right text-xs font-medium">
                             <div className="flex items-center justify-end gap-1">
+                              {/* View Organization Details */}
+                              <Link
+                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white dark:text-blue-400 dark:hover:bg-blue-600 transition inline-flex items-center justify-center"
+                                title="View Organization Details"
+                                to={`${basePath}/organizations/view/${org.id}`}
+                              >
+                                <i className="mgc_eye_line text-base"></i>
+                              </Link>
                               {/* View Payment Details Button */}
                               <button
                                 type="button"
@@ -1223,6 +1276,15 @@ const SuperAdminOrganizations = () => {
               </div>
 
               {/* Custom Trial Days Input */}
+              {isOrgPaid(selectedOrgForExpiry) ? (
+                <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                  <i className="mgc_information_line text-base text-blue-600 shrink-0 mt-0.5"></i>
+                  <div>
+                    <strong className="block font-semibold">Active Paid Plan</strong>
+                    <span>This organization has an active paid subscription. Trial duration adjustments are disabled.</span>
+                  </div>
+                </div>
+              ) : (
               <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3.5 rounded-xl border border-amber-200/80 dark:border-amber-900/40 space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
@@ -1281,6 +1343,8 @@ const SuperAdminOrganizations = () => {
                   </div>
                 </div>
               </div>
+
+              )}
 
               {/* Exact Expiry Date Picker */}
               <div>

@@ -3,6 +3,7 @@ import { API } from "@/config";
 import Swal from "sweetalert2";
 import { Check, ShieldCheck, Zap } from "lucide-react";
 import { useTenantStore } from "@/store/tenantStore";
+import { calculateProratedUpgrade, ProratedUpgradeInfo } from "@/helpers/proratedUpgrade";
 
 // Helper to dynamically load Razorpay script
 const loadRazorpayScript = (): Promise<boolean> => {
@@ -170,11 +171,182 @@ const SubscriptionBillingPage = () => {
         return;
       }
 
+      
+      const isUpgrade = isOrgActive && !isCurrent && planAmount > currentAmount;
+      let upgradeInfo: ProratedUpgradeInfo | null = null;
+      let payAmountCents = planAmount;
+
+      if (isUpgrade) {
+        upgradeInfo = calculateProratedUpgrade({
+          currentAmount: currentAmount / 100,
+          targetAmount: planAmount / 100,
+          startDate: subscription?.starts_at,
+          upgradeDate: new Date(),
+          currency: plan.currency || "INR",
+          currentPlanName: subscription?.tier_name || "Current Plan",
+          targetPlanName: plan.name,
+        });
+        payAmountCents = Math.round(upgradeInfo.payableUpgradeAmount * 100);
+      }
+      const formattedPrice = formatAmount(payAmountCents, plan.currency);
+
+      // ALWAYS ASK PAYMENT MODE: Cash or Online (for regular payment and upgrades!)
+      const choice: any = await Swal.fire({
+        title: isUpgrade ? "Plan Upgrade: Select Payment Mode" : "Select Payment Mode",
+        html: `
+          <div class="text-left text-xs space-y-3 pt-1 text-slate-700">
+            <div class="p-3.5 bg-indigo-50/90 rounded-xl border border-indigo-200 space-y-2">
+              <div class="flex justify-between items-center border-b border-indigo-200 pb-1.5">
+                <span class="text-xs text-indigo-900 font-bold block">
+                  ${isUpgrade ? `Upgrade to ${plan.name} Plan` : `${plan.name} Plan`}
+                </span>
+                ${isUpgrade ? `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">New Validity: 1 Year</span>` : ''}
+              </div>
+              ${isUpgrade && upgradeInfo ? `
+                <div class="space-y-1 text-[11px] text-slate-600 pt-0.5">
+                  <div class="flex justify-between">
+                    <span>Current Plan (${upgradeInfo.currentPlanName}):</span>
+                    <span class="font-medium">${formatAmount(currentAmount, plan.currency)}</span>
+                  </div>
+                  <div class="flex justify-between text-slate-500">
+                    <span>Days Used (${upgradeInfo.daysUsed} days @ ${formatAmount(Math.round(upgradeInfo.dailyRate * 100), plan.currency)}/day):</span>
+                    <span class="text-red-500 font-medium">-${formatAmount(Math.round(upgradeInfo.usedAmount * 100), plan.currency)}</span>
+                  </div>
+                  <div class="flex justify-between font-semibold text-emerald-700">
+                    <span>Unused Balance Credit:</span>
+                    <span>+${formatAmount(Math.round(upgradeInfo.remainingCredit * 100), plan.currency)}</span>
+                  </div>
+                  <div class="flex justify-between pt-1 border-t border-indigo-100">
+                    <span>Upgraded Plan (${upgradeInfo.targetPlanName}):</span>
+                    <span class="font-medium">${formatAmount(planAmount, plan.currency)}</span>
+                  </div>
+                  <div class="flex justify-between font-bold text-sm text-indigo-950 pt-1 border-t border-indigo-200">
+                    <span>Net Upgrade Payable:</span>
+                    <span class="text-emerald-600 text-base font-extrabold">${formattedPrice}</span>
+                  </div>
+                </div>
+                <div class="text-[10px] text-indigo-700 bg-indigo-100/70 p-2 rounded-lg leading-relaxed mt-1">
+                  ✨ <strong>1-Year Renewal:</strong> Upon upgrade, your subscription start date resets to today and validity extends for 1 full year (until <strong>${new Date(upgradeInfo.newExpiryDate).toLocaleDateString()}</strong>).
+                </div>
+              ` : `
+                <span class="text-xl font-extrabold text-indigo-950 mt-1 block">${formattedPrice}</span>
+              `}
+            </div>
+            <p class="text-center font-bold text-xs text-slate-700">
+              ${isUpgrade ? "Select payment mode to pay the upgrade difference:" : "Please choose how you want to make this payment:"}
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <button id="swal-bill-cash" type="button" class="p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 hover:bg-emerald-100 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm font-bold">💵</span>
+                  <strong class="text-sm font-bold text-emerald-950">Cash Payment</strong>
+                </div>
+                <p class="text-[11px] text-gray-600 leading-snug">
+                  ${isUpgrade ? "Pay upgrade difference in cash." : "Pay via cash handover or physical receipt."}
+                </p>
+                <div class="mt-3 pt-2 border-t border-emerald-200 text-[11px] font-bold text-emerald-700">
+                  Pay with Cash (${formattedPrice}) →
+                </div>
+              </button>
+              <button id="swal-bill-online" type="button" class="p-3.5 rounded-xl border-2 border-indigo-500 bg-indigo-50 hover:bg-indigo-100 text-left transition hover:shadow-md cursor-pointer flex flex-col justify-between">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">💳</span>
+                  <strong class="text-sm font-bold text-indigo-950">Online Payment</strong>
+                </div>
+                <p class="text-[11px] text-gray-600 leading-snug">
+                  ${isUpgrade ? "Pay upgrade difference online via Razorpay." : "Instant online checkout via Razorpay."}
+                </p>
+                <div class="mt-3 pt-2 border-t border-indigo-200 text-[11px] font-bold text-indigo-700">
+                  Pay Online (${formattedPrice}) →
+                </div>
+              </button>
+            </div>
+          </div>
+        `,
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: "Cancel",
+        cancelButtonColor: "#94a3b8",
+        didOpen: () => {
+          const cashBtn = document.getElementById("swal-bill-cash");
+          const onlineBtn = document.getElementById("swal-bill-online");
+          if (cashBtn) cashBtn.onclick = () => (Swal as any).close({ value: "cash" });
+          if (onlineBtn) onlineBtn.onclick = () => (Swal as any).close({ value: "online" });
+        },
+      });
+
+      if (!choice || !choice.value) {
+        return;
+      }
+
+      if (choice.value === "cash") {
+        const { value: cashDetails } = await Swal.fire({
+          title: isUpgrade ? "Record Cash Payment for Upgrade" : "Record Cash Payment",
+          width: "680px",
+          customClass: {
+            popup: "!w-[680px] !max-w-[95vw] !p-8 rounded-3xl border border-slate-200 shadow-2xl",
+            htmlContainer: "!overflow-visible !m-0 !pt-2",
+            confirmButton: "!rounded-xl !px-6 !py-3 !font-bold !text-sm !bg-emerald-600 hover:!bg-emerald-500 cursor-pointer",
+            cancelButton: "!rounded-xl !px-6 !py-3 !font-semibold !text-sm !bg-slate-200 cursor-pointer",
+          },
+          html: `
+            <div class="text-left text-sm space-y-4 pt-2">
+              <p>Plan: <strong>${plan.name}</strong> (${formattedPrice})</p>
+              <div>
+                <label class="block font-semibold mb-1">Receipt / Voucher Ref #:</label>
+                <input id="swal-cash-ref" class="form-input text-xs w-full py-2 rounded-lg border border-gray-300" placeholder="e.g. CASH-${Date.now().toString().slice(-6)}" value="CASH-${Date.now().toString().slice(-6)}" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1">Notes / Remarks:</label>
+                <input id="swal-cash-notes" class="form-input text-xs w-full py-2 rounded-lg border border-gray-300" placeholder="e.g. Paid cash for plan upgrade" />
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: "Confirm Cash Payment",
+          confirmButtonColor: "#10b981",
+          preConfirm: () => {
+            const ref = (document.getElementById("swal-cash-ref") as HTMLInputElement)?.value;
+            const notes = (document.getElementById("swal-cash-notes") as HTMLInputElement)?.value;
+            return { reference: ref, notes };
+          },
+        });
+
+        if (cashDetails) {
+          Swal.fire({ title: "Recording Payment...", didOpen: () => Swal.showLoading() });
+          const tenantSlug = data?.tenant?.slug || localStorage.getItem("active_tenant_slug") || "";
+          const cashRes = await API.post("/subscription/public-cash-payment", {
+            slug: tenantSlug,
+            plan_code: plan.name.toLowerCase(),
+            currency: plan.currency,
+            amount_cents: payAmountCents,
+            is_upgrade: isUpgrade,
+            payer_name: data?.tenant?.name || "Admin",
+            reference: cashDetails.reference,
+            notes: cashDetails.notes,
+          });
+
+          if (cashRes.data && cashRes.data.success) {
+            Swal.fire({
+              icon: "success",
+              title: isUpgrade ? "Plan Upgraded Successfully! 🎉" : "Cash Payment Recorded!",
+              text: `Invoice: ${cashRes.data.data?.invoice_number || 'Generated'}. Your subscription is now upgraded!`,
+              confirmButtonColor: "#10b981",
+            });
+            await loadBillingData();
+          } else {
+            throw new Error(cashRes.data?.message || "Failed to record cash payment");
+          }
+        }
+        return;
+      }
+
       setProcessingPlanId(plan.id);
 
       // 1. Initiate order creation
       const orderRes = await API.post("/subscription/create-order", {
         pricing_tier_id: plan.id,
+        amount_cents: payAmountCents,
         currency: plan.currency,
       });
 
@@ -354,7 +526,18 @@ const SubscriptionBillingPage = () => {
                     const planAmount = Number(plan.amount_cents || 0);
                     const isLowerPlan = isOrgActive && !isCurrent && planAmount < currentAmount;
                     const isUpgrade = isOrgActive && !isCurrent && planAmount > currentAmount;
-                    const diffAmount = isUpgrade ? planAmount - currentAmount : 0;
+                    const upgradeProrated = isUpgrade
+                      ? calculateProratedUpgrade({
+                          currentAmount: currentAmount / 100,
+                          targetAmount: planAmount / 100,
+                          startDate: subscription?.starts_at,
+                          upgradeDate: new Date(),
+                          currency: plan.currency,
+                          currentPlanName: subscription?.tier_name || "Current Plan",
+                          targetPlanName: plan.name,
+                        })
+                      : null;
+                    const proratedPayableCents = upgradeProrated ? Math.round(upgradeProrated.payableUpgradeAmount * 100) : 0;
 
                     const parsedFeatures: string[] = Array.isArray(plan.features)
                       ? plan.features
@@ -431,7 +614,7 @@ const SubscriptionBillingPage = () => {
                               : isLowerPlan
                               ? "Included in current plan"
                               : isUpgrade
-                              ? `Upgrade (${formatAmount(diffAmount, plan.currency)})`
+                              ? `Upgrade (${formatAmount(proratedPayableCents, plan.currency)})`
                               : "Subscribe with Razorpay"}
                           </button>
                         </div>

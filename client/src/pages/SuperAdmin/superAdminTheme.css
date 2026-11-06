@@ -292,6 +292,23 @@
   background-color: #f8fafc !important;
 }
 
+/* Lucide Icon Outlines & Alignment */
+.super-admin-theme svg.lucide,
+.super-admin-theme svg.lucide * {
+  fill: none !important;
+}
+
+.super-admin-theme svg.lucide {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.super-admin-theme button svg,
+.super-admin-theme a svg {
+  flex-shrink: 0;
+}
+
 /* Form Controls */
 .super-admin-theme input:not([type="checkbox"]):not([type="radio"]),
 .super-admin-theme select,
@@ -313,6 +330,17 @@
   border-color: var(--brand-color, #040975) !important;
   box-shadow: 0 0 0 3px var(--brand-color-ring, rgba(4, 9, 117, 0.22)) !important;
   outline: none !important;
+}
+
+/* Disabled Inputs */
+.super-admin-theme input:disabled,
+.super-admin-theme input[disabled],
+.super-admin-theme select:disabled,
+.super-admin-theme textarea:disabled {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+  border-color: #e2e8f0 !important;
+  cursor: not-allowed !important;
 }
 
 /* Checkboxes */

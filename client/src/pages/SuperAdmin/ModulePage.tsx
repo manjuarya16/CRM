@@ -7,7 +7,9 @@ import { MATRIX_MODULES } from "@/constants/matrixModules";
 import { showConfirmDialog, showSuccessAlert } from "@/utils/swalAlert";
 import PaymentLinkDialog from "@/pages/SuperAdmin/PaymentLinkDialog";
 import { buildTenantUrl } from "@/utils/subdomain";
+import { PaginationControls } from "@/components/PaginationControls";
 import Swal from "sweetalert2";
+import { calculateProratedUpgrade } from "@/helpers/proratedUpgrade";
 import {
   ArrowLeft,
   Calendar,
@@ -358,11 +360,18 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [trialPlanId, setTrialPlanId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     setSearchTerm("");
     setStatusFilter("all");
+    setCurrentPage(1);
   }, [moduleKey]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, tenantId]);
 
   const config = ENDPOINTS[moduleKey];
   const scoped = TENANT_SCOPED.has(moduleKey);
@@ -820,6 +829,16 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   };
 
   const updateExpiry = async (record: RecordValue) => {
+    const isPaid = String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"));
+    if (isPaid) {
+      await Swal.fire({
+        icon: "info",
+        title: "Active Paid Subscription",
+        text: `"${record.name || 'Organization'}" is on an active paid plan. Manual trial adjustments are disabled for paid accounts. Use "Change plan" or the payment portal to modify subscriptions.`,
+        confirmButtonColor: "#4f46e5",
+      });
+      return;
+    }
     const { value: date } = await Swal.fire({
       title: "Update Subscription Expiry",
       input: "date",
@@ -836,6 +855,689 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         await load();
       } catch (err) {
         setError(errorMessage(err));
+      }
+    }
+  };
+
+  const handleUpdateTrial = async (record: RecordValue) => {
+    const orgName = String(record.tenant_name || record.name || "Organization");
+    const tenantId = Number(record.tenant_id || record.id);
+    const currentExpiry = record.ends_at ? String(record.ends_at).substring(0, 10) : "";
+
+    const { value: selectedDate } = await Swal.fire({
+      title: `Update Trial Period`,
+      html: `
+        <div class="text-left text-xs space-y-3.5 text-slate-700 dark:text-slate-300">
+          <p>Extend or adjust the active trial period for <strong>${orgName}</strong>.</p>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300 uppercase tracking-wide">Quick Extend Presets:</label>
+            <div class="flex flex-wrap gap-1.5" id="swal-trial-btn-container">
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="7">+7 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="14">+14 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="30">+30 Days</button>
+              <button type="button" class="swal-trial-btn text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 font-semibold cursor-pointer" data-days="60">+60 Days</button>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300 uppercase tracking-wide">Trial End Date:</label>
+            <input id="swal-trial-expiry" type="date" class="swal2-input !mt-0 !w-full !text-xs !h-9 !py-1 !px-3" value="${currentExpiry || new Date(Date.now() + 14 * 86400000).toISOString().substring(0, 10)}" />
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const dateInput = document.getElementById("swal-trial-expiry") as HTMLInputElement;
+        const btns = document.querySelectorAll(".swal-trial-btn");
+        btns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const days = Number(btn.getAttribute("data-days") || 14);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            if (dateInput) {
+              dateInput.value = targetDate.toISOString().substring(0, 10);
+            }
+          });
+        });
+      },
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Update Trial Period ⏱️",
+      confirmButtonColor: "#d97706",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const input = (document.getElementById("swal-trial-expiry") as HTMLInputElement)?.value;
+        if (!input) {
+          Swal.showValidationMessage("Please pick a trial end date.");
+          return false;
+        }
+        return input;
+      },
+    });
+
+    if (!selectedDate) return;
+
+    try {
+      Swal.fire({
+        title: "Updating Trial...",
+        text: `Applying trial extension to ${orgName}...`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      await request("patch", `/super-admin/tenants/${tenantId}/expiry`, { expiry_date: selectedDate });
+
+      await Swal.fire({
+        icon: "success",
+        title: "Trial Period Updated! 🎉",
+        text: `Trial for ${orgName} is now active until ${new Date(selectedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`,
+        confirmButtonColor: "#059669",
+      });
+
+      await load();
+    } catch (err: unknown) {
+      Swal.fire("Error", errorMessage(err) || "Failed to update trial", "error");
+    }
+  };
+
+  
+  const handleChangePlan = async (record: RecordValue) => {
+    const orgName = String(record.tenant_name || record.name || "Organization");
+    const currentPlan = String(record.tier_name || record.plan || "Growth");
+    const orgSlug = String(record.tenant_slug || record.slug || "");
+    const orgId = Number(record.tenant_id || record.id);
+    const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${orgId}`;
+
+    const statusStr = String(record.status || "trialing").toLowerCase();
+    const isTrial = statusStr === "trial" || statusStr === "trialing";
+    const rawExpiry = record.ends_at;
+    const expiryDate = rawExpiry ? new Date(String(rawExpiry)) : null;
+    const isExpired = expiryDate ? expiryDate.getTime() < Date.now() : false;
+    const daysRemaining = expiryDate ? Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+    // Show Pay Later only when plan is expired OR plan expiry has 10 or fewer days remaining
+    const showPayLaterCard = isExpired || (expiryDate !== null && daysRemaining <= 10);
+    const isActivePaid = (statusStr === "active" || statusStr === "paid") && !isExpired;
+
+    const allPlans = [
+      { name: "Starter", price: 9999, rank: 1, label: "Starter Plan (₹9,999/yr)" },
+      { name: "Growth", price: 19999, rank: 2, label: "Growth Plan (₹19,999/yr)" },
+      { name: "Business", price: 29999, rank: 3, label: "Business Plan (₹29,999/yr)" },
+    ];
+
+    const currentPlanLower = currentPlan.toLowerCase();
+    const currentMeta = allPlans.find((p) => currentPlanLower.includes(p.name.toLowerCase())) || allPlans[0];
+    const currentPrice = currentMeta.price;
+    const currentRank = currentMeta.rank;
+
+    let availablePlans = allPlans;
+    let isUpgradeFlow = false;
+
+    if (isActivePaid) {
+      isUpgradeFlow = true;
+      // Lower packages not allowed to update; only upper plans allowed
+      availablePlans = allPlans.filter((p) => p.rank > currentRank);
+    }
+
+    if (isActivePaid && availablePlans.length === 0) {
+      await Swal.fire({
+        icon: "info",
+        title: "Already on Highest Plan",
+        html: `
+          <div class="text-left text-xs space-y-2 text-slate-700 dark:text-slate-300">
+            <p><strong>${orgName}</strong> is currently active on the highest available plan (<strong>${currentMeta.name} Plan</strong>).</p>
+            <p>Downgrading to a lower package is not permitted during an active subscription period.</p>
+            <p class="text-slate-500">Subscription Expiry: <strong>${expiryDate ? expiryDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</strong></p>
+          </div>
+        `,
+        confirmButtonColor: "#4f46e5",
+      });
+      return;
+    }
+
+    const defaultTargetPlan = availablePlans[0];
+    const startDate = (record.starts_at || record.created_at) as string | Date | undefined;
+    const firstUpgradeCalc = isUpgradeFlow
+      ? calculateProratedUpgrade({
+          currentAmount: currentPrice,
+          targetAmount: defaultTargetPlan.price,
+          startDate,
+          upgradeDate: new Date(),
+          currency: "INR",
+          currentPlanName: currentMeta.name,
+          targetPlanName: defaultTargetPlan.name,
+        })
+      : null;
+    const defaultNetPrice = firstUpgradeCalc ? firstUpgradeCalc.payableUpgradeAmount : Math.max(0, defaultTargetPlan.price - (isUpgradeFlow ? currentPrice : 0));
+    const expiryDisplay = expiryDate ? expiryDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+    // Calculate yearly anniversary continuation (expiry will be same yearly, only payment date differs)
+    let yearlyContinuationDate = new Date();
+    if (expiryDate) {
+      yearlyContinuationDate = new Date(expiryDate);
+      while (yearlyContinuationDate.getTime() <= Date.now()) {
+        yearlyContinuationDate.setFullYear(yearlyContinuationDate.getFullYear() + 1);
+      }
+    } else {
+      yearlyContinuationDate.setFullYear(yearlyContinuationDate.getFullYear() + 1);
+      yearlyContinuationDate.setDate(yearlyContinuationDate.getDate() - 1);
+    }
+    const yearlyContinuationDisplay = yearlyContinuationDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const yearlyContinuationIsoDate = yearlyContinuationDate.toISOString().split("T")[0];
+
+    const defaultPayLaterDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+    const defaultPayLaterIsoDate = defaultPayLaterDate.toISOString().split("T")[0];
+    const defaultPayLaterFormatted = defaultPayLaterDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+    // 1. FIRST SHOW PAYMENT MODE: Cash, Online, or Pay Later?
+    const modeChoice: any = await Swal.fire({
+      title: `${showPayLaterCard ? "Change Plan / Continue Subscription" : "Change / Upgrade Plan"} - ${orgName}`,
+      width: showPayLaterCard ? "880px" : "680px",
+      showCloseButton: true,
+      customClass: {
+        popup: `${showPayLaterCard ? "!w-[880px]" : "!w-[680px]"} !max-w-[95vw] !p-8 !pb-9 rounded-3xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl relative !overflow-visible !h-auto !min-h-fit`,
+        title: "!text-xl md:!text-2xl !font-bold !pt-2 !pb-1 !px-8 text-slate-900 dark:text-slate-100",
+        closeButton: "!text-slate-400 hover:!text-slate-700 dark:hover:!text-slate-200 !text-2xl !outline-none !shadow-none !top-5 !right-5 !p-2 !transition cursor-pointer",
+        htmlContainer: "!overflow-visible !m-0 !pt-2 !pb-1 !max-h-none",
+      },
+      html: `
+        <div class="text-left text-sm space-y-4 pt-1 text-slate-700 dark:text-slate-300">
+          <div class="p-4 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200/90 dark:border-indigo-800 text-center space-y-1">
+            <span class="text-xs text-gray-500 dark:text-gray-400 block font-medium">Organization: <strong class="text-slate-800 dark:text-slate-200">${orgName}</strong></span>
+            <span class="text-sm text-indigo-950 dark:text-indigo-200 font-bold block">
+              Current Plan: ${currentMeta.name} Plan (₹${currentPrice.toLocaleString()}/yr)
+            </span>
+            <span class="text-xs ${isExpired ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-emerald-700 dark:text-emerald-300 font-semibold'} block">
+              ${isActivePaid ? `Active • Expiry: ${expiryDisplay}` : isTrial ? `Trial (${record.trial_days || 14} days)` : `Expired on ${expiryDisplay}`}
+            </span>
+          </div>
+
+          <p class="text-center font-bold text-xs md:text-sm text-slate-800 dark:text-slate-100 pt-1">
+            Select payment mode${showPayLaterCard ? ' or continue subscription' : ''}:
+          </p>
+
+          <div class="${showPayLaterCard ? 'grid grid-cols-1 md:grid-cols-3 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto'} pt-1 pb-1">
+            <button id="swal-change-cash" type="button" class="p-5 rounded-2xl border-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/50 text-left transition hover:shadow-lg cursor-pointer flex flex-col justify-between min-h-[190px]">
+              <div>
+                <div class="flex items-center gap-2.5 mb-2">
+                  <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">💵</span>
+                  <strong class="text-sm font-bold text-emerald-950 dark:text-emerald-200">Cash Payment</strong>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Record an offline cash payment, deduct credit, and renew or upgrade plan directly.
+                </p>
+              </div>
+              <div class="mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-800/80 text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                <span>Record Cash</span>
+                <span>→</span>
+              </div>
+            </button>
+
+            <button id="swal-change-online" type="button" class="p-5 rounded-2xl border-2 border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/50 text-left transition hover:shadow-lg cursor-pointer flex flex-col justify-between min-h-[190px]">
+              <div>
+                <div class="flex items-center gap-2.5 mb-2">
+                  <span class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">💳</span>
+                  <strong class="text-sm font-bold text-indigo-950 dark:text-indigo-200">Online Link</strong>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Redirect to hosted payment portal via secure Razorpay checkout link.
+                </p>
+              </div>
+              <div class="mt-4 pt-3 border-t border-indigo-200 dark:border-indigo-800/80 text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+                <span>Payment Link</span>
+                <span>→</span>
+              </div>
+            </button>
+
+            ${showPayLaterCard ? `
+            <button id="swal-change-paylater" type="button" class="p-5 rounded-2xl border-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 hover:bg-amber-100/70 dark:hover:bg-amber-900/50 text-left transition hover:shadow-lg cursor-pointer flex flex-col justify-between min-h-[190px]">
+              <div>
+                <div class="flex items-center gap-2.5 mb-2">
+                  <span class="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">⏳</span>
+                  <strong class="text-sm font-bold text-amber-950 dark:text-amber-200">Pay Later</strong>
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Continue subscription on yearly cycle. Set custom promised payment date.
+                </p>
+              </div>
+              <div class="mt-4 pt-3 border-t border-amber-200 dark:border-amber-800/80 text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center justify-between">
+                <span>Continue (Pay Later)</span>
+                <span>→</span>
+              </div>
+            </button>
+            ` : ""}
+          </div>
+        </div>
+      `,
+      showConfirmButton: false,
+      showCancelButton: false,
+      didOpen: () => {
+        const cashBtn = document.getElementById("swal-change-cash");
+        const onlineBtn = document.getElementById("swal-change-online");
+        const payLaterBtn = document.getElementById("swal-change-paylater");
+        if (cashBtn) {
+          cashBtn.onclick = () => (Swal as any).close({ value: "cash" });
+        }
+        if (onlineBtn) {
+          onlineBtn.onclick = () => (Swal as any).close({ value: "online" });
+        }
+        if (payLaterBtn) {
+          payLaterBtn.onclick = () => (Swal as any).close({ value: "paylater" });
+        }
+      },
+    });
+
+    if (!modeChoice || !modeChoice.value) return;
+
+    // IF ONLINE -> REDIRECT TO PAYMENT LINK / CHECKOUT PAGE!
+    if (modeChoice.value === "online") {
+      const win = window.open(paymentUrl, "_blank");
+      if (!win || win.closed || typeof win.closed === "undefined") {
+        window.location.href = paymentUrl;
+      }
+      return;
+    }
+
+    // IF CASH -> RECORD CASH PAYMENT AND ACTIVATE PLAN!
+    if (modeChoice.value === "cash") {
+      const { value: cashData } = await Swal.fire({
+        title: `Record Cash Payment - ${orgName}`,
+        width: "840px",
+        showCloseButton: true,
+        customClass: {
+          popup: "!w-[840px] !max-w-[95vw] !p-8 !pb-9 rounded-3xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl relative",
+          closeButton: "!text-slate-400 hover:!text-slate-700 dark:hover:!text-slate-200 !text-2xl !outline-none !shadow-none !top-5 !right-5 !p-2 !transition cursor-pointer",
+          htmlContainer: "!overflow-visible !m-0 !pt-2 !text-left !max-h-none",
+          actions: "!mt-6 !gap-3",
+          confirmButton: "!rounded-xl !px-7 !py-3 !font-bold !text-sm !bg-emerald-600 hover:!bg-emerald-500 !shadow-md transition cursor-pointer",
+          cancelButton: "!rounded-xl !px-7 !py-3 !font-semibold !text-sm !bg-slate-200 dark:!bg-slate-700 !text-slate-800 dark:!text-slate-200 hover:!bg-slate-300 dark:hover:!bg-slate-600 transition cursor-pointer",
+        },
+        html: `
+          <div class="text-left text-sm space-y-4 pt-1 text-slate-700 dark:text-slate-300">
+            <!-- PREVIOUS / CURRENT PLAN BOX -->
+            <div class="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500">Previous / Current Plan:</span>
+                <span class="font-bold text-slate-900 dark:text-slate-100">${currentMeta.name} Plan (₹${currentPrice.toLocaleString()}/yr)</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500">Current Plan Expiry:</span>
+                <span class="font-semibold ${isActivePaid ? 'text-slate-700 dark:text-slate-300' : 'text-amber-600'}">
+                  ${isActivePaid ? `Active (Current plan expires: ${expiryDisplay})` : isTrial ? `Trial (${record.trial_days || 14} days)` : "Expired"}
+                </span>
+              </div>
+              ${isUpgradeFlow && firstUpgradeCalc ? `
+                <div class="mt-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-700 text-xs text-indigo-700 dark:text-indigo-300 font-medium flex items-center justify-between">
+                  <span>Days Used: <strong>${firstUpgradeCalc.daysUsed} days</strong> (@ ₹${firstUpgradeCalc.dailyRate}/day)</span>
+                  <span>Unused Credit Deducted: <strong class="font-mono text-emerald-600 text-sm">-₹${firstUpgradeCalc.remainingCredit.toLocaleString()}</strong></span>
+                </div>
+                <div class="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-xs">
+                  <span class="text-emerald-900 dark:text-emerald-200 font-semibold">✨ New 1-Year Expiry (After Upgrade):</span>
+                  <span class="font-bold font-mono text-emerald-700 dark:text-emerald-300 text-sm">${new Date(firstUpgradeCalc.newExpiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                </div>
+              ` : ''}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Select New Plan <span class="text-rose-500">*</span></label>
+                <select id="swal-cash-plan" class="swal2-select !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm">
+                  ${availablePlans.map((p, idx) => {
+                    let rem = p.price;
+                    let label = `${p.name} Plan (₹${p.price.toLocaleString()}/yr)`;
+                    if (isUpgradeFlow) {
+                      const uCalc = calculateProratedUpgrade({
+                        currentAmount: currentPrice,
+                        targetAmount: p.price,
+                        startDate,
+                        upgradeDate: new Date(),
+                        currency: "INR",
+                        currentPlanName: currentMeta.name,
+                        targetPlanName: p.name,
+                      });
+                      rem = uCalc.payableUpgradeAmount;
+                      label = `${p.name} Plan (₹${p.price.toLocaleString()} - ₹${uCalc.remainingCredit.toLocaleString()} credit [${uCalc.daysUsed}d used] = ₹${rem.toLocaleString()} payable)`;
+                    }
+                    return `<option value="${p.name}" data-price="${rem}" data-full="${p.price}" ${idx === 0 ? "selected" : ""}>${label}</option>`;
+                  }).join("")}
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Receipt / Voucher Ref #:</label>
+                <input id="swal-cash-ref" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono" placeholder="e.g. CASH-REC-${Date.now().toString().slice(-5)}" value="CASH-REC-${Date.now().toString().slice(-5)}" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">${isUpgradeFlow ? "Remaining Upgrade (₹):" : "Plan Amount (₹):"}</label>
+                <input id="swal-cash-amount" type="number" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono font-bold" value="${defaultNetPrice}" />
+              </div>
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Discount Amount (₹):</label>
+                <input id="swal-cash-discount" type="number" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono text-emerald-600 font-bold" value="0" />
+              </div>
+            </div>
+
+            <div class="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-sm">
+              <span class="font-bold text-emerald-950 dark:text-emerald-200">Net Payable in Cash:</span>
+              <span id="swal-cash-net" class="font-mono font-extrabold text-base text-emerald-700 dark:text-emerald-300">₹${defaultNetPrice.toLocaleString()}</span>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Notes / Remarks:</label>
+              <input id="swal-cash-notes" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm" placeholder="e.g. Paid in cash at office, plan upgraded" value="${isUpgradeFlow ? `Upgrade from ${currentMeta.name} Plan recorded in cash` : "Plan recorded in cash by Super Admin"}" />
+            </div>
+          </div>
+        `,
+        didOpen: () => {
+          const planSelect = document.getElementById("swal-cash-plan") as HTMLSelectElement;
+          const amountInput = document.getElementById("swal-cash-amount") as HTMLInputElement;
+          const discountInput = document.getElementById("swal-cash-discount") as HTMLInputElement;
+          const netDisplay = document.getElementById("swal-cash-net");
+
+          const updateNet = () => {
+            const amt = Number(amountInput?.value) || 0;
+            const disc = Number(discountInput?.value) || 0;
+            const net = Math.max(0, amt - disc);
+            if (netDisplay) {
+              netDisplay.textContent = `₹${net.toLocaleString()}`;
+            }
+          };
+
+          if (planSelect && amountInput) {
+            planSelect.onchange = () => {
+              const selectedOpt = planSelect.options[planSelect.selectedIndex];
+              const price = selectedOpt.getAttribute("data-price") || "0";
+              amountInput.value = price;
+              updateNet();
+            };
+          }
+
+          if (amountInput) {
+            amountInput.oninput = updateNet;
+          }
+          if (discountInput) {
+            discountInput.oninput = updateNet;
+          }
+        },
+        showCancelButton: true,
+        confirmButtonText: "Confirm Cash Payment & Update Plan 💵",
+        confirmButtonColor: "#059669",
+        cancelButtonText: "Cancel",
+        cancelButtonColor: "#64748b",
+        preConfirm: () => {
+          const planSelect = document.getElementById("swal-cash-plan") as HTMLSelectElement;
+          const amountInput = document.getElementById("swal-cash-amount") as HTMLInputElement;
+          const discountInput = document.getElementById("swal-cash-discount") as HTMLInputElement;
+          const refInput = document.getElementById("swal-cash-ref") as HTMLInputElement;
+          const notesInput = document.getElementById("swal-cash-notes") as HTMLInputElement;
+
+          const planName = planSelect?.value || defaultTargetPlan.name;
+          const amount = Number(amountInput?.value) || defaultNetPrice;
+          const discount = Number(discountInput?.value) || 0;
+          const reference = refInput?.value || `CASH-REC-${Date.now().toString().slice(-5)}`;
+          const notes = notesInput?.value || "Plan changed via Cash Payment";
+
+          return { planName, amount, discount, reference, notes };
+        },
+      });
+
+      if (!cashData) return;
+
+      try {
+        Swal.fire({
+          title: "Updating Plan & Recording Payment...",
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
+        const res = await API.post("/admin/payments/record", {
+          organization_id: orgId,
+          plan_name: cashData.planName,
+          amount: cashData.amount,
+          discount_amount: cashData.discount,
+          currency: "INR",
+          payment_method: "Cash",
+          reference: cashData.reference,
+          notes: cashData.notes,
+        });
+
+        if (res.data && res.data.success) {
+          const netPaid = Math.max(0, cashData.amount - cashData.discount);
+          await Swal.fire({
+            icon: "success",
+            title: "Plan Changed Successfully! 🎉",
+            confirmButtonText: "Done",
+            confirmButtonColor: "#4f46e5",
+            customClass: {
+              popup: "rounded-2xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl !p-6",
+              confirmButton: "!rounded-xl !px-7 !py-2.5 !font-semibold !text-xs !bg-indigo-600 hover:!bg-indigo-500 !shadow-sm transition",
+            },
+            html: `
+              <div class="space-y-3.5 pt-1 text-slate-700 dark:text-slate-300">
+                <p class="text-sm text-slate-600 dark:text-slate-400 text-center leading-relaxed">
+                  <strong>${orgName}</strong> is now updated to the <strong class="text-indigo-600 dark:text-indigo-400 font-bold">${cashData.planName} Plan</strong>.
+                </p>
+
+                <div class="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 text-xs space-y-2.5 text-left shadow-2xs">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Cash Payment Received:</span>
+                    <span class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">₹${netPaid.toLocaleString()}</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Updated Plan:</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-200">${cashData.planName} (Yearly)</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">New Subscription Expiry:</span>
+                    <span class="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <span>${firstUpgradeCalc ? new Date(firstUpgradeCalc.newExpiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : new Date(Date.now() + 364 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      <span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">1 Year Renewed</span>
+                    </span>
+                  </div>
+                  ${cashData.reference ? `
+                  <div class="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Receipt / Ref #:</span>
+                    <span class="font-mono text-slate-600 dark:text-slate-400">${cashData.reference}</span>
+                  </div>
+                  ` : ""}
+                </div>
+              </div>
+            `,
+          });
+          await load();
+        } else {
+          throw new Error(res.data?.message || "Failed to record cash payment");
+        }
+      } catch (err: any) {
+        Swal.fire("Error", errorMessage(err) || "Failed to change plan via cash payment", "error");
+      }
+    }
+
+    // IF PAY LATER -> CONTINUE SUBSCRIPTION WITH CUSTOM PROMISED PAYMENT DATE!
+    if (modeChoice.value === "paylater") {
+      const { value: payLaterData } = await Swal.fire({
+        title: `Continue Subscription (Pay Later) - ${orgName}`,
+        width: "840px",
+        showCloseButton: true,
+        customClass: {
+          popup: "!w-[840px] !max-w-[95vw] !p-8 !pb-9 rounded-3xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl relative",
+        title: "!text-xl md:!text-2xl !font-bold !pt-2 !pb-1 !px-8 text-slate-900 dark:text-slate-100",
+          closeButton: "!text-slate-400 hover:!text-slate-700 dark:hover:!text-slate-200 !text-2xl !outline-none !shadow-none !top-5 !right-5 !p-2 !transition cursor-pointer",
+          htmlContainer: "!overflow-visible !m-0 !pt-2 !text-left !max-h-none",
+          actions: "!mt-6 !gap-3",
+          confirmButton: "!rounded-xl !px-7 !py-3 !font-bold !text-sm !bg-amber-600 hover:!bg-amber-500 !shadow-md transition cursor-pointer text-white",
+          cancelButton: "!rounded-xl !px-7 !py-3 !font-semibold !text-sm !bg-slate-200 dark:!bg-slate-700 !text-slate-800 dark:!text-slate-200 hover:!bg-slate-300 dark:hover:!bg-slate-600 transition cursor-pointer",
+        },
+        html: `
+          <div class="text-left text-sm space-y-4 pt-1 text-slate-700 dark:text-slate-300">
+            <!-- CURRENT STATUS BANNER -->
+            <div class="p-4 bg-amber-50/80 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-2">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-amber-900 dark:text-amber-200 font-semibold">Current Plan:</span>
+                <span class="font-bold text-slate-900 dark:text-slate-100">${currentMeta.name} Plan (₹${currentPrice.toLocaleString()}/yr)</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-amber-900 dark:text-amber-200 font-semibold">Current Status:</span>
+                <span class="font-semibold ${isExpired ? 'text-rose-600' : 'text-emerald-600'}">
+                  ${isExpired ? `Expired (${expiryDisplay})` : `Active (Expires: ${expiryDisplay})`}
+                </span>
+              </div>
+              <div class="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800 flex justify-between items-center text-xs">
+                <span class="font-bold text-amber-950 dark:text-amber-200">✨ Preserved Yearly Expiry Date:</span>
+                <span class="font-mono font-bold text-sm text-amber-900 dark:text-amber-100">${yearlyContinuationDisplay}</span>
+              </div>
+              <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                ℹ️ <strong>Same Yearly Cycle Preserved:</strong> Subscription continues on its yearly anniversary cycle (${yearlyContinuationDisplay}). The organization is set to <strong>Active</strong> immediately so the client can continue using their CRM without disruption.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Select Plan <span class="text-rose-500">*</span></label>
+                <select id="swal-paylater-plan" class="swal2-select !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm">
+                  ${availablePlans.map((p) => `
+                    <option value="${p.name}" data-price="${p.price}" ${p.name.toLowerCase() === currentMeta.name.toLowerCase() ? "selected" : ""}>
+                      ${p.name} Plan (₹${p.price.toLocaleString()}/yr)
+                    </option>
+                  `).join("")}
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">
+                  Custom Pay Later Date (Client Promises Payment By) <span class="text-rose-500">*</span>
+                </label>
+                <input id="swal-paylater-due-date" type="date" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono font-semibold" value="${defaultPayLaterIsoDate}" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">
+                  Subscription Expiry Date (Yearly Anniversary)
+                </label>
+                <input id="swal-paylater-expiry-date" type="date" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono font-semibold" value="${yearlyContinuationIsoDate}" />
+              </div>
+
+              <div>
+                <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Pending Payment Amount (₹):</label>
+                <input id="swal-paylater-amount" type="number" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm font-mono font-bold" value="${currentPrice}" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-xs text-slate-700 dark:text-slate-300 mb-1.5">Notes / Payment Commitment Details:</label>
+              <input id="swal-paylater-notes" class="swal2-input !w-full !text-sm !h-11 !py-2 !px-3 !m-0 rounded-xl border border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm" placeholder="e.g. Client requested extension, cheque promised by ${defaultPayLaterFormatted}" value="Subscription continued under Pay Later. Payment promised by ${defaultPayLaterFormatted}." />
+            </div>
+          </div>
+        `,
+        didOpen: () => {
+          const planSelect = document.getElementById("swal-paylater-plan") as HTMLSelectElement;
+          const amountInput = document.getElementById("swal-paylater-amount") as HTMLInputElement;
+          if (planSelect && amountInput) {
+            planSelect.onchange = () => {
+              const selectedOpt = planSelect.options[planSelect.selectedIndex];
+              const price = selectedOpt.getAttribute("data-price") || "0";
+              amountInput.value = price;
+            };
+          }
+        },
+        showCancelButton: true,
+        confirmButtonText: "Continue Subscription & Mark Pay Later ⏳",
+        confirmButtonColor: "#d97706",
+        cancelButtonText: "Cancel",
+        cancelButtonColor: "#64748b",
+        preConfirm: () => {
+          const planSelect = document.getElementById("swal-paylater-plan") as HTMLSelectElement;
+          const dueDateInput = document.getElementById("swal-paylater-due-date") as HTMLInputElement;
+          const expiryDateInput = document.getElementById("swal-paylater-expiry-date") as HTMLInputElement;
+          const amountInput = document.getElementById("swal-paylater-amount") as HTMLInputElement;
+          const notesInput = document.getElementById("swal-paylater-notes") as HTMLInputElement;
+
+          const planName = planSelect?.value || currentMeta.name;
+          const expectedPaymentDate = dueDateInput?.value;
+          const customExpiryDate = expiryDateInput?.value;
+          const amount = Number(amountInput?.value) || currentPrice;
+          const notes = notesInput?.value || `Pay Later commitment until ${expectedPaymentDate}`;
+
+          if (!expectedPaymentDate) {
+            Swal.showValidationMessage("Please specify the custom date when payment is expected.");
+            return false;
+          }
+          return { planName, expectedPaymentDate, customExpiryDate, amount, notes };
+        },
+      });
+
+      if (!payLaterData) return;
+
+      try {
+        Swal.fire({
+          title: "Continuing Subscription...",
+          text: "Updating organization status and setting Pay Later commitment.",
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
+        const res = await API.post("/admin/payments/record", {
+          organization_id: orgId,
+          plan_name: payLaterData.planName,
+          amount: payLaterData.amount,
+          discount_amount: 0,
+          currency: "INR",
+          payment_method: "Pay Later",
+          payment_status: "pending",
+          expected_payment_date: payLaterData.expectedPaymentDate,
+          custom_expiry_date: payLaterData.customExpiryDate,
+          notes: payLaterData.notes,
+        });
+
+        if (res.data && res.data.success) {
+          await Swal.fire({
+            icon: "success",
+            title: "Subscription Continued! ⏳",
+            confirmButtonText: "Done",
+            confirmButtonColor: "#4f46e5",
+            customClass: {
+              popup: "rounded-2xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl !p-6",
+              confirmButton: "!rounded-xl !px-7 !py-2.5 !font-semibold !text-xs !bg-indigo-600 hover:!bg-indigo-500 !shadow-sm transition",
+            },
+            html: `
+              <div class="space-y-3.5 pt-1 text-slate-700 dark:text-slate-300">
+                <p class="text-sm text-slate-600 dark:text-slate-400 text-center leading-relaxed">
+                  <strong>${orgName}</strong> is now <strong class="text-emerald-600 dark:text-emerald-400 font-bold">Active</strong> and can continue using their CRM.
+                </p>
+
+                <div class="p-4 bg-amber-50/70 dark:bg-amber-950/40 rounded-2xl border border-amber-200/90 dark:border-amber-700/80 text-xs space-y-2.5 text-left shadow-2xs">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Subscription Status:</span>
+                    <span class="font-bold text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">Active</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-amber-200/80 dark:border-amber-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Payment Status:</span>
+                    <span class="font-bold text-xs bg-amber-100 text-amber-900 dark:bg-amber-900/80 dark:text-amber-200 px-2.5 py-0.5 rounded-full">Pay Later (Pending)</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-amber-200/80 dark:border-amber-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Payment Promised Date:</span>
+                    <span class="font-mono font-bold text-amber-700 dark:text-amber-300">${new Date(payLaterData.expectedPaymentDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-amber-200/80 dark:border-amber-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Preserved Yearly Expiry:</span>
+                    <span class="font-mono font-bold text-slate-800 dark:text-slate-200">${new Date(payLaterData.customExpiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                  </div>
+                  <div class="flex items-center justify-between pt-2 border-t border-amber-200/80 dark:border-amber-700/70">
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Amount Due:</span>
+                    <span class="font-mono font-bold text-sm text-slate-900 dark:text-slate-100">₹${Number(payLaterData.amount).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            `,
+          });
+          await load();
+        } else {
+          throw new Error(res.data?.message || "Failed to continue subscription under Pay Later");
+        }
+      } catch (err: any) {
+        Swal.fire("Error", errorMessage(err) || "Failed to continue subscription", "error");
       }
     }
   };
@@ -978,9 +1680,24 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       : [];
   }, [moduleKey, records]);
   const baseRecords = useMemo(() => {
-    return moduleKey === "subscriptions" && tenantId
+    let list = moduleKey === "subscriptions" && tenantId
       ? records.filter((record) => String(record.tenant_id) === tenantId)
       : records;
+
+    if (moduleKey === "subscriptions") {
+      // Last added on top: sort by tenant_id DESC, id DESC, or created_at DESC
+      list = [...list].sort((a, b) => {
+        const idA = Number(a.tenant_id ?? a.id ?? 0);
+        const idB = Number(b.tenant_id ?? b.id ?? 0);
+        if (idB !== idA) return idB - idA;
+
+        const dateA = new Date(String(a.created_at || a.starts_at || 0)).getTime();
+        const dateB = new Date(String(b.created_at || b.starts_at || 0)).getTime();
+        return dateB - dateA;
+      });
+    }
+
+    return list;
   }, [moduleKey, tenantId, records]);
 
   const availableStatuses = useMemo(() => {
@@ -1020,6 +1737,15 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       return true;
     });
   }, [moduleKey, baseRecords, searchTerm, statusFilter]);
+
+  // Pagination calculations
+  const totalItems = displayedRecords.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const paginatedRecords = useMemo(() => {
+    return displayedRecords.slice(startIndex, endIndex);
+  }, [displayedRecords, startIndex, endIndex]);
 
   const createLabel = moduleKey === "organizations"
     ? "Create Organization"
@@ -1693,16 +2419,112 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         </div>
       )}
 
-      {moduleKey !== "smtp" && moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+      {moduleKey !== "smtp" && moduleKey !== "access-management" && !showForm && !viewing && <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {loading ? (
-          <div role="status" className="space-y-3 p-5"><div className="h-4 w-40 animate-pulse rounded bg-slate-800" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><div className="h-10 animate-pulse rounded bg-slate-800/70" /><span className="sr-only">Loading {title.toLowerCase()}…</span></div>
+          <div role="status" className="w-full">
+            {/* Desktop Table Skeleton with grey strap lines */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                {moduleKey === "subscriptions" ? (
+                  <thead className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-slate-800/60 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="px-5 py-3.5">ORGANIZATION</th>
+                      <th className="px-5 py-3.5">PLAN</th>
+                      <th className="px-5 py-3.5">BILLING CYCLE</th>
+                      <th className="px-5 py-3.5">NEXT RENEWAL</th>
+                      <th className="px-5 py-3.5">STATUS</th>
+                      <th className="px-5 py-3.5 text-right">ACTIONS</th>
+                    </tr>
+                  </thead>
+                ) : (
+                  <thead className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-800/60 text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-center w-16">Sr. No.</th>
+                      {visibleColumns.map((column) => (
+                        <th key={column} className="px-4 py-3 font-semibold">
+                          {column.replace(/_/g, " ")}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                  {[1, 2, 3, 4, 5, 6].map((row) => (
+                    <tr key={row} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                      {moduleKey === "subscriptions" ? (
+                        <>
+                          <td className="px-5 py-4"><div className="h-4 w-44 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" /></td>
+                          <td className="px-5 py-4"><div className="h-4 w-20 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" /></td>
+                          <td className="px-5 py-4"><div className="h-4 w-24 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" /></td>
+                          <td className="px-5 py-4"><div className="h-4 w-28 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" /></td>
+                          <td className="px-5 py-4"><div className="h-6 w-16 rounded-full bg-gray-200 dark:bg-slate-700 animate-pulse" /></td>
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="h-7 w-20 rounded-lg bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                              <div className="h-7 w-24 rounded-lg bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-4 py-4 text-center w-16">
+                            <div className="h-4 w-5 mx-auto rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                          </td>
+                          {visibleColumns.map((col, idx) => {
+                            let widthClass = "w-28";
+                            if (col === "name") widthClass = row % 2 === 0 ? "w-36" : "w-28";
+                            else if (col === "email") widthClass = row % 2 === 0 ? "w-44" : "w-36";
+                            else if (col === "phone") widthClass = "w-24";
+                            else if (col === "role_name" || col === "parent_role_name") widthClass = "w-24";
+                            else if (col === "status") widthClass = "w-16 h-5 rounded-full";
+                            else if (col === "created_at" || col === "updated_at") widthClass = "w-24";
+                            else if (idx % 2 === 0) widthClass = "w-32";
+
+                            return (
+                              <td key={col} className="px-4 py-4">
+                                <div className={`h-4 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse ${widthClass}`} />
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2.5">
+                              <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                              <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                              <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Skeleton Cards with grey strap lines */}
+            <div className="divide-y divide-gray-100 dark:divide-slate-800 md:hidden bg-white dark:bg-slate-900 p-4 space-y-4">
+              {[1, 2, 3, 4].map((card) => (
+                <div key={card} className="pt-3 first:pt-0 space-y-2.5">
+                  <div className="flex justify-between items-center">
+                    <div className="h-4 w-32 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                    <div className="h-5 w-16 rounded-full bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                  </div>
+                  <div className="h-3 w-44 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                  <div className="h-3 w-28 rounded-md bg-gray-200 dark:bg-slate-700 animate-pulse" />
+                </div>
+              ))}
+            </div>
+            <span className="sr-only">Loading {title.toLowerCase()}…</span>
+          </div>
         ) : scoped && !tenantId && moduleKey !== "subscriptions" ? (
           <div className="p-10 text-center"><h2 className="font-semibold text-slate-800 dark:text-white">Select a tenant</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose a tenant above to load its {title.toLowerCase()}.</p></div>
         ) : displayedRecords.length === 0 ? (
           <div className="p-10 text-center"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><Inbox aria-hidden="true" size={21} /></div><h2 className="mt-3 font-semibold text-slate-800 dark:text-white">{error ? "Unable to load records" : (searchTerm || statusFilter !== "all") ? "No matching records" : "Nothing here yet"}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{error ? "Check the error above and retry." : (searchTerm || statusFilter !== "all") ? "Try adjusting your search or filter criteria." : `No ${title.toLowerCase()} were found.`}</p>{(searchTerm || statusFilter !== "all") && (<button type="button" onClick={() => { setSearchTerm(""); setStatusFilter("all"); }} className="mt-4 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold !text-white hover:bg-indigo-500 shadow-sm transition">Reset filters</button>)}</div>
         ) : moduleKey === "pricing" ? (
-          <div className="grid gap-5 p-4 sm:grid-cols-2 sm:p-6 2xl:grid-cols-3">
-            {displayedRecords.map((record, index) => {
+          <>
+            <div className="grid gap-5 p-4 sm:grid-cols-2 sm:p-6 2xl:grid-cols-3">
+              {paginatedRecords.map((record, index) => {
               const features = Array.isArray(record.features) ? record.features : [];
               const interval = record.billing_interval === "yearly"
                 ? "per year"
@@ -1782,16 +2604,48 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               );
             })}
           </div>
+          {totalItems > pageSize && (
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                totalItems={totalItems}
+                itemsPerPage={pageSize}
+                onPageChange={(page) => setCurrentPage(page)}
+              />
+            </div>
+          )}
+        </>
         ) : (
           <>
             {moduleKey === "subscriptions" && (
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                  Subscription status by organization
-                </h2>
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {displayedRecords.length} total
-                </span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800">
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                    Subscription status by organization
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Manage subscriptions, active plans, renewals, and payment commitments
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {totalItems > 0 ? `Showing ${startIndex + 1}–${endIndex} of ${totalItems} total` : "0 subscriptions"}
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 px-2.5 py-1 text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs font-medium"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
               </div>
             )}
             <div className="hidden overflow-x-auto md:block">
@@ -1808,7 +2662,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     </tr>
                   </thead>
                 ) : (
-                  <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
+                  <thead className="border-b border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-800/60 text-xs uppercase tracking-wide text-slate-500 font-semibold">
                     <tr>
                       <th className="px-4 py-3 font-semibold text-center w-16">Sr. No.</th>
                       {visibleColumns.map((column) => <th key={column} className="px-4 py-3 font-semibold">{column.replace(/_/g, " ")}</th>)}
@@ -1818,7 +2672,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 )}
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                   {moduleKey === "subscriptions" ? (
-                    displayedRecords.map((record, index) => {
+                    paginatedRecords.map((record, index) => {
                       const statusStr = String(record.status || "trialing").toLowerCase();
                       const isTrial = statusStr === "trial" || statusStr === "trialing";
                       const isSuspended = statusStr === "suspended";
@@ -1827,9 +2681,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       const planName = String(record.tier_name || record.plan || "Growth");
                       const billingCycle = isTrial
                         ? `${record.trial_days || 14}-day trial`
-                        : record.billing_interval
-                          ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1)
-                          : "Monthly";
+                        : "Yearly";
 
                       let renewalDateStr = "—";
                       if (record.ends_at) {
@@ -1843,12 +2695,43 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         }
                       }
 
+                      const isPayLater =
+                        record.is_pay_later === true ||
+                        String(record.payment_status || "").toLowerCase() === "pay_later" ||
+                        String(record.payment_method || "").toLowerCase().includes("pay later") ||
+                        String(record.payment_method || "").toLowerCase().includes("pay_later") ||
+                        String(record.notes || "").toLowerCase().includes("pay later") ||
+                        Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true);
+
+                      let expectedDateStr = "";
+                      if (record.expected_payment_date) {
+                        const ed = new Date(String(record.expected_payment_date));
+                        if (!isNaN(ed.getTime())) {
+                          expectedDateStr = ed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                        }
+                      } else if (record.tenant_settings && (record.tenant_settings as any).expected_payment_date) {
+                        const ed = new Date(String((record.tenant_settings as any).expected_payment_date));
+                        if (!isNaN(ed.getTime())) {
+                          expectedDateStr = ed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                        }
+                      }
+
                       return (
                         <tr key={String(record.id ?? index)} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors bg-white dark:bg-slate-900">
                           <td className="px-5 py-4 whitespace-nowrap">
-                            <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                              {orgName}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                                {orgName}
+                              </span>
+                              {isPayLater && (
+                                <span
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-[11px] shadow-2xs cursor-help"
+                                  title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
+                                >
+                                  ⏳
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
                             <span className="font-mono text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -1866,45 +2749,58 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                             </span>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
-                            {isActive ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
-                                ACTIVE
-                              </span>
-                            ) : isTrial ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
-                                TRIAL
-                              </span>
-                            ) : isSuspended ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
-                                <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
-                                SUSPENDED
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
-                                {statusStr.toUpperCase()}
-                              </span>
-                            )}
+                            <div className="inline-flex items-center gap-1.5">
+                              {isActive ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+                                  ACTIVE
+                                </span>
+                              ) : isTrial ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
+                                  TRIAL
+                                </span>
+                              ) : isSuspended ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+                                  SUSPENDED
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+                                  {statusStr.toUpperCase()}
+                                </span>
+                              )}
+                              {isPayLater && (
+                                <span
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-xs shadow-2xs cursor-help"
+                                  title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
+                                >
+                                  ⏳
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {(() => {
-                                const orgSlug = String(record.tenant_slug || record.slug || "");
-                                const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
-                                return (
-                                  <a
-                                    href={paymentUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs inline-flex items-center justify-center text-center"
-                                    title={`Open payment & plan upgrade page for ${orgName}`}
-                                  >
-                                    Change plan
-                                  </a>
-                                );
-                              })()}
+                              {isTrial && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleUpdateTrial(record)}
+                                  className="px-3.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs"
+                                  title={`Extend or update trial for ${orgName}`}
+                                >
+                                  Update trial
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => void handleChangePlan(record)}
+                                className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs inline-flex items-center justify-center text-center cursor-pointer"
+                                title={`Change plan for ${orgName}`}
+                              >
+                                Change plan
+                              </button>
                               <Link
                                 to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
                                 className="px-3.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition shadow-2xs"
@@ -1918,9 +2814,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     })
                   ) : null}
 
-                  {moduleKey !== "subscriptions" && displayedRecords.map((record, index) => (
+                  {moduleKey !== "subscriptions" && paginatedRecords.map((record, index) => (
                     <tr key={String(record.id ?? index)} className="hover:bg-slate-800/30">
-                      <td className="px-4 py-3 text-center font-mono text-xs text-slate-400 w-16">{index + 1}</td>
+                      <td className="px-4 py-3 text-center font-mono text-xs text-slate-400 w-16">{startIndex + index + 1}</td>
                       {visibleColumns.map((column) => (
                         <td key={column} className="max-w-xs px-4 py-3 text-slate-300">
                           <span className="block truncate">
@@ -1935,7 +2831,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           {moduleKey === "organizations" && <>
                             <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
                             <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
-                            <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
+                              <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            )}
                             {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                             {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                             {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
@@ -1965,14 +2863,14 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
               </table>
             </div>
             <div className="divide-y divide-slate-800 md:hidden">
-              {moduleKey === "subscriptions" ? displayedRecords.map((record, index) => {
+              {moduleKey === "subscriptions" ? paginatedRecords.map((record, index) => {
                 const statusStr = String(record.status || "trialing").toLowerCase();
                 const isTrial = statusStr === "trial" || statusStr === "trialing";
                 const isSuspended = statusStr === "suspended";
                 const isActive = statusStr === "active";
                 const orgName = String(record.tenant_name || record.name || "Organization");
                 const planName = String(record.tier_name || record.plan || "Growth");
-                const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : record.billing_interval ? String(record.billing_interval).charAt(0).toUpperCase() + String(record.billing_interval).slice(1) : "Monthly";
+                const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : "Yearly";
                 let renewalDateStr = "—";
                 if (record.ends_at) {
                   const d = new Date(String(record.ends_at));
@@ -1980,19 +2878,61 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     renewalDateStr = isTrial ? `Trial ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                   }
                 }
+
+                const isPayLater =
+                  record.is_pay_later === true ||
+                  String(record.payment_status || "").toLowerCase() === "pay_later" ||
+                  String(record.payment_method || "").toLowerCase().includes("pay later") ||
+                  String(record.payment_method || "").toLowerCase().includes("pay_later") ||
+                  String(record.notes || "").toLowerCase().includes("pay later") ||
+                  Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true);
+
+                let expectedDateStr = "";
+                if (record.expected_payment_date) {
+                  const ed = new Date(String(record.expected_payment_date));
+                  if (!isNaN(ed.getTime())) {
+                    expectedDateStr = ed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }
+                } else if (record.tenant_settings && (record.tenant_settings as any).expected_payment_date) {
+                  const ed = new Date(String((record.tenant_settings as any).expected_payment_date));
+                  if (!isNaN(ed.getTime())) {
+                    expectedDateStr = ed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                  }
+                }
+
                 return (
                   <article key={String(record.id ?? index)} className="p-4 bg-white dark:bg-slate-900 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{orgName}</span>
-                      {isActive ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ACTIVE</span>
-                      ) : isTrial ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRIAL</span>
-                      ) : isSuspended ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">SUSPENDED</span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">{statusStr.toUpperCase()}</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{orgName}</span>
+                        {isPayLater && (
+                          <span
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-[10px]"
+                            title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
+                          >
+                            ⏳
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isActive ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ACTIVE</span>
+                        ) : isTrial ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRIAL</span>
+                        ) : isSuspended ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">SUSPENDED</span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">{statusStr.toUpperCase()}</span>
+                        )}
+                        {isPayLater && (
+                          <span
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-[10px]"
+                            title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
+                          >
+                            ⏳
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div><span className="text-slate-400 block text-[10px] uppercase">Plan</span><span className="font-mono">{planName}</span></div>
@@ -2000,21 +2940,23 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       <div><span className="text-slate-400 block text-[10px] uppercase">Next Renewal</span><span className="font-mono">{renewalDateStr}</span></div>
                     </div>
                     <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-slate-800">
-                      {(() => {
-                        const orgSlug = String(record.tenant_slug || record.slug || "");
-                        const paymentUrl = orgSlug ? buildTenantUrl(orgSlug, "/payment") : `/payment?id=${record.tenant_id || record.id}`;
-                        return (
-                          <a
-                            href={paymentUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center inline-flex items-center justify-center"
-                            title={`Open payment & plan upgrade page for ${orgName}`}
-                          >
-                            Change plan
-                          </a>
-                        );
-                      })()}
+                      {isTrial && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateTrial(record)}
+                          className="flex-1 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 text-center"
+                        >
+                          Update trial
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleChangePlan(record)}
+                        className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center inline-flex items-center justify-center cursor-pointer"
+                        title={`Change plan for ${orgName}`}
+                      >
+                        Change plan
+                      </button>
                       <Link
                         to={`/admin/payments?org_id=${record.tenant_id || record.id}`}
                         className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center"
@@ -2024,7 +2966,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     </div>
                   </article>
                 );
-              }) : displayedRecords.map((record, index) => (
+              }) : paginatedRecords.map((record, index) => (
                 <article key={String(record.id ?? index)} className="p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
                     {visibleColumns.map((column) => (
@@ -2042,7 +2984,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     {moduleKey === "organizations" && <>
                     <button type="button" aria-label="View organization" title="View organization" onClick={() => beginView(record)} className="super-admin-action-icon"><Eye aria-hidden="true" size={17} /></button>
                     <button type="button" aria-label="Impersonate organization" title="Impersonate organization admin" onClick={() => void impersonateTenant(record)} className="super-admin-action-icon text-indigo-400 hover:text-indigo-300"><ExternalLink aria-hidden="true" size={16} /></button>
-                    <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                    {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
+                              <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
+                            )}
                     {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                     {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                     {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
@@ -2068,6 +3012,17 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 </article>
               ))}
             </div>
+
+            {totalItems > 0 && (
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                startIndex={startIndex}
+                totalItems={totalItems}
+                itemsPerPage={pageSize}
+                onPageChange={(page) => setCurrentPage(page)}
+              />
+            )}
           </>
         )}
       </div>}

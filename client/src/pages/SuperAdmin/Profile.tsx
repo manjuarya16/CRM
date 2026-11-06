@@ -24,6 +24,7 @@ export const SuperAdminProfile: React.FC = () => {
   const [name, setName] = useState(admin?.name || "");
   const [phone, setPhone] = useState(admin?.phone || "");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
 
   // Password Form State
@@ -42,6 +43,63 @@ export const SuperAdminProfile: React.FC = () => {
       setPhone(admin.phone || "");
     }
   }, [admin]);
+
+  const validateName = (val: string): boolean => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setNameError("Full name is required.");
+      return false;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(trimmed)) {
+      setNameError("Full name cannot contain special characters or numbers. Only letters and spaces are allowed.");
+      return false;
+    }
+    setNameError("");
+    return true;
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      e.key === "Backspace" ||
+      e.key === "Tab" ||
+      e.key === "Enter" ||
+      e.key === "Delete" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight" ||
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "Home" ||
+      e.key === "End" ||
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey
+    ) {
+      return;
+    }
+    // Block special characters and numbers on keypress
+    if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Strip special characters and numbers immediately on type
+    const sanitized = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+    setName(sanitized);
+    if (nameError) validateName(sanitized);
+  };
+
+  const handleNamePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData("text");
+    const sanitized = pastedText.replace(/[^a-zA-Z\s]/g, "");
+    const input = e.currentTarget;
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? 0;
+    const updated = name.slice(0, start) + sanitized + name.slice(end);
+    setName(updated);
+    if (nameError) validateName(updated);
+  };
 
   const validatePhone = (val: string): boolean => {
     if (!val.trim()) {
@@ -69,6 +127,10 @@ export const SuperAdminProfile: React.FC = () => {
     e.preventDefault();
     if (!name.trim()) {
       Swal.fire({ icon: "warning", title: "Validation Error", text: "Full name is required." });
+      return;
+    }
+    if (!validateName(name)) {
+      Swal.fire({ icon: "warning", title: "Validation Error", text: nameError || "Full name cannot contain special characters or numbers." });
       return;
     }
     if (phone.trim() && !validatePhone(phone)) {
@@ -160,40 +222,40 @@ export const SuperAdminProfile: React.FC = () => {
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* ─── Profile Header Banner ─── */}
-      <div className="relative overflow-hidden rounded-3xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 sm:p-8 shadow-xs">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 rounded-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 sm:p-7 shadow-xs">
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-gradient-to-br from-[#040975]/5 to-indigo-500/10 blur-3xl pointer-events-none" />
 
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-3xl font-black text-white shadow-md ring-4 ring-indigo-50 dark:ring-indigo-950/50">
+            <div className="flex h-18 w-18 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#040975] via-[#1a237e] to-[#3949ab] text-2xl sm:text-3xl font-black text-white shadow-md ring-4 ring-slate-100 dark:ring-slate-800">
               {String(admin?.name || "A").charAt(0).toUpperCase()}
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 px-3 py-0.5 rounded-full border border-indigo-200/80 dark:border-indigo-800/80">
-                  <Shield size={12} />
-                  {roleTitle}
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#040975] bg-[#040975]/10 px-3 py-1 rounded-full border border-[#040975]/20">
+                  <Shield size={13} className="shrink-0" />
+                  <span className="leading-none">{roleTitle}</span>
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/80">
-                  <CheckCircle2 size={12} />
-                  {admin?.status || "Active"}
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  <CheckCircle2 size={13} className="shrink-0" />
+                  <span className="leading-none">{admin?.status || "Active"}</span>
                 </span>
               </div>
               <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                 {admin?.name || "Super Admin"}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <Mail size={13} className="text-slate-400" />
-                {admin?.email}
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-1">
+                <Mail size={14} className="text-slate-400 shrink-0" />
+                <span>{admin?.email}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex sm:flex-col items-end gap-1.5 text-xs text-slate-500 dark:text-slate-400 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-gray-700/80 pt-3 sm:pt-0 sm:pl-6 w-full sm:w-auto justify-between sm:justify-start">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-gray-400">Security Clearance</span>
-            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-              <Sparkles size={13} className="text-amber-500" />
-              Full System Access
+          <div className="flex sm:flex-col items-end gap-1.5 text-xs text-slate-500 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-6 w-full sm:w-auto justify-between sm:justify-start">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Security Clearance</span>
+            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <Sparkles size={14} className="text-amber-500 shrink-0" />
+              <span>Full System Access</span>
             </span>
           </div>
         </div>
@@ -201,45 +263,55 @@ export const SuperAdminProfile: React.FC = () => {
 
       {/* ─── Two-Column Layout ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols) ── Edit Details & Password */}
+        {/* Left Column (2 Cols) ── Personal Details & Password */}
         <div className="lg:col-span-2 space-y-6">
           {/* Personal Information Form */}
-          <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
-            <div className="flex items-center gap-2.5 pb-4 border-b border-gray-100 dark:border-gray-700/80 mb-5">
-              <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
-                <User size={18} />
+          <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#040975]/10 text-[#040975]">
+                <User size={18} className="shrink-0" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Personal & Contact Details</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Manage your name, contact phone, and login identifier.</p>
+                <p className="text-xs text-slate-500">Manage your name, contact phone number, and platform account details.</p>
               </div>
             </div>
 
-            <form onSubmit={handleProfileSubmit} className="space-y-4">
+            <form onSubmit={handleProfileSubmit} className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Full Name <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="relative flex items-center">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <User size={16} className="shrink-0" />
+                    </div>
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter full name"
+                      onKeyDown={handleNameKeyDown}
+                      onChange={handleNameChange}
+                      onPaste={handleNamePaste}
+                      onBlur={() => validateName(name)}
+                      placeholder="Enter full name (letters only)"
                       required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className={`block w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border ${
+                        nameError ? "border-rose-500 ring-2 ring-rose-500/20" : "border-slate-200"
+                      } bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#040975]/20 focus:border-[#040975] outline-none transition`}
                     />
                   </div>
+                  {nameError && <p className="text-xs text-rose-500 mt-1 font-medium">{nameError}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Phone Number
                   </label>
-                  <div className="relative">
-                    <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="relative flex items-center">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Phone size={16} className="shrink-0" />
+                    </div>
                     <input
                       type="tel"
                       maxLength={10}
@@ -251,9 +323,9 @@ export const SuperAdminProfile: React.FC = () => {
                       }}
                       onBlur={() => validatePhone(phone)}
                       placeholder="10-digit mobile number"
-                      className={`w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border ${
-                        phoneError ? "border-rose-500 ring-1 ring-rose-500" : "border-gray-300 dark:border-slate-700"
-                      } bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition`}
+                      className={`block w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border ${
+                        phoneError ? "border-rose-500 ring-2 ring-rose-500/20" : "border-slate-200"
+                      } bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#040975]/20 focus:border-[#040975] outline-none transition`}
                     />
                   </div>
                   {phoneError && <p className="text-xs text-rose-500 mt-1 font-medium">{phoneError}</p>}
@@ -261,85 +333,101 @@ export const SuperAdminProfile: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Email Address
                 </label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="relative flex items-center">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail size={16} className="shrink-0" />
+                  </div>
                   <input
                     type="email"
                     value={admin?.email || ""}
                     disabled
-                    className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 cursor-not-allowed outline-none"
+                    className="block w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed outline-none select-none font-medium"
                   />
-                  <Lock size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock size={15} className="shrink-0" />
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Platform staff email is locked to system login credentials.</p>
+                <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
+                  <Lock size={12} className="text-slate-400 shrink-0" />
+                  <span>Platform staff email is locked to system login credentials.</span>
+                </p>
               </div>
 
-              <div className="pt-3 flex justify-end">
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+                <span className="text-xs text-slate-400">Keep your details updated for system notifications.</span>
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 shadow-md transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#040975] hover:bg-[#232894] text-white font-bold text-xs px-5 py-2.5 shadow-sm transition disabled:opacity-50 cursor-pointer"
                 >
-                  <Save size={15} />
-                  <span>{savingProfile ? "Saving..." : "Save Details"}</span>
+                  <Save size={15} className="shrink-0" />
+                  <span className="leading-none">{savingProfile ? "Saving..." : "Save Details"}</span>
                 </button>
               </div>
             </form>
           </div>
 
           {/* Change Password Form */}
-          <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
-            <div className="flex items-center gap-2.5 pb-4 border-b border-gray-100 dark:border-gray-700/80 mb-5">
-              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
-                <KeyRound size={18} />
+          <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                <KeyRound size={18} className="shrink-0" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Security & Password</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Update your account password regularly to ensure system protection.</p>
+                <p className="text-xs text-slate-500">Update your account password regularly to ensure platform protection.</p>
               </div>
             </div>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <form onSubmit={handlePasswordSubmit} className="space-y-5">
               {passwordError && (
-                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold">
-                  {passwordError}
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <Shield size={14} className="text-rose-500 shrink-0" />
+                  <span>{passwordError}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Current Password <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="relative flex items-center">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock size={16} className="shrink-0" />
+                  </div>
                   <input
                     type={showCurrentPass ? "text" : "password"}
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder="Enter current password"
                     required
-                    className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    className="block w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#040975]/20 focus:border-[#040975] outline-none transition"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPass(!showCurrentPass)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showCurrentPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
+                  <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPass(!showCurrentPass)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition flex items-center justify-center cursor-pointer"
+                      aria-label={showCurrentPass ? "Hide password" : "Show password"}
+                    >
+                      {showCurrentPass ? <EyeOff size={16} className="shrink-0" /> : <Eye size={16} className="shrink-0" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     New Password <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="relative flex items-center">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock size={16} className="shrink-0" />
+                    </div>
                     <input
                       type={showNewPass ? "text" : "password"}
                       value={newPassword}
@@ -347,24 +435,29 @@ export const SuperAdminProfile: React.FC = () => {
                       placeholder="Min 8 characters"
                       required
                       minLength={8}
-                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className="block w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#040975]/20 focus:border-[#040975] outline-none transition"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPass(!showNewPass)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
+                    <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPass(!showNewPass)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition flex items-center justify-center cursor-pointer"
+                        aria-label={showNewPass ? "Hide password" : "Show password"}
+                      >
+                        {showNewPass ? <EyeOff size={16} className="shrink-0" /> : <Eye size={16} className="shrink-0" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Confirm New Password <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="relative flex items-center">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock size={16} className="shrink-0" />
+                    </div>
                     <input
                       type={showConfirmPass ? "text" : "password"}
                       value={confirmPassword}
@@ -372,27 +465,36 @@ export const SuperAdminProfile: React.FC = () => {
                       placeholder="Re-enter new password"
                       required
                       minLength={8}
-                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className="block w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#040975]/20 focus:border-[#040975] outline-none transition"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPass(!showConfirmPass)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showConfirmPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
+                    <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPass(!showConfirmPass)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition flex items-center justify-center cursor-pointer"
+                        aria-label={showConfirmPass ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPass ? <EyeOff size={16} className="shrink-0" /> : <Eye size={16} className="shrink-0" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end">
+              <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+                <Shield size={14} className="text-slate-400 shrink-0" />
+                <span>Password must be at least 8 characters long and match confirmation.</span>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+                <span className="text-xs text-slate-400">You will stay signed in on this current browser session.</span>
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-5 py-2.5 shadow-md transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#040975] hover:bg-[#232894] text-white font-bold text-xs px-5 py-2.5 shadow-sm transition disabled:opacity-50 cursor-pointer"
                 >
-                  <KeyRound size={15} />
-                  <span>{savingPassword ? "Updating..." : "Update Password"}</span>
+                  <KeyRound size={15} className="shrink-0" />
+                  <span className="leading-none">{savingPassword ? "Updating..." : "Update Password"}</span>
                 </button>
               </div>
             </form>
@@ -402,40 +504,42 @@ export const SuperAdminProfile: React.FC = () => {
         {/* Right Column (1 Col) ── Account & Privileges Info */}
         <div className="space-y-6">
           {/* Account Overview */}
-          <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
-            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100 dark:border-gray-700/80 flex items-center gap-2">
-              <Shield size={16} className="text-indigo-600" />
-              Role & Status
+          <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+              <Shield size={16} className="text-[#040975] shrink-0" />
+              <span>Role & Status</span>
             </h4>
 
             <div className="space-y-3.5 text-xs">
-              <div className="flex items-center justify-between py-1 border-b border-gray-100/60 dark:border-gray-700/60">
-                <span className="text-gray-500">Assigned Role</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{roleTitle}</span>
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Assigned Role</span>
+                <span className="font-bold text-slate-900">{roleTitle}</span>
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-gray-100/60 dark:border-gray-700/60">
-                <span className="text-gray-500">Ownership</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Ownership</span>
+                <span className="font-semibold text-[#040975]">
                   {admin?.is_platform_owner ? "Platform Owner" : "Delegated Staff"}
                 </span>
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-gray-100/60 dark:border-gray-700/60">
-                <span className="text-gray-500">Status</span>
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Status</span>
                 <span className="font-bold text-emerald-600 uppercase">{admin?.status || "Active"}</span>
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-gray-100/60 dark:border-gray-700/60">
-                <span className="text-gray-500 flex items-center gap-1">
-                  <Calendar size={13} /> Created Date
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Calendar size={13} className="shrink-0" />
+                  <span>Created Date</span>
                 </span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-700">
                   {admin?.created_at ? new Date(admin.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "System Default"}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1">
-                <span className="text-gray-500 flex items-center gap-1">
-                  <Clock size={13} /> Last Updated
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Clock size={13} className="shrink-0" />
+                  <span>Last Updated</span>
                 </span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-700">
                   {admin?.updated_at ? new Date(admin.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recent"}
                 </span>
               </div>
@@ -443,36 +547,36 @@ export const SuperAdminProfile: React.FC = () => {
           </div>
 
           {/* Platform Privileges */}
-          <div className="rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-gray-700/80">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
-                <Sparkles size={16} className="text-amber-500" />
-                Privileges
+          <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles size={16} className="text-amber-500 shrink-0" />
+                <span>Privileges</span>
               </h4>
-              <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full">
+              <span className="text-[11px] font-bold text-[#040975] bg-[#040975]/10 px-2.5 py-0.5 rounded-full">
                 {admin?.is_platform_owner ? "All 48" : permissionsList.length} Active
               </span>
             </div>
 
             {admin?.is_platform_owner ? (
-              <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-200">
-                <p className="font-bold flex items-center gap-1.5">
-                  <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400" />
-                  Full Administrative Privileges
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
+                <p className="font-bold text-slate-900 flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <span>Full Administrative Privileges</span>
                 </p>
-                <p className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                <p className="mt-1.5 text-[11px] text-slate-500 leading-relaxed">
                   As Platform Owner, your account possesses unrestricted view, create, edit, and delete permissions across all multi-tenant SaaS modules.
                 </p>
               </div>
             ) : (
               <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
                 {permissionsList.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-3 text-center">No explicit permissions assigned</p>
+                  <p className="text-xs text-slate-400 py-3 text-center">No explicit permissions assigned</p>
                 ) : (
                   permissionsList.map((perm) => (
                     <div
                       key={perm}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-gray-100 dark:border-gray-700/60 text-[11px] font-mono text-slate-700 dark:text-slate-300"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70 text-[11px] font-mono text-slate-700"
                     >
                       {perm}
                     </div>

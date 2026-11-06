@@ -35,51 +35,15 @@ const EditOrganization = () => {
 
   // Address fields
   const [street, setStreet] = useState("");
-  const [stateId, setStateId] = useState<number | "">("");
-  const [cityId, setCityId] = useState<number | "">("");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("India");
   const [addressType, setAddressType] = useState("Registered Office");
 
-  const [states, setStates] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
-  const [loadingCities, setLoadingCities] = useState(false);
   const [clientValidationError, setClientValidationError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"basic" | "address" | "legal" | "contact" | "leadership">("basic");
-  
-  // Load States on mount
-  useEffect(() => {
-    adminApi
-      .get("/admin/states")
-      .then((res) => {
-        if (res.data && res.data.success) {
-          setStates(res.data.data || []);
-        }
-      })
-      .catch((err) => console.error("Error fetching states:", err));
-  }, []);
-
-  // Load Cities when stateId changes
-  useEffect(() => {
-    if (stateId) {
-      setLoadingCities(true);
-      adminApi
-        .get(`/admin/cities?state_id=${stateId}`)
-        .then((res) => {
-          if (res.data && res.data.success) {
-            setCities(res.data.data || []);
-          }
-        })
-        .catch((err) => {
-          console.error("Error fetching cities:", err);
-          setCities([]);
-        })
-        .finally(() => setLoadingCities(false));
-    } else {
-      setCities([]);
-    }
-  }, [stateId]);
 
   // Helper to normalize dates
   const normalizeDate = (val: string | undefined | null): string => {
@@ -125,12 +89,8 @@ const EditOrganization = () => {
 
         // Address details
         setStreet(org.street || org.address || "");
-        if (org.state_id) {
-          setStateId(Number(org.state_id));
-        }
-        if (org.city_id) {
-          setCityId(Number(org.city_id));
-        }
+        setState(org.state || org.state_name || "");
+        setCity(org.city || org.city_name || "");
         setPostalCode(org.postal_code || org.pincode || "");
         setCountry(org.country || "India");
         setAddressType(org.address_type || "Registered Office");
@@ -291,8 +251,8 @@ const EditOrganization = () => {
       subscription_expiry_date: subscriptionExpiryDate || null,
       street: street.trim() || null,
       address: street.trim() || null,
-      state_id: stateId || null,
-      city_id: cityId || null,
+      state: state.trim() || null,
+      city: city.trim() || null,
       postal_code: postalCode.trim() || null,
       pincode: postalCode.trim() || null,
       country: country.trim() || "India",
@@ -552,44 +512,28 @@ const EditOrganization = () => {
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
                   State
                 </label>
-                <select
+                <input
+                  type="text"
                   className="form-input text-xs w-full"
-                  value={stateId}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : "";
-                    setStateId(val);
-                  }}
+                  placeholder="State"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
                   disabled={modalLoading}
-                >
-                  <option value="">Select State</option>
-                  {states.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
                   City
                 </label>
-                <select
+                <input
+                  type="text"
                   className="form-input text-xs w-full"
-                  value={cityId}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : "";
-                    setCityId(val);
-                  }}
-                  disabled={modalLoading || !stateId || loadingCities}
-                >
-                  <option value="">{loadingCities ? "Loading cities..." : !stateId ? "Select state first" : "Select City"}</option>
-                  {cities.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.city || c.city_name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="City"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  disabled={modalLoading}
+                />
               </div>
 
               <div>
@@ -655,7 +599,7 @@ const EditOrganization = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
-                  Registration Number <span className="text-red-500">*</span>
+                  Registration Number
                 </label>
                 <input
                   type="text"
@@ -666,7 +610,6 @@ const EditOrganization = () => {
                     const cleanVal = e.target.value.replace(/[^a-zA-Z0-9-]/g, "").toUpperCase();
                     setRegistrationNo(cleanVal);
                   }}
-                  required
                   disabled={modalLoading}
                 />
               </div>

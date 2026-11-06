@@ -75,6 +75,152 @@ const SuperAdminPayments: React.FC = () => {
 
   // Invoice Modal State
   const [selectedInvoice, setSelectedInvoice] = useState<PaymentRecord | null>(null);
+  // Record Cash / Online Payment Modal State
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [recordForm, setRecordForm] = useState({
+    organization_id: "",
+    plan_name: "Starter",
+    currency: "INR",
+    amount: 9999,
+    discount_amount: 0,
+    payment_method: "Cash",
+    reference: "",
+    notes: "",
+    paid_at: new Date().toISOString().split("T")[0],
+  });
+  const [recordingPayment, setRecordingPayment] = useState(false);
+
+  const handlePlanChange = (plan: string, curr: string = recordForm.currency) => {
+    let amt = 9999;
+    const isUsd = curr === "USD";
+    if (plan === "Growth") amt = isUsd ? 299 : 19999;
+    else if (plan === "Business") amt = isUsd ? 449 : 29999;
+    else amt = isUsd ? 149 : 9999;
+    setRecordForm(prev => ({ ...prev, plan_name: plan, currency: curr, amount: amt }));
+  };
+
+  const handleCurrencyToggle = (curr: string) => {
+    handlePlanChange(recordForm.plan_name, curr);
+  };
+
+  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recordForm.organization_id) {
+      Swal.fire("Organization Required", "Please select an organization.", "warning");
+      return;
+    }
+    setRecordingPayment(true);
+    try {
+      const res = await adminApi.post("/admin/payments/record", {
+        organization_id: recordForm.organization_id,
+        plan_name: recordForm.plan_name,
+        amount: Number(recordForm.amount),
+        discount_amount: Number(recordForm.discount_amount),
+        currency: recordForm.currency,
+        payment_method: recordForm.payment_method,
+        reference: recordForm.reference || undefined,
+        notes: recordForm.notes || undefined,
+        paid_at: recordForm.paid_at || undefined,
+      });
+
+      if (res.data && res.data.success) {
+        setShowRecordModal(false);
+        Swal.fire({
+          title: "Payment Recorded! 🎉",
+          text: res.data.message || "Payment recorded and subscription activated successfully.",
+          icon: "success",
+          confirmButtonColor: "#10b981",
+        });
+        fetchPayments();
+      } else {
+        throw new Error(res.data?.message || "Failed to record payment");
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err.response?.data?.message || err.message || "Failed to record payment", "error");
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
+
+  const handleMarkPaymentPaid = async (payment: PaymentRecord) => {
+    const isUsd = payment.currency === "USD";
+    const amountFormatted = isUsd ? `${Number(payment.amount).toLocaleString()}` : `₹${Number(payment.amount).toLocaleString()}`;
+
+    const { value: formValues } = await Swal.fire({
+      title: "Mark Payment as Received",
+      width: "520px",
+      html: `
+        <div class="text-left text-xs space-y-3 pt-2 text-slate-700 dark:text-slate-300">
+          <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800 space-y-1">
+            <span class="text-gray-500 dark:text-gray-400 block font-medium">Organization: <strong class="text-slate-800 dark:text-slate-200">${payment.organization_name}</strong></span>
+            <span class="text-sm text-emerald-700 dark:text-emerald-300 font-bold block">Amount: ${amountFormatted}</span>
+            <span class="text-[11px] text-gray-500 block">Plan: ${payment.plan_name} • Invoice: ${payment.invoice_number || `#${payment.id}`}</span>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Received Payment Method *</label>
+            <select id="swal-mark-method" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800">
+              <option value="Cash">Cash</option>
+              <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+              <option value="UPI">UPI</option>
+              <option value="Cheque">Cheque</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Reference / Voucher / UTR #</label>
+            <input id="swal-mark-ref" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800" placeholder="e.g. CASH-REC-${Date.now().toString().slice(-5)}" />
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Notes (Optional)</label>
+            <input id="swal-mark-notes" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800" placeholder="e.g. Paid in full at office" />
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Confirm & Mark as Paid ✓",
+      confirmButtonColor: "#10b981",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const method = (document.getElementById("swal-mark-method") as HTMLSelectElement)?.value || "Cash";
+        const reference = (document.getElementById("swal-mark-ref") as HTMLInputElement)?.value;
+        const notes = (document.getElementById("swal-mark-notes") as HTMLInputElement)?.value;
+        return { method, reference, notes };
+      },
+    });
+
+    if (!formValues) return;
+
+    try {
+      Swal.fire({
+        title: "Updating Payment...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const res = await adminApi.post(`/admin/payments/${payment.id}/mark-paid`, {
+        payment_method: formValues.method,
+        reference: formValues.reference,
+        notes: formValues.notes,
+      });
+
+      if (res.data && res.data.success) {
+        await Swal.fire({
+          icon: "success",
+          title: "Payment Received! 🎉",
+          text: `Payment of ${amountFormatted} for ${payment.organization_name} marked as Paid. Pay Later commitment cleared.`,
+          confirmButtonColor: "#10b981",
+        });
+        fetchPayments();
+      } else {
+        throw new Error(res.data?.message || "Failed to mark payment as paid");
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err.response?.data?.message || err.message || "Failed to update payment", "error");
+    }
+  };
 
   // Webhooks State
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
@@ -358,6 +504,24 @@ const SuperAdminPayments: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          
+          {activeTab === "payments" && (
+            <button
+              type="button"
+              className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition"
+              onClick={() => {
+                setRecordForm(prev => ({
+                  ...prev,
+                  organization_id: selectedOrgId || (organizations[0]?.id ? String(organizations[0].id) : ""),
+                  reference: `REC-${Date.now().toString().slice(-6)}`,
+                }));
+                setShowRecordModal(true);
+              }}
+            >
+              <i className="mgc_wallet_2_line text-sm"></i> Record Payment (Cash / Online)
+            </button>
+          )}
+
           {activeTab === "webhooks" && (
             <button
               type="button"
@@ -600,7 +764,19 @@ const SuperAdminPayments: React.FC = () => {
 
                                 {/* Action: View / Download Invoice */}
                                 <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
-                                  <button
+                                  <div className="flex items-center justify-end gap-1.5">
+  {(p.payment_status?.toLowerCase() === "pending" || p.payment_status?.toLowerCase().includes("pay later") || p.payment_status?.toLowerCase().includes("pay_later")) && (
+    <button
+      type="button"
+      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-600 transition shadow-xs inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5 cursor-pointer"
+      onClick={() => handleMarkPaymentPaid(p)}
+      title="Confirm receipt of payment and mark as Paid"
+    >
+      <i className="mgc_check_circle_line text-base"></i>
+      <span>Mark as Paid</span>
+    </button>
+  )}
+<button
                                     type="button"
                                     className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-600 transition shadow-xs inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5"
                                     onClick={() => setSelectedInvoice(p)}
@@ -609,6 +785,7 @@ const SuperAdminPayments: React.FC = () => {
                                     <i className="mgc_receipt_line text-base"></i>
                                     <span>Invoice</span>
                                   </button>
+</div>
                                 </td>
                               </tr>
                             ))}
@@ -1229,6 +1406,214 @@ const SuperAdminPayments: React.FC = () => {
                 Close Inspector
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Record Payment Modal */}
+      {showRecordModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-fadeIn">
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                  <i className="mgc_wallet_2_line text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Record Payment & Activate Plan</h3>
+                  <p className="text-xs text-gray-500">Record offline cash, UPI, bank transfer or manual online payment</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecordModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4 my-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Select Organization <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={recordForm.organization_id}
+                  onChange={(e) => setRecordForm({ ...recordForm, organization_id: e.target.value })}
+                  className="form-select text-xs w-full rounded-xl py-2"
+                >
+                  <option value="">-- Choose Organization --</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} (ID: #{org.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Subscription Plan <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={recordForm.plan_name}
+                    onChange={(e) => handlePlanChange(e.target.value)}
+                    className="form-select text-xs w-full rounded-xl py-2"
+                  >
+                    <option value="Starter">Starter Plan</option>
+                    <option value="Growth">Growth Plan</option>
+                    <option value="Business">Business Plan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    value={recordForm.currency}
+                    onChange={(e) => handleCurrencyToggle(e.target.value)}
+                    className="form-select text-xs w-full rounded-xl py-2"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Plan Base Amount ({recordForm.currency === "USD" ? "$" : "₹"})
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={recordForm.amount}
+                    onChange={(e) => setRecordForm({ ...recordForm, amount: Number(e.target.value) })}
+                    className="form-input text-xs w-full rounded-xl py-2 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Discount Amount ({recordForm.currency === "USD" ? "$" : "₹"})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={recordForm.discount_amount}
+                    onChange={(e) => setRecordForm({ ...recordForm, discount_amount: Number(e.target.value) })}
+                    className="form-input text-xs w-full rounded-xl py-2 font-mono text-emerald-600"
+                  />
+                </div>
+              </div>
+
+              {/* Live Net Amount Summary */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center text-xs">
+                <div>
+                  <span className="text-gray-500 block">Net Amount to Record:</span>
+                  <strong className="text-slate-800 dark:text-slate-100 text-sm">
+                    {recordForm.currency === "USD" ? "$" : "₹"}
+                    {Math.max(0, recordForm.amount - recordForm.discount_amount).toLocaleString()}
+                  </strong>
+                </div>
+                {recordForm.discount_amount > 0 && (
+                  <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold px-2 py-0.5 rounded text-[11px]">
+                    Discount: -{recordForm.currency === "USD" ? "$" : "₹"}{recordForm.discount_amount.toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Payment Mode <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={recordForm.payment_method}
+                    onChange={(e) => setRecordForm({ ...recordForm, payment_method: e.target.value })}
+                    className="form-select text-xs w-full rounded-xl py-2"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Online">Online / Razorpay</option>
+                    <option value="Bank Transfer">Bank Transfer (NEFT/RTGS)</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Receipt / Transaction Ref #
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CASH-84920"
+                    value={recordForm.reference}
+                    onChange={(e) => setRecordForm({ ...recordForm, reference: e.target.value })}
+                    className="form-input text-xs w-full rounded-xl py-2 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Payment Date
+                </label>
+                <input
+                  type="date"
+                  value={recordForm.paid_at}
+                  onChange={(e) => setRecordForm({ ...recordForm, paid_at: e.target.value })}
+                  className="form-input text-xs w-full rounded-xl py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Notes / Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Paid in cash at office, special approved discount"
+                  value={recordForm.notes}
+                  onChange={(e) => setRecordForm({ ...recordForm, notes: e.target.value })}
+                  className="form-input text-xs w-full rounded-xl py-1.5"
+                ></textarea>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setShowRecordModal(false)}
+                  className="btn border border-gray-300 dark:border-gray-600 text-xs px-4 py-2 rounded-xl font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={recordingPayment}
+                  className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md"
+                >
+                  {recordingPayment ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                      <span>Saving Payment...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="mgc_check_circle_fill text-sm"></i>
+                      <span>Record Payment & Activate</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

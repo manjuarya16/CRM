@@ -59,15 +59,11 @@ const CreateOrganization = () => {
 
   // Address fields
   const [street, setStreet] = useState("");
-  const [stateId, setStateId] = useState<number | "">("");
-  const [cityId, setCityId] = useState<number | "">("");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("India");
   const [addressType, setAddressType] = useState("Registered Office");
-
-  const [states, setStates] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
-  const [loadingCities, setLoadingCities] = useState(false);
 
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -84,39 +80,7 @@ const CreateOrganization = () => {
   const nameRegex = /^[a-zA-Z0-9\s.,'&-]+$/;
   const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-  // Load States on mount
-  useEffect(() => {
-    adminApi
-      .get("/admin/states")
-      .then((res) => {
-        if (res.data && res.data.success) {
-          setStates(res.data.data || []);
-        }
-      })
-      .catch((err) => console.error("Error fetching states:", err));
-  }, []);
-
-  // Load Cities when stateId changes
-  useEffect(() => {
-    if (stateId) {
-      setLoadingCities(true);
-      adminApi
-        .get(`/admin/cities?state_id=${stateId}`)
-        .then((res) => {
-          if (res.data && res.data.success) {
-            setCities(res.data.data || []);
-          }
-        })
-        .catch((err) => {
-          console.error("Error fetching cities:", err);
-          setCities([]);
-        })
-        .finally(() => setLoadingCities(false));
-    } else {
-      setCities([]);
-      setCityId("");
-    }
-  }, [stateId]);
+// States and cities are free text inputs
 
   // Auto-fetch details if coming from Demo Request
   useEffect(() => {
@@ -173,10 +137,140 @@ const CreateOrganization = () => {
     }
   };
 
+  const TABS: Array<"basic" | "admin" | "address" | "legal" | "contact"> = [
+    "basic",
+    "admin",
+    "address",
+    "legal",
+    "contact",
+  ];
+
+  const validateTab = (tab: "basic" | "admin" | "address" | "legal" | "contact"): boolean => {
+    const tabErrors: Record<string, string> = {};
+
+    if (tab === "basic") {
+      if (!orgName.trim()) {
+        tabErrors.orgName = "Organization name is required.";
+      } else if (orgName.trim().length < 2) {
+        tabErrors.orgName = "Organization name must be at least 2 characters.";
+      } else if (!nameRegex.test(orgName.trim())) {
+        tabErrors.orgName = "Organization name contains invalid special characters.";
+      }
+
+      if (orgSlug.trim()) {
+        if (!slugRegex.test(orgSlug.trim())) {
+          tabErrors.orgSlug = "Slug must be lowercase letters, numbers, and single hyphens (e.g. green-earth).";
+        } else if (orgSlug.trim().length > 100) {
+          tabErrors.orgSlug = "Slug cannot exceed 100 characters.";
+        }
+      }
+
+      if (!ngoType) {
+        tabErrors.ngoType = "Organization type is required.";
+      }
+    } else if (tab === "admin") {
+      if (!adminName.trim()) {
+        tabErrors.adminName = "Admin user name is required.";
+      } else if (adminName.trim().length < 2) {
+        tabErrors.adminName = "Admin name must be at least 2 characters.";
+      } else if (!nameRegex.test(adminName.trim())) {
+        tabErrors.adminName = "Admin name contains invalid special characters.";
+      }
+
+      if (!adminEmail.trim()) {
+        tabErrors.adminEmail = "Admin user email is required.";
+      } else if (!emailRegex.test(adminEmail.trim())) {
+        tabErrors.adminEmail = "Please enter a valid admin email address.";
+      }
+
+      if (!adminPassword) {
+        tabErrors.adminPassword = "Admin password is required.";
+      } else if (adminPassword.length < 6) {
+        tabErrors.adminPassword = "Password must be at least 6 characters.";
+      } else if (adminPassword.length > 50) {
+        tabErrors.adminPassword = "Password cannot exceed 50 characters.";
+      }
+
+      if (subscriptionStartDate && subscriptionExpiryDate) {
+        if (new Date(subscriptionExpiryDate) < new Date(subscriptionStartDate)) {
+          tabErrors.subscriptionExpiryDate = "Expiry date cannot be earlier than start date.";
+        }
+      }
+    } else if (tab === "address") {
+      if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) {
+        tabErrors.postalCode = "Please enter a valid 6-digit postal / PIN code.";
+      }
+    } else if (tab === "legal") {
+      if (registrationNo.trim() && !/^[A-Za-z0-9-]+$/.test(registrationNo.trim())) {
+        tabErrors.registrationNo = "Registration number can only contain letters, digits, and hyphens (-).";
+      }
+    } else if (tab === "contact") {
+      if (orgEmail.trim() && !emailRegex.test(orgEmail.trim())) {
+        tabErrors.orgEmail = "Please enter a valid email address.";
+      }
+      if (orgPhone.trim() && isInvalidPhone(orgPhone.trim())) {
+        tabErrors.orgPhone = "Organization phone must be a valid 10-digit number starting with 6, 7, 8, or 9 (cannot be all identical digits).";
+      }
+      if (websiteUrl.trim()) {
+        try {
+          const urlToCheck = websiteUrl.startsWith("http://") || websiteUrl.startsWith("https://")
+            ? websiteUrl
+            : `https://${websiteUrl}`;
+          new URL(urlToCheck);
+        } catch (_) {
+          tabErrors.websiteUrl = "Please enter a valid website URL.";
+        }
+      }
+      if (ceoName.trim() && !nameRegex.test(ceoName.trim())) {
+        tabErrors.ceoName = "CEO name contains invalid special characters.";
+      }
+      if (ceoContact.trim() && isInvalidPhone(ceoContact.trim())) {
+        tabErrors.ceoContact = "Please enter a valid 10-digit phone number for CEO starting with 6, 7, 8, or 9.";
+      }
+      if (chairpersonName.trim() && !nameRegex.test(chairpersonName.trim())) {
+        tabErrors.chairpersonName = "Chairperson name contains invalid special characters.";
+      }
+      if (chairpersonContact.trim() && isInvalidPhone(chairpersonContact.trim())) {
+        tabErrors.chairpersonContact = "Please enter a valid 10-digit phone number for Chairperson starting with 6, 7, 8, or 9.";
+      }
+    }
+
+    if (Object.keys(tabErrors).length > 0) {
+      setErrors((prev) => ({ ...prev, ...tabErrors }));
+      const firstError = Object.values(tabErrors)[0];
+      Swal.fire({
+        icon: "warning",
+        title: "Please complete required fields",
+        text: firstError,
+        confirmButtonColor: "#040975",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSaveAndNext = () => {
+    if (!validateTab(activeTab)) {
+      return;
+    }
+    const currentIndex = TABS.indexOf(activeTab);
+    if (currentIndex < TABS.length - 1) {
+      setActiveTab(TABS[currentIndex + 1]);
+    }
+  };
+
+  const handlePrevious = () => {
+    const currentIndex = TABS.indexOf(activeTab);
+    if (currentIndex > 0) {
+      setActiveTab(TABS[currentIndex - 1]);
+    }
+  };
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    // 1. Basic Info
+    // 1. Basic Info (Compulsory)
     if (!orgName.trim()) {
       newErrors.orgName = "Organization name is required.";
     } else if (orgName.trim().length < 2) {
@@ -198,14 +292,40 @@ const CreateOrganization = () => {
       newErrors.ngoType = "Organization type is required.";
     }
 
-    // 2. Legal
-    if (!registrationNo.trim()) {
-      newErrors.registrationNo = "Registration number is required.";
-    } else if (!/^[A-Za-z0-9-]+$/.test(registrationNo.trim())) {
+    // 2. Admin Info (Compulsory)
+    if (!adminName.trim()) {
+      newErrors.adminName = "Admin user name is required.";
+    } else if (adminName.trim().length < 2) {
+      newErrors.adminName = "Admin name must be at least 2 characters.";
+    } else if (!nameRegex.test(adminName.trim())) {
+      newErrors.adminName = "Admin name contains invalid special characters.";
+    }
+
+    if (!adminEmail.trim()) {
+      newErrors.adminEmail = "Admin user email is required.";
+    } else if (!emailRegex.test(adminEmail.trim())) {
+      newErrors.adminEmail = "Please enter a valid admin email address.";
+    }
+
+    if (!adminPassword) {
+      newErrors.adminPassword = "Admin password is required.";
+    } else if (adminPassword.length < 6) {
+      newErrors.adminPassword = "Password must be at least 6 characters.";
+    } else if (adminPassword.length > 50) {
+      newErrors.adminPassword = "Password cannot exceed 50 characters.";
+    }
+
+    // 3. Optional Address format check
+    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) {
+      newErrors.postalCode = "Please enter a valid 6-digit postal / PIN code.";
+    }
+
+    // 4. Optional Legal format check
+    if (registrationNo.trim() && !/^[A-Za-z0-9-]+$/.test(registrationNo.trim())) {
       newErrors.registrationNo = "Registration number can only contain letters, digits, and hyphens (-).";
     }
 
-    // 3. Contact
+    // 5. Optional Contact format checks
     if (orgEmail.trim() && !emailRegex.test(orgEmail.trim())) {
       newErrors.orgEmail = "Please enter a valid email address.";
     }
@@ -239,39 +359,11 @@ const CreateOrganization = () => {
       newErrors.chairpersonContact = "Please enter a valid 10-digit phone number for Chairperson starting with 6, 7, 8, or 9.";
     }
 
-    // 4. Address validation
-    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) {
-      newErrors.postalCode = "Please enter a valid 6-digit postal / PIN code.";
-    }
-
-    // 5. Dates
+    // 6. Dates
     if (subscriptionStartDate && subscriptionExpiryDate) {
       if (new Date(subscriptionExpiryDate) < new Date(subscriptionStartDate)) {
         newErrors.subscriptionExpiryDate = "Expiry date cannot be earlier than start date.";
       }
-    }
-
-    // 6. Admin Info
-    if (!adminName.trim()) {
-      newErrors.adminName = "Admin user name is required.";
-    } else if (adminName.trim().length < 2) {
-      newErrors.adminName = "Admin name must be at least 2 characters.";
-    } else if (!nameRegex.test(adminName.trim())) {
-      newErrors.adminName = "Admin name contains invalid special characters.";
-    }
-
-    if (!adminEmail.trim()) {
-      newErrors.adminEmail = "Admin user email is required.";
-    } else if (!emailRegex.test(adminEmail.trim())) {
-      newErrors.adminEmail = "Please enter a valid admin email address.";
-    }
-
-    if (!adminPassword) {
-      newErrors.adminPassword = "Admin password is required.";
-    } else if (adminPassword.length < 6) {
-      newErrors.adminPassword = "Password must be at least 6 characters.";
-    } else if (adminPassword.length > 50) {
-      newErrors.adminPassword = "Password cannot exceed 50 characters.";
     }
 
     setErrors(newErrors);
@@ -290,9 +382,9 @@ const CreateOrganization = () => {
       const firstError = Object.values(newErrors)[0];
       Swal.fire({
         icon: "warning",
-        title: "Validation Error",
+        title: "Required Information Missing",
         text: firstError,
-        confirmButtonColor: "#4f46e5",
+        confirmButtonColor: "#040975",
       });
       return false;
     }
@@ -333,8 +425,8 @@ const CreateOrganization = () => {
       subscription_expiry_date: subscriptionExpiryDate || null,
       street: street.trim() || null,
       address: street.trim() || null,
-      state_id: stateId || null,
-      city_id: cityId || null,
+      state: state.trim() || null,
+      city: city.trim() || null,
       postal_code: postalCode.trim() || null,
       pincode: postalCode.trim() || null,
       country: country.trim() || "India",
@@ -782,44 +874,28 @@ const CreateOrganization = () => {
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
                   State
                 </label>
-                <select
+                <input
+                  type="text"
                   className="form-input text-xs w-full"
-                  value={stateId}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : "";
-                    setStateId(val);
-                  }}
+                  placeholder="State"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
                   disabled={modalLoading}
-                >
-                  <option value="">Select State</option>
-                  {states.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
                   City
                 </label>
-                <select
+                <input
+                  type="text"
                   className="form-input text-xs w-full"
-                  value={cityId}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : "";
-                    setCityId(val);
-                  }}
-                  disabled={modalLoading || !stateId || loadingCities}
-                >
-                  <option value="">{loadingCities ? "Loading cities..." : !stateId ? "Select state first" : "Select City"}</option>
-                  {cities.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.city || c.city_name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="City"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  disabled={modalLoading}
+                />
               </div>
 
               <div>
@@ -887,7 +963,7 @@ const CreateOrganization = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
-                  Registration Number <span className="text-red-500">*</span>
+                  Registration Number
                 </label>
                 <input
                   type="text"
@@ -1116,12 +1192,8 @@ const CreateOrganization = () => {
               {activeTab !== "basic" && (
                 <button
                   type="button"
-                  className="btn btn-sm text-xs border border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition flex items-center gap-1"
-                  onClick={() => {
-                    if (activeTab === "contact") setActiveTab("legal");
-                    else if (activeTab === "legal") setActiveTab("admin");
-                    else if (activeTab === "admin") setActiveTab("basic");
-                  }}
+                  className="btn btn-sm text-xs border border-gray-300 dark:border-gray-600 px-3.5 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition flex items-center gap-1.5 font-medium cursor-pointer"
+                  onClick={handlePrevious}
                 >
                   <i className="mgc_arrow_left_line"></i> Previous
                 </button>
@@ -1129,14 +1201,11 @@ const CreateOrganization = () => {
               {activeTab !== "contact" && (
                 <button
                   type="button"
-                  className="btn btn-sm text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition flex items-center gap-1 font-semibold"
-                  onClick={() => {
-                    if (activeTab === "basic") setActiveTab("admin");
-                    else if (activeTab === "admin") setActiveTab("legal");
-                    else if (activeTab === "legal") setActiveTab("contact");
-                  }}
+                  className="btn btn-sm text-xs bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white dark:bg-primary/20 dark:hover:bg-primary px-4 py-2 rounded-xl transition flex items-center gap-1.5 font-bold cursor-pointer shadow-xs"
+                  onClick={handleSaveAndNext}
                 >
-                  Next <i className="mgc_arrow_right_line"></i>
+                  <span>Save & Next</span>
+                  <i className="mgc_arrow_right_line"></i>
                 </button>
               )}
             </div>

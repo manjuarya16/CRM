@@ -8,6 +8,7 @@ import SuperAdminDomains from "@/pages/admin/Domains";
 import SuperAdminPayments from "@/pages/admin/Payments";
 import SuperAdminOrganizationCreate from "@/pages/admin/CreateOrganization";
 import SuperAdminOrganizationEdit from "@/pages/admin/EditOrganization";
+import SuperAdminOrganizationView from "@/pages/admin/ViewOrganization";
 import SuperAdminModulePage from "@/pages/SuperAdmin/ModulePage.tsx";
 import NotificationDropdown from "@/pages/SuperAdmin/NotificationDropdown";
 import EmailTemplatesPage from "@/pages/SuperAdmin/EmailTemplatesPage";
@@ -124,6 +125,7 @@ const SuperAdminPortal: React.FC = () => {
   const breadcrumbTrail = useMemo(() => {
     const isOrgCreate = (activeSection === "organizations" || activeSection === "domains") && subSection === "create";
     const isOrgEdit = (activeSection === "organizations" || activeSection === "domains") && (subSection === "edit" || thirdSegment === "edit");
+    const isOrgView = (activeSection === "organizations" || activeSection === "domains") && (subSection === "view" || thirdSegment === "view");
 
     const trail: Array<{ label: string; path?: string; active?: boolean }> = [
       { label: "Super Admin", path: getMenuItemPath("dashboard") }
@@ -134,6 +136,9 @@ const SuperAdminPortal: React.FC = () => {
     } else if (isOrgCreate) {
       trail.push({ label: activeSection === "domains" ? "Domains & Subdomains" : "Organizations", path: getMenuItemPath(activeSection) });
       trail.push({ label: "Provision New Domain", active: true });
+    } else if (isOrgView) {
+      trail.push({ label: activeSection === "domains" ? "Domains & Subdomains" : "Organizations", path: getMenuItemPath(activeSection) });
+      trail.push({ label: "Organization Overview", active: true });
     } else if (isOrgEdit) {
       trail.push({ label: activeSection === "domains" ? "Domains & Subdomains" : "Organizations", path: getMenuItemPath(activeSection) });
       trail.push({ label: "Edit Organization", active: true });
@@ -218,7 +223,7 @@ const SuperAdminPortal: React.FC = () => {
   useEffect(() => {
     if (profileLoading || profileError || accessibleMenuItems.length === 0) return;
     if (section === "profile") return;
-    if ((activeSection === "organizations" || activeSection === "domains") && (subSection === "create" || subSection === "edit" || thirdSegment === "edit")) return;
+    if ((activeSection === "organizations" || activeSection === "domains") && (subSection === "create" || subSection === "edit" || thirdSegment === "edit" || subSection === "view" || thirdSegment === "view")) return;
     if (!activeItem || !hasPermission(activeItem.permission)) {
       const next = accessibleMenuItems[0];
       navigate(getMenuItemPath(next.key), { replace: true });
@@ -432,6 +437,10 @@ const SuperAdminPortal: React.FC = () => {
         ) : (activeSection === "organizations" || activeSection === "domains") && subSection === "create" ? (
           <div className="p-4 sm:p-6">
             <SuperAdminOrganizationCreate />
+          </div>
+        ) : (activeSection === "organizations" || activeSection === "domains") && (subSection === "view" || thirdSegment === "view") ? (
+          <div className="p-4 sm:p-6">
+            <SuperAdminOrganizationView />
           </div>
         ) : (activeSection === "organizations" || activeSection === "domains") && (subSection === "edit" || thirdSegment === "edit") ? (
           <div className="p-4 sm:p-6">
