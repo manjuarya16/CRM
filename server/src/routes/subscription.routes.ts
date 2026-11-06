@@ -674,7 +674,17 @@ router.post('/public-verify-payment', handler(async (req, res) => {
 
     if (targetAmount > currentPlanPrice) {
       isUpgrade = true;
-      finalPayAmount = targetAmount - currentPlanPrice;
+      const effectiveStartDate = existingSub?.starts_at || tenant.settings?.subscription_start_date || tenant.created_at || new Date();
+      const prorated = calculateProratedUpgrade({
+        currentAmount: currentPlanPrice,
+        targetAmount,
+        startDate: effectiveStartDate,
+        upgradeDate: new Date(),
+        currency: isUsd ? 'USD' : 'INR',
+        currentPlanName,
+        targetPlanName: planName,
+      });
+      finalPayAmount = prorated.payable_upgrade_amount;
     }
   }
 

@@ -1044,7 +1044,7 @@ const PublicPayment: React.FC = () => {
                                 </>
                               ) : isUpgradeEligible ? (
                                 <>
-                                  <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? '$' + getPlanPricing(plan).finalPrice : '₹' + Number(getPlanPricing(plan).finalPrice).toLocaleString()}) →
+                                  <i className="mgc_arrow_up_circle_fill text-base"></i> Upgrade to {plan.name} ({currency === "USD" ? `${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}) →
                                 </>
                               ) : isCurrent ? (
                                 <>
