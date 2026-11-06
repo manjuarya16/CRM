@@ -95,8 +95,10 @@ router.get('/organizations', async (req: Request, res: Response, next: NextFunct
       let paymentStatus = 'Unpaid';
       if (r.latest_pay_status === 'paid') {
         paymentStatus = 'Paid';
-      } else if (r.latest_pay_status === 'pending') {
-        paymentStatus = 'Pending';
+      } else if (r.latest_pay_method === 'pay_later' || settings.pay_later || r.latest_pay_status === 'pending') {
+        paymentStatus = settings.expected_payment_date
+          ? `Pay Later (${new Date(settings.expected_payment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+          : 'Pay Later';
       } else if (r.latest_pay_status === 'failed') {
         paymentStatus = 'Failed';
       } else if (computedStatus === 'Trial' || planCode.includes('trial')) {
@@ -210,6 +212,42 @@ router.get('/organizations/:id', async (req: Request, res: Response, next: NextF
       computedStatus = 'Trial';
     }
 
+    const streetVal =
+      (typeof addr.street === 'string' && addr.street.trim()) ||
+      (typeof settings.street === 'string' && settings.street.trim()) ||
+      (typeof settings.address === 'string' && settings.address.trim()) ||
+      (typeof addr.address === 'string' && addr.address.trim()) ||
+      '';
+
+    let stateName =
+      (typeof addr.state === 'string' && addr.state.trim()) ||
+      (typeof settings.state === 'string' && settings.state.trim()) ||
+      '';
+    if (!stateName && settings.state_id) {
+      try {
+        const stateRes = await pool.query('SELECT name FROM public.country_states WHERE id = $1', [settings.state_id]);
+        if (stateRes.rows[0]?.name) stateName = stateRes.rows[0].name;
+      } catch {
+        // ignore
+      }
+    }
+
+    const cityName =
+      (typeof addr.city === 'string' && addr.city.trim()) ||
+      (typeof settings.city === 'string' && settings.city.trim()) ||
+      '';
+
+    const postalCodeVal =
+      (typeof addr.pincode === 'string' && addr.pincode.trim()) ||
+      (typeof settings.postal_code === 'string' && settings.postal_code.trim()) ||
+      (typeof settings.pincode === 'string' && settings.pincode.trim()) ||
+      '';
+
+    const countryVal =
+      (typeof addr.country === 'string' && addr.country.trim()) ||
+      (typeof settings.country === 'string' && settings.country.trim()) ||
+      'India';
+
     const result = {
       id: profile.id,
       name: profile.name,
@@ -233,13 +271,17 @@ router.get('/organizations/:id', async (req: Request, res: Response, next: NextF
       chairperson_contact: settings.chairperson_contact || '',
       subscription_start_date: settings.subscription_start_date || profile.created_at,
       subscription_expiry_date: settings.subscription_expiry_date || null,
-      street: addr.street || settings.street || '',
-      address: addr.street || settings.address || '',
+      street: streetVal,
+      address: streetVal,
+      city: cityName,
+      city_name: cityName,
+      state: stateName,
+      state_name: stateName,
       state_id: settings.state_id || null,
       city_id: settings.city_id || null,
-      postal_code: addr.pincode || settings.postal_code || '',
-      pincode: addr.pincode || settings.pincode || '',
-      country: addr.country || settings.country || 'India',
+      postal_code: postalCodeVal,
+      pincode: postalCodeVal,
+      country: countryVal,
       address_type: settings.address_type || 'Registered Office',
       admin: profile.admin,
       stats: profile.stats,
@@ -318,6 +360,26 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
       return;
     }
 
+    let cityName = city || '';
+    if (!cityName && city_id) {
+      try {
+        const cityRes = await pool.query('SELECT name FROM public.country_cities WHERE id = $1', [city_id]);
+        if (cityRes.rows[0]) cityName = cityRes.rows[0].name;
+      } catch {
+        // ignore
+      }
+    }
+
+    let stateName = state || '';
+    if (!stateName && state_id) {
+      try {
+        const stateRes = await pool.query('SELECT name FROM public.country_states WHERE id = $1', [state_id]);
+        if (stateRes.rows[0]) stateName = stateRes.rows[0].name;
+      } catch {
+        // ignore
+      }
+    }
+
     const result = await superAdminService.createTenant({
       name,
       slug: effectiveSlug,
@@ -334,8 +396,8 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
       timezone,
       logo_url,
       street: street || address,
-      city,
-      state,
+      city: cityName,
+      state: stateName,
       country,
       pincode: pincode || postal_code,
       address: street || address,
@@ -356,6 +418,8 @@ router.post('/organizations', async (req: Request, res: Response, next: NextFunc
         subscription_expiry_date,
         state_id,
         city_id,
+        state: stateName || state,
+        city: cityName || city,
         address_type,
       };
 
@@ -443,6 +507,26 @@ router.put('/organizations/:id', async (req: Request, res: Response, next: NextF
       country,
     });
 
+    let cityName = (req.body.city as string) || '';
+    if (!cityName && city_id) {
+      try {
+        const cityRes = await pool.query('SELECT name FROM public.country_cities WHERE id = $1', [city_id]);
+        if (cityRes.rows[0]) cityName = cityRes.rows[0].name;
+      } catch {
+        // ignore
+      }
+    }
+
+    let stateName = (req.body.state as string) || '';
+    if (!stateName && state_id) {
+      try {
+        const stateRes = await pool.query('SELECT name FROM public.country_states WHERE id = $1', [state_id]);
+        if (stateRes.rows[0]) stateName = stateRes.rows[0].name;
+      } catch {
+        // ignore
+      }
+    }
+
     // Update custom settings
     const extraSettings = {
       ngo_type,
@@ -457,6 +541,8 @@ router.put('/organizations/:id', async (req: Request, res: Response, next: NextF
       subscription_expiry_date,
       state_id,
       city_id,
+      state: stateName,
+      city: cityName,
       address_type,
     };
 
@@ -888,10 +974,17 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
       discount_amount = 0,
       currency = 'INR',
       payment_method = 'Cash',
+      payment_status,
+      expected_payment_date,
+      custom_expiry_date,
       reference,
       notes,
       paid_at,
     } = req.body;
+
+    const isPayLater = String(payment_method).toLowerCase().includes('pay later') || payment_status === 'pending';
+    const payStatus = isPayLater ? 'pending' : 'paid';
+    const actualPaidAt = isPayLater ? null : (paid_at ? new Date(paid_at) : new Date());
 
     const orgId = Number(organization_id);
     if (!orgId) throw new ApiError(400, 'Organization ID is required');
@@ -944,15 +1037,22 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
       }
     }
 
-    // NEXT RENEWAL date change ONLY if package has ended/expired!
-    // Otherwise, expiry date remains exactly the same as with the old package.
-    const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
-    if (!isPackageEnded && existingExpiry) {
-      targetExpiry = existingExpiry;
+    // Expiry date calculation:
+    // If custom_expiry_date is provided, honor it.
+    // Else if subscription is expired, continue on same yearly cycle (expiry will be same yearly, only payment date differs).
+    // Otherwise 1 year minus 1 day from today.
+    if (custom_expiry_date) {
+      targetExpiry = new Date(custom_expiry_date);
+    } else if (existingExpiry && existingExpiry.getTime() <= Date.now()) {
+      targetExpiry = new Date(existingExpiry);
+      while (targetExpiry.getTime() <= Date.now()) {
+        targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+      }
     } else {
       const now = new Date();
       targetExpiry = new Date(now);
       targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+      targetExpiry.setDate(targetExpiry.getDate() - 1);
     }
 
     const grossAmount = Number(amount) !== undefined && Number(amount) > 0 ? Number(amount) : basePayAmount;
@@ -977,27 +1077,42 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
           SET status = 'active',
               plan = $1,
               settings = jsonb_set(
-                COALESCE(settings, '{}'::jsonb),
-                '{subscription_expiry_date}',
-                to_jsonb($2::text)
+                jsonb_set(
+                  jsonb_set(
+                    COALESCE(settings, '{}'::jsonb),
+                    '{subscription_expiry_date}',
+                    to_jsonb($2::text)
+                  ),
+                  '{pay_later}',
+                  to_jsonb($3::boolean)
+                ),
+                '{expected_payment_date}',
+                to_jsonb($4::text)
               ),
               updated_at = NOW()
-        WHERE id = $3`,
-      [targetMeta.name, targetExpiry.toISOString(), org.id]
+        WHERE id = $5`,
+      [targetMeta.name, targetExpiry.toISOString(), isPayLater, expected_payment_date || '', org.id]
     );
 
     // 2. Update or Insert platform_subscriptions
     let subId: number | string;
-    if (isUpgrade && existingSub?.id) {
+    const subNotes = isPayLater
+      ? `Subscription continued under Pay Later (Payment promised by ${expected_payment_date || 'custom date'}). ${notes || ''}`
+      : isUpgrade
+      ? `Upgraded to ${targetMeta.name} via ${payment_method}`
+      : `Payment recorded by admin via ${payment_method}`;
+
+    if (existingSub?.id) {
       await pool.query(
         `UPDATE public.platform_subscriptions
             SET pricing_tier_id = $1,
                 status = 'active',
+                starts_at = NOW(),
                 ends_at = $2,
                 notes = $3,
                 updated_at = NOW()
           WHERE id = $4`,
-        [tierId, targetExpiry.toISOString(), `Upgraded to ${targetMeta.name} via ${payment_method}`, existingSub.id]
+        [tierId, targetExpiry.toISOString(), subNotes, existingSub.id]
       );
       subId = existingSub.id;
     } else {
@@ -1006,17 +1121,17 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
             tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at
          ) VALUES ($1, $2, 'active', NOW(), $3, TRUE, $4, NOW(), NOW())
          RETURNING id`,
-        [org.id, tierId, targetExpiry.toISOString(), `Payment recorded by admin via ${payment_method}`]
+        [org.id, tierId, targetExpiry.toISOString(), subNotes]
       );
       subId = subRes.rows[0]?.id;
     }
 
     // 3. Insert platform_payments
-    const refStr = reference || `REC-${Date.now().toString().slice(-6)}`;
+    const refStr = reference || (isPayLater ? `PROMISE-${Date.now().toString().slice(-6)}` : `REC-${Date.now().toString().slice(-6)}`);
     const currSym = isUsd ? 'USD' : 'INR';
     const fullNotes = [
-      `Payment recorded by admin for ${targetMeta.name} Plan (${payment_method}).`,
-      isUpgrade ? `Upgrade from ${currentMeta.name}: Deducted current plan credit (-${currSym} ${isUsd ? currentMeta.usd : currentMeta.inr}). Expiry preserved: ${targetExpiry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '',
+      isPayLater ? `[PAY LATER] Promised payment by ${expected_payment_date || 'custom date'} for ${targetMeta.name} Plan.` : `Payment recorded by admin for ${targetMeta.name} Plan (${payment_method}).`,
+      isUpgrade ? `Upgrade from ${currentMeta.name}: Deducted current plan credit (-${currSym} ${isUsd ? currentMeta.usd : currentMeta.inr}). Expiry: ${targetExpiry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '',
       discountVal > 0 ? `Discount: -${currSym} ${discountVal} (Gross: ${currSym} ${grossAmount}).` : '',
       notes || '',
     ].filter(Boolean).join(' ');
@@ -1024,7 +1139,7 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
     const paymentRes = await pool.query(
       `INSERT INTO public.platform_payments
          (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method, reference, notes, paid_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'paid', $6, $7, $8, $9, NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
        RETURNING id`,
       [
         org.id,
@@ -1032,10 +1147,11 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
         tierId,
         amountInSubunits,
         isUsd ? 'USD' : 'INR',
-        payment_method.toLowerCase(),
+        payStatus,
+        isPayLater ? 'pay_later' : payment_method.toLowerCase(),
         refStr,
         fullNotes,
-        paid_at ? new Date(paid_at) : new Date(),
+        actualPaidAt,
       ]
     );
 
@@ -1063,6 +1179,73 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
  * GET /api/admin/webhooks
  * List webhook lifecycle logs
  */
+
+/**
+ * POST /api/admin/payments/:id/mark-paid
+ * Mark a pending or pay_later payment as received/paid
+ */
+router.post('/payments/:id/mark-paid', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const paymentId = Number(req.params.id);
+    if (!paymentId) throw new ApiError(400, 'Payment ID is required');
+
+    const { payment_method = 'Cash', reference, notes } = req.body;
+
+    const payRes = await pool.query(
+      `SELECT p.id, p.tenant_id, p.status, p.amount_cents, p.currency, p.notes, t.name as tenant_name
+         FROM public.platform_payments p
+         JOIN public.saas_tenants t ON t.id = p.tenant_id
+        WHERE p.id = $1`,
+      [paymentId]
+    );
+
+    if (!payRes.rows[0]) throw new ApiError(404, 'Payment record not found');
+    const payment = payRes.rows[0];
+
+    const refStr = reference || `REC-${Date.now().toString().slice(-6)}`;
+    const updateNotes = [payment.notes || '', `[RECEIVED] Paid via ${payment_method} (Ref: ${refStr}). ${notes || ''}`].filter(Boolean).join(' ');
+
+    // 1. Update platform_payments
+    await pool.query(
+      `UPDATE public.platform_payments
+          SET status = 'paid',
+              method = $1,
+              reference = $2,
+              notes = $3,
+              paid_at = NOW(),
+              updated_at = NOW()
+        WHERE id = $4`,
+      [payment_method.toLowerCase(), refStr, updateNotes, paymentId]
+    );
+
+    // 2. Clear pay_later in saas_tenants settings
+    await pool.query(
+      `UPDATE public.saas_tenants
+          SET settings = jsonb_set(
+                COALESCE(settings, '{}'::jsonb),
+                '{pay_later}',
+                'false'::jsonb
+              ),
+              updated_at = NOW()
+        WHERE id = $1`,
+      [payment.tenant_id]
+    );
+
+    res.json({
+      success: true,
+      message: `Payment #${paymentId} marked as paid successfully.`,
+      data: {
+        payment_id: paymentId,
+        tenant_id: payment.tenant_id,
+        tenant_name: payment.tenant_name,
+        status: 'paid',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/webhooks', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, search } = req.query;
@@ -1243,6 +1426,28 @@ router.get('/states', async (_req: Request, res: Response, next: NextFunction) =
   try {
     const { rows } = await pool.query(
       `SELECT id, name, code, country_id FROM public.country_states ORDER BY name ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/cities
+ * Cities for address forms filtered by state_id
+ */
+router.get('/cities', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stateId = Number(req.query.state_id);
+    if (!stateId || isNaN(stateId)) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, name, state_id FROM public.country_cities WHERE state_id = $1 ORDER BY name ASC`,
+      [stateId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {

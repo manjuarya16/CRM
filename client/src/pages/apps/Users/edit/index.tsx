@@ -215,8 +215,8 @@ const UserEdit = () => {
         address_type: user.address_type || "home",
         state_id: user.state_id ? Number(user.state_id) : undefined,
         city_id: user.city_id ? Number(user.city_id) : undefined,
-        state: "",
-        city: "",
+        state: user.state || user.state_name || "",
+        city: user.city || user.city_name || "",
       }));
 
       if (user.profile_img) setProfilePreview(user.profile_img);
@@ -444,7 +444,7 @@ const UserEdit = () => {
     // Trim strings to remove pre/post spaces except `name` to allow typing spaces
     Object.keys(next).forEach((k) => {
       const v = (next as any)[k];
-      if (typeof v === "string" && k !== "name" && k !== "street") (next as any)[k] = v.trim();
+      if (typeof v === "string" && k !== "name" && k !== "street" && k !== "state" && k !== "city") (next as any)[k] = v.trim();
     });
     setFormData(next);
     try {
@@ -829,25 +829,15 @@ return (
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     State
                   </label>
-                  <select
-                    name="state_id"
-                    value={
-                      formData.state_id !== undefined &&
-                      formData.state_id !== null
-                        ? String(formData.state_id)
-                        : ""
-                    }
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state || ""}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600"
-                  >
-                    <option value="">Select a state</option>
-                    {states.map((s: any) => (
-                      <option key={s.id} value={String(s.id)}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {renderFieldErrors("state_id")}
+                    placeholder="State"
+                  />
+                  {renderFieldErrors("state")}
                 </div>
 
                 {/* City */}
@@ -855,30 +845,15 @@ return (
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     City
                   </label>
-                  <select
-                    name="city_id"
-                    value={
-                      formData.city_id !== undefined &&
-                      formData.city_id !== null
-                        ? String(formData.city_id)
-                        : ""
-                    }
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city || ""}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600"
-                  >
-                    <option value="">Select a city</option>
-                    {cities.length === 0 && (
-                      <option value="" disabled>
-                        No cities available
-                      </option>
-                    )}
-                    {cities.map((c: any) => (
-                      <option key={c.id} value={String(c.id)}>
-                        {c.name || c.city || c.id}
-                      </option>
-                    ))}
-                  </select>
-                  {renderFieldErrors("city_id")}
+                    placeholder="City"
+                  />
+                  {renderFieldErrors("city")}
                 </div>
 
                 {/* Postal Code */}

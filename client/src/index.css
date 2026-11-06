@@ -83,7 +83,12 @@ a.bg-blue-600 *,
 .swal2-styled.swal2-confirm *,
 button[type="submit"]:not(.btn-secondary):not(.btn-light):not([data-variant="secondary"]):not([class*="border-gray"]):not([class*="bg-gray"]):not([class*="bg-red"]):not([class*="bg-white"]):not([class*="text-gray"]) * {
   color: #ffffff !important;
-  fill: currentColor !important;
+}
+
+/* Lucide Icon Protection */
+svg.lucide,
+svg.lucide * {
+  fill: none !important;
 }
 
 /* Primary Button Hover */

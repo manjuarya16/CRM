@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import API from "../../config";
+import { calculateProratedUpgrade, ProratedUpgradeInfo } from "@/helpers/proratedUpgrade";
 import Swal from "sweetalert2";
 import { buildTenantUrl } from "@/utils/subdomain";
 
@@ -425,7 +426,7 @@ const PublicPayment: React.FC = () => {
                   </div>
                 </div>
                 <p class="text-[11px] text-gray-500">
-                  ✨ Your active subscription period (valid until <strong>${orgData?.subscription_expiry_date ? new Date(orgData.subscription_expiry_date).toLocaleDateString() : 'N/A'}</strong>) will be upgraded to <strong>${plan.name}</strong> immediately.
+                  ✨ <strong>1-Year Renewal:</strong> Your subscription start date resets to today and validity is renewed for <strong>1 full year</strong> starting today.
                 </p>
               `
                   : `
@@ -896,7 +897,19 @@ const PublicPayment: React.FC = () => {
                       const planPrice = currency === "USD" ? Number(plan.price_usd) : Number(plan.price_inr);
                       const isUpgradeEligible = isOrgActivePaid && !isCurrent && planPrice > currentPlanPrice;
                       const isLowerPlan = isOrgActivePaid && !isCurrent && planPrice < currentPlanPrice;
-                      const upgradeDiffAmount = isUpgradeEligible ? planPrice - currentPlanPrice : 0;
+                      let upgradeProrated: ProratedUpgradeInfo | null = null;
+                      if (isUpgradeEligible) {
+                        upgradeProrated = calculateProratedUpgrade({
+                          currentAmount: currentPlanPrice,
+                          targetAmount: planPrice,
+                          startDate: orgData?.subscription_start_date,
+                          upgradeDate: new Date(),
+                          currency,
+                          currentPlanName: currentPlanObj?.name || orgData?.plan_name || "Current Plan",
+                          targetPlanName: plan.name,
+                        });
+                      }
+                      const upgradeDiffAmount = upgradeProrated ? upgradeProrated.payableUpgradeAmount : 0;
 
                       return (
                         <div
@@ -988,9 +1001,16 @@ const PublicPayment: React.FC = () => {
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-gray-500 font-medium">{plan.trial_days || 14}-day trial</span>
                               {isUpgradeEligible && (
-                                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                                  Upgrade diff: {currency === "USD" ? `$${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}
-                                </span>
+                                <div className="text-right">
+                                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">
+                                    Upgrade diff: {currency === "USD" ? `${upgradeDiffAmount}` : `₹${upgradeDiffAmount.toLocaleString()}`}
+                                  </span>
+                                  {upgradeProrated && (
+                                    <span className="text-[9px] text-gray-400 font-normal block">
+                                      ({upgradeProrated.daysUsed}d used · 1 yr validity)
+                                    </span>
+                                  )}
+                                </div>
                               )}
                               {isLowerPlan && (
                                 <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -1150,8 +1170,19 @@ const PublicPayment: React.FC = () => {
               const isCurrent = orgData?.plan_code === cashModalPlan.code;
               const isUpgrade = isOrgActivePaid && !isCurrent && planPrice > currentPlanPrice;
               const currentPlanName = currentPlanObj?.name || orgData?.plan_name || "Current Plan";
-              const upgradeDiff = isUpgrade ? planPrice - currentPlanPrice : 0;
-              const baseAmount = isUpgrade ? upgradeDiff : planPrice;
+              let cashUpgradeProrated: ProratedUpgradeInfo | null = null;
+              if (isUpgrade) {
+                cashUpgradeProrated = calculateProratedUpgrade({
+                  currentAmount: currentPlanPrice,
+                  targetAmount: planPrice,
+                  startDate: orgData?.subscription_start_date,
+                  upgradeDate: new Date(),
+                  currency,
+                  currentPlanName,
+                  targetPlanName: cashModalPlan.name,
+                });
+              }
+              const baseAmount = isUpgrade && cashUpgradeProrated ? cashUpgradeProrated.payableUpgradeAmount : planPrice;
 
               let discount = 0;
               if (appliedCoupon) {
@@ -1167,36 +1198,44 @@ const PublicPayment: React.FC = () => {
                     <span>{isUpgrade ? "Upgrading Plan To:" : "Plan Selected:"}</span>
                     <strong className="text-slate-900 dark:text-white">{cashModalPlan.name} Plan</strong>
                   </div>
-                  {isUpgrade ? (
+                  {isUpgrade && cashUpgradeProrated ? (
                     <>
                       <div className="flex justify-between text-gray-500">
-                        <span>{cashModalPlan.name} Standard Price:</span>
-                        <span>{currency === "USD" ? '$' + planPrice : '₹' + planPrice.toLocaleString()}</span>
+                        <span>Current Plan ({currentPlanName}):</span>
+                        <span>{currency === "USD" ? "$" + currentPlanPrice : "₹" + currentPlanPrice.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>Days Used ({cashUpgradeProrated.daysUsed} days @ {currency === "USD" ? "$" : "₹"}{cashUpgradeProrated.dailyRate}/day):</span>
+                        <span className="text-red-500">-{currency === "USD" ? "$" + cashUpgradeProrated.usedAmount : "₹" + cashUpgradeProrated.usedAmount.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
-                        <span>{currentPlanName} Credit:</span>
-                        <span>-{currency === "USD" ? '$' + currentPlanPrice : '₹' + currentPlanPrice.toLocaleString()}</span>
+                        <span>Unused Balance Credit:</span>
+                        <span>+{currency === "USD" ? "$" + cashUpgradeProrated.remainingCredit : "₹" + cashUpgradeProrated.remainingCredit.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-500 pt-1 border-t border-emerald-200 dark:border-emerald-800">
+                        <span>{cashModalPlan.name} Standard Price:</span>
+                        <span>{currency === "USD" ? "$" + planPrice : "₹" + planPrice.toLocaleString()}</span>
                       </div>
                     </>
                   ) : (
                     <div className="flex justify-between text-gray-500">
                       <span>Base Amount:</span>
-                      <span>{currency === "USD" ? '$' + planPrice : '₹' + planPrice.toLocaleString()}</span>
+                      <span>{currency === "USD" ? "$" + planPrice : "₹" + planPrice.toLocaleString()}</span>
                     </div>
                   )}
                   {discount > 0 && (
                     <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
                       <span>Discount ({appliedCoupon?.code}):</span>
-                      <span>-{currency === "USD" ? '$' + discount : '₹' + discount.toLocaleString()}</span>
+                      <span>-{currency === "USD" ? "$" + discount : "₹" + discount.toLocaleString()}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-sm text-emerald-800 dark:text-emerald-300 pt-1.5 border-t border-emerald-200 dark:border-emerald-800">
                     <span>{isUpgrade ? "Net Upgrade Cash to Pay:" : "Total Cash Payable:"}</span>
-                    <span>{currency === "USD" ? '$' + finalAmount : '₹' + finalAmount.toLocaleString()}</span>
+                    <span>{currency === "USD" ? "$" + finalAmount : "₹" + finalAmount.toLocaleString()}</span>
                   </div>
                   {isUpgrade && (
-                    <p className="text-[10px] text-gray-500 pt-1">
-                      ✨ Active subscription validity until <strong>{orgData?.subscription_expiry_date ? new Date(orgData.subscription_expiry_date).toLocaleDateString() : 'expiry'}</strong> will be preserved.
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 pt-1">
+                      ✨ <strong>1-Year Renewal:</strong> Upon upgrade, your subscription starts today and extends for 1 full year.
                     </p>
                   )}
                 </div>

@@ -64,9 +64,18 @@ router.put('/me', requireSuperAdmin, async (req, res, next) => {
     const values: any[] = [];
     let paramIndex = 1;
 
-    if (typeof name === 'string' && name.trim()) {
-      updates.push(`name = ${paramIndex++}`);
-      values.push(name.trim());
+    if (typeof name === 'string') {
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        res.status(400).json({ success: false, message: 'Full name is required' });
+        return;
+      }
+      if (!/^[a-zA-Z\s]+$/.test(trimmedName)) {
+        res.status(400).json({ success: false, message: 'Full name cannot contain special characters or numbers. Only letters and spaces are allowed.' });
+        return;
+      }
+      updates.push('name = $' + (paramIndex++));
+      values.push(trimmedName);
     }
 
     if (phone !== undefined) {
@@ -76,7 +85,7 @@ router.put('/me', requireSuperAdmin, async (req, res, next) => {
           res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number starting with 6, 7, 8, or 9' });
           return;
         }
-        updates.push(`phone = ${paramIndex++}`);
+        updates.push('phone = $' + (paramIndex++));
         values.push(digits);
       } else {
         updates.push('phone = NULL');
@@ -103,13 +112,13 @@ router.put('/me', requireSuperAdmin, async (req, res, next) => {
         return;
       }
       const hash = await bcrypt.hash(new_password, 10);
-      updates.push(`password_hash = ${paramIndex++}`);
+      updates.push('password_hash = $' + (paramIndex++));
       values.push(hash);
     }
 
     values.push(admin.id);
     await pool.query(
-      `UPDATE public.saas_super_admins SET ${updates.join(', ')} WHERE id = ${paramIndex}`,
+      'UPDATE public.saas_super_admins SET ' + updates.join(', ') + ' WHERE id = $' + paramIndex,
       values
     );
 
@@ -438,6 +447,25 @@ router.get('/states', requireSuperAdmin, async (_req, res, next) => {
     const { pool } = await import('@/config/db');
     const { rows } = await pool.query(
       `SELECT id, name, code, country_id FROM public.country_states ORDER BY name ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Protected: Country Cities for address forms filtered by state_id
+router.get('/cities', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const stateId = Number(req.query.state_id);
+    if (!stateId || isNaN(stateId)) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const { pool } = await import('@/config/db');
+    const { rows } = await pool.query(
+      `SELECT id, name, state_id FROM public.country_cities WHERE state_id =  ORDER BY name ASC`,
+      [stateId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {

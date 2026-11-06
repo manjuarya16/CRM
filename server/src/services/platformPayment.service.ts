@@ -44,6 +44,104 @@ export const getRazorpayInstance = (): Razorpay => {
 /**
  * Calculate subscription end date given interval and start date
  */
+export interface ProratedUpgradeResult {
+  is_upgrade: boolean;
+  current_plan_name: string;
+  current_plan_amount: number;
+  target_plan_name: string;
+  target_plan_amount: number;
+  subscription_start_date: string;
+  upgrade_date: string;
+  days_used: number;
+  daily_rate: number;
+  used_amount: number;
+  remaining_credit: number;
+  payable_upgrade_amount: number;
+  currency: string;
+  new_start_date: string;
+  new_expiry_date: string;
+}
+
+/**
+ * Prorated Plan Upgrade Calculator:
+ * - Calculates whole days used from subscription start date to upgrade date
+ * - Daily rate = current plan price / 365 days
+ * - Used amount = days used * (current plan price / 365)
+ * - Remaining credit = current plan price - used amount
+ * - Net payable upgrade amount = target plan price - remaining credit
+ * - New subscription validity = 1 year from upgrade date
+ */
+export function calculateProratedUpgrade({
+  currentAmount,
+  targetAmount,
+  startDate,
+  upgradeDate = new Date(),
+  currency = 'INR',
+  currentPlanName = 'Current Plan',
+  targetPlanName = 'Target Plan',
+}: {
+  currentAmount: number;
+  targetAmount: number;
+  startDate: Date | string | null | undefined;
+  upgradeDate?: Date | string;
+  currency?: string;
+  currentPlanName?: string;
+  targetPlanName?: string;
+}): ProratedUpgradeResult {
+  const upDate = upgradeDate ? new Date(upgradeDate) : new Date();
+  const stDate = startDate ? new Date(startDate) : upDate;
+  
+  // Calculate difference in calendar days between subscription start date and upgrade date
+  const stCal = new Date(stDate.getFullYear(), stDate.getMonth(), stDate.getDate());
+  const upCal = new Date(upDate.getFullYear(), upDate.getMonth(), upDate.getDate());
+  const daysUsed = Math.min(365, Math.max(0, Math.round((upCal.getTime() - stCal.getTime()) / (1000 * 60 * 60 * 24))));
+  
+  // Daily rate: ₹Current ÷ 365 days = ₹Per Day
+  const dailyRate = currentAmount > 0 ? Number((currentAmount / 365).toFixed(2)) : 0;
+  
+  // Used amount: days used * daily rate (capped at currentAmount)
+  const usedAmount = Math.min(
+    currentAmount,
+    Number((daysUsed * (currentAmount / 365)).toFixed(2))
+  );
+  
+  // Remaining credit: current amount minus used amount
+  const remainingCredit = Math.max(
+    0,
+    Number((currentAmount - usedAmount).toFixed(2))
+  );
+  
+  // Net payable difference: new plan amount minus remaining credit
+  const payableAmount = Math.max(
+    0,
+    Number((targetAmount - remainingCredit).toFixed(2))
+  );
+
+  // New subscription validity: 1 full year from update date (ends 1 year minus 1 day from start)
+  const newStartDate = new Date(upDate);
+  const newExpiryDate = new Date(upDate);
+  newExpiryDate.setFullYear(newExpiryDate.getFullYear() + 1);
+  newExpiryDate.setDate(newExpiryDate.getDate() - 1);
+
+  return {
+    is_upgrade: targetAmount > currentAmount,
+    current_plan_name: currentPlanName,
+    current_plan_amount: currentAmount,
+    target_plan_name: targetPlanName,
+    target_plan_amount: targetAmount,
+    subscription_start_date: stDate.toISOString(),
+    upgrade_date: upDate.toISOString(),
+    days_used: daysUsed,
+    daily_rate: dailyRate,
+    used_amount: usedAmount,
+    remaining_credit: remainingCredit,
+    payable_upgrade_amount: payableAmount,
+    currency,
+    new_start_date: newStartDate.toISOString(),
+    new_expiry_date: newExpiryDate.toISOString(),
+  };
+}
+
 export const calculateSubscriptionEndDate = (
   interval: string | null | undefined,
   startDate: Date = new Date(),
@@ -57,6 +155,7 @@ export const calculateSubscriptionEndDate = (
   const normalized = (interval || 'monthly').toLowerCase();
   if (normalized === 'yearly' || normalized === 'annual') {
     result.setFullYear(result.getFullYear() + 1);
+    result.setDate(result.getDate() - 1);
   } else if (normalized === 'quarterly') {
     result.setMonth(result.getMonth() + 3);
   } else {
@@ -131,10 +230,11 @@ export async function markRazorpayPaymentPaid(
     let subscriptionId = payment.subscription_id;
     let tierId = payment.pricing_tier_id;
     let existingEndsAt: Date | null = null;
+    let existingStartsAt: Date | null = null;
 
     if (!subscriptionId) {
       const { rows: existingSubs } = await client.query(
-        `SELECT id, pricing_tier_id, ends_at, status FROM public.platform_subscriptions
+        `SELECT id, pricing_tier_id, starts_at, ends_at, status FROM public.platform_subscriptions
           WHERE tenant_id = $1
           ORDER BY id DESC
           LIMIT 1`,
@@ -143,15 +243,21 @@ export async function markRazorpayPaymentPaid(
       if (existingSubs[0]) {
         subscriptionId = existingSubs[0].id;
         tierId = tierId || existingSubs[0].pricing_tier_id;
+        if (existingSubs[0].starts_at) {
+          existingStartsAt = new Date(existingSubs[0].starts_at);
+        }
         if (existingSubs[0].ends_at && new Date(existingSubs[0].ends_at) > new Date() && existingSubs[0].status === 'active') {
           existingEndsAt = new Date(existingSubs[0].ends_at);
         }
       }
     } else {
       const { rows: currentSubRows } = await client.query(
-        `SELECT ends_at, status FROM public.platform_subscriptions WHERE id = $1`,
+        `SELECT starts_at, ends_at, status FROM public.platform_subscriptions WHERE id = $1`,
         [subscriptionId]
       );
+      if (currentSubRows[0]?.starts_at) {
+        existingStartsAt = new Date(currentSubRows[0].starts_at);
+      }
       if (currentSubRows[0]?.ends_at && new Date(currentSubRows[0].ends_at) > new Date() && currentSubRows[0].status === 'active') {
         existingEndsAt = new Date(currentSubRows[0].ends_at);
       }
@@ -174,30 +280,32 @@ export async function markRazorpayPaymentPaid(
       }
     }
 
-    // If upgrading an active package, keep expiry date intact; otherwise 1 year from now:
+    // If upgrading an active package, start date becomes NOW and expiry becomes 1 year from NOW:
     const isUpgradePayment = (payment.notes || '').toLowerCase().includes('upgrade');
-    const endsAt = (isUpgradePayment && existingEndsAt)
-      ? existingEndsAt
-      : (existingEndsAt || calculateSubscriptionEndDate(billingInterval, new Date(), 0));
+    const now = new Date();
+    const startsAt = isUpgradePayment ? now : (existingStartsAt || now);
+    const endsAt = isUpgradePayment
+      ? calculateSubscriptionEndDate(billingInterval, now, 0)
+      : (existingEndsAt || calculateSubscriptionEndDate(billingInterval, now, 0));
 
     if (subscriptionId) {
       await client.query(
         `UPDATE public.platform_subscriptions
             SET status = 'active',
                 pricing_tier_id = COALESCE($2, pricing_tier_id),
-                starts_at = COALESCE(starts_at, NOW()),
-                ends_at = $3,
+                starts_at = $3,
+                ends_at = $4,
                 updated_at = NOW()
           WHERE id = $1`,
-        [subscriptionId, tierId || null, endsAt]
+        [subscriptionId, tierId || null, startsAt, endsAt]
       );
     } else {
       const { rows: newSubRows } = await client.query(
         `INSERT INTO public.platform_subscriptions
            (tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at)
-         VALUES ($1, $2, 'active', NOW(), $3, TRUE, 'Activated via Razorpay payment', NOW(), NOW())
+         VALUES ($1, $2, 'active', $3, $4, TRUE, 'Activated via Razorpay payment', NOW(), NOW())
          RETURNING id`,
-        [payment.tenant_id, tierId || null, endsAt]
+        [payment.tenant_id, tierId || null, startsAt, endsAt]
       );
       subscriptionId = newSubRows[0]?.id;
       await client.query(
@@ -206,19 +314,23 @@ export async function markRazorpayPaymentPaid(
       );
     }
 
-    // 4. Update saas_tenants status to active, plan name, and expiry date
+    // 4. Update saas_tenants status to active, plan name, start date, and expiry date (1 year)
     await client.query(
       `UPDATE public.saas_tenants
           SET status = 'active',
               plan = COALESCE($2, plan),
               settings = jsonb_set(
-                COALESCE(settings, '{}'::jsonb),
-                '{subscription_expiry_date}',
-                to_jsonb($3::text)
+                jsonb_set(
+                  COALESCE(settings, '{}'::jsonb),
+                  '{subscription_expiry_date}',
+                  to_jsonb($3::text)
+                ),
+                '{subscription_start_date}',
+                to_jsonb($4::text)
               ),
               updated_at = NOW()
         WHERE id = $1`,
-      [payment.tenant_id, tierName, endsAt.toISOString()]
+      [payment.tenant_id, tierName, endsAt.toISOString(), startsAt.toISOString()]
     );
 
     // 5. Insert system notification
@@ -261,7 +373,7 @@ export const platformPaymentService = {
    */
   async createOrder({ tenantId, pricingTierId, amountCents, currency = 'INR', notes = {} }: CreateOrderParams) {
     const { rows: tenantRows } = await pool.query(
-      `SELECT id, name, slug, plan FROM public.saas_tenants WHERE id = $1`,
+      `SELECT id, name, slug, plan, settings, created_at FROM public.saas_tenants WHERE id = $1`,
       [tenantId]
     );
     if (!tenantRows[0]) throw new ApiError(404, 'Organization workspace not found');
@@ -276,10 +388,12 @@ export const platformPaymentService = {
 
     let targetAmountCents = Number(tier.amount_cents);
     let isUpgrade = false;
+    let upgradeDetails: ProratedUpgradeResult | null = null;
 
     if (amountCents === undefined || amountCents <= 0) {
       const { rows: subRows } = await pool.query(
-        `SELECT s.id, s.pricing_tier_id, s.ends_at, s.status, t.amount_cents as tier_amount_cents
+        `SELECT s.id, s.pricing_tier_id, s.starts_at, s.ends_at, s.status, s.created_at,
+                t.name as tier_name, t.amount_cents as tier_amount_cents
            FROM public.platform_subscriptions s
            LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
           WHERE s.tenant_id = $1
@@ -302,7 +416,17 @@ export const platformPaymentService = {
         }
         if (targetAmountCents > currentAmountCents) {
           isUpgrade = true;
-          targetAmountCents = targetAmountCents - currentAmountCents;
+          const effectiveStartDate = existingSub.starts_at || tenant.settings?.subscription_start_date || tenant.created_at || new Date();
+          upgradeDetails = calculateProratedUpgrade({
+            currentAmount: currentAmountCents / 100,
+            targetAmount: targetAmountCents / 100,
+            startDate: effectiveStartDate,
+            upgradeDate: new Date(),
+            currency: tier.currency || 'INR',
+            currentPlanName: existingSub.tier_name || tenant.plan || 'Current Plan',
+            targetPlanName: tier.name,
+          });
+          targetAmountCents = Math.round(upgradeDetails.payable_upgrade_amount * 100);
         }
       }
     }
@@ -331,6 +455,14 @@ export const platformPaymentService = {
           pricing_tier_id: String(tier.id),
           tier_name: tier.name,
           is_upgrade: String(isUpgrade),
+          ...(upgradeDetails ? {
+            days_used: String(upgradeDetails.days_used),
+            daily_rate: String(upgradeDetails.daily_rate),
+            used_amount: String(upgradeDetails.used_amount),
+            remaining_credit: String(upgradeDetails.remaining_credit),
+            original_target_amount: String(upgradeDetails.target_plan_amount),
+            prorated_upgrade_amount: String(upgradeDetails.payable_upgrade_amount),
+          } : {}),
           ...notes,
         },
       });
@@ -369,6 +501,8 @@ export const platformPaymentService = {
       key_id: env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
       tier_name: tier.name,
       tenant_name: tenant.name,
+      is_upgrade: isUpgrade,
+      upgrade_details: upgradeDetails,
     };
   },
 
@@ -469,19 +603,24 @@ export const platformPaymentService = {
         ]
       );
 
-      // Update tenant status & plan
+      // Update tenant status, plan, start date, and expiry date (1 year validity)
+      const offlineStartsAt = new Date();
       await client.query(
         `UPDATE public.saas_tenants
             SET status = 'active',
                 plan = $2,
                 settings = jsonb_set(
-                  COALESCE(settings, '{}'::jsonb),
-                  '{subscription_expiry_date}',
-                  to_jsonb($3::text)
+                  jsonb_set(
+                    COALESCE(settings, '{}'::jsonb),
+                    '{subscription_expiry_date}',
+                    to_jsonb($3::text)
+                  ),
+                  '{subscription_start_date}',
+                  to_jsonb($4::text)
                 ),
                 updated_at = NOW()
           WHERE id = $1`,
-        [tenantId, tier.name, endsAt.toISOString()]
+        [tenantId, tier.name, endsAt.toISOString(), offlineStartsAt.toISOString()]
       );
 
       await client.query('COMMIT');

@@ -282,7 +282,7 @@ const UserCreate = () => {
     // Trim strings to remove pre/post spaces except `name` to allow typing spaces
     Object.keys(next).forEach((k) => {
       const v = (next as any)[k];
-      if (typeof v === "string" && k !== "name" && k !== "street") (next as any)[k] = v.trim();
+      if (typeof v === "string" && k !== "name" && k !== "street" && k !== "state" && k !== "city") (next as any)[k] = v.trim();
     });
     setFormData(next);
     validateForm(next);
@@ -685,19 +685,15 @@ const UserCreate = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     State
                   </label>
-                  <select
-                    name="state_id"
-                    value={formData.state_id != null ? String(formData.state_id) : ""}
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state || ""}
                     onChange={handleChange}
-                    disabled={formData.country !== "India"}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600 ${formData.country !== "India" ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <option value="">Select a state</option>
-                    {states.map((s) => (
-                      <option key={s.id} value={String(s.id)}>{s.name}</option>
-                    ))}
-                  </select>
-                  {renderFieldErrors("state_id")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600"
+                    placeholder="State"
+                  />
+                  {renderFieldErrors("state")}
                 </div>
 
                 {/* City */}
@@ -705,22 +701,15 @@ const UserCreate = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     City
                   </label>
-                  <select
-                    name="city_id"
-                    value={formData.city_id != null ? String(formData.city_id) : ""}
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city || ""}
                     onChange={handleChange}
-                    disabled={formData.country !== "India"}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600 ${formData.country !== "India" ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <option value="">Select a city</option>
-                    {cities.length === 0 && (
-                      <option value="" disabled>No cities available</option>
-                    )}
-                    {cities.map((c) => (
-                      <option key={c.id} value={String(c.id)}>{c.name || c.city || c.id}</option>
-                    ))}
-                  </select>
-                  {renderFieldErrors("city_id")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-slate-700 dark:border-slate-600"
+                    placeholder="City"
+                  />
+                  {renderFieldErrors("city")}
                 </div>
 
                 {/* Postal Code */}

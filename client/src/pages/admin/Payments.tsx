@@ -143,6 +143,85 @@ const SuperAdminPayments: React.FC = () => {
   };
 
 
+  const handleMarkPaymentPaid = async (payment: PaymentRecord) => {
+    const isUsd = payment.currency === "USD";
+    const amountFormatted = isUsd ? `${Number(payment.amount).toLocaleString()}` : `₹${Number(payment.amount).toLocaleString()}`;
+
+    const { value: formValues } = await Swal.fire({
+      title: "Mark Payment as Received",
+      width: "520px",
+      html: `
+        <div class="text-left text-xs space-y-3 pt-2 text-slate-700 dark:text-slate-300">
+          <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800 space-y-1">
+            <span class="text-gray-500 dark:text-gray-400 block font-medium">Organization: <strong class="text-slate-800 dark:text-slate-200">${payment.organization_name}</strong></span>
+            <span class="text-sm text-emerald-700 dark:text-emerald-300 font-bold block">Amount: ${amountFormatted}</span>
+            <span class="text-[11px] text-gray-500 block">Plan: ${payment.plan_name} • Invoice: ${payment.invoice_number || `#${payment.id}`}</span>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Received Payment Method *</label>
+            <select id="swal-mark-method" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800">
+              <option value="Cash">Cash</option>
+              <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+              <option value="UPI">UPI</option>
+              <option value="Cheque">Cheque</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Reference / Voucher / UTR #</label>
+            <input id="swal-mark-ref" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800" placeholder="e.g. CASH-REC-${Date.now().toString().slice(-5)}" />
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Notes (Optional)</label>
+            <input id="swal-mark-notes" class="swal2-input !w-full !text-xs !h-9 !m-0 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800" placeholder="e.g. Paid in full at office" />
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Confirm & Mark as Paid ✓",
+      confirmButtonColor: "#10b981",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const method = (document.getElementById("swal-mark-method") as HTMLSelectElement)?.value || "Cash";
+        const reference = (document.getElementById("swal-mark-ref") as HTMLInputElement)?.value;
+        const notes = (document.getElementById("swal-mark-notes") as HTMLInputElement)?.value;
+        return { method, reference, notes };
+      },
+    });
+
+    if (!formValues) return;
+
+    try {
+      Swal.fire({
+        title: "Updating Payment...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const res = await adminApi.post(`/admin/payments/${payment.id}/mark-paid`, {
+        payment_method: formValues.method,
+        reference: formValues.reference,
+        notes: formValues.notes,
+      });
+
+      if (res.data && res.data.success) {
+        await Swal.fire({
+          icon: "success",
+          title: "Payment Received! 🎉",
+          text: `Payment of ${amountFormatted} for ${payment.organization_name} marked as Paid. Pay Later commitment cleared.`,
+          confirmButtonColor: "#10b981",
+        });
+        fetchPayments();
+      } else {
+        throw new Error(res.data?.message || "Failed to mark payment as paid");
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err.response?.data?.message || err.message || "Failed to update payment", "error");
+    }
+  };
+
   // Webhooks State
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
@@ -685,7 +764,19 @@ const SuperAdminPayments: React.FC = () => {
 
                                 {/* Action: View / Download Invoice */}
                                 <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
-                                  <button
+                                  <div className="flex items-center justify-end gap-1.5">
+  {(p.payment_status?.toLowerCase() === "pending" || p.payment_status?.toLowerCase().includes("pay later") || p.payment_status?.toLowerCase().includes("pay_later")) && (
+    <button
+      type="button"
+      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-600 transition shadow-xs inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5 cursor-pointer"
+      onClick={() => handleMarkPaymentPaid(p)}
+      title="Confirm receipt of payment and mark as Paid"
+    >
+      <i className="mgc_check_circle_line text-base"></i>
+      <span>Mark as Paid</span>
+    </button>
+  )}
+<button
                                     type="button"
                                     className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-600 transition shadow-xs inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5"
                                     onClick={() => setSelectedInvoice(p)}
@@ -694,6 +785,7 @@ const SuperAdminPayments: React.FC = () => {
                                     <i className="mgc_receipt_line text-base"></i>
                                     <span>Invoice</span>
                                   </button>
+</div>
                                 </td>
                               </tr>
                             ))}

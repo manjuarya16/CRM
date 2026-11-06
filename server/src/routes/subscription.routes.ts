@@ -5,7 +5,7 @@ import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 import { ApiError } from '@/middleware/errorHandler';
 import { requireAuth } from '@/middleware/auth';
-import { platformPaymentService, getRazorpayInstance } from '@/services/platformPayment.service';
+import { platformPaymentService, getRazorpayInstance, calculateProratedUpgrade, ProratedUpgradeResult } from '@/services/platformPayment.service';
 
 const router = Router();
 
@@ -265,6 +265,100 @@ function calculateDiscount(baseAmount: number, code?: string, explicitDiscount?:
 }
 
 // Public: Validate discount coupon
+// Calculate Prorated Upgrade Quote (Available in-app or via public slug)
+router.get('/upgrade-calculation', handler(async (req, res) => {
+  let tenantId: number | null = null;
+  try {
+    tenantId = getTenantId(req);
+  } catch (_) {
+    const slug = resolveSlugFromReq(req);
+    if (slug) {
+      const { rows } = await pool.query(
+        `SELECT id FROM public.saas_tenants 
+          WHERE LOWER(slug)=LOWER($1) 
+             OR LOWER(REPLACE(slug, '-', ''))=LOWER(REPLACE($1, '-', ''))
+          LIMIT 1`,
+        [slug]
+      );
+      if (rows[0]) tenantId = rows[0].id;
+    }
+  }
+
+  if (!tenantId) {
+    throw new ApiError(400, 'Organization identifier (tenant context or slug) is required');
+  }
+
+  const pricingTierId = req.query.pricing_tier_id ? Number(req.query.pricing_tier_id) : null;
+  const planCode = req.query.plan_code ? String(req.query.plan_code).trim().toLowerCase() : null;
+
+  if (!pricingTierId && !planCode) {
+    throw new ApiError(400, 'pricing_tier_id or plan_code is required');
+  }
+
+  // 1. Fetch tenant & existing subscription
+  const { rows: tenantRows } = await pool.query(
+    `SELECT t.id, t.name, t.slug, t.plan, t.settings, t.created_at,
+            s.id AS sub_id, s.pricing_tier_id, s.starts_at, s.ends_at, s.status AS sub_status,
+            pt.name AS tier_name, pt.amount_cents AS tier_amount_cents, pt.currency AS tier_currency
+       FROM public.saas_tenants t
+       LEFT JOIN LATERAL (
+         SELECT id, pricing_tier_id, starts_at, ends_at, status
+           FROM public.platform_subscriptions
+          WHERE tenant_id = t.id
+          ORDER BY id DESC
+          LIMIT 1
+       ) s ON TRUE
+       LEFT JOIN public.platform_pricing_tiers pt ON pt.id = s.pricing_tier_id
+      WHERE t.id = $1`,
+    [tenantId]
+  );
+
+  if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
+  const org = tenantRows[0];
+
+  // 2. Fetch target tier
+  let targetTierQuery = 'SELECT id, name, amount_cents, currency, billing_interval FROM public.platform_pricing_tiers WHERE active = TRUE';
+  const targetParams: any[] = [];
+  if (pricingTierId) {
+    targetTierQuery += ' AND id = $1';
+    targetParams.push(pricingTierId);
+  } else {
+    targetTierQuery += ' AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2) ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END LIMIT 1';
+    targetParams.push(planCode, `%${planCode}%`);
+  }
+
+  const { rows: targetTierRows } = await pool.query(targetTierQuery, targetParams);
+  if (!targetTierRows[0]) throw new ApiError(404, 'Target pricing tier not found');
+  const targetTier = targetTierRows[0];
+
+  // 3. Current active plan amount and start date
+  const currentPlanStr = (org.tier_name || org.plan || '').toLowerCase();
+  let currentAmount = org.tier_amount_cents ? Number(org.tier_amount_cents) / 100 : 0;
+  if (!currentAmount) {
+    if (currentPlanStr.includes('business')) currentAmount = 29999;
+    else if (currentPlanStr.includes('growth') || currentPlanStr.includes('professional')) currentAmount = 19999;
+    else if (currentPlanStr.includes('starter')) currentAmount = 9999;
+  }
+
+  const targetAmount = Number(targetTier.amount_cents) / 100;
+  const effectiveStartDate = org.starts_at || org.settings?.subscription_start_date || org.created_at || new Date();
+
+  const calculation = calculateProratedUpgrade({
+    currentAmount,
+    targetAmount,
+    startDate: effectiveStartDate,
+    upgradeDate: new Date(),
+    currency: targetTier.currency || 'INR',
+    currentPlanName: org.tier_name || org.plan || 'Current Plan',
+    targetPlanName: targetTier.name,
+  });
+
+  res.json({
+    success: true,
+    data: calculation,
+  });
+}));
+
 router.post('/validate-discount', handler(async (req, res) => {
   const { code, amount, currency = 'INR' } = req.body;
   const isUsd = String(currency).toUpperCase() === 'USD';
@@ -377,7 +471,17 @@ router.post('/public-create-order', handler(async (req, res) => {
 
     if (targetAmount > currentPlanPrice) {
       isUpgrade = true;
-      finalPayAmount = targetAmount - currentPlanPrice;
+      const effectiveStartDate = existingSub?.starts_at || org.settings?.subscription_start_date || org.created_at || new Date();
+      const prorated = calculateProratedUpgrade({
+        currentAmount: currentPlanPrice,
+        targetAmount,
+        startDate: effectiveStartDate,
+        upgradeDate: new Date(),
+        currency: isUsd ? 'USD' : 'INR',
+        currentPlanName,
+        targetPlanName: planName,
+      });
+      finalPayAmount = prorated.payable_upgrade_amount;
     }
   }
 
@@ -574,33 +678,45 @@ router.post('/public-verify-payment', handler(async (req, res) => {
     }
   }
 
-  // If upgrading an active package, keep the existing expiry date intact!
-  // Otherwise, set 1 year from now.
-  // NEXT RENEWAL date change ONLY if package has ended/expired!
-  // Otherwise, expiry date remains exactly the same as with the old package.
+  // Subscription expiry date & start date:
+  // On Upgrade: Subscription start date becomes NOW and expiry becomes 1 year from NOW!
+  // On Regular Renewal: Expiry extends by 1 year.
   const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
   let targetExpiry: Date;
-  if (!isPackageEnded && existingExpiry) {
-    targetExpiry = existingExpiry;
-  } else {
-    const now = new Date();
-    targetExpiry = new Date(now);
+  let targetStartDate: Date = new Date();
+
+  if (isUpgrade) {
+    targetStartDate = new Date();
+    targetExpiry = new Date(targetStartDate);
     targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+    targetExpiry.setDate(targetExpiry.getDate() - 1);
+  } else if (!isPackageEnded && existingExpiry) {
+    targetExpiry = existingExpiry;
+    targetStartDate = existingSub?.starts_at ? new Date(existingSub.starts_at) : new Date();
+  } else {
+    targetStartDate = new Date();
+    targetExpiry = new Date(targetStartDate);
+    targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+    targetExpiry.setDate(targetExpiry.getDate() - 1);
   }
 
-  // 1. Update saas_tenants
+  // 1. Update saas_tenants with updated plan, start date, and 1-year expiry date
   await pool.query(
     `UPDATE public.saas_tenants 
         SET status = 'active',
             plan = $1,
             settings = jsonb_set(
-              COALESCE(settings, '{}'::jsonb),
-              '{subscription_expiry_date}',
-              to_jsonb($2::text)
+              jsonb_set(
+                COALESCE(settings, '{}'::jsonb),
+                '{subscription_expiry_date}',
+                to_jsonb($2::text)
+              ),
+              '{subscription_start_date}',
+              to_jsonb($3::text)
             ),
             updated_at = NOW()
-      WHERE id = $3`,
-    [planName, targetExpiry.toISOString(), tenant.id]
+      WHERE id = $4`,
+    [planName, targetExpiry.toISOString(), targetStartDate.toISOString(), tenant.id]
   );
 
   // 2. Insert/Update platform_subscriptions
@@ -610,10 +726,12 @@ router.post('/public-verify-payment', handler(async (req, res) => {
       `UPDATE public.platform_subscriptions
           SET pricing_tier_id = $1,
               status = 'active',
-              notes = $2,
+              starts_at = $2,
+              ends_at = $3,
+              notes = $4,
               updated_at = NOW()
-        WHERE id = $3`,
-      [tierId, `Upgraded to ${planName} Plan (Extra amount: ${isUsd ? 'USD' : 'INR'} ${finalPayAmount})`, existingSub.id]
+        WHERE id = $5`,
+      [tierId, targetStartDate, targetExpiry, `Upgraded to ${planName} Plan (Extra amount: ${isUsd ? 'USD' : 'INR'} ${finalPayAmount})`, existingSub.id]
     );
     subId = existingSub.id;
   } else {
@@ -827,39 +945,60 @@ router.post('/public-cash-payment', handler(async (req, res) => {
 
     if (targetAmount > currentPlanPrice) {
       isUpgrade = true;
-      basePayAmount = targetAmount - currentPlanPrice;
+      const effectiveStartDate = existingSub?.starts_at || org.settings?.subscription_start_date || org.created_at || new Date();
+      const prorated = calculateProratedUpgrade({
+        currentAmount: currentPlanPrice,
+        targetAmount,
+        startDate: effectiveStartDate,
+        upgradeDate: new Date(),
+        currency: isUsd ? 'USD' : 'INR',
+        currentPlanName,
+        targetPlanName: planName,
+      });
+      basePayAmount = prorated.payable_upgrade_amount;
     }
   }
 
   // Calculate discount
   const { discountAmount, finalAmount, discountCode } = calculateDiscount(basePayAmount, discount_code, reqDiscountAmount, isUsd);
 
-  // Subscription expiry date
-  // NEXT RENEWAL date change ONLY if package has ended/expired!
-  // Otherwise, expiry date remains exactly the same as with the old package.
+  // Subscription expiry date & start date:
+  // On Upgrade: Subscription start date becomes NOW and expiry becomes 1 year from NOW!
   const isPackageEnded = !hasActivePaidPlan || !existingExpiry || existingExpiry.getTime() <= Date.now();
   let targetExpiry: Date;
-  if (!isPackageEnded && existingExpiry) {
-    targetExpiry = existingExpiry;
-  } else {
-    const now = new Date();
-    targetExpiry = new Date(now);
+  let targetStartDate: Date = new Date();
+  if (isUpgrade) {
+    targetStartDate = new Date();
+    targetExpiry = new Date(targetStartDate);
     targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+    targetExpiry.setDate(targetExpiry.getDate() - 1);
+  } else if (!isPackageEnded && existingExpiry) {
+    targetExpiry = existingExpiry;
+    targetStartDate = existingSub?.starts_at ? new Date(existingSub.starts_at) : new Date();
+  } else {
+    targetStartDate = new Date();
+    targetExpiry = new Date(targetStartDate);
+    targetExpiry.setFullYear(targetExpiry.getFullYear() + 1);
+    targetExpiry.setDate(targetExpiry.getDate() - 1);
   }
 
-  // 1. Update saas_tenants
+  // 1. Update saas_tenants with updated plan, start date, and 1-year expiry date
   await pool.query(
     `UPDATE public.saas_tenants 
         SET status = 'active',
             plan = $1,
             settings = jsonb_set(
-              COALESCE(settings, '{}'::jsonb),
-              '{subscription_expiry_date}',
-              to_jsonb($2::text)
+              jsonb_set(
+                COALESCE(settings, '{}'::jsonb),
+                '{subscription_expiry_date}',
+                to_jsonb($2::text)
+              ),
+              '{subscription_start_date}',
+              to_jsonb($3::text)
             ),
             updated_at = NOW()
-      WHERE id = $3`,
-    [planName, targetExpiry.toISOString(), org.id]
+      WHERE id = $4`,
+    [planName, targetExpiry.toISOString(), targetStartDate.toISOString(), org.id]
   );
 
   // 2. Insert or update platform_subscriptions
@@ -870,10 +1009,12 @@ router.post('/public-cash-payment', handler(async (req, res) => {
       `UPDATE public.platform_subscriptions
           SET pricing_tier_id = $1,
               status = 'active',
-              notes = $2,
+              starts_at = $2,
+              ends_at = $3,
+              notes = $4,
               updated_at = NOW()
-        WHERE id = $3`,
-      [tierId, `Upgraded to ${planName} via Cash (Paid: ${currSym} ${finalAmount}${discountCode ? `, Code: ${discountCode}` : ''})`, existingSub.id]
+        WHERE id = $5`,
+      [tierId, targetStartDate, targetExpiry, `Upgraded to ${planName} via Cash (Paid: ${currSym} ${finalAmount}${discountCode ? `, Code: ${discountCode}` : ''})`, existingSub.id]
     );
     subId = existingSub.id;
   } else {
@@ -975,10 +1116,13 @@ router.get('/current', handler(async (req, res) => {
       [tenantId]
     ),
     pool.query(
-      `SELECT s.id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at, s.auto_renew,
-              s.created_at, t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval,
+      `SELECT s.id, s.pricing_tier_id, s.status,
+              COALESCE(s.starts_at, (t_org.settings->>'subscription_start_date')::timestamptz, s.created_at) AS starts_at,
+              COALESCE(s.ends_at, (t_org.settings->>'subscription_expiry_date')::timestamptz) AS ends_at,
+              s.auto_renew, s.created_at, t.name AS tier_name, t.amount_cents, t.currency, t.billing_interval,
               payment.status AS payment_status
          FROM public.platform_subscriptions s
+         JOIN public.saas_tenants t_org ON t_org.id = s.tenant_id
          LEFT JOIN public.platform_pricing_tiers t ON t.id=s.pricing_tier_id
          LEFT JOIN LATERAL (
            SELECT p.status
