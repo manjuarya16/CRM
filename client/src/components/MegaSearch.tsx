@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import API from "@/config";
 import { cleanEmailAddress, stripHtmlToText } from "@/utils/formatters";
+import { Search, X } from "lucide-react";
 
 export type MegaSearchTab =
   | "leads"
@@ -730,7 +731,7 @@ export const MegaSearch: React.FC = () => {
     <div ref={containerRef} className="relative flex-1 min-w-0">
       {/* Search Bar Input */}
       <div className="relative flex items-center">
-        <i className="mgc_search_line absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-base sm:text-lg pointer-events-none"></i>
+        <span className="absolute inset-y-0 left-3.5 flex items-center text-gray-500 dark:text-gray-400 pointer-events-none"><Search size={16} aria-hidden="true" /></span>
         <input
           ref={inputRef}
           type="text"
@@ -748,13 +749,15 @@ export const MegaSearch: React.FC = () => {
         {query && (
           <button
             type="button"
+            aria-label="Clear search"
+            title="Clear search"
             onClick={() => {
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            className="absolute inset-y-0 right-2 my-auto flex items-center justify-center w-6 h-6 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer"
           >
-            <i className="mgc_close_line text-sm"></i>
+            <X size={14} strokeWidth={2.25} aria-hidden="true" />
           </button>
         )}
       </div>

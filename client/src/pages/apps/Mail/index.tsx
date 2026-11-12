@@ -48,6 +48,7 @@ const MailPage: React.FC = () => {
     fetchEmails,
     fetchCounts,
     markAsRead,
+    toggleStar,
     removeEmail,
     bulkMoveToFolder,
     bulkDelete,
@@ -426,10 +427,12 @@ const MailPage: React.FC = () => {
               <i className="mgc_search_line absolute left-3 top-2.5 text-gray-400 text-sm"></i>
               {searchInput && (
                 <button
+                  type="button"
                   onClick={() => setSearchInput("")}
-                  className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-base"
+                  title="Clear Search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                 >
-                  &times;
+                  <i className="mgc_close_line text-sm leading-none"></i>
                 </button>
               )}
             </div>
@@ -456,6 +459,7 @@ const MailPage: React.FC = () => {
               emails.map((email, idx) => {
                 const isSelected = selectedEmailIds.includes(email.id);
                 const isUnread = !email.is_read;
+                const isStarred = Array.isArray(email.folders) && email.folders.includes("starred");
                 const senderName = stripHtmlToText(
                   email.name ||
                   email.sender?.name ||
@@ -566,6 +570,17 @@ const MailPage: React.FC = () => {
                         {/* Mobile Quick Action Buttons */}
                         <div className="flex items-center gap-1 text-gray-400">
                           <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStar(email.id, !isStarred);
+                            }}
+                            className={`p-1 rounded transition-colors ${isStarred ? "text-amber-400 hover:text-amber-500" : "hover:text-amber-400"}`}
+                            title={isStarred ? "Unstar email" : "Star email"}
+                          >
+                            <i className={isStarred ? "mgc_star_fill text-sm" : "mgc_star_line text-sm"}></i>
+                          </button>
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               markAsRead(email.id, !email.is_read);
@@ -616,6 +631,18 @@ const MailPage: React.FC = () => {
                             className="rounded border-gray-300 text-[#0088cc] focus:ring-[#0088cc] w-3.5 h-3.5 cursor-pointer"
                           />
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStar(email.id, !isStarred);
+                          }}
+                          title={isStarred ? "Unstar email" : "Star email"}
+                          className={`p-0.5 rounded transition-colors shrink-0 ${isStarred ? "text-amber-400 hover:text-amber-500" : "text-gray-300 dark:text-gray-600 hover:text-amber-400"}`}
+                        >
+                          <i className={isStarred ? "mgc_star_fill text-sm" : "mgc_star_line text-sm"}></i>
+                        </button>
 
                         <div className="w-2 flex justify-center shrink-0">
                           {isUnread && (

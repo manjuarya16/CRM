@@ -2,12 +2,15 @@ import { Router } from 'express';
 import { GoogleContactService } from '@/services/googleContact.service';
 import { saveGoogleAccountSchema, createGoogleExportBatchSchema } from '@/schemas/googleContact.schema';
 import { ApiError } from '@/middleware/errorHandler';
+import { requireAuth } from '@/middleware/auth';
 
 const router = Router();
+router.use(requireAuth);
 
 router.get('/accounts', async (req: any, res, next) => {
   try {
-    const userId = req.user?.id || 1;
+    const userId = Number(req.user?.id);
+    if (!userId) throw new ApiError(401, "Authentication required");
     const accounts = await GoogleContactService.getAccounts(userId);
     res.json({ success: true, data: accounts });
   } catch (err) {
@@ -17,7 +20,8 @@ router.get('/accounts', async (req: any, res, next) => {
 
 router.post('/accounts', async (req: any, res, next) => {
   try {
-    const userId = req.user?.id || 1;
+    const userId = Number(req.user?.id);
+    if (!userId) throw new ApiError(401, "Authentication required");
     const validated = saveGoogleAccountSchema.parse(req.body);
     const account = await GoogleContactService.saveAccount(userId, validated);
     res.status(201).json({ success: true, data: account });
@@ -40,7 +44,8 @@ router.delete('/accounts/:id', async (req, res, next) => {
 
 router.post('/sync/:id', async (req: any, res, next) => {
   try {
-    const userId = req.user?.id || 1;
+    const userId = Number(req.user?.id);
+    if (!userId) throw new ApiError(401, "Authentication required");
     const result = await GoogleContactService.syncGoogleContacts(userId, String(req.params.id));
     res.json({ success: true, data: result, message: 'Synced ' + result.syncedCount + ' contacts from Google' });
   } catch (err) {
@@ -50,7 +55,8 @@ router.post('/sync/:id', async (req: any, res, next) => {
 
 router.get('/batches', async (req: any, res, next) => {
   try {
-    const userId = req.user?.id || 1;
+    const userId = Number(req.user?.id);
+    if (!userId) throw new ApiError(401, "Authentication required");
     const batches = await GoogleContactService.getBatches(userId);
     res.json({ success: true, data: batches });
   } catch (err) {
@@ -60,7 +66,8 @@ router.get('/batches', async (req: any, res, next) => {
 
 router.post('/export', async (req: any, res, next) => {
   try {
-    const userId = req.user?.id || 1;
+    const userId = Number(req.user?.id);
+    if (!userId) throw new ApiError(401, "Authentication required");
     const validated = createGoogleExportBatchSchema.parse(req.body || {});
     const batch = await GoogleContactService.createBatch(userId, validated.person_ids);
     res.status(201).json({ success: true, data: batch, message: 'Created export batch for ' + batch.total_contacts + ' contacts' });

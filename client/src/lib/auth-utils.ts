@@ -2,17 +2,32 @@
  * Utility functions for authentication
  */
 
-export const logout = () => {
-  // Clear token from sessionStorage
-  sessionStorage.removeItem("token");
-  sessionStorage.removeItem("last_completed_status");
-
-  // Clear authToken cookie
-  document.cookie = "authToken=; path=/; max-age=0";
-
-  // Redirect to login
+export const clearAuthStorage = () => {
   if (typeof window !== "undefined") {
-    window.location.href = "/auth/login";
+    try {
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("app_user");
+      sessionStorage.removeItem("auth-store");
+      sessionStorage.removeItem("last_completed_status");
+    } catch {}
+    try {
+      localStorage.removeItem("auth-store");
+    } catch {}
+  }
+
+  if (typeof document !== "undefined") {
+    document.cookie =
+      "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+    document.cookie =
+      "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  }
+};
+
+export const logout = () => {
+  clearAuthStorage();
+  if (typeof window !== "undefined") {
+    sessionStorage.clear();
+    window.location.replace("/auth/login");
   }
 };
 
@@ -30,7 +45,8 @@ export const getTokenFromSession = (): string | null => {
 export const getTokenFromLocalStorageAuthStore = (): string | null => {
   if (typeof window === "undefined") return null;
   try {
-    const authStore = localStorage.getItem("auth-store");
+    const authStore =
+      sessionStorage.getItem("auth-store") || localStorage.getItem("auth-store");
     if (!authStore) return null;
     const parsed = JSON.parse(authStore);
     // Zustand persist wraps state under `state` key
@@ -104,19 +120,18 @@ export const processUrlAuthToken = (): string | null => {
           })
         );
         try {
-          localStorage.setItem(
-            "auth-store",
-            JSON.stringify({
-              state: {
-                user: userData,
-                token: token,
-                userLoggedIn: true,
-              },
-              version: 0,
-            })
-          );
+          const authStorePayload = JSON.stringify({
+            state: {
+              user: userData,
+              token: token,
+              userLoggedIn: true,
+            },
+            version: 0,
+          });
+          sessionStorage.setItem("auth-store", authStorePayload);
+          localStorage.removeItem("auth-store");
         } catch (e) {
-          console.warn("Failed to write auth-store to localStorage", e);
+          console.warn("Failed to write auth-store to sessionStorage", e);
         }
       }
 

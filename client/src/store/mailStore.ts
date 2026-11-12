@@ -127,6 +127,30 @@ export const useMailStore = create<MailState>((set, get) => ({
     }
   },
 
+  toggleStar: async (id: number, isStarred: boolean) => {
+    const { emails, currentEmail, activeFolder } = get();
+    const updateFolders = (folders?: string[]) => {
+      const base = Array.isArray(folders) ? folders.filter((f) => f !== "starred") : [];
+      return isStarred ? [...base, "starred"] : base;
+    };
+    try {
+      const res = await API.patch(`/mail/${id}/star`, { is_starred: isStarred });
+      const serverFolders = res.data?.data?.folders;
+      const updatedList = emails
+        .map((e) => (e.id === id ? { ...e, folders: serverFolders || updateFolders(e.folders) } : e))
+        .filter((e) => !(activeFolder === "starred" && e.id === id && !isStarred));
+      set({
+        emails: updatedList,
+        currentEmail: currentEmail && currentEmail.id === id
+          ? { ...currentEmail, folders: serverFolders || updateFolders(currentEmail.folders) }
+          : currentEmail,
+      });
+      get().fetchCounts();
+    } catch (error) {
+      console.error("Failed to toggle star status", error);
+    }
+  },
+
   removeEmail: async (id: number, type: "trash" | "delete" = "trash") => {
     set({ actionLoading: true });
     try {

@@ -242,23 +242,23 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
         <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">Colors & Styling</h3>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Page BG</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Page BG</label>
             <input type="color" {...register("background_color")} className="w-full h-8 rounded border cursor-pointer" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Form BG</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Form BG</label>
             <input type="color" {...register("form_background_color")} className="w-full h-8 rounded border cursor-pointer" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Title Color</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Title Color</label>
             <input type="color" {...register("form_title_color")} className="w-full h-8 rounded border cursor-pointer" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Button Color</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Button Color</label>
             <input type="color" {...register("form_submit_button_color")} className="w-full h-8 rounded border cursor-pointer" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Label Color</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Label Color</label>
             <input type="color" {...register("attribute_label_color")} className="w-full h-8 rounded border cursor-pointer" />
           </div>
         </div>
@@ -269,7 +269,7 @@ export const WebFormForm: React.FC<WebFormFormProps> = ({ initialData, isEdit })
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Form Fields & Attributes</h3>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Add Field:</span>
+            <span className="text-xs text-gray-600 dark:text-gray-300">Add Field:</span>
             <select
               onChange={(e) => {
                 const id = Number(e.target.value);

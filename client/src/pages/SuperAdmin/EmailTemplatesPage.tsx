@@ -282,8 +282,8 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
         )}
       </header>
 
-      {error && <p role="alert" className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</p>}
-      {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">{notice}</p>}
+      {error && <p role="alert" className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>}
+      {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200">{notice}</p>}
 
       {loading ? (
         <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading email templates…</p>
@@ -336,7 +336,7 @@ const EmailTemplatesPage = ({ title, canCreate, canEdit, canDelete }: EmailTempl
                     <p className="mb-2 text-xs font-medium text-slate-700">Insert dynamic placeholder</p>
                     <div className="flex flex-wrap gap-2">
                       {placeholders.map((placeholder) => (
-                        <button key={placeholder} type="button" disabled={!isCreating && !canEdit} onClick={() => insertPlaceholder(placeholder)} className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 font-mono text-xs text-indigo-200 disabled:opacity-50">
+                        <button key={placeholder} type="button" disabled={!isCreating && !canEdit} onClick={() => insertPlaceholder(placeholder)} className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 font-mono text-xs text-indigo-700 dark:text-indigo-200 disabled:opacity-50">
                           {`{{${placeholder}}}`}
                         </button>
                       ))}

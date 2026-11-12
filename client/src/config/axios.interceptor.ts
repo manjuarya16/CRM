@@ -48,7 +48,7 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
   const attachToken = (config: any) => {
     try {
       const url = (config.url || "").toLowerCase();
-      const isSuperAdminRoute = url.includes("/super-admin");
+      const isSuperAdminRoute = url.includes("/super-admin") || url.startsWith("/admin") || url.includes("/api/admin");
 
       if (isSuperAdminRoute) {
         // Only attach Super Admin token to super admin endpoints - never tenant user tokens!
@@ -168,7 +168,9 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
     // 401 UNAUTHORIZED - Token Invalid/Expired
     if (status === 401) {
       console.warn("401 Unauthorized - Invalid or expired token");
-      const isSuperAdminRoute = error.config?.url?.includes("/super-admin");
+      const errUrl = (error.config?.url || "").toLowerCase();
+      const isSuperAdminRoute =
+        errUrl.includes("/super-admin") || errUrl.startsWith("/admin") || errUrl.includes("/api/admin");
 
       if (isSuperAdminRoute) {
         try {
@@ -227,7 +229,9 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
     // 403 FORBIDDEN - User Not Authorized
     if (status === 403) {
       console.warn("403 Forbidden - User not authorized for this resource");
-      const isSuperAdminRoute = error.config?.url?.includes("/super-admin");
+      const errUrl = (error.config?.url || "").toLowerCase();
+      const isSuperAdminRoute =
+        errUrl.includes("/super-admin") || errUrl.startsWith("/admin") || errUrl.includes("/api/admin");
 
       if (isSuperAdminRoute) {
         try {

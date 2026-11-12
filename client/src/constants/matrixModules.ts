@@ -29,17 +29,6 @@ export const MATRIX_MODULES: MatrixModule[] = [
     deleteKey: "dashboard.delete",
   },
   {
-    id: "organization",
-    name: "Organization",
-    slug: "organization",
-    avatarChar: "O",
-    avatarBg: "bg-purple-600",
-    viewKey: "organizations.view",
-    addKey: "organizations.create",
-    updateKey: "organizations.edit",
-    deleteKey: "organizations.delete",
-  },
-  {
     id: "users",
     name: "Users",
     slug: "users",

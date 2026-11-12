@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { useOrganizationStore, useAuthStore, useConfigStore } from "../store";
+import { useOrganizationStore, useAuthStore, useConfigStore, useTenantStore } from "../store";
 import commonAPI from "../helpers/api/common";
+import { superAdminApi } from "../helpers/api/superAdmin";
+import { getSubdomain } from "../utils/subdomain";
 import { API_URL } from "../config";
 
-const resolveLogoUrl = (logo: string | null): string | null => {
+export const resolveLogoUrl = (logo: string | null | undefined): string | null => {
   if (!logo) return null;
   if (logo.startsWith("data:") || logo.startsWith("http://") || logo.startsWith("https://")) return logo;
   let base = API_URL.replace(/\/api$/, "");
@@ -17,13 +19,19 @@ const resolveLogoUrl = (logo: string | null): string | null => {
 
 const useAppLogo = () => {
   const { organization, getOrganization } = useOrganizationStore();
+  const { profile: tenantProfile, fetchProfile: fetchTenantProfile } = useTenantStore();
   const { userLoggedIn } = useAuthStore();
   const configs = useConfigStore((s) => s.configs);
   const fetchConfigs = useConfigStore((s) => s.fetchConfigs);
+  const subdomain = getSubdomain();
   const [publicBranding, setPublicBranding] = useState<{
     name: string | null;
     logo: string | null;
   }>({ name: null, logo: null });
+  const [publicTenant, setPublicTenant] = useState<{
+    name: string | null;
+    logo_url: string | null;
+  }>({ name: null, logo_url: null });
 
   // Only sync configs from server once on mount or when login state changes
   useEffect(() => {
@@ -33,7 +41,21 @@ const useAppLogo = () => {
   useEffect(() => {
     if (userLoggedIn) {
       if (!organization) getOrganization();
+      if (!tenantProfile) fetchTenantProfile();
     } else {
+      if (subdomain.slug) {
+        superAdminApi
+          .getPublicTenant(subdomain.slug)
+          .then((res) => {
+            if (res.data?.success && res.data?.data) {
+              setPublicTenant({
+                name: res.data.data.name || null,
+                logo_url: res.data.data.logo_url || null,
+              });
+            }
+          })
+          .catch(() => {});
+      }
       commonAPI
         .getPublicBranding()
         .then((res) => {
@@ -46,12 +68,19 @@ const useAppLogo = () => {
         })
         .catch(() => {});
     }
-  }, [userLoggedIn]);
+  }, [userLoggedIn, subdomain.slug]);
 
-  // Admin Logo configured in Configuration is the primary brand logo for the entire system
   const adminLogo = configs["general.general.admin_logo.logo_image"];
-  const rawLogo = adminLogo || (userLoggedIn ? organization?.logo : publicBranding.logo);
-  const orgLogo = resolveLogoUrl(rawLogo ?? null) || "/logonew.png";
+  const tenantLogo = userLoggedIn ? tenantProfile?.logo_url : publicTenant.logo_url;
+  const rawLogo =
+    tenantLogo ||
+    adminLogo ||
+    (userLoggedIn ? organization?.logo : null) ||
+    publicTenant.logo_url ||
+    publicBranding.logo;
+
+  const orgLogo = resolveLogoUrl(rawLogo ?? null) || "/logo-2.png";
+  const isCustomLogo = Boolean(rawLogo);
 
   // Favicon configured in Configuration -> General settings for condensed/small sidebar
   const adminFavicon = configs["general.general.admin_logo.favicon_image"];
@@ -61,8 +90,11 @@ const useAppLogo = () => {
     logoLight: orgLogo,
     logoDark: orgLogo,
     logoSm: faviconUrl || orgLogo,
+    isCustomLogo,
     orgName:
-      (userLoggedIn ? organization?.name : publicBranding.name) ?? "MORSE CRM",
+      (userLoggedIn
+        ? tenantProfile?.name || organization?.name
+        : publicTenant.name || publicBranding.name) ?? "MORSE CRM",
   };
 };
 

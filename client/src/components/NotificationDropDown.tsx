@@ -45,13 +45,15 @@ const NotificationDropdown = () => {
   useEffect(() => {
     // Initial fetch once on mount
     fetchUnreadCount();
+    fetchNotifications(1, 10);
 
     // Listen to real-time push events via Server-Sent Events (Zero polling)
     const cleanup = realtimeService.onNotificationChange(() => {
       fetchUnreadCount();
+      fetchNotifications(1, 10);
     });
     return cleanup;
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, fetchNotifications]);
 
   const handleNotificationClick = async (item: INotificationItem) => {
     if (!item.is_read) {

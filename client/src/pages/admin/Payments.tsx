@@ -46,6 +46,13 @@ interface OrgOption {
   name: string;
 }
 
+interface TierOption {
+  id?: number;
+  name: string;
+  inr: number;
+  usd: number;
+}
+
 const SuperAdminPayments: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -89,13 +96,21 @@ const SuperAdminPayments: React.FC = () => {
     paid_at: new Date().toISOString().split("T")[0],
   });
   const [recordingPayment, setRecordingPayment] = useState(false);
+  const [tierOptions, setTierOptions] = useState<TierOption[]>([
+    { name: "Starter", inr: 9999, usd: 149 },
+    { name: "Growth", inr: 19999, usd: 299 },
+    { name: "Business", inr: 29999, usd: 449 },
+  ]);
 
   const handlePlanChange = (plan: string, curr: string = recordForm.currency) => {
-    let amt = 9999;
+    const matched = tierOptions.find((t) => t.name.toLowerCase() === plan.toLowerCase());
     const isUsd = curr === "USD";
-    if (plan === "Growth") amt = isUsd ? 299 : 19999;
-    else if (plan === "Business") amt = isUsd ? 449 : 29999;
-    else amt = isUsd ? 149 : 9999;
+    let amt = matched ? (isUsd ? matched.usd : matched.inr) : 9999;
+    if (!matched) {
+      if (plan === "Growth") amt = isUsd ? 299 : 19999;
+      else if (plan === "Business") amt = isUsd ? 449 : 29999;
+      else amt = isUsd ? 149 : 9999;
+    }
     setRecordForm(prev => ({ ...prev, plan_name: plan, currency: curr, amount: amt }));
   };
 
@@ -107,6 +122,16 @@ const SuperAdminPayments: React.FC = () => {
     e.preventDefault();
     if (!recordForm.organization_id) {
       Swal.fire("Organization Required", "Please select an organization.", "warning");
+      return;
+    }
+    const amt = Number(recordForm.amount);
+    const disc = Number(recordForm.discount_amount) || 0;
+    if (!Number.isFinite(amt) || amt <= 0) {
+      Swal.fire("Invalid Amount", "Plan base amount must be greater than 0.", "warning");
+      return;
+    }
+    if (!Number.isFinite(disc) || disc < 0 || disc >= amt) {
+      Swal.fire("Invalid Discount", "Net payable amount after discount must be greater than 0.", "warning");
       return;
     }
     setRecordingPayment(true);
@@ -288,8 +313,32 @@ const SuperAdminPayments: React.FC = () => {
     }
   };
 
+  const fetchTierOptions = async () => {
+    try {
+      const response = await adminApi.get("/super-admin/modules/subscription-plans");
+      const rows = response.data?.data;
+      if (Array.isArray(rows) && rows.length > 0) {
+        setTierOptions(
+          rows.map((r: any) => {
+            const major = Math.round(Number(r.amount_cents || 0) / 100);
+            const isUsd = String(r.currency || "INR").toUpperCase() === "USD";
+            return {
+              id: Number(r.id),
+              name: String(r.name),
+              inr: isUsd ? Math.round(major * 70) : major,
+              usd: isUsd ? major : Math.max(1, Math.round(major / 70)),
+            };
+          })
+        );
+      }
+    } catch {
+      // Keep fallback tier defaults
+    }
+  };
+
   useEffect(() => {
     fetchOrgOptions();
+    fetchTierOptions();
   }, []);
 
   useEffect(() => {
@@ -513,6 +562,10 @@ const SuperAdminPayments: React.FC = () => {
                 setRecordForm(prev => ({
                   ...prev,
                   organization_id: selectedOrgId || (organizations[0]?.id ? String(organizations[0].id) : ""),
+                  discount_amount: 0,
+                  payment_method: "Cash",
+                  notes: "",
+                  paid_at: new Date().toISOString().split("T")[0],
                   reference: `REC-${Date.now().toString().slice(-6)}`,
                 }));
                 setShowRecordModal(true);
@@ -1463,9 +1516,11 @@ const SuperAdminPayments: React.FC = () => {
                     onChange={(e) => handlePlanChange(e.target.value)}
                     className="form-select text-xs w-full rounded-xl py-2"
                   >
-                    <option value="Starter">Starter Plan</option>
-                    <option value="Growth">Growth Plan</option>
-                    <option value="Business">Business Plan</option>
+                    {tierOptions.map((tier) => (
+                      <option key={tier.name} value={tier.name}>
+                        {tier.name} Plan
+                      </option>
+                    ))}
                   </select>
                 </div>
 

@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTenantStore, TenantProfile } from "@/store/tenantStore";
+import { useTenantStore } from "@/store/tenantStore";
+import { resolveLogoUrl } from "@/hooks/useAppLogo";
 import { getSubdomain } from "@/utils/subdomain";
+import API from "@/config";
+import Swal from "sweetalert2";
 
 const TIMEZONES = [
   "Asia/Kolkata",
@@ -32,6 +35,31 @@ const OrganizationPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"general" | "contact" | "workspace" | "admin">("general");
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
+
+  const handleOrgLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      Swal.fire("Warning", "Logo file size must be under 5 MB.", "warning");
+      return;
+    }
+    try {
+      setUploadingLogo(true);
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await API.post("/configuration/upload-image", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      if (res.data?.success && res.data?.url) {
+        setFormData((prev) => ({ ...prev, logo_url: res.data.url }));
+      }
+    } catch (err: any) {
+      Swal.fire("Error", err?.response?.data?.message || "Failed to upload organization logo", "error");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   // Form state
   const [formData, setFormData] = useState<{
@@ -252,9 +280,12 @@ const OrganizationPage: React.FC = () => {
             <div className="relative group">
               {formData.logo_url ? (
                 <img
-                  src={formData.logo_url}
+                  src={resolveLogoUrl(formData.logo_url) || formData.logo_url}
                   alt={profile?.name || "Organization Logo"}
-                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover bg-white/10 border-2 border-white/20 shadow-md p-1"
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-contain bg-white/95 border-2 border-white/20 shadow-md p-1.5"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
                 />
               ) : (
                 <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-[#0088cc] to-teal-400 text-white font-black text-3xl sm:text-4xl flex items-center justify-center border-2 border-white/20 shadow-md">
@@ -430,6 +461,49 @@ const OrganizationPage: React.FC = () => {
           {activeTab === "general" && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className={labelCls}>Organization Logo</label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {formData.logo_url && (
+                      <img
+                        src={resolveLogoUrl(formData.logo_url) || formData.logo_url}
+                        alt="Org Logo Preview"
+                        className="h-12 w-12 rounded-xl object-contain bg-white border border-gray-200 dark:border-gray-600 p-1"
+                      />
+                    )}
+                    <input
+                      type="text"
+                      disabled={!isEditing}
+                      value={formData.logo_url}
+                      onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
+                      placeholder="https://... or upload logo image"
+                      className={`${inputCls} flex-1 min-w-[220px]`}
+                    />
+                    {isEditing && (
+                      <label className="px-3.5 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 cursor-pointer border border-gray-300 dark:border-gray-600 transition inline-flex items-center gap-1.5">
+                        <i className={uploadingLogo ? "mgc_loading_2_line animate-spin" : "mgc_upload_2_line"}></i>
+                        <span>{uploadingLogo ? "Uploading..." : "Upload Logo"}</span>
+                        <input
+                          type="file"
+                          accept="image/png, image/jpeg, image/jpg, image/webp, image/svg+xml"
+                          onChange={handleOrgLogoUpload}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                      </label>
+                    )}
+                    {isEditing && formData.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, logo_url: "" })}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/60 transition cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label className={labelCls}>Organization Name *</label>
                   <input

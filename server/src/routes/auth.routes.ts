@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '@/schemas/auth.schema';
+import {
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+} from '@/schemas/auth.schema';
 import { AuthService } from '@/services/auth.service';
 import { requireAuth } from '@/middleware/auth';
 
@@ -51,6 +58,28 @@ router.post('/logout', (_req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ success: true, user: req.user });
+});
+
+router.put('/profile', requireAuth, async (req, res, next) => {
+  try {
+    const validatedInput = updateProfileSchema.parse(req.body);
+    const tenantId = req.tenant?.id ?? req.user?.tenant_id ?? undefined;
+    const updatedUser = await AuthService.updateProfile(req.user!.id, validatedInput, tenantId);
+    res.json({ success: true, message: 'Profile updated successfully', user: updatedUser });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/change-password', requireAuth, async (req, res, next) => {
+  try {
+    const validatedInput = changePasswordSchema.parse(req.body);
+    const tenantId = req.tenant?.id ?? req.user?.tenant_id ?? undefined;
+    await AuthService.changePassword(req.user!.id, validatedInput, tenantId);
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

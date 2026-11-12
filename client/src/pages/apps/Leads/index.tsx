@@ -9,6 +9,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { realtimeService } from "@/services/realtimeService";
 import { VoiceLeadModal } from "@/components/VoiceLeadModal";
+import { X } from "lucide-react";
 
 interface LeadStageDropdownProps {
   currentStageId: number;
@@ -495,13 +496,13 @@ const LeadsPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex items-center gap-x-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           {/* Voice Lead button */}
           {canCreate && (
             <button
               type="button"
               onClick={() => setShowVoiceModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 sm:px-3.5 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors cursor-pointer"
               title="Create Lead using Voice Assistant"
             >
               <i className="mgc_mic_line text-sm text-[#0e90d9]"></i>
@@ -513,7 +514,7 @@ const LeadsPage: React.FC = () => {
           {isDocGenEnabled && canCreate && (
             <button
               onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 sm:px-3.5 border border-[#0e90d9] text-[#0e90d9] hover:bg-[#e0f2fe] dark:hover:bg-gray-700 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
             >
               <i className="mgc_upload_line text-sm"></i>
               <span>Upload File</span>
@@ -522,7 +523,7 @@ const LeadsPage: React.FC = () => {
 
           <Link
             to="/reports/recurring-contracts"
-            className="inline-flex items-center gap-1.5 px-3 py-2 border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-xs sm:text-sm font-semibold rounded-md shadow-2xs transition-colors"
             title="Open Recurring Contracts & Renewals Report"
           >
             <i className="mgc_repeat_line text-sm text-purple-600 dark:text-purple-400"></i>
@@ -532,7 +533,7 @@ const LeadsPage: React.FC = () => {
           {canCreate && (
             <Link
               to="/leads/create"
-              className="inline-flex items-center px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
+              className="inline-flex items-center justify-center whitespace-nowrap px-3.5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white text-xs sm:text-sm font-semibold rounded-md shadow-xs transition-colors"
             >
               Create Lead
             </Link>
@@ -563,10 +564,10 @@ const LeadsPage: React.FC = () => {
                     fetchLeads(1, perPage, "", filterForm);
                   }
                 }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                className="absolute inset-y-0 right-1.5 my-auto flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                 title="Clear search"
               >
-                ✕
+                <X size={14} strokeWidth={2.25} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -881,7 +882,7 @@ const LeadsPage: React.FC = () => {
           <div
             ref={boardContainerRef}
             style={{ height: boardHeight }}
-            className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} kanban-board-scroll overflow-x-auto pb-0 scroll-smooth sticky bottom-0`}
+            className={`${mobileKanbanLayout === "board" ? "block" : "hidden md:block"} kanban-board-scroll overflow-x-auto pb-3 scroll-smooth`}
           >
             <div className="flex gap-4 min-w-max h-full items-stretch">
               {(() => {
@@ -908,7 +909,7 @@ const LeadsPage: React.FC = () => {
                       await updateLeadStage(leadId, stage.id, true);
                       fetchKanbanLeads(selectedPipelineId ? Number(selectedPipelineId) : undefined, search, filterForm);
                     }}
-                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-50/70 dark:bg-gray-900/50 rounded-xl border border-gray-200/80 dark:border-gray-700/80 p-3.5 flex flex-col h-full min-h-0 transition-colors hover:border-[#0088cc]/50"
+                    className="w-72 lg:w-80 flex-shrink-0 bg-gray-100/75 dark:bg-gray-900/60 rounded-xl border border-gray-200/90 dark:border-gray-700/80 p-3.5 flex flex-col h-full min-h-[420px] transition-colors hover:border-[#0088cc]/50"
                   >
                     <div className="flex items-center justify-between shrink-0 mb-2">
                       <div>
@@ -993,7 +994,7 @@ const LeadsPage: React.FC = () => {
                                 e.dataTransfer.setData("text/plain", String(lead.id));
                                 e.dataTransfer.effectAllowed = "move";
                               }}
-                              className="group bg-gray-50 dark:bg-gray-900 rounded-xl p-3.5 border border-gray-200 dark:border-gray-700/80 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                              className="group bg-white dark:bg-gray-800 rounded-xl p-3.5 border border-gray-200/90 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-[#0088cc]/40 transition-all cursor-grab active:cursor-grabbing space-y-2.5"
                             >
                               {/* ROW 1: Avatar + Person + Company + alert icon */}
                               <div className="flex items-start justify-between gap-2">

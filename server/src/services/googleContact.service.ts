@@ -25,21 +25,39 @@ export class GoogleContactService {
     data: { google_email: string; access_token: string; refresh_token?: string | null; expires_in?: number; token_type?: string }
   ): Promise<IGoogleContactAccount> {
     try {
-      const userIdNumber = toNumberParam(userId) || 1;
-      const cleanedToken = data.access_token ? data.access_token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '') : '';
+      const userIdNumber = toNumberParam(userId);
+      if (!userIdNumber) {
+        throw new Error('Valid authenticated user ID is required');
+      }
+      const cleanedToken = data.access_token
+        ? data.access_token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '')
+        : '';
+      const expiresIn = data.expires_in || 3600;
+      const tokenType = data.token_type || 'Bearer';
 
       const { rows } = await pool.query(
-        'SELECT save_google_account($1, $2, $3, $4, $5, $6) as result',
+        `INSERT INTO public.google_contact_accounts
+           (user_id, google_email, access_token, refresh_token, expires_in, token_type, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           google_email = EXCLUDED.google_email,
+           access_token = EXCLUDED.access_token,
+           refresh_token = COALESCE(EXCLUDED.refresh_token, public.google_contact_accounts.refresh_token),
+           expires_in = EXCLUDED.expires_in,
+           token_type = EXCLUDED.token_type,
+           is_active = true,
+           updated_at = NOW()
+         RETURNING id, user_id, google_email, token_type, expires_in, is_active, created_at, updated_at`,
         [
           userIdNumber,
           data.google_email.trim(),
           cleanedToken,
           data.refresh_token || null,
-          data.expires_in || 3600,
-          data.token_type || 'Bearer',
+          expiresIn,
+          tokenType,
         ]
       );
-      return rows[0]?.result;
+      return rows[0];
     } catch (error: any) {
       logger.error({ error, userId, data }, 'GoogleContactService.saveAccount failed');
       throw error;

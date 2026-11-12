@@ -94,27 +94,44 @@ const PersonsPage: React.FC = () => {
         }
         if (res.length > 0) return res;
       }
-      return [{ label, value: clean.includes("@") ? cleanEmailAddress(clean) : clean }];
+      const val = clean.includes("@") ? cleanEmailAddress(clean) : clean;
+      return val ? [{ label, value: val }] : [];
     };
 
     if (Array.isArray(raw)) {
       const result: Array<{ label: string; value: string }> = [];
       for (const item of raw) {
         if (typeof item === "object" && item !== null) {
-          const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+          const itemVal = item.value ?? item.number ?? item.phone ?? item.contact ?? item.mobile ?? item.contact_number ?? item.phone_number ?? item.tel ?? item.email;
           const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? item.label : defaultLabel;
           const itemLabel = stripHtmlToText(rawLabel) || defaultLabel;
           if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(",") || itemVal.includes("<"))) {
             result.push(...processString(itemVal, itemLabel));
-          } else if (itemVal) {
+          } else if (itemVal !== undefined && itemVal !== null && String(itemVal).trim() !== "") {
             const valStr = String(itemVal).trim();
             result.push({ label: itemLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
+          } else {
+            for (const [k, v] of Object.entries(item)) {
+              if (k === "label" || k === "id" || v === undefined || v === null) continue;
+              const valStr = String(v).trim();
+              if (valStr) result.push({ label: k || defaultLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
+            }
           }
         } else if (typeof item === "string") {
           result.push(...processString(item, defaultLabel));
+        } else if (typeof item === "number") {
+          result.push({ label: defaultLabel, value: String(item) });
         }
       }
       return result;
+    }
+
+    if (typeof raw === "object" && raw !== null) {
+      return parseItems([raw], defaultLabel);
+    }
+
+    if (typeof raw === "number") {
+      return [{ label: defaultLabel, value: String(raw) }];
     }
 
     if (typeof raw === "string") {
@@ -140,7 +157,7 @@ const PersonsPage: React.FC = () => {
   };
 
   const formatContacts = (contacts: any) => {
-    const list = parseItems(contacts, "work");
+    const list = parseItems(contacts, "work").filter((item) => item.value && item.value.trim() !== "");
     if (!list.length) return "-";
     return (
       <div className="flex flex-col gap-0.5">

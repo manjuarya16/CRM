@@ -449,8 +449,11 @@ export async function initializePlatformModuleTables(): Promise<void> {
       message TEXT NOT NULL,
       type VARCHAR(30) NOT NULL DEFAULT 'info',
       is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      metadata JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE public.platform_notifications
+      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
     CREATE INDEX IF NOT EXISTS platform_notifications_created_idx
       ON public.platform_notifications (created_at DESC);
 

@@ -720,7 +720,6 @@ const ReportsPage: React.FC = () => {
             { key: 'product-service-mix', label: 'Product vs Service', icon: 'mgc_shuffle_line' },
             { key: 'stale-leads', label: 'Stale Leads', icon: 'mgc_alarm_line' },
             { key: 'recurring-contracts', label: 'Recurring & Contracts', icon: 'mgc_repeat_line' },
-            { key: 'setup', label: 'Data Setup', icon: 'mgc_settings_3_line' },
           ].map((tabItem) => {
             const isActive = activeTab === tabItem.key;
             return (

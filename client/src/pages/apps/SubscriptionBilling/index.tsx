@@ -348,6 +348,7 @@ const SubscriptionBillingPage = () => {
         pricing_tier_id: plan.id,
         amount_cents: payAmountCents,
         currency: plan.currency,
+        is_upgrade: isUpgrade,
       });
 
       const orderData = orderRes.data?.data;
@@ -355,16 +356,26 @@ const SubscriptionBillingPage = () => {
         throw new Error("Could not initialize payment order.");
       }
 
-      // 2. Ensure Razorpay SDK is loaded
-      await loadRazorpayScript();
+      const isMockOrder =
+        !orderData.key_id ||
+        orderData.key_id === "rzp_test_placeholder" ||
+        String(orderData.order_id).startsWith("order_crm_") ||
+        String(orderData.order_id).startsWith("order_mock_");
 
-      if (typeof (window as any).Razorpay === "function") {
+      // 2. Ensure Razorpay SDK is loaded when using live gateway keys
+      if (!isMockOrder) {
+        await loadRazorpayScript();
+      }
+
+      if (!isMockOrder && typeof (window as any).Razorpay === "function") {
         const options = {
           key: orderData.key_id,
           amount: orderData.amount,
           currency: orderData.currency,
           name: "CRM SaaS",
-          description: `Subscription: ${plan.name} Plan`,
+          description: isUpgrade
+            ? `Upgrade to ${plan.name} Plan`
+            : `Subscription: ${plan.name} Plan`,
           order_id: orderData.order_id,
           handler: async (response: any) => {
             try {
@@ -377,7 +388,7 @@ const SubscriptionBillingPage = () => {
 
               await Swal.fire({
                 icon: "success",
-                title: "Payment Successful!",
+                title: isUpgrade ? "Plan Upgraded!" : "Payment Successful!",
                 text: `Your ${plan.name} subscription has been activated successfully.`,
                 confirmButtonColor: "#4f46e5",
               });
@@ -392,7 +403,11 @@ const SubscriptionBillingPage = () => {
             }
           },
           prefill: {
-            name: data?.tenant?.name || "Organization Admin",
+            ...(data?.tenant?.name ? { name: data.tenant.name } : {}),
+            ...((data?.tenant as any)?.email ? { email: (data?.tenant as any).email } : {}),
+            ...((data?.tenant as any)?.phone && String((data?.tenant as any).phone).trim().length >= 10
+              ? { contact: String((data?.tenant as any).phone).trim() }
+              : {}),
           },
           theme: { color: "#4f46e5" },
         };
@@ -407,13 +422,13 @@ const SubscriptionBillingPage = () => {
         });
         rzp.open();
       } else {
-        // Fallback demo/sandbox confirmation if checkout.js is offline or mock mode
+        // Fallback sandbox/mock confirmation if checkout.js is unavailable or keys are in test placeholder/mock mode
         const result = await Swal.fire({
-          title: "Complete Payment",
-          html: `Simulate checkout for <strong>${plan.name}</strong> (${formatAmount(plan.amount_cents, plan.currency)})?`,
+          title: isUpgrade ? "Confirm Plan Upgrade" : "Complete Payment",
+          html: `Confirm ${isUpgrade ? "upgrade" : "checkout"} for <strong>${plan.name}</strong> (${formattedPrice})?`,
           icon: "question",
           showCancelButton: true,
-          confirmButtonText: "Confirm Payment",
+          confirmButtonText: isUpgrade ? `Pay ${formattedPrice} & Upgrade` : "Confirm Payment",
           confirmButtonColor: "#4f46e5",
         });
 
@@ -427,7 +442,7 @@ const SubscriptionBillingPage = () => {
 
           await Swal.fire({
             icon: "success",
-            title: "Payment Verified",
+            title: isUpgrade ? "Plan Upgraded" : "Payment Verified",
             text: `Subscription updated to ${plan.name}.`,
           });
           void loadBillingData();

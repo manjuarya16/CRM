@@ -385,7 +385,7 @@ router.post('/public-create-order', handler(async (req, res) => {
   if (!slug) throw new ApiError(400, 'Subdomain or organization slug is required');
 
   const { rows } = await pool.query(
-    `SELECT id, name, slug, plan, status FROM public.saas_tenants 
+    `SELECT id, name, slug, plan, status, settings, created_at FROM public.saas_tenants 
       WHERE LOWER(slug)=LOWER($1) 
          OR LOWER(REPLACE(slug, '-', ''))=LOWER(REPLACE($1, '-', ''))
       LIMIT 1`,
@@ -425,7 +425,7 @@ router.post('/public-create-order', handler(async (req, res) => {
 
   // Check if organization already has an active package and is upgrading
   const { rows: subRows } = await pool.query(
-    `SELECT s.id, s.pricing_tier_id, s.status, s.ends_at, t.name as tier_name
+    `SELECT s.id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at, t.name as tier_name
        FROM public.platform_subscriptions s
        LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
       WHERE s.tenant_id = $1
@@ -579,7 +579,7 @@ router.post('/public-verify-payment', handler(async (req, res) => {
   if (!slug) throw new ApiError(400, 'Subdomain or organization slug is required');
 
   const { rows } = await pool.query(
-    `SELECT id, name, slug, settings FROM public.saas_tenants 
+    `SELECT id, name, slug, plan, status, settings, created_at FROM public.saas_tenants 
       WHERE LOWER(slug)=LOWER($1) 
          OR LOWER(REPLACE(slug, '-', ''))=LOWER(REPLACE($1, '-', ''))
       LIMIT 1`,
@@ -592,7 +592,8 @@ router.post('/public-verify-payment', handler(async (req, res) => {
 
   // Verify HMAC signature if present and not mock
   const keySecret = env.RAZORPAY_KEY_SECRET;
-  if (keySecret && razorpay_signature && !razorpay_order_id?.startsWith('order_mock_')) {
+  const isMockOrder = !razorpay_order_id || razorpay_order_id.startsWith('order_mock_') || razorpay_order_id.startsWith('order_crm_');
+  if (keySecret && razorpay_signature && !isMockOrder) {
     const payload = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = createHmac('sha256', keySecret).update(payload).digest('hex');
     if (expectedSignature !== razorpay_signature) {
@@ -628,7 +629,7 @@ router.post('/public-verify-payment', handler(async (req, res) => {
 
   // Check if organization has an existing active subscription and whether this is an upgrade
   const { rows: subRows } = await pool.query(
-    `SELECT s.id, s.pricing_tier_id, s.status, s.ends_at, t.name as tier_name
+    `SELECT s.id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at, t.name as tier_name
        FROM public.platform_subscriptions s
        LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
       WHERE s.tenant_id = $1
@@ -710,14 +711,18 @@ router.post('/public-verify-payment', handler(async (req, res) => {
     targetExpiry.setDate(targetExpiry.getDate() - 1);
   }
 
-  // 1. Update saas_tenants with updated plan, start date, and 1-year expiry date
+  // 1. Update saas_tenants with updated plan, start date, 1-year expiry date, and clear pay_later
   await pool.query(
     `UPDATE public.saas_tenants 
         SET status = 'active',
             plan = $1,
             settings = jsonb_set(
               jsonb_set(
-                COALESCE(settings, '{}'::jsonb),
+                jsonb_set(
+                  COALESCE(settings, '{}'::jsonb),
+                  '{pay_later}',
+                  'false'::jsonb
+                ),
                 '{subscription_expiry_date}',
                 to_jsonb($2::text)
               ),
@@ -862,7 +867,7 @@ router.post('/public-cash-payment', handler(async (req, res) => {
   if (!slug) throw new ApiError(400, 'Subdomain or organization slug is required');
 
   const { rows } = await pool.query(
-    `SELECT id, name, slug, plan, status, settings FROM public.saas_tenants 
+    `SELECT id, name, slug, plan, status, settings, created_at FROM public.saas_tenants 
       WHERE LOWER(slug)=LOWER($1) 
          OR LOWER(REPLACE(slug, '-', ''))=LOWER(REPLACE($1, '-', ''))
       LIMIT 1`,
@@ -911,7 +916,7 @@ router.post('/public-cash-payment', handler(async (req, res) => {
 
   // Check active subscription & upgrades
   const { rows: subRows } = await pool.query(
-    `SELECT s.id, s.pricing_tier_id, s.status, s.ends_at, t.name as tier_name
+    `SELECT s.id, s.pricing_tier_id, s.status, s.starts_at, s.ends_at, t.name as tier_name
        FROM public.platform_subscriptions s
        LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
       WHERE s.tenant_id = $1
@@ -992,14 +997,18 @@ router.post('/public-cash-payment', handler(async (req, res) => {
     targetExpiry.setDate(targetExpiry.getDate() - 1);
   }
 
-  // 1. Update saas_tenants with updated plan, start date, and 1-year expiry date
+  // 1. Update saas_tenants with updated plan, start date, 1-year expiry date, and clear pay_later
   await pool.query(
     `UPDATE public.saas_tenants 
         SET status = 'active',
             plan = $1,
             settings = jsonb_set(
               jsonb_set(
-                COALESCE(settings, '{}'::jsonb),
+                jsonb_set(
+                  COALESCE(settings, '{}'::jsonb),
+                  '{pay_later}',
+                  'false'::jsonb
+                ),
                 '{subscription_expiry_date}',
                 to_jsonb($2::text)
               ),
@@ -1186,6 +1195,7 @@ router.post('/create-order', handler(async (req, res) => {
     pricingTierId,
     amountCents: req.body.amount_cents ? Number(req.body.amount_cents) : undefined,
     currency: req.body.currency,
+    isUpgrade: req.body.is_upgrade !== undefined ? Boolean(req.body.is_upgrade) : undefined,
     notes: { payment_source: 'in_app_tenant_portal' },
   });
 

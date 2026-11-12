@@ -35,7 +35,7 @@ const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: strin
         return parsePersonField(p, lbl);
       } catch {}
     }
-    clean = clean.replace(/<[^>]+>/g, ' ').replace(/\bmailto:\s*/gi, '').trim();
+    clean = clean.replace(/<\/?[a-zA-Z][^>]*>/g, ' ').replace(/\bmailto:\s*/gi, '').trim();
     if (clean.includes(':') || clean.includes(',')) {
       const parts = clean.split(',');
       const res: Array<{ label: string; value: string }> = [];
@@ -65,23 +65,59 @@ const parsePersonField = (val: any, defaultLabel = 'work'): Array<{ label: strin
     const res: Array<{ label: string; value: string }> = [];
     for (const item of val) {
       if (typeof item === 'object' && item !== null) {
-        const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+        const itemVal = [item.value, item.number, item.phone, item.contact, item.mobile, item.contact_number, item.contactNumber, item.phone_number, item.phoneNumber, item.mobile_number, item.mobileNumber, item.telephone, item.tel, item.email]
+          .find((value) => value !== undefined && value !== null && String(value).trim() !== '');
         const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? String(item.label).trim() : defaultLabel;
         const itemLabel = rawLabel.replace(/<[^>]+>/g, '').trim() || defaultLabel;
         if (typeof itemVal === 'string' && (itemVal.startsWith('[') || itemVal.startsWith('{') || itemVal.includes(':') || itemVal.includes(',') || itemVal.includes('<'))) {
           res.push(...parseStr(itemVal, itemLabel));
-        } else if (itemVal) {
+        } else if (itemVal !== undefined && itemVal !== null && String(itemVal).trim() !== '') {
           const vStr = String(itemVal).trim();
-          res.push({ label: itemLabel, value: vStr.includes('@') ? cleanEmailVal(vStr) : vStr.replace(/<[^>]+>/g, '').trim() });
+          res.push({ label: itemLabel, value: vStr.includes('@') ? cleanEmailVal(vStr) : vStr.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim() });
+        } else {
+          for (const [k, v] of Object.entries(item)) {
+            if (k === 'label' || k === 'id' || v === undefined || v === null) continue;
+            const vStr = String(v).trim();
+            if (vStr) res.push({ label: k || defaultLabel, value: vStr.includes('@') ? cleanEmailVal(vStr) : vStr });
+          }
         }
       } else if (typeof item === 'string') {
         res.push(...parseStr(item, defaultLabel));
+      } else if (typeof item === 'number') {
+        res.push({ label: defaultLabel, value: String(item) });
       }
     }
     return res;
   }
+  if (typeof val === 'object' && val !== null) {
+    return parsePersonField([val], defaultLabel);
+  }
+  if (typeof val === 'number') {
+    return [{ label: defaultLabel, value: String(val) }];
+  }
   if (typeof val === 'string') return parseStr(val, defaultLabel);
   return [];
+};
+
+const parsePersonContactNumbers = (person: any): Array<{ label: string; value: string }> => {
+  const candidates = [
+    person.contact_numbers,
+    person.contactNumbers,
+    person.contact_number,
+    person.contactNumber,
+    person.phone,
+    person.phone_number,
+    person.phoneNumber,
+    person.mobile,
+    person.mobile_number,
+    person.mobileNumber,
+    person.telephone,
+    person.tel,
+  ];
+  const populated = candidates.find((candidate) =>
+    parsePersonField(candidate, 'work').some((contact) => contact.value.trim() !== '')
+  );
+  return parsePersonField(populated, 'work');
 };
 
 export class PersonService {
@@ -102,11 +138,27 @@ export class PersonService {
       ]);
 
       const resData = rows[0]?.result || { rows: [], total: 0 };
-      const cleanedRows = (resData.rows || []).map((row: any) => ({
-        ...row,
-        emails: parsePersonField(row.emails, 'work'),
-        contact_numbers: parsePersonField(row.contact_numbers, 'work'),
-      }));
+      const personRows = resData.rows || [];
+      const personIds = personRows
+        .map((row: any) => Number(row.id))
+        .filter((personId: number) => Number.isInteger(personId) && personId > 0);
+      const rawPeople = personIds.length
+        ? await client.query(
+            'SELECT id, to_jsonb(p) AS raw_person FROM public.persons p WHERE p.id = ANY($1::integer[])',
+            [personIds]
+          )
+        : { rows: [] };
+      const rawPeopleById = new Map(
+        rawPeople.rows.map((row: any) => [Number(row.id), row.raw_person])
+      );
+      const cleanedRows = personRows.map((row: any) => {
+        const mergedPerson = { ...row, ...(rawPeopleById.get(Number(row.id)) || {}) };
+        return {
+          ...mergedPerson,
+          emails: parsePersonField(row.emails ?? mergedPerson.emails, 'work'),
+          contact_numbers: parsePersonContactNumbers(mergedPerson),
+        };
+      });
 
       return {
         rows: cleanedRows,
@@ -128,8 +180,13 @@ export class PersonService {
       if (!personId) return null;
 
       client = await pool.connect();
-      const { rows } = await client.query('SELECT get_person($1) as result', [personId]);
-      const person = rows[0]?.result || null;
+      const { rows } = await client.query(
+        'SELECT get_person($1) AS result, to_jsonb(p) AS raw_person FROM public.persons p WHERE p.id = $1',
+        [personId]
+      );
+      const person = rows[0]?.result
+        ? { ...rows[0].result, ...(rows[0].raw_person || {}) }
+        : null;
       if (!person) return null;
 
       const cleanJobTitle = (title: any) => {
@@ -143,7 +200,7 @@ export class PersonService {
       const cleanedPerson = {
         ...person,
         emails: parsePersonField(person.emails, 'work'),
-        contact_numbers: parsePersonField(person.contact_numbers, 'work'),
+        contact_numbers: parsePersonContactNumbers(person),
         job_title: cleanJobTitle(person.job_title),
       };
 

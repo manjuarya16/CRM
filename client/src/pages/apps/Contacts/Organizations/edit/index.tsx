@@ -8,28 +8,6 @@ import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { organizationSchema } from "@/schemas";
 import { TagPicker } from "@/components/TagPicker";
 
-const COUNTRIES = [
-  "United States",
-  "India",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-  "Germany",
-  "France",
-  "United Arab Emirates",
-  "Singapore",
-  "Japan",
-  "Brazil",
-  "China",
-  "Italy",
-  "Spain",
-  "Netherlands",
-  "Switzerland",
-  "Mexico",
-  "South Africa",
-  "Saudi Arabia",
-  "New Zealand",
-];
 
 const EditOrganizationPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -321,18 +299,13 @@ const EditOrganizationPage: React.FC = () => {
                 {/* Right: Country, State, City, Postcode */}
                 <div className="space-y-3">
                   <div>
-                    <select
+                    <input
+                      type="text"
+                      placeholder="Country"
                       value={formData.country}
                       onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                       className={inputCls}
-                    >
-                      <option value="">Select Country</option>
-                      {COUNTRIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

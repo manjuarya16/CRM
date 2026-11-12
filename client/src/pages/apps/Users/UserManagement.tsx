@@ -680,7 +680,7 @@ export const UserManagement: React.FC = () => {
             </div>
             
             <div className="flex flex-col min-w-[140px]">
-              <label className="text-xs text-gray-500 mb-1">From</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">From</label>
               <input
                 type="date"
                 value={pendingDateFrom}
@@ -691,7 +691,7 @@ export const UserManagement: React.FC = () => {
               />
             </div>
             <div className="flex flex-col min-w-[140px]">
-              <label className="text-xs text-gray-500 mb-1">To</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">To</label>
               <input
                 type="date"
                 value={pendingDateTo}

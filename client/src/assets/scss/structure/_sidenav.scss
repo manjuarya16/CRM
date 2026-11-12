@@ -388,13 +388,18 @@ html[data-sidenav-view="sm"] {
                     .sub-menu {
                         display: block;
                         inset-inline-start: 100%;
-                        overflow: visible;
+                        overflow-y: auto;
+                        overflow-x: hidden;
+                        max-height: calc(100vh - 90px);
                         position: absolute;
-                        height: inherit !important;
+                        z-index: 60;
+                        height: auto !important;
                         transition: none;
                         padding-inline-start: 0;
                         background: $menu-bg;
                         width: calc($sidenav-width - $sidenav-width-sm);
+                        border-radius: 0.5rem;
+                        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
                         @apply border border-solid border-gray-500/20;
 
                         >.menu-item {

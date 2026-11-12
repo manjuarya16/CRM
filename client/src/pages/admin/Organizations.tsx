@@ -165,6 +165,21 @@ const SuperAdminOrganizations = () => {
 
   const handleSendPaymentLink = async (org: Organization) => {
     const defaultEmail = org.email || "";
+    const isTrial = String(org.plan_name || org.plan_code || "").toLowerCase().includes("trial");
+    const isAlreadyPaid =
+      org.status !== false &&
+      (String((org as any).payment_status || "").toLowerCase() === "paid" || !isTrial) &&
+      Boolean(org.subscription_expiry_date && new Date(org.subscription_expiry_date) > new Date());
+
+    if (isAlreadyPaid) {
+      await Swal.fire({
+        icon: "info",
+        title: "Already Paid",
+        text: `${org.name} already has an active paid ${org.plan_name || ""} subscription until ${new Date(org.subscription_expiry_date!).toLocaleDateString("en-IN")}. You cannot send a new payment link while already paid.`,
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
     const { value: formValues } = await Swal.fire({
       title: "Send Payment Link Email",
       html: `
@@ -1123,6 +1138,15 @@ const SuperAdminOrganizations = () => {
                               >
                                 <i className="mgc_bill_line text-base"></i>
                               </button>
+
+                              {/* Change Plan / Manage Subscription Button */}
+                              <Link
+                                to={`${basePath}/subscriptions?org_id=${org.id}`}
+                                className="p-1.5 rounded-lg text-violet-600 hover:bg-violet-600 hover:text-white dark:text-violet-400 dark:hover:bg-violet-600 transition inline-flex items-center justify-center"
+                                title="Change Plan / Manage Subscription"
+                              >
+                                <i className="mgc_arrow_up_circle_line text-base"></i>
+                              </Link>
 
                               {/* Send Payment Link Email Button */}
                               <button

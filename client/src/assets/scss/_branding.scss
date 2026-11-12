@@ -147,6 +147,25 @@ a.btn-primary:active {
   color: var(--brand-color-hover, #232894);
 }
 
+/* Readable Primary Text Accents in Dark Mode */
+:is([data-mode="dark"], .dark) .text-\[\#0088cc\],
+:is([data-mode="dark"], .dark) .text-\[\#0E90D9\],
+:is([data-mode="dark"], .dark) .text-\[\#0e90d9\],
+:is([data-mode="dark"], .dark) .text-\[\#0284c7\],
+:is([data-mode="dark"], .dark) .text-\[\#040975\],
+:is([data-mode="dark"], .dark) .text-\[\#03075e\],
+:is([data-mode="dark"], .dark) .text-primary {
+  color: #60a5fa;
+}
+
+:is([data-mode="dark"], .dark) .hover\:text-\[\#0088cc\]:hover,
+:is([data-mode="dark"], .dark) .hover\:text-\[\#0E90D9\]:hover,
+:is([data-mode="dark"], .dark) .hover\:text-\[\#0e90d9\]:hover,
+:is([data-mode="dark"], .dark) .hover\:text-\[\#040975\]:hover,
+:is([data-mode="dark"], .dark) .hover\:text-primary:hover {
+  color: #93c5fd;
+}
+
 /* Primary Border Accents */
 .border-\[\#0088cc\],
 .border-\[\#0E90D9\],

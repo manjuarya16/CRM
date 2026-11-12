@@ -3,6 +3,7 @@ import type { ProfileDropDownProps } from "../interface/profileInterface";
 import React from "react";
 import { PopoverLayout } from "./HeadlessUI";
 import { useAuthStore } from "../store";
+import { clearAuthStorage } from "@/lib/auth-utils";
 import { API_URL } from "../config";
 const resolveImageUrl = (img: string | null | undefined): string | null => {
   if (!img) return null;
@@ -46,9 +47,10 @@ const ProfileDropDown = ({
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
+      clearAuthStorage();
       reset();
       sessionStorage.clear();
-      navigate("/auth/login", { replace: true });
+      window.location.replace("/auth/login");
     }
   };
 

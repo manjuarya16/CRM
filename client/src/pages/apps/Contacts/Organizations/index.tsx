@@ -287,14 +287,8 @@ const OrganizationsPage: React.FC = () => {
             <span className="leading-relaxed">{fullAddress}</span>
           </div>
 
-          {/* Person Count & Date */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-            <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
-              <i className="mgc_group_line text-sm text-gray-400 shrink-0"></i>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">{org.person_count ?? 0}</span>
-              <span className="text-gray-500">{org.person_count === 1 ? "associated contact" : "associated contacts"}</span>
-            </div>
-
+          {/* Date */}
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
             <div className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500 text-[11px]">
               <i className="mgc_calendar_line text-xs shrink-0"></i>
               <span>Created {formatDate(org.created_at)}</span>
@@ -302,12 +296,8 @@ const OrganizationsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Bottom Row: Person Count Pill + Actions */}
-        <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/50 text-[#0284c7] dark:text-sky-300 border border-sky-200/80 dark:border-sky-800">
-            <i className="mgc_user_3_line text-xs shrink-0"></i>
-            <span>{org.person_count ?? 0} {org.person_count === 1 ? "Person" : "Persons"}</span>
-          </span>
+        {/* Bottom Row: Actions */}
+        <div className="flex items-center justify-end gap-2 pt-1 text-xs">
 
           <div className="flex items-center gap-1 shrink-0 text-gray-400">
             {canEdit && (
@@ -540,7 +530,6 @@ const OrganizationsPage: React.FC = () => {
                     </th>
                     <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">ID</th>
                     <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Name</th>
-                    <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Person Count</th>
                     <th className="py-3.5 px-4 font-semibold text-gray-600 dark:text-gray-300">Created At</th>
                     <th className="py-3.5 px-4 font-semibold text-right text-gray-600 dark:text-gray-300">Actions</th>
                   </tr>
@@ -573,9 +562,6 @@ const OrganizationsPage: React.FC = () => {
                           >
                             {org.name}
                           </Link>
-                        </td>
-                        <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300">
-                          {org.person_count ?? 0}
                         </td>
                         <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300">
                           {formatDate(org.created_at)}

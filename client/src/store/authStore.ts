@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { API } from "@/config";
 import {
   login as loginApi,
@@ -10,7 +10,7 @@ import {
 } from "../helpers/api/auth";
 
 import { UserData, AuthState } from "@/interface/authInterface";
-import { processUrlAuthToken, parseJwt, isTokenExpired, getToken } from "@/lib/auth-utils";
+import { processUrlAuthToken, parseJwt, isTokenExpired, getToken, clearAuthStorage } from "@/lib/auth-utils";
 import { useConfigStore } from "./configStore";
 
 export const useAuthStore = create<AuthState>()(
@@ -34,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
           const { data } = response;
 
           if (data.success && data.token) {
+            clearAuthStorage();
             // Store token in sessionStorage for auth-utils
             sessionStorage.setItem("token", data.token);
 
@@ -89,8 +90,10 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true });
         try {
           await logoutApi();
-          sessionStorage.removeItem("token");
-          sessionStorage.removeItem("app_user");
+        } catch (error: any) {
+          console.warn("Logout API failed, clearing local session:", error?.message || error);
+        } finally {
+          clearAuthStorage();
           delete API.defaults.headers.common["Authorization"];
 
           set({
@@ -101,14 +104,6 @@ export const useAuthStore = create<AuthState>()(
             loading: false,
             error: null,
           });
-        } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.message || error.message || "Logout failed";
-          set({
-            error: errorMessage,
-            loading: false,
-          });
-          throw error;
         }
       },
 
@@ -309,6 +304,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-store",
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,

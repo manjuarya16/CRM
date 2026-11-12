@@ -10,6 +10,73 @@ import { WorkflowService } from "@/services/workflow.service";
 
 const logger = pino();
 
+const extractEmailValue = (rawEmails: unknown): string | null => {
+  if (!rawEmails) return null;
+  let parsed = rawEmails;
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return trimmed.includes("@") ? trimmed : null;
+      }
+    } else {
+      return trimmed.includes("@") ? trimmed : null;
+    }
+  }
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      if (typeof entry === "string" && entry.includes("@")) return entry.trim();
+      if (entry && typeof entry === "object" && typeof (entry as any).value === "string" && (entry as any).value.includes("@")) {
+        return String((entry as any).value).trim();
+      }
+    }
+  } else if (parsed && typeof parsed === "object" && typeof (parsed as any).value === "string") {
+    return String((parsed as any).value).trim();
+  }
+  return null;
+};
+
+const enrichQuotesWithPersonEmails = async (connection: PoolClient, rows: any[]): Promise<void> => {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const quoteIds = rows.map((r) => Number(r.id)).filter((id) => Number.isFinite(id) && id > 0);
+  if (quoteIds.length === 0) return;
+
+  const emailRes = await connection.query(
+    `SELECT q.id AS quote_id, p.emails AS person_emails, lp.emails AS lead_person_emails
+       FROM public.quotes q
+       LEFT JOIN public.persons p ON p.id = q.person_id
+       LEFT JOIN LATERAL (
+         SELECT l.person_id
+           FROM public.lead_quotes lq
+           JOIN public.leads l ON l.id = lq.lead_id
+          WHERE lq.quote_id = q.id
+          ORDER BY l.id DESC
+          LIMIT 1
+       ) ld ON TRUE
+       LEFT JOIN public.persons lp ON lp.id = ld.person_id
+      WHERE q.id = ANY($1::bigint[])`,
+    [quoteIds]
+  );
+
+  const byQuoteId = new Map<number, string>();
+  for (const row of emailRes.rows) {
+    const email = extractEmailValue(row.person_emails) || extractEmailValue(row.lead_person_emails);
+    if (email) {
+      byQuoteId.set(Number(row.quote_id), email);
+    }
+  }
+
+  for (const quote of rows) {
+    if (!quote.person_email) {
+      const resolved = byQuoteId.get(Number(quote.id));
+      if (resolved) quote.person_email = resolved;
+    }
+  }
+};
+
 const getQuotes = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
@@ -23,6 +90,8 @@ const getQuotes = async (req: Request, res: Response): Promise<void> => {
       "SELECT * FROM public.fn_get_all_quotes($1, $2, $3, $4)",
       [search || null, page, limit, leadId]
     );
+
+    await enrichQuotesWithPersonEmails(connection, result.rows);
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
 
@@ -63,6 +132,7 @@ const getQuoteById = async (req: Request, res: Response): Promise<void> => {
     }
 
     const quoteData = result.rows[0];
+    await enrichQuotesWithPersonEmails(connection, [quoteData]);
 
     // Fetch quote line items using DB function
     const itemsRes = await connection.query(

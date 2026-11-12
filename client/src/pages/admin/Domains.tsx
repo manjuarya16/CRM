@@ -29,7 +29,7 @@ interface OrganizationDomain {
 }
 
 const SuperAdminDomains = () => {
-  const basePath = typeof window !== "undefined" && window.location.pathname.startsWith("/super-admin") ? "/super-admin" : "/admin";
+  const basePath = typeof window !== "undefined" ? (window.location.pathname.startsWith("/super-admin") ? "/super-admin" : window.location.pathname.startsWith("/admin") ? "/admin" : "") : "/admin";
   const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<OrganizationDomain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,10 +38,10 @@ const SuperAdminDomains = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [planFilter, setPlanFilter] = useState("All");
-  const [sortBy, setSortBy] = useState<"name" | "slug" | "created" | "expiry" | "plan" | "status">("name");
+  const [sortBy, setSortBy] = useState<"name" | "slug" | "created" | "expiry" | "plan" | "status" | "protocol">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  const handleColumnSort = (col: "name" | "slug" | "created" | "expiry" | "plan" | "status") => {
+  const handleColumnSort = (col: "name" | "slug" | "created" | "expiry" | "plan" | "status" | "protocol") => {
     if (sortBy === col) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -62,7 +62,21 @@ const SuperAdminDomains = () => {
 
   const handleSendPaymentLink = async (org: OrganizationDomain) => {
     const defaultEmail = (org as any).email || "";
-    const isAlreadyPaid = org.status !== false && org.subscription_expiry_date && new Date(org.subscription_expiry_date) > new Date();
+    const isTrial = String(org.plan_name || org.plan_code || "").toLowerCase().includes("trial");
+    const isAlreadyPaid =
+      org.status !== false &&
+      (String(org.payment_status || "").toLowerCase() === "paid" || !isTrial) &&
+      Boolean(org.subscription_expiry_date && new Date(org.subscription_expiry_date) > new Date());
+
+    if (isAlreadyPaid) {
+      await Swal.fire({
+        icon: "info",
+        title: "Already Paid",
+        text: `${org.name} already has an active paid ${org.plan_name || ""} subscription until ${new Date(org.subscription_expiry_date!).toLocaleDateString("en-IN")}. You cannot send a new payment link while already paid.`,
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
 
     const { value: formValues } = await Swal.fire({
       title: "Send Payment Link Email",
@@ -302,6 +316,8 @@ const SuperAdminDomains = () => {
       const statusA = a.computed_status || (a.status ? "Active" : "Suspended");
       const statusB = b.computed_status || (b.status ? "Active" : "Suspended");
       comp = statusA.localeCompare(statusB);
+    } else if (sortBy === "protocol") {
+      comp = a.slug.localeCompare(b.slug);
     }
     return sortOrder === "asc" ? comp : -comp;
   });
@@ -396,7 +412,7 @@ const SuperAdminDomains = () => {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to={`${basePath}/organizations/create`}
+            to={`${basePath}/domains/create`}
             className="btn bg-primary text-white text-xs sm:text-sm font-semibold hover:bg-primary-600 px-4 py-2 rounded-xl flex items-center gap-2 shadow-xs transition"
           >
             <i className="mgc_add_line text-base"></i> Provision New Domain
@@ -633,7 +649,22 @@ const SuperAdminDomains = () => {
                         </span>
                       </div>
                     </th>
-                    <th className="px-3 py-3 text-center">SSL / Protocol</th>
+                    <th
+                      className="px-3 py-3 text-center cursor-pointer hover:text-primary transition group"
+                      onClick={() => handleColumnSort("protocol")}
+                      title="Click to sort by SSL / Protocol"
+                    >
+                      <div className="inline-flex items-center justify-center gap-1.5">
+                        <span>SSL / Protocol</span>
+                        <span className="text-gray-400 group-hover:text-primary inline-flex">
+                          {sortBy === "protocol" ? (
+                            sortOrder === "asc" ? <i className="mgc_arrow_up_line text-sm text-primary font-bold"></i> : <i className="mgc_arrow_down_line text-sm text-primary font-bold"></i>
+                          ) : (
+                            <i className="mgc_unfold_more_line text-sm opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                          )}
+                        </span>
+                      </div>
+                    </th>
                     <th
                       className="px-3 py-3 text-left cursor-pointer hover:text-primary transition group"
                       onClick={() => handleColumnSort("expiry")}

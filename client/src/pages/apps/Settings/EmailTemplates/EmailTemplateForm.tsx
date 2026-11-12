@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/utils/zodResolver";
@@ -20,6 +20,8 @@ const PLACEHOLDERS = [
 export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const subjectRef = useRef<HTMLInputElement | null>(null);
+  const contentRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
     register,
@@ -44,14 +46,31 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
     }
   }, [initialData, setValue]);
 
+  const insertAtCursor = (
+    fieldName: "subject" | "content",
+    el: HTMLInputElement | HTMLTextAreaElement | null,
+    tag: string
+  ) => {
+    const current = el ? el.value : (watch(fieldName) || "");
+    const start = el && typeof el.selectionStart === "number" ? el.selectionStart : current.length;
+    const end = el && typeof el.selectionEnd === "number" ? el.selectionEnd : current.length;
+    const nextValue = current.slice(0, start) + tag + current.slice(end);
+    setValue(fieldName, nextValue, { shouldValidate: true, shouldDirty: true });
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        const cursorPos = start + tag.length;
+        el.setSelectionRange(cursorPos, cursorPos);
+      }
+    });
+  };
+
   const insertTag = (tag: string) => {
-    const current = watch("content") || "";
-    setValue("content", current + " " + tag + " ");
+    insertAtCursor("content", contentRef.current, tag);
   };
 
   const insertSubjectTag = (tag: string) => {
-    const current = watch("subject") || "";
-    setValue("subject", (current ? current + " " : "") + tag + " ", { shouldValidate: true });
+    insertAtCursor("subject", subjectRef.current, tag);
   };
 
   const onInvalid = (_errs: any) => {};
@@ -114,6 +133,10 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
           <input
             type="text"
             {...register("subject")}
+            ref={(e) => {
+              register("subject").ref(e);
+              subjectRef.current = e;
+            }}
             placeholder="e.g. Welcome to {%lead.title%}!"
             className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 ${
               errors.subject ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
@@ -144,6 +167,10 @@ export const EmailTemplateForm: React.FC<EmailTemplateFormProps> = ({ initialDat
           <textarea
             rows={12}
             {...register("content")}
+            ref={(e) => {
+              register("content").ref(e);
+              contentRef.current = e;
+            }}
             placeholder="Hi {%person.name%},
 
 Thank you for reaching out regarding {%lead.title%}.

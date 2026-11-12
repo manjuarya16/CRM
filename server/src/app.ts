@@ -93,8 +93,10 @@ export function createApp(): express.Express {
   );
   app.use(passport.initialize());
 
-  // Static uploads directory with auto-fallback to production storage
+  // Static uploads directories with auto-fallback to production storage
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  app.use('/uploads', express.static(path.join(process.cwd(), 'server', 'uploads')));
+  app.use('/uploads', express.static(path.resolve(__dirname, '../../uploads')));
   app.use('/uploads', async (req, res, next) => {
     try {
       const remoteUrl = `https://crmsrv.imorse.digital/uploads${req.url}`;

@@ -141,12 +141,6 @@ const MENU_ITEMS: MenuItemTypes[] = [
         url: "/reports/recurring-contracts",
         parentKey: "reports",
       },
-      {
-        key: "reports-setup",
-        label: "Data Setup",
-        url: "/reports/setup",
-        parentKey: "reports",
-      },
     ],
   },
   {

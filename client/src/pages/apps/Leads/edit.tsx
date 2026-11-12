@@ -18,6 +18,37 @@ const TABS = [
 const fmtCurrency = (n: number) =>
   `₹${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
 
+const validateContactPhoneValue = (raw: string): string | null => {
+  const cleaned = raw.trim();
+  if (!cleaned) return null;
+  let coreDigits = cleaned;
+  if (cleaned.startsWith("+")) {
+    const match10 = cleaned.match(/^\+\d{1,3}(\d{10})$/);
+    if (match10) {
+      coreDigits = match10[1];
+    } else if (/^\+[1-9]\d{6,14}$/.test(cleaned)) {
+      coreDigits = cleaned.slice(1);
+    } else {
+      return "Please enter a valid phone number (e.g. 9876543210 or +919876543210)";
+    }
+  } else {
+    if (!/^\d+$/.test(cleaned)) {
+      return "Contact number must contain only digits";
+    }
+    if (cleaned.length !== 10) {
+      return "Contact number must be exactly 10 digits";
+    }
+    coreDigits = cleaned;
+  }
+  if (/^(\d)\1+$/.test(coreDigits)) {
+    return "Contact number cannot consist of all identical digits";
+  }
+  if (coreDigits.length === 10 && coreDigits.startsWith("0")) {
+    return "Contact number cannot start with 0";
+  }
+  return null;
+};
+
 const getPersonEmail = (person: any): string => {
   if (!person) return "";
   if (person.email) return person.email;
@@ -60,26 +91,41 @@ const getPersonPhone = (person: any): string => {
   return "";
 };
 
-const parseContactItems = (data: any, defaultLabel: string = "Work"): ILeadContactItem[] => {
-  if (!data) return [{ label: defaultLabel, value: "" }];
+const parseContactItems = (data: any, defaultLabel: string = "Work", fallbackValue?: string): ILeadContactItem[] => {
+  const fallback = fallbackValue && String(fallbackValue).trim() ? [{ label: defaultLabel, value: String(fallbackValue).trim() }] : [{ label: defaultLabel, value: "" }];
+  if (!data) return fallback;
   let parsed = data;
-  if (typeof data === "string") {
-    try {
-      parsed = JSON.parse(data);
-    } catch {
-      return [{ label: defaultLabel, value: data }];
+  for (let i = 0; i < 2; i++) {
+    if (typeof parsed === "string") {
+      const trimmed = parsed.trim();
+      if (!trimmed) return fallback;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return [{ label: defaultLabel, value: trimmed }];
+      }
     }
   }
   if (Array.isArray(parsed) && parsed.length > 0) {
-    return parsed.map((item: any) => {
-      if (typeof item === "string") return { label: defaultLabel, value: item };
-      return {
-        label: item.label || defaultLabel,
-        value: item.value || item.email || item.number || item.phone || "",
-      };
-    });
+    const items = parsed
+      .map((item: any) => {
+        if (typeof item === "string") return { label: defaultLabel, value: item };
+        if (item && typeof item === "object") {
+          return {
+            label: item.label || defaultLabel,
+            value: String(item.value || item.email || item.number || item.phone || ""),
+          };
+        }
+        return { label: defaultLabel, value: "" };
+      })
+      .filter((x) => x.value.trim() !== "");
+    return items.length > 0 ? items : fallback;
   }
-  return [{ label: defaultLabel, value: "" }];
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const val = String((parsed as any).value || (parsed as any).email || (parsed as any).number || (parsed as any).phone || "");
+    if (val.trim()) return [{ label: (parsed as any).label || defaultLabel, value: val }];
+  }
+  return fallback;
 };
 
 const getDurationOptionsForCycle = (cycle?: string) => {
@@ -252,6 +298,8 @@ const EditLeadPage: React.FC = () => {
   const [organizationId, setOrganizationId] = useState("");
   const [organizations, setOrganizations] = useState<any[]>([]);
   const personDropdownRef = useRef<HTMLDivElement>(null);
+  const hydratedPersonIdRef = useRef<string>("");
+  const contactsEditedRef = useRef<boolean>(false);
 
   // Tab 3 – Products
   const [products, setProducts] = useState<any[]>([]);
@@ -327,7 +375,53 @@ const EditLeadPage: React.FC = () => {
             setOrganizationId(String(lead.organization_id));
           }
           if (lead.person_id) {
-            setPersonId(String(lead.person_id));
+            const pid = String(lead.person_id);
+            setPersonId(pid);
+            if (lead.person_name) {
+              setPersonName(lead.person_name);
+              setPersonSearch(lead.person_name);
+            }
+            const leadPersonObj = (lead as any).person;
+            const initialEmails = parseContactItems(
+              leadPersonObj?.emails || (lead as any).person_emails,
+              "Work",
+              leadPersonObj?.email || (lead as any).person_email
+            );
+            const initialPhones = parseContactItems(
+              leadPersonObj?.contact_numbers || (lead as any).person_contact_numbers || (lead as any).person_phones,
+              "Work",
+              leadPersonObj?.phone || (lead as any).person_phone
+            );
+            if (initialEmails.some((e) => e.value.trim())) {
+              setContactEmails(initialEmails);
+              hydratedPersonIdRef.current = pid;
+            }
+            if (initialPhones.some((p) => p.value.trim())) {
+              setContactPhones(initialPhones);
+            }
+            usePersonStore
+              .getState()
+              .getPersonById(Number(lead.person_id))
+              .then((fullPerson: any) => {
+                if (!fullPerson || contactsEditedRef.current) return;
+                if (fullPerson.name) {
+                  setPersonName((prev) => prev || fullPerson.name);
+                  setPersonSearch((prev) => prev || fullPerson.name);
+                }
+                const parsedEmails = parseContactItems(fullPerson.emails, "Work", fullPerson.email);
+                if (parsedEmails.some((e) => e.value.trim())) {
+                  setContactEmails((prev) => (prev.some((x) => x.value.trim()) ? prev : parsedEmails));
+                  hydratedPersonIdRef.current = pid;
+                }
+                const parsedPhones = parseContactItems(fullPerson.contact_numbers, "Work", fullPerson.phone);
+                if (parsedPhones.some((p) => p.value.trim())) {
+                  setContactPhones((prev) => (prev.some((x) => x.value.trim()) ? prev : parsedPhones));
+                }
+                if (!lead.organization_id && fullPerson.organization_id) {
+                  setOrganizationId((prev) => prev || String(fullPerson.organization_id));
+                }
+              })
+              .catch(() => {});
           }
           if (lead.custom_attributes) {
             if (typeof lead.custom_attributes === "object") {
@@ -415,13 +509,28 @@ const EditLeadPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (personId && persons.length > 0) {
+    if (personId && persons.length > 0 && !contactsEditedRef.current) {
       const p = persons.find((item) => String(item.id) === String(personId));
       if (p) {
-        setPersonName(p.name || "");
-        setPersonSearch(p.name || "");
-        setContactEmails(parseContactItems(p.emails, "Work"));
-        setContactPhones(parseContactItems(p.contact_numbers, "Work"));
+        const nextName = p.name || "";
+        if (nextName) {
+          setPersonName((prev) => prev || nextName);
+          setPersonSearch((prev) => prev || nextName);
+        }
+        const nextEmails = parseContactItems(p.emails, "Work", p.email);
+        const nextPhones = parseContactItems(p.contact_numbers, "Work", p.phone);
+        if (hydratedPersonIdRef.current !== String(personId)) {
+          if (nextEmails.some((e) => e.value.trim())) setContactEmails(nextEmails);
+          if (nextPhones.some((pn) => pn.value.trim())) setContactPhones(nextPhones);
+          hydratedPersonIdRef.current = String(personId);
+        } else {
+          if (nextEmails.some((e) => e.value.trim())) {
+            setContactEmails((prev) => (prev.some((x) => x.value.trim()) ? prev : nextEmails));
+          }
+          if (nextPhones.some((pn) => pn.value.trim())) {
+            setContactPhones((prev) => (prev.some((x) => x.value.trim()) ? prev : nextPhones));
+          }
+        }
         if (!organizationId && p.organization_id) {
           setOrganizationId(String(p.organization_id));
         }
@@ -456,21 +565,25 @@ const EditLeadPage: React.FC = () => {
   };
 
   const handleSelectPerson = (p: any) => {
+    hydratedPersonIdRef.current = String(p.id);
+    contactsEditedRef.current = false;
     setPersonId(String(p.id));
     setPersonName(p.name || "");
     setPersonSearch(p.name || "");
-    setContactEmails(parseContactItems(p.emails, "Work"));
-    setContactPhones(parseContactItems(p.contact_numbers, "Work"));
+    setContactEmails(parseContactItems(p.emails, "Work", p.email));
+    setContactPhones(parseContactItems(p.contact_numbers, "Work", p.phone));
     if (p.organization_id) {
       setOrganizationId(String(p.organization_id));
     } else {
       setOrganizationId("");
     }
-    clearError("personName", "contactEmail");
+    clearError("personName", "contactEmail", "contactPhone");
     setIsPersonDropdownOpen(false);
   };
 
   const handleClearPerson = () => {
+    hydratedPersonIdRef.current = "";
+    contactsEditedRef.current = true;
     setPersonId("");
     setPersonName("");
     setPersonSearch("");
@@ -484,6 +597,7 @@ const EditLeadPage: React.FC = () => {
   };
 
   const handleEmailChange = (index: number, field: "label" | "value", val: string) => {
+    contactsEditedRef.current = true;
     setContactEmails((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: val };
@@ -504,12 +618,14 @@ const EditLeadPage: React.FC = () => {
   };
 
   const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
-    const cleanVal = field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
+    contactsEditedRef.current = true;
+    const cleanVal = field === "value" ? val.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "").slice(0, 15) : val;
     setContactPhones((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: cleanVal };
       return updated;
     });
+    clearError("contactPhone");
   };
 
   const handleRemovePhoneRow = (index: number) => {
@@ -884,6 +1000,14 @@ const EditLeadPage: React.FC = () => {
       fieldErrors.contactEmail = "Please enter a valid email address";
     }
 
+    for (const phoneRow of contactPhones) {
+      const phoneErr = validateContactPhoneValue(phoneRow.value || "");
+      if (phoneErr) {
+        fieldErrors.contactPhone = phoneErr;
+        break;
+      }
+    }
+
     // Product rows validation
     productRows.forEach((row, idx) => {
       const hasAnyInput = row.product_id || (row.quantity && row.quantity !== "1") || (row.price && row.price !== "0") || productRows.length > 1;
@@ -927,7 +1051,7 @@ const EditLeadPage: React.FC = () => {
       setErrors(fieldErrors);
       if (fieldErrors.title) {
         scrollToSection("lead-details");
-      } else if (fieldErrors.personName || fieldErrors.contactEmail) {
+      } else if (fieldErrors.personName || fieldErrors.contactEmail || fieldErrors.contactPhone) {
         scrollToSection("contact-person");
       } else {
         scrollToSection("products");
@@ -980,11 +1104,19 @@ const EditLeadPage: React.FC = () => {
         custom_attributes: customAttributes,
       };
 
+      const validEmails = contactEmails.filter((e) => e.value.trim());
+      const validPhones = contactPhones.filter((p) => p.value.trim());
       if (personId) {
         payload.person_id = Number(personId);
+        if (contactsEditedRef.current && (personName.trim() || validEmails.length > 0 || validPhones.length > 0)) {
+          await API.put(`/persons/${personId}`, {
+            name: personName.trim() || undefined,
+            emails: validEmails,
+            contact_numbers: validPhones,
+            organization_id: organizationId ? Number(organizationId) : undefined,
+          }).catch(() => {});
+        }
       } else if (personName.trim()) {
-        const validEmails = contactEmails.filter((e) => e.value.trim());
-        const validPhones = contactPhones.filter((p) => p.value.trim());
         payload.person = {
           name: personName.trim(),
           emails: validEmails.length > 0 ? validEmails : undefined,
@@ -1169,6 +1301,7 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Expected Close Date</label>
               <input
                 type="date"
+                min={getLocalTodayString()}
                 value={details.expected_close_date}
                 onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
                 className={inputCls}
@@ -1301,12 +1434,15 @@ const EditLeadPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleClearPerson}
-                    className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                    title="Clear selection"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                   >
-                    ✕
+                    <i className="mgc_close_line text-sm leading-none"></i>
                   </button>
                 ) : (
-                  <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center text-gray-400 pointer-events-none">
+                    <i className="mgc_down_line text-sm leading-none"></i>
+                  </span>
                 )}
               </div>
               {errors.personName && (
@@ -1425,12 +1561,14 @@ const EditLeadPage: React.FC = () => {
               <label className={labelCls}>Contact Number</label>
               {contactPhones.map((pn, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
+                  <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactPhone ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"}`}>
                     <input
                       type="tel"
+                      inputMode="tel"
+                      maxLength={15}
                       value={pn.value}
                       onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
-                      placeholder=""
+                      placeholder="e.g. 9876543210 or +919876543210"
                       className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                     />
                     <select
@@ -1456,6 +1594,9 @@ const EditLeadPage: React.FC = () => {
                   )}
                 </div>
               ))}
+              {errors.contactPhone && (
+                <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactPhone}</p>
+              )}
               <button
                 type="button"
                 onClick={handleAddPhoneRow}
