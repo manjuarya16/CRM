@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '@/utils/logger';
 import { SseClient, RealtimeEvent } from '@/interfaces';
+import { getTenantContext } from '@/context/tenantContext';
 export type { SseClient, RealtimeEvent };
 
 export class SseService {
@@ -25,6 +26,10 @@ export class SseService {
 
   static handleConnection(req: Request, res: Response): void {
     const userId = (req.user as any)?.id ? Number((req.user as any).id) : undefined;
+    const tenantId =
+      getTenantContext()?.tenantId ??
+      req.tenant?.id ??
+      ((req.user as any)?.tenant_id ? Number((req.user as any).tenant_id) : undefined);
     const clientId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     res.writeHead(200, {
@@ -36,9 +41,9 @@ export class SseService {
 
     res.write(`data: ${JSON.stringify({ type: 'connected', clientId, timestamp: new Date().toISOString() })}\n\n`);
 
-    const client: SseClient = { id: clientId, userId, res };
+    const client: SseClient = { id: clientId, userId, tenantId, res };
     this.clients.set(clientId, client);
-    logger.info(`[SSE] Client connected: ${clientId} (User #${userId || 'anon'}). Total active streams: ${this.clients.size}`);
+    logger.info(`[SSE] Client connected: ${clientId} (User #${userId || 'anon'}, Tenant #${tenantId ?? 'global'}). Total active streams: ${this.clients.size}`);
 
     req.on('close', () => {
       this.clients.delete(clientId);
@@ -58,10 +63,28 @@ export class SseService {
     }
   }
 
-  static emitToUser<T>(userId: number, event: RealtimeEvent<T>): void {
+  static broadcastToTenant<T>(tenantId: number | undefined, event: RealtimeEvent<T>): void {
     const payload = `data: ${JSON.stringify(event)}\n\n`;
     for (const [clientId, client] of this.clients.entries()) {
-      if (client.userId === userId) {
+      const tenantMatches =
+        tenantId !== undefined ? client.tenantId === tenantId : client.tenantId === undefined;
+      if (tenantMatches) {
+        try {
+          client.res.write(payload);
+        } catch (err: any) {
+          logger.warn(`[SSE] Failed to send to client ${clientId}, removing: ${err.message}`);
+          this.clients.delete(clientId);
+        }
+      }
+    }
+  }
+
+  static emitToUser<T>(userId: number, event: RealtimeEvent<T>, tenantId?: number): void {
+    const payload = `data: ${JSON.stringify(event)}\n\n`;
+    for (const [clientId, client] of this.clients.entries()) {
+      const tenantMatches =
+        tenantId !== undefined ? client.tenantId === tenantId : client.tenantId === undefined;
+      if (client.userId === userId && tenantMatches) {
         try {
           client.res.write(payload);
         } catch (err: any) {
@@ -73,24 +96,35 @@ export class SseService {
   }
 
   static emitLeadEvent(type: 'lead:created' | 'lead:updated' | 'lead:deleted', data: any): void {
-    logger.info(`[SSE] Broadcasting ${type} event to all clients (Active streams: ${this.clients.size})`);
-    this.broadcast({
+    const tenantId =
+      getTenantContext()?.tenantId ??
+      (data?.tenant_id ? Number(data.tenant_id) : undefined);
+    logger.info(`[SSE] Broadcasting ${type} event (Tenant #${tenantId ?? 'global'}, Active streams: ${this.clients.size})`);
+    this.broadcastToTenant(tenantId, {
       type,
       data,
       timestamp: new Date().toISOString(),
     });
   }
 
-  static emitNotificationEvent(data: { userId?: number; unreadCount?: number; notification?: any }): void {
-    logger.info(`[SSE] Broadcasting notification event (Active streams: ${this.clients.size})`);
+  static emitNotificationEvent(data: { userId?: number; tenantId?: number; unreadCount?: number; notification?: any }): void {
+    const tenantId =
+      data.tenantId ??
+      getTenantContext()?.tenantId ??
+      (data.notification?.tenant_id ? Number(data.notification.tenant_id) : undefined);
+    logger.info(`[SSE] Broadcasting notification event (Tenant #${tenantId ?? 'global'}, Active streams: ${this.clients.size})`);
     if (data.userId) {
-      this.emitToUser(data.userId, {
-        type: 'notification:new',
-        data,
-        timestamp: new Date().toISOString(),
-      });
+      this.emitToUser(
+        data.userId,
+        {
+          type: 'notification:new',
+          data,
+          timestamp: new Date().toISOString(),
+        },
+        tenantId
+      );
     } else {
-      this.broadcast({
+      this.broadcastToTenant(tenantId, {
         type: 'notification:new',
         data,
         timestamp: new Date().toISOString(),

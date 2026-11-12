@@ -213,7 +213,7 @@ export const RecurringContractsReport: React.FC<RecurringContractsReportProps> =
           };
           const info = cycleMap[row.billing_cycle?.toLowerCase()] || {
             label: row.billing_cycle,
-            badge: 'bg-gray-100 text-gray-700',
+            badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700',
           };
           return (
             <div className="flex flex-col">

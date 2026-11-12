@@ -270,6 +270,7 @@ export interface IContactExportBatch {
 export interface SseClient {
   id: string;
   userId?: number;
+  tenantId?: number;
   res: Response;
 }
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import useAppLogo from "@/hooks/useAppLogo";
+import useAppLogo, { resolveLogoUrl } from "@/hooks/useAppLogo";
 
 interface AccountLayoutProps {
   pageImage?: any;
@@ -11,6 +11,8 @@ interface AccountLayoutProps {
   children?: React.ReactNode;
   hasForm?: boolean;
   userImage?: string;
+  logoImage?: string | null;
+  orgName?: string | null;
 }
 
 const AuthLayout = ({
@@ -18,8 +20,17 @@ const AuthLayout = ({
   helpText,
   bottomLinks,
   children,
+  logoImage,
+  orgName: explicitOrgName,
 }: AccountLayoutProps) => {
-  const { logoLight, orgName } = useAppLogo();
+  const { logoLight, orgName, isCustomLogo } = useAppLogo();
+  const explicitLogo = resolveLogoUrl(logoImage);
+  const resolvedLogo = explicitLogo || logoLight || "/logo-2.png";
+  const resolvedOrgName = explicitOrgName || orgName || "MORSE CRM";
+  const showCustomBackdrop =
+    Boolean(explicitLogo || isCustomLogo) &&
+    !resolvedLogo.endsWith("/logo-2.png") &&
+    !resolvedLogo.endsWith("/logonew.png");
 
   return (
     <div
@@ -32,11 +43,23 @@ const AuthLayout = ({
       <div className="w-full max-w-md relative z-10 space-y-6">
         {/* Top Logo */}
         <div className="text-center pb-2 flex justify-center">
-          <Link to="/" className="inline-flex items-center justify-center transition-transform hover:scale-105" aria-label="Home">
+          <Link
+            to="/"
+            className={
+              showCustomBackdrop
+                ? "inline-flex items-center justify-center rounded-2xl bg-white/95 px-6 py-3 shadow-lg transition-transform hover:scale-105"
+                : "inline-flex items-center justify-center transition-transform hover:scale-105"
+            }
+            aria-label="Home"
+          >
             <img
-              src={logoLight || "/logo-2.png"}
-              alt={orgName || "MORSE CRM"}
-              className="h-28 sm:h-36 w-auto max-w-[380px] sm:max-w-[460px] object-contain drop-shadow-md"
+              src={resolvedLogo}
+              alt={resolvedOrgName}
+              className={
+                showCustomBackdrop
+                  ? "h-16 sm:h-20 w-auto max-w-[260px] object-contain"
+                  : "h-24 sm:h-32 w-auto max-w-[340px] sm:max-w-[400px] object-contain drop-shadow-md"
+              }
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 if (!target.src.endsWith("/logo-2.png")) {

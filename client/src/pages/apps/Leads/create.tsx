@@ -20,6 +20,37 @@ const TABS = [
 const fmtCurrency = (n: number) =>
   `₹${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
 
+const validateContactPhoneValue = (raw: string): string | null => {
+  const cleaned = raw.trim();
+  if (!cleaned) return null;
+  let coreDigits = cleaned;
+  if (cleaned.startsWith("+")) {
+    const match10 = cleaned.match(/^\+\d{1,3}(\d{10})$/);
+    if (match10) {
+      coreDigits = match10[1];
+    } else if (/^\+[1-9]\d{6,14}$/.test(cleaned)) {
+      coreDigits = cleaned.slice(1);
+    } else {
+      return "Please enter a valid phone number (e.g. 9876543210 or +919876543210)";
+    }
+  } else {
+    if (!/^\d+$/.test(cleaned)) {
+      return "Contact number must contain only digits";
+    }
+    if (cleaned.length !== 10) {
+      return "Contact number must be exactly 10 digits";
+    }
+    coreDigits = cleaned;
+  }
+  if (/^(\d)\1+$/.test(coreDigits)) {
+    return "Contact number cannot consist of all identical digits";
+  }
+  if (coreDigits.length === 10 && coreDigits.startsWith("0")) {
+    return "Contact number cannot start with 0";
+  }
+  return null;
+};
+
 const getPersonEmail = (person: any): string => {
   if (!person) return "";
   if (person.email) return person.email;
@@ -340,12 +371,13 @@ const CreateLeadPage: React.FC = () => {
   };
 
   const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
-    const cleanVal = field === "value" ? val.replace(/[^0-9+\-\s()]/g, "") : val;
+    const cleanVal = field === "value" ? val.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "").slice(0, 15) : val;
     setContactPhones((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: cleanVal };
       return updated;
     });
+    clearError("contactPhone");
   };
 
   const handleRemovePhoneRow = (index: number) => {
@@ -732,6 +764,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       fieldErrors.title = "Title is required";
     }
 
+    if (details.expected_close_date) {
+      const today = getLocalTodayString();
+      const closeDate = toISODateString(details.expected_close_date);
+      if (closeDate && closeDate < today) {
+        fieldErrors.expected_close_date = `Expected close date cannot be in the past (must be on or after ${today})`;
+      }
+    }
+
     if (!personId && !personName.trim()) {
       fieldErrors.personName = "Contact Person Name is required";
     }
@@ -741,6 +781,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
       fieldErrors.contactEmail = "Contact Person Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(firstEmail)) {
       fieldErrors.contactEmail = "Please enter a valid email address";
+    }
+
+    for (const phoneRow of contactPhones) {
+      const phoneErr = validateContactPhoneValue(phoneRow.value || "");
+      if (phoneErr) {
+        fieldErrors.contactPhone = phoneErr;
+        break;
+      }
     }
 
     // Product rows validation
@@ -784,9 +832,9 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
 
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
-      if (fieldErrors.title) {
+      if (fieldErrors.title || fieldErrors.expected_close_date) {
         scrollToSection("lead-details");
-      } else if (fieldErrors.personName || fieldErrors.contactEmail) {
+      } else if (fieldErrors.personName || fieldErrors.contactEmail || fieldErrors.contactPhone) {
         scrollToSection("contact-person");
       } else {
         scrollToSection("products");
@@ -1034,10 +1082,19 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                 <label className={labelCls}>Expected Close Date</label>
                 <input
                   type="date"
+                  min={getLocalTodayString()}
                   value={details.expected_close_date}
-                  onChange={(e) => setDetails({ ...details, expected_close_date: e.target.value })}
+                  onChange={(e) => {
+                    setDetails({ ...details, expected_close_date: e.target.value });
+                    if (errors.expected_close_date) {
+                      setErrors((prev) => ({ ...prev, expected_close_date: "" }));
+                    }
+                  }}
                   className={inputCls}
                 />
+                {errors.expected_close_date && (
+                  <p className="text-red-500 text-xs mt-1">{errors.expected_close_date}</p>
+                )}
               </div>
 
               {/* Lead Source */}
@@ -1167,12 +1224,15 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                     <button
                       type="button"
                       onClick={handleClearPerson}
-                      className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                      title="Clear selection"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                     >
-                      ✕
+                      <i className="mgc_close_line text-sm leading-none"></i>
                     </button>
                   ) : (
-                    <span className="absolute right-3 text-gray-400 pointer-events-none text-xs">▼</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center text-gray-400 pointer-events-none">
+                      <i className="mgc_down_line text-sm leading-none"></i>
+                    </span>
                   )}
                 </div>
                 {errors.personName && (
@@ -1292,12 +1352,14 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                 <label className={labelCls}>Contact Number</label>
                 {contactPhones.map((pn, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <div className="flex-1 flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 focus-within:ring-[#0088cc]">
+                    <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactPhone ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"}`}>
                       <input
                         type="tel"
+                        inputMode="tel"
+                        maxLength={15}
                         value={pn.value}
                         onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
-                        placeholder=""
+                        placeholder="e.g. 9876543210 or +919876543210"
                         className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                       />
                       <select
@@ -1323,6 +1385,9 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                     )}
                   </div>
                 ))}
+                {errors.contactPhone && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contactPhone}</p>
+                )}
                 <button
                   type="button"
                   onClick={handleAddPhoneRow}

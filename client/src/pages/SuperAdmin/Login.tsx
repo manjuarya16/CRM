@@ -44,7 +44,7 @@ export const SuperAdminLogin: React.FC = () => {
         <div className="text-center pb-6 flex justify-center">
           <Link to="/" className="inline-flex items-center justify-center transition-transform hover:scale-105" aria-label="Home">
             <img
-              src="/logo-2.png"
+              src={logoLight || "/logo-2.png"}
               alt={orgName || "MORSE CRM"}
               className="h-24 sm:h-28 w-auto max-w-[300px] sm:max-w-[340px] object-contain drop-shadow-md"
               onError={(e) => {

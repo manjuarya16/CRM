@@ -36,6 +36,8 @@ const getModuleCategory = (id: string): CategoryKey => {
   return "settings";
 };
 
+const ORG_MATRIX_MODULES = MATRIX_MODULES.filter((m) => !m.viewKey.startsWith('platform.'));
+
 export const RoleAccessMatrix: React.FC = () => {
   const { user } = useAuthStore();
   const { isAllAccess, hasPermission } = usePermission();
@@ -196,12 +198,12 @@ export const RoleAccessMatrix: React.FC = () => {
   // Preset Shortcuts
   const applyPreset = (preset: "grant_all" | "read_only" | "clear_all") => {
     if (preset === "grant_all") {
-      const allMatrixKeys = MATRIX_MODULES.flatMap((m) => [m.viewKey, m.addKey, m.updateKey, m.deleteKey]);
+      const allMatrixKeys = ORG_MATRIX_MODULES.flatMap((m) => [m.viewKey, m.addKey, m.updateKey, m.deleteKey]);
       const set = new Set([...selectedPermissions, ...allMatrixKeys, ...ALL_CRM_PERMISSION_KEYS]);
       setSelectedPermissions(Array.from(set));
     } else if (preset === "read_only") {
-      const allWriteKeys = MATRIX_MODULES.flatMap((m) => [m.addKey, m.updateKey, m.deleteKey]);
-      const allViewKeys = MATRIX_MODULES.map((m) => m.viewKey);
+      const allWriteKeys = ORG_MATRIX_MODULES.flatMap((m) => [m.addKey, m.updateKey, m.deleteKey]);
+      const allViewKeys = ORG_MATRIX_MODULES.map((m) => m.viewKey);
       const filtered = selectedPermissions.filter((k) => !allWriteKeys.includes(k));
       const set = new Set([...filtered, ...allViewKeys]);
       setSelectedPermissions(Array.from(set));
@@ -253,7 +255,7 @@ export const RoleAccessMatrix: React.FC = () => {
 
   // Filtered modules based on category and search query
   const filteredModules = useMemo(() => {
-    return MATRIX_MODULES.filter((m) => {
+    return ORG_MATRIX_MODULES.filter((m) => {
       const cat = getModuleCategory(m.id);
       const matchesCategory = activeCategory === "all" || cat === activeCategory;
 
@@ -275,14 +277,14 @@ export const RoleAccessMatrix: React.FC = () => {
     let updateCount = 0;
     let deleteCount = 0;
 
-    MATRIX_MODULES.forEach((m) => {
+    ORG_MATRIX_MODULES.forEach((m) => {
       if (selectedPermissions.includes(m.viewKey)) viewCount++;
       if (selectedPermissions.includes(m.addKey)) addCount++;
       if (selectedPermissions.includes(m.updateKey)) updateCount++;
       if (selectedPermissions.includes(m.deleteKey)) deleteCount++;
     });
 
-    const totalPossible = MATRIX_MODULES.length * 4;
+    const totalPossible = ORG_MATRIX_MODULES.length * 4;
     const totalGranted = viewCount + addCount + updateCount + deleteCount;
     const percent = Math.round((totalGranted / totalPossible) * 100);
 
@@ -294,7 +296,7 @@ export const RoleAccessMatrix: React.FC = () => {
       totalGranted,
       totalPossible,
       percent,
-      totalModules: MATRIX_MODULES.length,
+      totalModules: ORG_MATRIX_MODULES.length,
     };
   }, [selectedPermissions]);
 

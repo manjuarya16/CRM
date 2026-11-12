@@ -199,6 +199,18 @@ router.get('/organizations/:id', async (req: Request, res: Response, next: NextF
       return;
     }
 
+    const expiryVal = profile.settings?.subscription_expiry_date || profile.subscription_expiry_date;
+    const isUnexpired = !expiryVal || new Date(expiryVal) > new Date();
+    const isTrialPlan = String(profile.plan || '').toLowerCase().includes('trial');
+    const isPaidStatus = String((profile as any).payment_status || '').toLowerCase() === 'paid';
+    if (profile.status !== false && isUnexpired && (isPaidStatus || (!isTrialPlan && String(profile.plan || '').trim() !== ''))) {
+      res.status(409).json({
+        success: false,
+        message: 'This organization already has an active paid subscription. A payment link cannot be sent while already paid.',
+      });
+      return;
+    }
+
     const settings = profile.settings || {};
     const addr = profile.address || {};
     const now = new Date();
@@ -1011,16 +1023,39 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
 
     const isUsd = String(currency).toUpperCase() === 'USD';
 
-    const planRanks: Record<string, { rank: number; inr: number; usd: number; name: string }> = {
-      starter: { rank: 1, inr: 9999, usd: 149, name: 'Starter' },
-      growth: { rank: 2, inr: 19999, usd: 299, name: 'Growth' },
-      business: { rank: 3, inr: 29999, usd: 449, name: 'Business' },
+    const defaultTiers = [
+      { id: null as number | null, name: 'Starter', rank: 1, inr: 9999, usd: 149 },
+      { id: null as number | null, name: 'Growth', rank: 2, inr: 19999, usd: 299 },
+      { id: null as number | null, name: 'Business', rank: 3, inr: 29999, usd: 449 },
+    ];
+    const dbTiersRes = await pool.query<{ id: number; name: string; amount_cents: string | number; currency: string }>(
+      `SELECT id, name, amount_cents, currency FROM public.platform_pricing_tiers WHERE active = TRUE ORDER BY amount_cents ASC, id ASC`
+    );
+    const catalog = dbTiersRes.rows.length > 0
+      ? dbTiersRes.rows.map((row, idx) => {
+          const major = Math.round(Number(row.amount_cents || 0) / 100);
+          return {
+            id: Number(row.id),
+            name: String(row.name),
+            rank: idx + 1,
+            inr: String(row.currency || 'INR').toUpperCase() === 'USD' ? Math.round(major * 70) : major,
+            usd: String(row.currency || 'INR').toUpperCase() === 'USD' ? major : Math.max(1, Math.round(major / 70)),
+          };
+        })
+      : defaultTiers;
+
+    const findPlanMeta = (rawName: string) => {
+      const normalized = rawName.trim().toLowerCase();
+      const exact = catalog.find((item) => item.name.toLowerCase() === normalized);
+      if (exact) return exact;
+      const partial = catalog.find((item) => normalized.includes(item.name.toLowerCase()) || item.name.toLowerCase().includes(normalized));
+      if (partial) return partial;
+      const fallback = defaultTiers.find((item) => normalized.includes(item.name.toLowerCase()));
+      return fallback || { id: null as number | null, name: rawName.trim() || 'Starter', rank: catalog.length + 1, inr: 9999, usd: 149 };
     };
 
-    const currentPlanKey = String(org.plan || existingSub?.tier_name || 'starter').toLowerCase();
-    const currentMeta = currentPlanKey.includes('business') ? planRanks.business : currentPlanKey.includes('growth') ? planRanks.growth : planRanks.starter;
-    const targetPlanKey = String(plan_name).toLowerCase();
-    const targetMeta = targetPlanKey.includes('business') ? planRanks.business : targetPlanKey.includes('growth') ? planRanks.growth : planRanks.starter;
+    const currentMeta = findPlanMeta(String(existingSub?.tier_name || org.plan || 'Starter'));
+    const targetMeta = findPlanMeta(String(plan_name || 'Starter'));
 
     let isUpgrade = false;
     let basePayAmount = isUsd ? targetMeta.usd : targetMeta.inr;
@@ -1055,105 +1090,120 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
       targetExpiry.setDate(targetExpiry.getDate() - 1);
     }
 
-    const grossAmount = Number(amount) !== undefined && Number(amount) > 0 ? Number(amount) : basePayAmount;
-    const discountVal = Math.max(0, Number(discount_amount) || 0);
-    const netAmount = Math.max(0, grossAmount - discountVal);
-    const amountInSubunits = Math.round(netAmount * 100);
-
-    // Resolve tier
-    const tierRes = await pool.query<{ id: number; name: string }>(
-      `SELECT id, name FROM public.platform_pricing_tiers 
-        WHERE active=TRUE 
-          AND (LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2)
-        ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END, id ASC 
-        LIMIT 1`,
-      [targetMeta.name, `%${targetMeta.name.toLowerCase()}%`]
-    );
-    const tierId = tierRes.rows[0]?.id ? Number(tierRes.rows[0].id) : null;
-
-    // 1. Update saas_tenants
-    await pool.query(
-      `UPDATE public.saas_tenants
-          SET status = 'active',
-              plan = $1,
-              settings = jsonb_set(
-                jsonb_set(
-                  jsonb_set(
-                    COALESCE(settings, '{}'::jsonb),
-                    '{subscription_expiry_date}',
-                    to_jsonb($2::text)
-                  ),
-                  '{pay_later}',
-                  to_jsonb($3::boolean)
-                ),
-                '{expected_payment_date}',
-                to_jsonb($4::text)
-              ),
-              updated_at = NOW()
-        WHERE id = $5`,
-      [targetMeta.name, targetExpiry.toISOString(), isPayLater, expected_payment_date || '', org.id]
-    );
-
-    // 2. Update or Insert platform_subscriptions
-    let subId: number | string;
-    const subNotes = isPayLater
-      ? `Subscription continued under Pay Later (Payment promised by ${expected_payment_date || 'custom date'}). ${notes || ''}`
-      : isUpgrade
-      ? `Upgraded to ${targetMeta.name} via ${payment_method}`
-      : `Payment recorded by admin via ${payment_method}`;
-
-    if (existingSub?.id) {
-      await pool.query(
-        `UPDATE public.platform_subscriptions
-            SET pricing_tier_id = $1,
-                status = 'active',
-                starts_at = NOW(),
-                ends_at = $2,
-                notes = $3,
-                updated_at = NOW()
-          WHERE id = $4`,
-        [tierId, targetExpiry.toISOString(), subNotes, existingSub.id]
-      );
-      subId = existingSub.id;
-    } else {
-      const subRes = await pool.query(
-        `INSERT INTO public.platform_subscriptions (
-            tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at
-         ) VALUES ($1, $2, 'active', NOW(), $3, TRUE, $4, NOW(), NOW())
-         RETURNING id`,
-        [org.id, tierId, targetExpiry.toISOString(), subNotes]
-      );
-      subId = subRes.rows[0]?.id;
+    const parsedAmount = amount !== undefined && amount !== null && String(amount).trim() !== '' ? Number(amount) : NaN;
+    if (Number.isFinite(parsedAmount) && parsedAmount < 0) {
+      throw new ApiError(400, 'Payment amount cannot be negative');
     }
+    const grossAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : basePayAmount;
+    const discountVal = Math.max(0, Number(discount_amount) || 0);
+    if (discountVal > grossAmount) {
+      throw new ApiError(400, 'Discount amount cannot exceed plan amount');
+    }
+    const netAmount = Math.max(0, grossAmount - discountVal);
+    if (!isUpgrade && netAmount <= 0) {
+      throw new ApiError(400, 'Net payable amount after discount must be greater than 0');
+    }
+    const amountInSubunits = Math.round(netAmount * 100);
+    const tierId = targetMeta.id;
 
-    // 3. Insert platform_payments
-    const refStr = reference || (isPayLater ? `PROMISE-${Date.now().toString().slice(-6)}` : `REC-${Date.now().toString().slice(-6)}`);
-    const currSym = isUsd ? 'USD' : 'INR';
-    const fullNotes = [
-      isPayLater ? `[PAY LATER] Promised payment by ${expected_payment_date || 'custom date'} for ${targetMeta.name} Plan.` : `Payment recorded by admin for ${targetMeta.name} Plan (${payment_method}).`,
-      isUpgrade ? `Upgrade from ${currentMeta.name}: Deducted current plan credit (-${currSym} ${isUsd ? currentMeta.usd : currentMeta.inr}). Expiry: ${targetExpiry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '',
-      discountVal > 0 ? `Discount: -${currSym} ${discountVal} (Gross: ${currSym} ${grossAmount}).` : '',
-      notes || '',
-    ].filter(Boolean).join(' ');
+    const client = await pool.connect();
+    let paymentRes: { rows: Array<{ id: number }> } = { rows: [] };
+    try {
+      await client.query('BEGIN');
 
-    const paymentRes = await pool.query(
-      `INSERT INTO public.platform_payments
-         (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method, reference, notes, paid_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-       RETURNING id`,
-      [
-        org.id,
-        subId,
-        tierId,
-        amountInSubunits,
-        isUsd ? 'USD' : 'INR',
-        payStatus,
-        isPayLater ? 'pay_later' : payment_method.toLowerCase(),
-        refStr,
-        fullNotes,
-        actualPaidAt,
-      ]
-    );
+      // 1. Update saas_tenants
+      await client.query(
+        `UPDATE public.saas_tenants
+            SET status = 'active',
+                plan = $1,
+                settings = jsonb_set(
+                  jsonb_set(
+                    jsonb_set(
+                      COALESCE(settings, '{}'::jsonb),
+                      '{subscription_expiry_date}',
+                      to_jsonb($2::text)
+                    ),
+                    '{pay_later}',
+                    to_jsonb($3::boolean)
+                  ),
+                  '{expected_payment_date}',
+                  to_jsonb($4::text)
+                ),
+                updated_at = NOW()
+          WHERE id = $5`,
+        [targetMeta.name, targetExpiry.toISOString(), isPayLater, expected_payment_date || '', org.id]
+      );
+
+      // 2. Update or Insert platform_subscriptions
+      let subId: number | string;
+      const subNotes = isPayLater
+        ? `Subscription continued under Pay Later (Payment promised by ${expected_payment_date || 'custom date'}). ${notes || ''}`
+        : isUpgrade
+        ? `Upgraded to ${targetMeta.name} via ${payment_method}`
+        : `Payment recorded by admin via ${payment_method}`;
+
+      if (existingSub?.id) {
+        await client.query(
+          `UPDATE public.platform_subscriptions
+              SET pricing_tier_id = $1,
+                  status = 'active',
+                  starts_at = NOW(),
+                  ends_at = $2,
+                  notes = $3,
+                  updated_at = NOW()
+            WHERE id = $4`,
+          [tierId, targetExpiry.toISOString(), subNotes, existingSub.id]
+        );
+        subId = existingSub.id;
+      } else {
+        const subRes = await client.query(
+          `INSERT INTO public.platform_subscriptions (
+              tenant_id, pricing_tier_id, status, starts_at, ends_at, auto_renew, notes, created_at, updated_at
+           ) VALUES ($1, $2, 'active', NOW(), $3, TRUE, $4, NOW(), NOW())
+           RETURNING id`,
+          [org.id, tierId, targetExpiry.toISOString(), subNotes]
+        );
+        subId = subRes.rows[0]?.id;
+      }
+
+      // 3. Insert platform_payments (DB constraint requires amount_cents > 0)
+      if (amountInSubunits > 0) {
+        const refStr = reference || (isPayLater ? `PROMISE-${Date.now().toString().slice(-6)}` : `REC-${Date.now().toString().slice(-6)}`);
+        const currSym = isUsd ? 'USD' : 'INR';
+        const fullNotes = [
+          isPayLater ? `[PAY LATER] Promised payment by ${expected_payment_date || 'custom date'} for ${targetMeta.name} Plan.` : `Payment recorded by admin for ${targetMeta.name} Plan (${payment_method}).`,
+          isUpgrade ? `Upgrade from ${currentMeta.name}: Deducted current plan credit (-${currSym} ${isUsd ? currentMeta.usd : currentMeta.inr}). Expiry: ${targetExpiry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '',
+          discountVal > 0 ? `Discount: -${currSym} ${discountVal} (Gross: ${currSym} ${grossAmount}).` : '',
+          notes || '',
+        ].filter(Boolean).join(' ');
+
+        paymentRes = await client.query(
+          `INSERT INTO public.platform_payments
+             (tenant_id, subscription_id, pricing_tier_id, amount_cents, currency, status, method, reference, notes, paid_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+           RETURNING id`,
+          [
+            org.id,
+            subId,
+            tierId,
+            amountInSubunits,
+            isUsd ? 'USD' : 'INR',
+            payStatus,
+            isPayLater ? 'pay_later' : payment_method.toLowerCase(),
+            refStr,
+            fullNotes,
+            actualPaidAt,
+          ]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     res.json({
       success: true,

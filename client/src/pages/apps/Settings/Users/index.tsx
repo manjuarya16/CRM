@@ -6,6 +6,7 @@ import { useUserStore, useRoleStore, useGroupStore } from "@/store";
 import { IRole, IGroup, IUserData } from "@/interface";
 import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
+import { Eye, EyeOff } from "lucide-react";
 
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { usePermission } from "@/hooks/usePermission";
@@ -1285,7 +1286,7 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Password {editingUser ? "(Leave blank to keep)" : <span className="text-red-500">*</span>}
                   </label>
-                  <div className="relative flex items-center">
+                  <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
@@ -1303,10 +1304,10 @@ const UsersPage: React.FC = () => {
                       type="button"
                       tabIndex={-1}
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      className="absolute inset-y-0 right-0 z-10 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                       title={showPassword ? "Hide password" : "Show password"}
                     >
-                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                   {errors.password && (
@@ -1318,7 +1319,7 @@ const UsersPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
                     Confirm Password
                   </label>
-                  <div className="relative flex items-center">
+                  <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
@@ -1339,10 +1340,10 @@ const UsersPage: React.FC = () => {
                       type="button"
                       tabIndex={-1}
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer select-none"
+                      className="absolute inset-y-0 right-0 z-10 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                       title={showPassword ? "Hide password" : "Show password"}
                     >
-                      <i className={`mgc_${showPassword ? "eye_line" : "eye_close_line"} text-base`}></i>
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                   {errors.confirm_password && (

@@ -221,6 +221,7 @@ const ConfigurationPage = React.lazy(
   () => import("../pages/apps/Configuration"),
 );
 const HelpPage = React.lazy(() => import("../pages/apps/Help"));
+const ProfilePage = React.lazy(() => import("../pages/apps/Profile"));
 
 export interface RoutesProps {
   path: RouteProps["path"];
@@ -971,6 +972,11 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/help",
     name: "Help",
     element: <HelpPage />,
+  },
+  {
+    path: "/profile",
+    name: "My Profile",
+    element: <ProfilePage />,
   },
 ];
 

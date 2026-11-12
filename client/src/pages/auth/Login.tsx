@@ -57,7 +57,7 @@ const Login = () => {
     : "Enter your credentials to access your workspace.";
 
   if (userLoggedIn || user || (getToken() && !isTokenExpired(getToken()))) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={redirectUrl} replace />;
   }
 
   return (
@@ -66,6 +66,20 @@ const Login = () => {
       <AuthLayout
         authTitle={displayTitle}
         helpText={displayHelp}
+        logoImage={tenantInfo?.logo_url}
+        orgName={tenantInfo?.name}
+        bottomLinks={
+          !subdomain.slug ? (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+              <Link
+                to="/"
+                className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-[#0088cc] transition-colors"
+              >
+                Sign in with your organization subdomain →
+              </Link>
+            </div>
+          ) : undefined
+        }
       >
 
         <VerticalForm<loginData>

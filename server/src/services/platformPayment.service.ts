@@ -10,6 +10,7 @@ export interface CreateOrderParams {
   pricingTierId: number;
   amountCents?: number;
   currency?: string;
+  isUpgrade?: boolean;
   notes?: Record<string, string>;
 }
 
@@ -172,7 +173,8 @@ export async function markRazorpayPaymentPaid(
   providerPaymentId?: string | null,
   customNotes?: string,
   amountCents?: number,
-  currency?: string
+  currency?: string,
+  overridePricingTierId?: number
 ): Promise<any> {
   const client = await pool.connect();
   try {
@@ -204,6 +206,13 @@ export async function markRazorpayPaymentPaid(
       return payment;
     }
 
+    const originalNotes = String(payment.notes || '');
+    const mergedNotes = customNotes
+      ? originalNotes.toLowerCase().includes('upgrade') && !customNotes.toLowerCase().includes('upgrade')
+        ? `${originalNotes} — ${customNotes}`
+        : customNotes
+      : originalNotes || null;
+
     // 2. Update payment status to paid
     const updatedPaymentRes = await client.query(
       `UPDATE public.platform_payments
@@ -213,22 +222,24 @@ export async function markRazorpayPaymentPaid(
               notes = COALESCE($3, notes),
               amount_cents = COALESCE($4, amount_cents),
               currency = COALESCE($5, currency),
+              pricing_tier_id = COALESCE($6, pricing_tier_id),
               updated_at = NOW()
         WHERE id = $1
         RETURNING *`,
       [
         payment.id,
         providerPaymentId || null,
-        customNotes || payment.notes || null,
+        mergedNotes,
         amountCents || null,
         currency || null,
+        overridePricingTierId || null,
       ]
     );
     payment = updatedPaymentRes.rows[0];
 
     // 3. Lookup or Create Subscription
     let subscriptionId = payment.subscription_id;
-    let tierId = payment.pricing_tier_id;
+    let tierId = overridePricingTierId || payment.pricing_tier_id;
     let existingEndsAt: Date | null = null;
     let existingStartsAt: Date | null = null;
 
@@ -281,7 +292,9 @@ export async function markRazorpayPaymentPaid(
     }
 
     // If upgrading an active package, start date becomes NOW and expiry becomes 1 year from NOW:
-    const isUpgradePayment = (payment.notes || '').toLowerCase().includes('upgrade');
+    const isUpgradePayment =
+      originalNotes.toLowerCase().includes('upgrade') ||
+      String(payment.notes || '').toLowerCase().includes('upgrade');
     const now = new Date();
     const startsAt = isUpgradePayment ? now : (existingStartsAt || now);
     const endsAt = isUpgradePayment
@@ -295,9 +308,10 @@ export async function markRazorpayPaymentPaid(
                 pricing_tier_id = COALESCE($2, pricing_tier_id),
                 starts_at = $3,
                 ends_at = $4,
+                notes = CASE WHEN $5 THEN 'Upgraded via Razorpay payment' ELSE notes END,
                 updated_at = NOW()
           WHERE id = $1`,
-        [subscriptionId, tierId || null, startsAt, endsAt]
+        [subscriptionId, tierId || null, startsAt, endsAt, isUpgradePayment]
       );
     } else {
       const { rows: newSubRows } = await client.query(
@@ -314,14 +328,18 @@ export async function markRazorpayPaymentPaid(
       );
     }
 
-    // 4. Update saas_tenants status to active, plan name, start date, and expiry date (1 year)
+    // 4. Update saas_tenants status to active, plan name, start date, expiry date, and clear pay_later flag
     await client.query(
       `UPDATE public.saas_tenants
           SET status = 'active',
               plan = COALESCE($2, plan),
               settings = jsonb_set(
                 jsonb_set(
-                  COALESCE(settings, '{}'::jsonb),
+                  jsonb_set(
+                    COALESCE(settings, '{}'::jsonb),
+                    '{pay_later}',
+                    'false'::jsonb
+                  ),
                   '{subscription_expiry_date}',
                   to_jsonb($3::text)
                 ),
@@ -371,7 +389,7 @@ export const platformPaymentService = {
   /**
    * Create an in-app Razorpay Order for tenant checkout
    */
-  async createOrder({ tenantId, pricingTierId, amountCents, currency = 'INR', notes = {} }: CreateOrderParams) {
+  async createOrder({ tenantId, pricingTierId, amountCents, currency = 'INR', isUpgrade: reqIsUpgrade, notes = {} }: CreateOrderParams) {
     const { rows: tenantRows } = await pool.query(
       `SELECT id, name, slug, plan, settings, created_at FROM public.saas_tenants WHERE id = $1`,
       [tenantId]
@@ -387,45 +405,45 @@ export const platformPaymentService = {
     const tier = tierRows[0];
 
     let targetAmountCents = Number(tier.amount_cents);
-    let isUpgrade = false;
+    let isUpgrade = Boolean(reqIsUpgrade);
     let upgradeDetails: ProratedUpgradeResult | null = null;
 
-    if (amountCents === undefined || amountCents <= 0) {
-      const { rows: subRows } = await pool.query(
-        `SELECT s.id, s.pricing_tier_id, s.starts_at, s.ends_at, s.status, s.created_at,
-                t.name as tier_name, t.amount_cents as tier_amount_cents
-           FROM public.platform_subscriptions s
-           LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
-          WHERE s.tenant_id = $1
-          ORDER BY s.id DESC
-          LIMIT 1`,
-        [tenantId]
-      );
-      const existingSub = subRows[0];
-      const isFutureExpiry = existingSub?.ends_at && new Date(existingSub.ends_at).getTime() > Date.now();
-      const isTrial = (existingSub?.status || '').includes('trial') || (tenant.plan || '').toLowerCase().includes('trial');
-      const hasActivePaidPlan = existingSub?.status === 'active' && isFutureExpiry && !isTrial;
+    const { rows: subRows } = await pool.query(
+      `SELECT s.id, s.pricing_tier_id, s.starts_at, s.ends_at, s.status, s.created_at,
+              t.name as tier_name, t.amount_cents as tier_amount_cents
+         FROM public.platform_subscriptions s
+         LEFT JOIN public.platform_pricing_tiers t ON t.id = s.pricing_tier_id
+        WHERE s.tenant_id = $1
+        ORDER BY s.id DESC
+        LIMIT 1`,
+      [tenantId]
+    );
+    const existingSub = subRows[0];
+    const isFutureExpiry = existingSub?.ends_at && new Date(existingSub.ends_at).getTime() > Date.now();
+    const isTrial = (existingSub?.status || '').includes('trial') || (tenant.plan || '').toLowerCase().includes('trial');
+    const hasActivePaidPlan = existingSub?.status === 'active' && isFutureExpiry && !isTrial;
 
-      if (hasActivePaidPlan && existingSub?.tier_amount_cents) {
-        const currentAmountCents = Number(existingSub.tier_amount_cents);
-        if (targetAmountCents < currentAmountCents) {
-          throw new ApiError(
-            400,
-            `Your organization already has an active ${existingSub.tier_name || 'higher'} plan. Downgrades are not permitted during an active subscription period. You can only upgrade to a higher plan.`
-          );
-        }
-        if (targetAmountCents > currentAmountCents) {
-          isUpgrade = true;
-          const effectiveStartDate = existingSub.starts_at || tenant.settings?.subscription_start_date || tenant.created_at || new Date();
-          upgradeDetails = calculateProratedUpgrade({
-            currentAmount: currentAmountCents / 100,
-            targetAmount: targetAmountCents / 100,
-            startDate: effectiveStartDate,
-            upgradeDate: new Date(),
-            currency: tier.currency || 'INR',
-            currentPlanName: existingSub.tier_name || tenant.plan || 'Current Plan',
-            targetPlanName: tier.name,
-          });
+    if (hasActivePaidPlan && existingSub?.tier_amount_cents) {
+      const currentAmountCents = Number(existingSub.tier_amount_cents);
+      if (targetAmountCents < currentAmountCents) {
+        throw new ApiError(
+          400,
+          `Your organization already has an active ${existingSub.tier_name || 'higher'} plan. Downgrades are not permitted during an active subscription period. You can only upgrade to a higher plan.`
+        );
+      }
+      if (targetAmountCents > currentAmountCents) {
+        isUpgrade = true;
+        const effectiveStartDate = existingSub.starts_at || tenant.settings?.subscription_start_date || tenant.created_at || new Date();
+        upgradeDetails = calculateProratedUpgrade({
+          currentAmount: currentAmountCents / 100,
+          targetAmount: targetAmountCents / 100,
+          startDate: effectiveStartDate,
+          upgradeDate: new Date(),
+          currency: tier.currency || 'INR',
+          currentPlanName: existingSub.tier_name || tenant.plan || 'Current Plan',
+          targetPlanName: tier.name,
+        });
+        if (amountCents === undefined || amountCents <= 0) {
           targetAmountCents = Math.round(upgradeDetails.payable_upgrade_amount * 100);
         }
       }
@@ -489,7 +507,7 @@ export const platformPaymentService = {
         orderCurrency,
         order.id,
         receipt,
-        `Razorpay checkout order for ${tier.name}`,
+        isUpgrade ? `Razorpay upgrade order for ${tier.name}` : `Razorpay checkout order for ${tier.name}`,
       ]
     );
 
@@ -526,7 +544,10 @@ export const platformPaymentService = {
     const payment = await markRazorpayPaymentPaid(
       razorpay_order_id,
       razorpay_payment_id,
-      `Verified Razorpay payment (Sig: ${razorpay_signature ? 'Valid' : 'Mock'})`
+      `Verified Razorpay payment (Sig: ${razorpay_signature ? 'Valid' : 'Mock'})`,
+      undefined,
+      undefined,
+      pricing_tier_id
     );
 
     if (!payment) {
@@ -611,12 +632,16 @@ export const platformPaymentService = {
                 plan = $2,
                 settings = jsonb_set(
                   jsonb_set(
-                    COALESCE(settings, '{}'::jsonb),
-                    '{subscription_expiry_date}',
-                    to_jsonb($3::text)
+                    jsonb_set(
+                      COALESCE(settings, '{}'::jsonb),
+                      '{subscription_expiry_date}',
+                      to_jsonb($3::text)
+                    ),
+                    '{subscription_start_date}',
+                    to_jsonb($4::text)
                   ),
-                  '{subscription_start_date}',
-                  to_jsonb($4::text)
+                  '{pay_later}',
+                  'false'::jsonb
                 ),
                 updated_at = NOW()
           WHERE id = $1`,

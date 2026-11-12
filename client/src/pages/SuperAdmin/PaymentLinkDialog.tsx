@@ -149,7 +149,7 @@ const PaymentLinkDialog = ({ tenantId, tenantName, currentPlan, onClose, onCompl
             </h2>
             <p className="mt-1 text-sm text-slate-300 font-medium">{tenantName}</p>
           </div>
-          <button type="button" onClick={onClose} className="super-admin-action-icon text-slate-400 hover:text-white" aria-label="Close dialog">
+          <button type="button" onClick={onClose} className="super-admin-action-icon text-slate-400 hover:text-white" aria-label="Close dialog" title="Close">
             <X aria-hidden="true" size={20} />
           </button>
         </div>

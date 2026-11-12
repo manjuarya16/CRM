@@ -139,19 +139,52 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
     const trimmedName = name.trim();
     if (!trimmedName) {
       errMap.name = "Warehouse name is required";
-    } else if (/^[0-9\W_]+$/.test(trimmedName)) {
-      errMap.name = "Warehouse name cannot consist of only special characters or numbers";
-    } else if (!/[a-zA-Z]/.test(trimmedName)) {
-      errMap.name = "Warehouse name must contain at least one letter";
+    } else if (!/^[a-zA-Z0-9\s\-_.,&()/]+$/.test(trimmedName) || !/[a-zA-Z0-9]/.test(trimmedName)) {
+      errMap.name = "Warehouse name can only contain letters, numbers, spaces, and standard punctuation (- _ . , & ( ) /)";
+    }
+
+    const trimmedDesc = description.trim();
+    if (trimmedDesc && (trimmedDesc.length > 1000 || !/[a-zA-Z0-9]/.test(trimmedDesc))) {
+      errMap.description = "Description must contain at least one letter or number (max 1000 characters)";
     }
 
     const trimmedContact = contactName.trim();
     if (!trimmedContact) {
       errMap.contact_name = "Contact person name is required";
-    } else if (/^[0-9\W_]+$/.test(trimmedContact)) {
-      errMap.contact_name = "Contact person name cannot consist of only special characters or numbers";
-    } else if (!/[a-zA-Z]/.test(trimmedContact)) {
-      errMap.contact_name = "Contact person name must contain at least one letter";
+    } else if (/\d/.test(trimmedContact)) {
+      errMap.contact_name = "Contact person name cannot contain numbers";
+    } else if (!/^[a-zA-Z\s.'-]+$/.test(trimmedContact) || !/[a-zA-Z]/.test(trimmedContact)) {
+      errMap.contact_name = "Contact person name must contain only letters and valid punctuation";
+    }
+
+    const trimmedEmail = contactEmail.trim();
+    if (trimmedEmail && (trimmedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(trimmedEmail))) {
+      errMap.contact_emails = "Please enter a valid email address (e.g. warehouse@example.com).";
+    }
+
+    const placeRegex = /^[a-zA-Z\s.'-]+$/;
+    if (city.trim() && (!placeRegex.test(city.trim()) || !/[a-zA-Z]/.test(city.trim()))) {
+      errMap.city = "City must contain only letters and valid punctuation.";
+    }
+    if (state.trim() && (!placeRegex.test(state.trim()) || !/[a-zA-Z]/.test(state.trim()))) {
+      errMap.state = "State / Province must contain only letters and valid punctuation.";
+    }
+    if (postcode.trim() && !/^\d{6}$/.test(postcode.trim())) {
+      errMap.postcode = "Postcode / ZIP must be exactly 6 digits.";
+    }
+    if (country.trim() && (!placeRegex.test(country.trim()) || !/[a-zA-Z]/.test(country.trim()))) {
+      errMap.country = "Country must contain only letters and valid punctuation.";
+    }
+    const trimmedStreet = streetAddress.trim();
+    if (trimmedStreet && (trimmedStreet.length > 500 || !/^[a-zA-Z0-9\s.,#'\-/()&]+$/.test(trimmedStreet) || !/[a-zA-Z0-9]/.test(trimmedStreet))) {
+      errMap.street_address = "Street address must contain valid characters and at least one letter or number.";
+    }
+    for (const loc of locations) {
+      const trimmedLoc = loc.trim();
+      if (trimmedLoc && (!/^[a-zA-Z0-9\s\-_.,/()]+$/.test(trimmedLoc) || !/[a-zA-Z0-9]/.test(trimmedLoc))) {
+        errMap.locations = "Storage location names can only contain letters, numbers, spaces, and standard punctuation (- _ . , / ( ))";
+        break;
+      }
     }
 
     if (contactNumber.trim()) {
@@ -235,8 +268,12 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
       if (err instanceof ZodError) {
         const errMap: Record<string, string> = {};
         err.issues.forEach((issue) => {
-          if (issue.path[0]) {
-            errMap[issue.path[0].toString()] = issue.message;
+          const key =
+            issue.path.length > 1 && issue.path[0] === "contact_address"
+              ? issue.path[1].toString()
+              : issue.path[0]?.toString();
+          if (key) {
+            errMap[key] = issue.message;
           }
         });
         setErrors((prev) => ({ ...prev, ...errMap }));
@@ -352,10 +389,16 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
               <textarea
                 rows={3}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (errors.description) setErrors((prev) => ({ ...prev, description: "" }));
+                }}
                 placeholder="Brief summary of inventory, capacity, or storage notes..."
-                className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent resize-none"
+                className={`w-full px-3.5 py-2.5 text-sm border ${
+                  errors.description ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent resize-none`}
               />
+              {errors.description && <p className="mt-1 text-xs text-red-500 font-medium">{errors.description}</p>}
             </div>
           </div>
 
@@ -393,10 +436,27 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 <input
                   type="email"
                   value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
+                  onChange={(e) => {
+                    setContactEmail(e.target.value);
+                    if (errors.contact_emails) setErrors((prev) => ({ ...prev, contact_emails: "" }));
+                  }}
+                  onBlur={() => {
+                    const cleaned = contactEmail.trim();
+                    if (cleaned && (cleaned.length > 254 || !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(cleaned))) {
+                      setErrors((prev) => ({
+                        ...prev,
+                        contact_emails: "Please enter a valid email address (e.g. warehouse@example.com).",
+                      }));
+                    }
+                  }}
                   placeholder="warehouse@example.com"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent"
+                  className={`w-full px-3.5 py-2.5 text-sm border ${
+                    errors.contact_emails ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent`}
                 />
+                {errors.contact_emails && (
+                  <p className="mt-1 text-xs text-red-500 font-medium">{errors.contact_emails}</p>
+                )}
               </div>
 
               <div>
@@ -404,11 +464,30 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                   Contact Number
                 </label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={14}
                   value={contactNumber}
                   onChange={(e) => {
-                    setContactNumber(e.target.value);
+                    const sanitized = e.target.value.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "").slice(0, 14);
+                    setContactNumber(sanitized);
                     if (errors.contact_numbers) setErrors((prev) => ({ ...prev, contact_numbers: "" }));
+                  }}
+                  onBlur={() => {
+                    const cleaned = contactNumber.trim();
+                    if (!cleaned) return;
+                    let core = cleaned;
+                    let msg = "";
+                    if (cleaned.startsWith("+")) {
+                      const m = cleaned.match(/^\+\d{1,3}(\d{10})$/);
+                      if (!m) msg = "Please enter a valid 10-digit mobile number (e.g. 9876543210 or +919876543210).";
+                      else core = m[1];
+                    } else if (!/^\d{10}$/.test(cleaned)) {
+                      msg = "Mobile number must be exactly 10 digits.";
+                    }
+                    if (!msg && /^(\d)\1{9}$/.test(core)) msg = "Mobile number cannot consist of all identical digits.";
+                    else if (!msg && core.startsWith("0")) msg = "Mobile number cannot start with 0.";
+                    if (msg) setErrors((prev) => ({ ...prev, contact_numbers: msg }));
                   }}
                   placeholder="e.g. 9876543210 or +919876543210"
                   className={`w-full px-3.5 py-2.5 text-sm border ${
@@ -448,10 +527,16 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
               <textarea
                 rows={2}
                 value={streetAddress}
-                onChange={(e) => setStreetAddress(e.target.value)}
+                onChange={(e) => {
+                  setStreetAddress(e.target.value);
+                  if (errors.street_address) setErrors((prev) => ({ ...prev, street_address: "" }));
+                }}
                 placeholder="Building number, street name, suite/unit..."
-                className="w-full px-3.5 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent resize-none"
+                className={`w-full px-3.5 py-2.5 text-sm border ${
+                  errors.street_address ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent resize-none`}
               />
+              {errors.street_address && <p className="mt-1 text-xs text-red-500 font-medium">{errors.street_address}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -462,10 +547,17 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 <input
                   type="text"
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => {
+                    const sanitized = e.target.value.replace(/[^a-zA-Z\s.'-]/g, "");
+                    setCity(sanitized);
+                    if (errors.city) setErrors((prev) => ({ ...prev, city: "" }));
+                  }}
                   placeholder="e.g. Chicago"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm border ${
+                    errors.city ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2`}
                 />
+                {errors.city && <p className="mt-1 text-xs text-red-500 font-medium">{errors.city}</p>}
               </div>
 
               <div>
@@ -475,10 +567,17 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 <input
                   type="text"
                   value={state}
-                  onChange={(e) => setState(e.target.value)}
+                  onChange={(e) => {
+                    const sanitized = e.target.value.replace(/[^a-zA-Z\s.'-]/g, "");
+                    setState(sanitized);
+                    if (errors.state) setErrors((prev) => ({ ...prev, state: "" }));
+                  }}
                   placeholder="e.g. Illinois"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm border ${
+                    errors.state ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2`}
                 />
+                {errors.state && <p className="mt-1 text-xs text-red-500 font-medium">{errors.state}</p>}
               </div>
             </div>
 
@@ -489,11 +588,26 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  maxLength={6}
                   value={postcode}
-                  onChange={(e) => setPostcode(e.target.value)}
-                  placeholder="e.g. 60601"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]"
+                  onChange={(e) => {
+                    const sanitized = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setPostcode(sanitized);
+                    if (errors.postcode) setErrors((prev) => ({ ...prev, postcode: "" }));
+                  }}
+                  onBlur={() => {
+                    const cleaned = postcode.trim();
+                    if (cleaned && !/^\d{6}$/.test(cleaned)) {
+                      setErrors((prev) => ({ ...prev, postcode: "Postcode / ZIP must be exactly 6 digits." }));
+                    }
+                  }}
+                  placeholder="e.g. 400001"
+                  className={`w-full px-3.5 py-2 text-sm border ${
+                    errors.postcode ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2`}
                 />
+                {errors.postcode && <p className="mt-1 text-xs text-red-500 font-medium">{errors.postcode}</p>}
               </div>
 
               <div>
@@ -503,10 +617,17 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 <input
                   type="text"
                   value={country}
-                  onChange={(e) => setCountry(e.target.value)}
+                  onChange={(e) => {
+                    const sanitized = e.target.value.replace(/[^a-zA-Z\s.'-]/g, "");
+                    setCountry(sanitized);
+                    if (errors.country) setErrors((prev) => ({ ...prev, country: "" }));
+                  }}
                   placeholder="e.g. United States"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]"
+                  className={`w-full px-3.5 py-2 text-sm border ${
+                    errors.country ? "border-red-500 focus:ring-red-500" : "border-gray-300 dark:border-gray-600 focus:ring-[#0088cc]"
+                  } rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2`}
                 />
+                {errors.country && <p className="mt-1 text-xs text-red-500 font-medium">{errors.country}</p>}
               </div>
             </div>
           </div>
@@ -537,7 +658,10 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                   <input
                     type="text"
                     value={loc}
-                    onChange={(e) => handleLocationChange(index, e.target.value)}
+                    onChange={(e) => {
+                      handleLocationChange(index, e.target.value);
+                      if (errors.locations) setErrors((prev) => ({ ...prev, locations: "" }));
+                    }}
                     placeholder={"Location name (e.g. Aisle " + (index + 1) + " - Row A)"}
                     className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0088cc]"
                   />
@@ -554,6 +678,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ mode }) => {
                 </div>
               ))}
             </div>
+            {errors.locations && <p className="mt-1 text-xs text-red-500 font-medium">{errors.locations}</p>}
           </div>
         </div>
       </div>

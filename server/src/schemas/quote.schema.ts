@@ -15,14 +15,25 @@ export const quoteSchema = z.object({
   description: z.string().optional().nullable(),
   billing_address: z.any().optional().nullable(),
   shipping_address: z.any().optional().nullable(),
-  discount_percent: z.coerce.number().optional().nullable(),
-  discount_amount: z.coerce.number().optional().nullable(),
-  tax_amount: z.coerce.number().optional().nullable(),
+  discount_percent: z.coerce.number().min(0).max(100, 'Discount cannot exceed 100%').optional().nullable(),
+  discount_amount: z.coerce.number().min(0).optional().nullable(),
+  tax_amount: z.coerce.number().min(0).optional().nullable(),
   adjustment_amount: z.coerce.number().optional().nullable(),
-  sub_total: z.coerce.number().optional().nullable(),
-  grand_total: z.coerce.number().optional().nullable(),
-  person_id: z.coerce.number().optional().nullable(),
+  sub_total: z.coerce.number().min(0).optional().nullable(),
+  grand_total: z.coerce.number().min(0).optional().nullable(),
+  person_id: z.coerce.number('Customer is required').int().positive('Customer is required'),
   user_id: z.coerce.number().optional().nullable(),
+  expired_at: z.string().optional().nullable(),
+  items: z
+    .array(
+      z
+        .object({
+          quantity: z.coerce.number().min(1, 'Product quantity must be at least 1'),
+          discount_percent: z.coerce.number().min(0).max(100, 'Item discount cannot exceed 100%').optional().nullable(),
+        })
+        .passthrough(),
+    )
+    .optional(),
   custom_attributes: z.any().optional().default({}),
 });
 

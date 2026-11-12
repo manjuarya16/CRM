@@ -464,6 +464,32 @@ export class MailService {
   }
 
   /**
+   * Toggle starred folder flag on an email thread root / message
+   */
+  async toggleStarStatus(emailId: number, isStarred: boolean) {
+    const sql = isStarred
+      ? `UPDATE public.emails
+         SET folders = CASE
+           WHEN COALESCE(folders, '[]'::jsonb) @> '["starred"]'::jsonb THEN COALESCE(folders, '["inbox"]'::jsonb)
+           ELSE COALESCE(folders, '[]'::jsonb) || '["starred"]'::jsonb
+         END,
+         updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING id, folders`
+      : `UPDATE public.emails
+         SET folders = COALESCE(
+           (SELECT jsonb_agg(elem) FROM jsonb_array_elements(COALESCE(folders, '[]'::jsonb)) elem WHERE elem #>> '{}' <> 'starred'),
+           '[]'::jsonb
+         ),
+         updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING id, folders`;
+    const result = await pool.query(sql, [emailId]);
+    const folders = result.rows[0]?.folders || [];
+    return { success: true, is_starred: isStarred, folders };
+  }
+
+  /**
    * Move email to trash or permanently delete
    */
   async deleteEmail(emailId: number, type: 'trash' | 'delete' = 'trash') {

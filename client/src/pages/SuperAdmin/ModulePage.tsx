@@ -1,6 +1,7 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { API } from "@/config";
+import adminApi from "@/lib/adminApi";
 import { getSuperAdminToken } from "@/lib/auth-utils";
 import { useSuperAdminStore } from "@/store/superAdminStore";
 import { MATRIX_MODULES } from "@/constants/matrixModules";
@@ -302,9 +303,21 @@ const formatTierPrice = (record: RecordValue): string => {
 };
 
 const jsonField = (value: string, field: string): unknown => {
+  const trimmed = value.trim();
+  const isFeatures = field.toLowerCase().includes("feature");
+  const isLimits = field.toLowerCase().includes("limit");
+  if (!trimmed) {
+    return isFeatures ? [] : isLimits ? {} : null;
+  }
   try {
-    return JSON.parse(value);
+    return JSON.parse(trimmed);
   } catch {
+    if (isFeatures) {
+      return trimmed
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
     throw new Error(`${field} must be valid JSON.`);
   }
 };
@@ -336,7 +349,8 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   const [smtpTestResult, setSmtpTestResult] = useState<{ message: string; success: boolean } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [tenantId, setTenantId] = useState("");
+  const [searchParams] = useSearchParams();
+  const [tenantId, setTenantId] = useState(() => searchParams.get("org_id") || searchParams.get("tenant_id") || "");
   const [roleId, setRoleId] = useState("");
   const [editing, setEditing] = useState<RecordValue | null>(null);
   const [viewing, setViewing] = useState<RecordValue | null>(null);
@@ -502,8 +516,24 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       ? { status: "active", platform_role_id: "" }
       : moduleKey === "subscriptions"
         ? { pricing_tier_id: "" }
-      : moduleKey === "roles" && admin?.platform_role_id
-        ? { parent_role_id: String(admin.platform_role_id) }
+      : moduleKey === "roles"
+        ? {
+            parent_role_id: admin?.platform_role_id
+              ? String(admin.platform_role_id)
+              : records[0]?.id
+                ? String(records[0].id)
+                : "",
+            permission_type: "custom",
+          }
+      : moduleKey === "pricing"
+        ? {
+            currency: "INR",
+            billing_interval: "yearly",
+            trial_days: "14",
+            features: "[]",
+            limits: "{}",
+            active: "true",
+          }
         : {});
     setFieldErrors({});
     setShowPasswordMap({});
@@ -538,7 +568,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
 
   const validateSingleField = (name: string, rawVal: string): string => {
     const val = rawVal.trim();
-    if (["name", "admin_name", "from_name"].includes(name)) {
+    if (["admin_name", "from_name"].includes(name) || (name === "name" && moduleKey === "users")) {
       if (!val) return "Full name is required.";
       if (!/^[a-zA-Z\s.'-]+$/.test(val)) return "Full name must only contain letters and spaces (no special characters).";
       if (val.length < 2) return "Full name must be at least 2 characters.";
@@ -647,6 +677,12 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       if (moduleKey === "subscriptions") {
         payload.pricing_tier_id = form.pricing_tier_id ? Number(form.pricing_tier_id) : null;
       }
+      if (moduleKey === "pricing") {
+        if (!Array.isArray(payload.features)) payload.features = [];
+        if (!payload.limits || typeof payload.limits !== "object" || Array.isArray(payload.limits)) payload.limits = {};
+        if (!payload.billing_interval) payload.billing_interval = "yearly";
+        if (payload.active === undefined) payload.active = true;
+      }
       if (moduleKey === "smtp") {
         if (form.password?.trim()) payload.password = form.password.trim();
         else delete payload.password;
@@ -679,6 +715,19 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         setSaving(false);
         return;
       } else if (moduleKey === "subscriptions") {
+        const confirmSend = await Swal.fire({
+          title: "Send Payment Link?",
+          text: "Create and email a subscription payment link for the selected organization?",
+          icon: "question",
+          showCancelButton: true,
+          confirmButtonText: "Yes, Send Link",
+          confirmButtonColor: "#059669",
+          cancelButtonText: "Cancel",
+        });
+        if (!confirmSend.isConfirmed) {
+          setSaving(false);
+          return;
+        }
         actionResult = asObject(await request("post", `/tenants/${tenantId}/subscriptions/payment-link`, {
           pricing_tier_id: Number(form.pricing_tier_id),
         }));
@@ -717,11 +766,30 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       if (subscriptionEmailFailure) {
         setError(responseMessage || "Payment link was created, but its email could not be sent. Resend it after checking SMTP settings.");
       }
-      if (moduleKey === "roles" || moduleKey === "users") {
+      if (moduleKey === "subscriptions" && !editing) {
+        if (subscriptionEmailFailure) {
+          await Swal.fire({
+            icon: "warning",
+            title: "Payment Link Active ⚠️",
+            text: responseMessage || "Payment link was created, but its email could not be sent. Check SMTP settings.",
+            confirmButtonColor: "#4f46e5",
+          });
+        } else {
+          await Swal.fire({
+            icon: "success",
+            title: "Payment Link Sent! ✉️",
+            text: responseMessage || "Payment link emailed successfully.",
+            confirmButtonColor: "#059669",
+          });
+        }
+      } else if (moduleKey === "roles" || moduleKey === "users") {
         await showSuccessAlert("Success!", successMessage);
       }
     } catch (requestError) {
       console.error("Save record error:", requestError);
+      const msg = errorMessage(requestError);
+      setError(msg);
+      void Swal.fire({ icon: "error", title: "Could not save record", text: msg });
     } finally {
       setSaving(false);
     }
@@ -956,11 +1024,26 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     const showPayLaterCard = isExpired || (expiryDate !== null && daysRemaining <= 10);
     const isActivePaid = (statusStr === "active" || statusStr === "paid") && !isExpired;
 
-    const allPlans = [
+    const fallbackPlans = [
       { name: "Starter", price: 9999, rank: 1, label: "Starter Plan (₹9,999/yr)" },
       { name: "Growth", price: 19999, rank: 2, label: "Growth Plan (₹19,999/yr)" },
       { name: "Business", price: 29999, rank: 3, label: "Business Plan (₹29,999/yr)" },
     ];
+    const dynamicPlans = planOptions
+      .filter((p) => p && p.name && p.active !== false)
+      .slice()
+      .sort((a, b) => Number(a.amount_cents || 0) - Number(b.amount_cents || 0))
+      .map((p, idx) => {
+        const price = Math.round(Number(p.amount_cents || 0) / 100);
+        const name = String(p.name);
+        return {
+          name,
+          price,
+          rank: idx + 1,
+          label: `${name} Plan (₹${price.toLocaleString()}/yr)`,
+        };
+      });
+    const allPlans = dynamicPlans.length > 0 ? dynamicPlans : fallbackPlans;
 
     const currentPlanLower = currentPlan.toLowerCase();
     const currentMeta = allPlans.find((p) => currentPlanLower.includes(p.name.toLowerCase())) || allPlans[0];
@@ -1108,7 +1191,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       `,
       showConfirmButton: false,
       showCancelButton: false,
-      didOpen: () => {
+      didOpen: (el) => {
+        const closeBtn = el.querySelector(".swal2-close");
+        if (closeBtn) closeBtn.setAttribute("title", "Close");
         const cashBtn = document.getElementById("swal-change-cash");
         const onlineBtn = document.getElementById("swal-change-online");
         const payLaterBtn = document.getElementById("swal-change-paylater");
@@ -1228,7 +1313,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </div>
           </div>
         `,
-        didOpen: () => {
+        didOpen: (el) => {
+          const closeBtn = el.querySelector(".swal2-close");
+          if (closeBtn) closeBtn.setAttribute("title", "Close");
           const planSelect = document.getElementById("swal-cash-plan") as HTMLSelectElement;
           const amountInput = document.getElementById("swal-cash-amount") as HTMLInputElement;
           const discountInput = document.getElementById("swal-cash-discount") as HTMLInputElement;
@@ -1272,8 +1359,24 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           const notesInput = document.getElementById("swal-cash-notes") as HTMLInputElement;
 
           const planName = planSelect?.value || defaultTargetPlan.name;
-          const amount = Number(amountInput?.value) || defaultNetPrice;
-          const discount = Number(discountInput?.value) || 0;
+          const amount = Number(amountInput?.value ?? defaultNetPrice);
+          const discount = Number(discountInput?.value ?? 0);
+          if (!Number.isFinite(amount) || amount < 0) {
+            Swal.showValidationMessage("Please enter a valid non-negative payment amount.");
+            return false;
+          }
+          if (!Number.isFinite(discount) || discount < 0) {
+            Swal.showValidationMessage("Discount cannot be negative.");
+            return false;
+          }
+          if (discount > amount) {
+            Swal.showValidationMessage("Discount amount cannot exceed payable amount.");
+            return false;
+          }
+          if (amount - discount <= 0 && !isUpgradeFlow) {
+            Swal.showValidationMessage("Net payable amount after discount must be greater than 0.");
+            return false;
+          }
           const reference = refInput?.value || `CASH-REC-${Date.now().toString().slice(-5)}`;
           const notes = notesInput?.value || "Plan changed via Cash Payment";
 
@@ -1290,7 +1393,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           didOpen: () => Swal.showLoading(),
         });
 
-        const res = await API.post("/admin/payments/record", {
+        const res = await adminApi.post("/admin/payments/record", {
           organization_id: orgId,
           plan_name: cashData.planName,
           amount: cashData.amount,
@@ -1361,7 +1464,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         showCloseButton: true,
         customClass: {
           popup: "!w-[840px] !max-w-[95vw] !p-8 !pb-9 rounded-3xl dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-2xl relative",
-        title: "!text-xl md:!text-2xl !font-bold !pt-2 !pb-1 !px-8 text-slate-900 dark:text-slate-100",
+          title: "!text-xl md:!text-2xl !font-bold !pt-2 !pb-1 !px-8 text-slate-900 dark:text-slate-100",
           closeButton: "!text-slate-400 hover:!text-slate-700 dark:hover:!text-slate-200 !text-2xl !outline-none !shadow-none !top-5 !right-5 !p-2 !transition cursor-pointer",
           htmlContainer: "!overflow-visible !m-0 !pt-2 !text-left !max-h-none",
           actions: "!mt-6 !gap-3",
@@ -1431,7 +1534,9 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </div>
           </div>
         `,
-        didOpen: () => {
+        didOpen: (el) => {
+          const closeBtn = el.querySelector(".swal2-close");
+          if (closeBtn) closeBtn.setAttribute("title", "Close");
           const planSelect = document.getElementById("swal-paylater-plan") as HTMLSelectElement;
           const amountInput = document.getElementById("swal-paylater-amount") as HTMLInputElement;
           if (planSelect && amountInput) {
@@ -1478,7 +1583,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
           didOpen: () => Swal.showLoading(),
         });
 
-        const res = await API.post("/admin/payments/record", {
+        const res = await adminApi.post("/admin/payments/record", {
           organization_id: orgId,
           plan_name: payLaterData.planName,
           amount: payLaterData.amount,
@@ -1565,17 +1670,89 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     }
   };
 
+  const isAlreadyPaidRecord = (record: RecordValue): boolean => {
+    const payStatus = String(record.payment_status || "").toLowerCase();
+    const recStatus = String(record.status || "").toLowerCase();
+    const planStr = String(record.plan || record.tier_name || "").toLowerCase();
+    const endsAt = record.ends_at || record.subscription_expiry_date;
+    const unexpired = !endsAt || new Date(String(endsAt)) > new Date();
+    if (payStatus === "paid") return unexpired;
+    return recStatus === "active" && !planStr.includes("trial") && unexpired;
+  };
+
+  const openPaymentLinkDialog = (record: RecordValue) => {
+    if (isAlreadyPaidRecord(record)) {
+      void Swal.fire({
+        icon: "info",
+        title: "Already Paid",
+        text: "This organization already has an active paid subscription. A new payment link cannot be created.",
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
+    setPaymentLinkTenant(record);
+  };
+
   const sendPaymentLink = async (record: RecordValue) => {
+    if (isAlreadyPaidRecord(record)) {
+      await Swal.fire({
+        icon: "info",
+        title: "Already Paid",
+        text: "This subscription is already paid. A new payment link cannot be sent.",
+        confirmButtonColor: "#040975",
+      });
+      return;
+    }
+
+    const confirm = await Swal.fire({
+      title: "Send Payment Link?",
+      text: `Send the subscription payment link email for ${String(record.tenant_name || record.name || "this organization")}?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Send Link",
+      confirmButtonColor: "#059669",
+      cancelButtonText: "Cancel",
+    });
+    if (!confirm.isConfirmed) return;
+
     try {
       setError("");
       setNotice("");
+      Swal.fire({
+        title: "Sending Payment Link...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
       const result = asObject(await request("post", `/tenants/${record.tenant_id}/subscriptions/${record.id}/payment-link`));
       await load();
-      const responseMessage = String(result?.response_message || "Payment link email request completed.");
-      if (result?.email_sent === false) setError(responseMessage);
-      else setNotice(responseMessage);
-    } catch (requestError) {
+      const responseMessage = String(result?.response_message || "Payment link email sent successfully.");
+      if (result?.email_sent === false) {
+        setError(responseMessage);
+        await Swal.fire({
+          icon: "warning",
+          title: "Payment Link Active ⚠️",
+          text: responseMessage,
+          confirmButtonColor: "#4f46e5",
+        });
+      } else {
+        setNotice(responseMessage);
+        await Swal.fire({
+          icon: "success",
+          title: "Payment Link Sent! ✉️",
+          text: responseMessage,
+          confirmButtonColor: "#059669",
+        });
+      }
+    } catch (requestError: any) {
       console.error("Save record error:", requestError);
+      const errMsg = requestError?.response?.data?.message || requestError?.message || "Failed to send payment link.";
+      setError(errMsg);
+      await Swal.fire({
+        icon: "error",
+        title: "Could Not Send Payment Link",
+        text: errMsg,
+        confirmButtonColor: "#e11d48",
+      });
     }
   };
 
@@ -1685,15 +1862,17 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
       : records;
 
     if (moduleKey === "subscriptions") {
-      // Last added on top: sort by tenant_id DESC, id DESC, or created_at DESC
+      // Last added on top: sort newest created_at / starts_at first, then tenant_id DESC, id DESC
       list = [...list].sort((a, b) => {
-        const idA = Number(a.tenant_id ?? a.id ?? 0);
-        const idB = Number(b.tenant_id ?? b.id ?? 0);
-        if (idB !== idA) return idB - idA;
+        const dateA = new Date(String(a.created_at || a.starts_at || 0)).getTime() || 0;
+        const dateB = new Date(String(b.created_at || b.starts_at || 0)).getTime() || 0;
+        if (dateB !== dateA) return dateB - dateA;
 
-        const dateA = new Date(String(a.created_at || a.starts_at || 0)).getTime();
-        const dateB = new Date(String(b.created_at || b.starts_at || 0)).getTime();
-        return dateB - dateA;
+        const tenantA = Number(a.tenant_id ?? 0);
+        const tenantB = Number(b.tenant_id ?? 0);
+        if (tenantB !== tenantA) return tenantB - tenantA;
+
+        return Number(b.id ?? 0) - Number(a.id ?? 0);
       });
     }
 
@@ -1965,7 +2144,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         <form noValidate onSubmit={(event) => void submitForm(event)} className="mb-6 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 p-5 sm:p-7 shadow-sm transition-all">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{editing ? "Edit Record" : createLabel}</h2>
-            <button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 transition shadow-2xs">Close</button>
+            <button type="button" title="Close" aria-label="Close" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 transition shadow-2xs cursor-pointer">Close</button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {fields.filter((field) =>
@@ -2008,6 +2187,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       }}
                       className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                     >
+                      <option value="">Select a parent role</option>
                       {records
                         .filter((role) => !editing || String(role.id) !== String(editing.id))
                         .map((role) => <option key={String(role.id)} value={String(role.id)}>{`${"— ".repeat(Number(role.hierarchy_depth) || 0)}${String(role.name || `Role ${role.id}`)}`}</option>)}
@@ -2084,13 +2264,14 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         }}
                         autoComplete="new-password"
                         placeholder="Min 8 characters"
-                        className={`block w-full rounded-lg border ${inputBorderClass} bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 outline-none`}
+                        className={`block w-full rounded-lg border ${inputBorderClass} bg-white dark:bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-900 dark:text-slate-100 border border-gray-300 dark:border-slate-700 outline-none`}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPasswordMap((prev) => ({ ...prev, [field.name]: !prev[field.name] }))}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+                        className="absolute inset-y-0 right-0 z-10 flex items-center pr-3 cursor-pointer text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                         aria-label={showPasswordMap[field.name] ? "Hide password" : "Show password"}
+                        title={showPasswordMap[field.name] ? "Hide password" : "Show password"}
                       >
                         {showPasswordMap[field.name] ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
@@ -2673,10 +2854,15 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                   {moduleKey === "subscriptions" ? (
                     paginatedRecords.map((record, index) => {
-                      const statusStr = String(record.status || "trialing").toLowerCase();
-                      const isTrial = statusStr === "trial" || statusStr === "trialing";
-                      const isSuspended = statusStr === "suspended";
-                      const isActive = statusStr === "active";
+                      const rawStatusStr = String(record.status || "trialing").toLowerCase();
+                      const endsDateObj = record.ends_at ? new Date(String(record.ends_at)) : null;
+                      const isPastDueDate = Boolean(endsDateObj && !isNaN(endsDateObj.getTime()) && endsDateObj.getTime() < Date.now());
+                      const isSuspended = rawStatusStr === "suspended";
+                      const isCancelled = rawStatusStr === "cancelled";
+                      const isExpired = rawStatusStr === "expired" || (isPastDueDate && !isSuspended && !isCancelled);
+                      const isTrial = !isExpired && (rawStatusStr === "trial" || rawStatusStr === "trialing");
+                      const isActive = !isExpired && rawStatusStr === "active";
+                      const statusStr = isExpired ? "expired" : rawStatusStr;
                       const orgName = String(record.tenant_name || record.name || "Organization");
                       const planName = String(record.tier_name || record.plan || "Growth");
                       const billingCycle = isTrial
@@ -2684,24 +2870,22 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         : "Yearly";
 
                       let renewalDateStr = "—";
-                      if (record.ends_at) {
-                        const d = new Date(String(record.ends_at));
-                        if (!isNaN(d.getTime())) {
-                          if (isTrial) {
-                            renewalDateStr = `Trial ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-                          } else {
-                            renewalDateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                          }
+                      if (endsDateObj && !isNaN(endsDateObj.getTime())) {
+                        if (isExpired) {
+                          renewalDateStr = `Expired ${endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+                        } else if (isTrial) {
+                          renewalDateStr = `Trial ends ${endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+                        } else {
+                          renewalDateStr = endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                         }
                       }
 
+                      const isPaid = String(record.payment_status || "").toLowerCase() === "paid";
                       const isPayLater =
-                        record.is_pay_later === true ||
-                        String(record.payment_status || "").toLowerCase() === "pay_later" ||
-                        String(record.payment_method || "").toLowerCase().includes("pay later") ||
-                        String(record.payment_method || "").toLowerCase().includes("pay_later") ||
-                        String(record.notes || "").toLowerCase().includes("pay later") ||
-                        Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true);
+                        !isPaid &&
+                        (record.is_pay_later === true ||
+                          String(record.payment_status || "").toLowerCase() === "pay_later" ||
+                          Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true));
 
                       let expectedDateStr = "";
                       if (record.expected_payment_date) {
@@ -2723,14 +2907,6 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                               <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                                 {orgName}
                               </span>
-                              {isPayLater && (
-                                <span
-                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-[11px] shadow-2xs cursor-help"
-                                  title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
-                                >
-                                  ⏳
-                                </span>
-                              )}
                             </div>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
@@ -2760,6 +2936,11 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
                                   TRIAL
                                 </span>
+                              ) : isExpired ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+                                  EXPIRED
+                                </span>
                               ) : isSuspended ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
                                   <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
@@ -2783,12 +2964,12 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {isTrial && (
+                              {(isTrial || isExpired) && (
                                 <button
                                   type="button"
                                   onClick={() => void handleUpdateTrial(record)}
                                   className="px-3.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs"
-                                  title={`Extend or update trial for ${orgName}`}
+                                  title={`Extend or update subscription for ${orgName}`}
                                 >
                                   Update trial
                                 </button>
@@ -2834,7 +3015,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                             {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
                               <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
                             )}
-                            {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                            {admin?.permissions?.includes("platform.payments.create") && !isAlreadyPaidRecord(record) && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => openPaymentLinkDialog(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                             {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                             {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                             {hasPermission("delete") && <button type="button" aria-label="Delete organization" title="Delete organization" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
@@ -2845,7 +3026,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                             {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                           </>}
                           {moduleKey === "domains" && hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} title={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
-                          {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                          {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && !isAlreadyPaidRecord(record) && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => openPaymentLinkDialog(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                           {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" aria-label="Activate trial" title="Activate trial" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="super-admin-action-icon super-admin-action-icon-warning"><Zap aria-hidden="true" size={17} /></button>}
                           {moduleKey === "demos" && hasPermission("edit") && <button type="button" aria-label="Advance status" title="Advance status" onClick={() => void performAction("status", record)} className="super-admin-action-icon"><RefreshCw aria-hidden="true" size={16} /></button>}
                           {moduleKey === "subscriptions" && record.status === "pending" && typeof record.provider_payment_link_url === "string" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Resend payment link" title="Resend payment link" onClick={() => void sendPaymentLink(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
@@ -2864,28 +3045,33 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
             </div>
             <div className="divide-y divide-slate-800 md:hidden">
               {moduleKey === "subscriptions" ? paginatedRecords.map((record, index) => {
-                const statusStr = String(record.status || "trialing").toLowerCase();
-                const isTrial = statusStr === "trial" || statusStr === "trialing";
-                const isSuspended = statusStr === "suspended";
-                const isActive = statusStr === "active";
+                const rawStatusStr = String(record.status || "trialing").toLowerCase();
+                const endsDateObj = record.ends_at ? new Date(String(record.ends_at)) : null;
+                const isPastDueDate = Boolean(endsDateObj && !isNaN(endsDateObj.getTime()) && endsDateObj.getTime() < Date.now());
+                const isSuspended = rawStatusStr === "suspended";
+                const isCancelled = rawStatusStr === "cancelled";
+                const isExpired = rawStatusStr === "expired" || (isPastDueDate && !isSuspended && !isCancelled);
+                const isTrial = !isExpired && (rawStatusStr === "trial" || rawStatusStr === "trialing");
+                const isActive = !isExpired && rawStatusStr === "active";
+                const statusStr = isExpired ? "expired" : rawStatusStr;
                 const orgName = String(record.tenant_name || record.name || "Organization");
                 const planName = String(record.tier_name || record.plan || "Growth");
                 const billingCycle = isTrial ? `${record.trial_days || 14}-day trial` : "Yearly";
                 let renewalDateStr = "—";
-                if (record.ends_at) {
-                  const d = new Date(String(record.ends_at));
-                  if (!isNaN(d.getTime())) {
-                    renewalDateStr = isTrial ? `Trial ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                  }
+                if (endsDateObj && !isNaN(endsDateObj.getTime())) {
+                  renewalDateStr = isExpired
+                    ? `Expired ${endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : isTrial
+                      ? `Trial ends ${endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      : endsDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                 }
 
+                const isPaid = String(record.payment_status || "").toLowerCase() === "paid";
                 const isPayLater =
-                  record.is_pay_later === true ||
-                  String(record.payment_status || "").toLowerCase() === "pay_later" ||
-                  String(record.payment_method || "").toLowerCase().includes("pay later") ||
-                  String(record.payment_method || "").toLowerCase().includes("pay_later") ||
-                  String(record.notes || "").toLowerCase().includes("pay later") ||
-                  Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true);
+                  !isPaid &&
+                  (record.is_pay_later === true ||
+                    String(record.payment_status || "").toLowerCase() === "pay_later" ||
+                    Boolean(record.tenant_settings && typeof record.tenant_settings === "object" && (record.tenant_settings as any).pay_later === true));
 
                 let expectedDateStr = "";
                 if (record.expected_payment_date) {
@@ -2905,20 +3091,14 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{orgName}</span>
-                        {isPayLater && (
-                          <span
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 text-[10px]"
-                            title={`Pay Later Commitment${expectedDateStr ? ` • Payment promised by ${expectedDateStr}` : ""}`}
-                          >
-                            ⏳
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center gap-1.5">
                         {isActive ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ACTIVE</span>
                         ) : isTrial ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRIAL</span>
+                        ) : isExpired ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">EXPIRED</span>
                         ) : isSuspended ? (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">SUSPENDED</span>
                         ) : (
@@ -2940,7 +3120,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                       <div><span className="text-slate-400 block text-[10px] uppercase">Next Renewal</span><span className="font-mono">{renewalDateStr}</span></div>
                     </div>
                     <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-slate-800">
-                      {isTrial && (
+                      {(isTrial || isExpired) && (
                         <button
                           type="button"
                           onClick={() => void handleUpdateTrial(record)}
@@ -2987,7 +3167,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     {!(String(record.payment_status || "").toLowerCase() === "paid" || (String(record.status || "").toLowerCase() === "active" && !String(record.plan || "").toLowerCase().includes("trial"))) && (
                               <button type="button" aria-label="Update expiry" title="Update subscription expiry date" onClick={() => void updateExpiry(record)} className="super-admin-action-icon text-amber-400 hover:text-amber-300"><Calendar aria-hidden="true" size={16} /></button>
                             )}
-                    {admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                    {admin?.permissions?.includes("platform.payments.create") && !isAlreadyPaidRecord(record) && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => openPaymentLinkDialog(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                     {hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} title={String(record.status).toLowerCase() === "active" ? "Suspend organization" : "Activate organization"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
                     {canEditRecord(record) && <button type="button" aria-label="Edit organization" title="Edit organization" onClick={() => beginEdit(record)} className="super-admin-action-icon"><Pencil aria-hidden="true" size={16} /></button>}
                     {hasPermission("delete") && <button type="button" aria-label="Delete organization" title="Delete organization" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
@@ -2998,7 +3178,7 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                     {canDeleteRecord(record) && <button type="button" aria-label="Delete user" title="Delete user" onClick={() => void performAction("delete", record)} className="super-admin-action-icon super-admin-action-icon-danger"><Trash2 aria-hidden="true" size={17} /></button>}
                     </>}
                     {moduleKey === "domains" && hasPermission("edit") && <button type="button" aria-label={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} title={String(record.status).toLowerCase() === "active" ? "Suspend domain" : "Activate domain"} onClick={() => void performAction("status", record)} className="super-admin-action-icon"><Power aria-hidden="true" size={17} /></button>}
-                    {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => setPaymentLinkTenant(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
+                    {moduleKey === "domains" && admin?.permissions?.includes("platform.payments.create") && !isAlreadyPaidRecord(record) && <button type="button" aria-label="Send payment link" title="Send payment link" onClick={() => openPaymentLinkDialog(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}
                     {moduleKey === "demos" && hasPermission("edit") && !record.trial_tenant_id && <button type="button" aria-label="Activate trial" title="Activate trial" onClick={() => { setTrialDemo(record); setTrialDays("14"); setTrialPassword(""); setTrialPlanId(""); }} className="super-admin-action-icon super-admin-action-icon-warning"><Zap aria-hidden="true" size={17} /></button>}
                     {moduleKey === "demos" && hasPermission("edit") && <button type="button" aria-label="Advance status" title="Advance status" onClick={() => void performAction("status", record)} className="super-admin-action-icon"><RefreshCw aria-hidden="true" size={16} /></button>}
                     {moduleKey === "subscriptions" && record.status === "pending" && typeof record.provider_payment_link_url === "string" && admin?.permissions?.includes("platform.payments.create") && <button type="button" aria-label="Resend payment link" title="Resend payment link" onClick={() => void sendPaymentLink(record)} className="super-admin-action-icon"><Send aria-hidden="true" size={17} /></button>}

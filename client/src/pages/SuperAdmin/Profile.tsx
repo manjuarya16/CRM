@@ -253,7 +253,7 @@ export const SuperAdminProfile: React.FC = () => {
 
           <div className="flex sm:flex-col items-end gap-1.5 text-xs text-slate-500 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-6 w-full sm:w-auto justify-between sm:justify-start">
             <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Security Clearance</span>
-            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+            <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
               <Sparkles size={14} className="text-amber-500 shrink-0" />
               <span>Full System Access</span>
             </span>
@@ -272,7 +272,7 @@ export const SuperAdminProfile: React.FC = () => {
                 <User size={18} className="shrink-0" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Personal & Contact Details</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 dark:text-slate-100">Personal & Contact Details</h3>
                 <p className="text-xs text-slate-500">Manage your name, contact phone number, and platform account details.</p>
               </div>
             </div>
@@ -280,7 +280,7 @@ export const SuperAdminProfile: React.FC = () => {
             <form onSubmit={handleProfileSubmit} className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                     Full Name <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative flex items-center">
@@ -305,7 +305,7 @@ export const SuperAdminProfile: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                     Phone Number
                   </label>
                   <div className="relative flex items-center">
@@ -333,7 +333,7 @@ export const SuperAdminProfile: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                   Email Address
                 </label>
                 <div className="relative flex items-center">
@@ -377,7 +377,7 @@ export const SuperAdminProfile: React.FC = () => {
                 <KeyRound size={18} className="shrink-0" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Security & Password</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 dark:text-slate-100">Security & Password</h3>
                 <p className="text-xs text-slate-500">Update your account password regularly to ensure platform protection.</p>
               </div>
             </div>
@@ -391,7 +391,7 @@ export const SuperAdminProfile: React.FC = () => {
               )}
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                   Current Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative flex items-center">
@@ -421,7 +421,7 @@ export const SuperAdminProfile: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                     New Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative flex items-center">
@@ -451,7 +451,7 @@ export const SuperAdminProfile: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
                     Confirm New Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative flex items-center">
@@ -505,7 +505,7 @@ export const SuperAdminProfile: React.FC = () => {
         <div className="space-y-6">
           {/* Account Overview */}
           <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
-            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
               <Shield size={16} className="text-[#040975] shrink-0" />
               <span>Role & Status</span>
             </h4>
@@ -513,7 +513,7 @@ export const SuperAdminProfile: React.FC = () => {
             <div className="space-y-3.5 text-xs">
               <div className="flex items-center justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Assigned Role</span>
-                <span className="font-bold text-slate-900">{roleTitle}</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100">{roleTitle}</span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Ownership</span>
@@ -530,7 +530,7 @@ export const SuperAdminProfile: React.FC = () => {
                   <Calendar size={13} className="shrink-0" />
                   <span>Created Date</span>
                 </span>
-                <span className="font-semibold text-slate-700">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
                   {admin?.created_at ? new Date(admin.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "System Default"}
                 </span>
               </div>
@@ -539,7 +539,7 @@ export const SuperAdminProfile: React.FC = () => {
                   <Clock size={13} className="shrink-0" />
                   <span>Last Updated</span>
                 </span>
-                <span className="font-semibold text-slate-700">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
                   {admin?.updated_at ? new Date(admin.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recent"}
                 </span>
               </div>
@@ -549,7 +549,7 @@ export const SuperAdminProfile: React.FC = () => {
           {/* Platform Privileges */}
           <div className="rounded-2xl border border-gray-200/90 dark:border-gray-700/80 bg-white dark:bg-slate-800 p-6 shadow-xs">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Sparkles size={16} className="text-amber-500 shrink-0" />
                 <span>Privileges</span>
               </h4>
@@ -560,7 +560,7 @@ export const SuperAdminProfile: React.FC = () => {
 
             {admin?.is_platform_owner ? (
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
-                <p className="font-bold text-slate-900 flex items-center gap-2">
+                <p className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                   <span>Full Administrative Privileges</span>
                 </p>

@@ -1032,7 +1032,7 @@ const getPersonEmail = (person: any): string => {
             </div>
 
             {/* TAB CONTENT */}
-            <div className="p-5">
+            <div className="p-5 max-h-[620px] overflow-y-auto">
 
               {/* CHANGELOGS TIMELINE */}
               {activeTab === "changelogs" && (

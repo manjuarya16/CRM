@@ -5,11 +5,46 @@ import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import { logger } from "@/utils/logger";
 import { ICreateNotificationInput, INotificationItem } from "@/interfaces";
 import { SseService } from "@/services/sse.service";
+import { getTenantContext, runWithTenantContext } from "@/context/tenantContext";
+
+const resolveRequestTenantId = (req: Request): number | null => {
+  const raw = req.tenant?.id ?? (req as any).user?.tenant_id ?? getTenantContext()?.tenantId;
+  return raw !== undefined && raw !== null && raw !== "" ? Number(raw) : null;
+};
+
+const connectTenantScoped = async (req: Request): Promise<PoolClient> => {
+  const ctx = getTenantContext();
+  const tenantId = resolveRequestTenantId(req);
+  if (tenantId) {
+    return runWithTenantContext(
+      {
+        tenantId,
+        tenantSlug: req.tenant?.slug ?? ctx?.tenantSlug,
+        isSuperAdmin: false,
+      },
+      () => pool.connect()
+    );
+  }
+  return pool.connect();
+};
 
 const getNotifications = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    const tenantId = resolveRequestTenantId(req);
+    const isSuperAdmin = Boolean((req as any).user?.is_super_admin || (req as any).user?.role === "super_admin");
+    if (!tenantId && isSuperAdmin) {
+      res.status(HttpStatusCodes.OK).json({
+        success: true,
+        data: [],
+        total: 0,
+        unreadCount: 0,
+        page: Math.max(1, Number(req.query.page) || 1),
+        limit: Math.max(1, Number(req.query.limit || req.query.per_page) || 10),
+      });
+      return;
+    }
+    connection = await connectTenantScoped(req);
     const userId = (req as any).user?.id || null;
     const isReadParam = req.query.is_read;
     const isRead = isReadParam !== undefined && isReadParam !== "" ? isReadParam === "true" : null;
@@ -59,7 +94,16 @@ const getNotifications = async (req: Request, res: Response): Promise<void> => {
 const getUnreadCount = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    const tenantId = resolveRequestTenantId(req);
+    const isSuperAdmin = Boolean((req as any).user?.is_super_admin || (req as any).user?.role === "super_admin");
+    if (!tenantId && isSuperAdmin) {
+      res.status(HttpStatusCodes.OK).json({
+        success: true,
+        unreadCount: 0,
+      });
+      return;
+    }
+    connection = await connectTenantScoped(req);
     const userId = (req as any).user?.id || null;
 
     // Safely generate reminders
@@ -95,7 +139,7 @@ const getUnreadCount = async (req: Request, res: Response): Promise<void> => {
 const markAsRead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    connection = await connectTenantScoped(req);
     const id = Number(req.params.id);
     const userId = (req as any).user?.id || null;
 
@@ -122,7 +166,7 @@ const markAsRead = async (req: Request, res: Response): Promise<void> => {
 const markAllAsRead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    connection = await connectTenantScoped(req);
     const userId = (req as any).user?.id || null;
 
     const result = await connection.query(
@@ -155,7 +199,7 @@ const markAllAsRead = async (req: Request, res: Response): Promise<void> => {
 const deleteNotification = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    connection = await connectTenantScoped(req);
     const id = Number(req.params.id);
     const userId = (req as any).user?.id || null;
 
@@ -182,7 +226,7 @@ const deleteNotification = async (req: Request, res: Response): Promise<void> =>
 const clearAllNotifications = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
-    connection = await pool.connect();
+    connection = await connectTenantScoped(req);
     const userId = (req as any).user?.id || null;
 
     const result = await connection.query(

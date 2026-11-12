@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { usePersonStore, useOrganizationStore, useUserStore, useTagStore } from "@/store";
 import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { personSchema } from "@/schemas";
+import { STRICT_EMAIL_REGEX, INDIAN_MOBILE_REGEX } from "@/schemas/person.schema";
 
 import { PersonEmailItem, ContactItem, PersonFormData } from "@/interface";
 import { TagPicker } from "@/components/TagPicker";
@@ -100,21 +101,46 @@ const EditPersonPage: React.FC = () => {
             const res: Array<{ label: string; value: string }> = [];
             for (const item of raw) {
               if (typeof item === "object" && item !== null) {
-                const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+                const itemVal = [
+                  item.value,
+                  item.number,
+                  item.phone,
+                  item.contact,
+                  item.mobile,
+                  item.contact_number,
+                  item.contactNumber,
+                  item.phone_number,
+                  item.phoneNumber,
+                  item.mobile_number,
+                  item.mobileNumber,
+                  item.telephone,
+                  item.tel,
+                  item.email,
+                ].find((value) => value !== undefined && value !== null && String(value).trim() !== "");
                 const rawLabel = item.label && !/^mailto$/i.test(String(item.label).trim()) ? item.label : defaultLabel;
                 const itemLabel = stripHtmlToText(rawLabel) || defaultLabel;
                 if (typeof itemVal === "string" && (itemVal.startsWith("[") || itemVal.startsWith("{") || itemVal.includes(":") || itemVal.includes(",") || itemVal.includes("<"))) {
                   res.push(...parseStr(itemVal, itemLabel));
-                } else if (itemVal) {
+                } else if (itemVal !== undefined && itemVal !== null && String(itemVal).trim() !== "") {
                   const valStr = String(itemVal).trim();
                   res.push({ label: itemLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
+                } else {
+                  for (const [k, v] of Object.entries(item)) {
+                    if (k === "label" || k === "id" || v === undefined || v === null) continue;
+                    const valStr = String(v).trim();
+                    if (valStr) res.push({ label: k || defaultLabel, value: valStr.includes("@") ? cleanEmailAddress(valStr) : stripHtmlToText(valStr) });
+                  }
                 }
               } else if (typeof item === "string") {
                 res.push(...parseStr(item, defaultLabel));
+              } else if (typeof item === "number") {
+                res.push({ label: defaultLabel, value: String(item) });
               }
             }
             return res;
           }
+          if (typeof raw === "object" && raw !== null) return unpackItems([raw], defaultLabel);
+          if (typeof raw === "number") return [{ label: defaultLabel, value: String(raw) }];
           if (typeof raw === "string") return parseStr(raw, defaultLabel);
           return [];
         };
@@ -122,7 +148,24 @@ const EditPersonPage: React.FC = () => {
         let parsedEmails = unpackItems(person.emails, "work");
         if (parsedEmails.length === 0) parsedEmails = [{ label: "work", value: "" }];
 
-        let parsedContacts = unpackItems(person.contact_numbers, "work");
+        const contactNumberCandidates = [
+          person.contact_numbers,
+          (person as any).contactNumbers,
+          (person as any).contact_number,
+          (person as any).contactNumber,
+          (person as any).phone,
+          (person as any).phone_number,
+          (person as any).phoneNumber,
+          (person as any).mobile,
+          (person as any).mobile_number,
+          (person as any).mobileNumber,
+          (person as any).telephone,
+          (person as any).tel,
+        ];
+        const rawContacts = contactNumberCandidates.find((candidate) =>
+          unpackItems(candidate, "work").some((contact) => contact.value.trim() !== "")
+        );
+        let parsedContacts = unpackItems(rawContacts, "work");
         if (parsedContacts.length === 0) parsedContacts = [{ label: "work", value: "" }];
 
         let cleanTitle = person.job_title || "";
@@ -186,6 +229,22 @@ const EditPersonPage: React.FC = () => {
       updated[index] = { ...updated[index], [field]: val };
       return { ...prev, emails: updated };
     });
+    if (field === "value") {
+      const trimmed = val.trim();
+      const atIdx = trimmed.indexOf("@");
+      const domainPart = atIdx !== -1 ? trimmed.slice(atIdx + 1) : "";
+      if (
+        trimmed &&
+        ((atIdx !== -1 && domainPart.length > 0 && !/^[a-zA-Z]/.test(domainPart)) ||
+          (trimmed.includes("@") && trimmed.includes(".") && !STRICT_EMAIL_REGEX.test(trimmed)))
+      ) {
+        setErrors((prev) => ({
+          ...prev,
+          emails: "Please enter a valid email address (domain cannot start with a number, e.g. name@domain.com).",
+        }));
+        return;
+      }
+    }
     if (errors.emails || errors.email) {
       setErrors((prev) => ({ ...prev, emails: "", email: "" }));
     }
@@ -228,23 +287,19 @@ const EditPersonPage: React.FC = () => {
     let errorMsg = "";
     let cleanVal = val;
     if (field === "value") {
-      if (/[a-zA-Z]/.test(val)) {
-        errorMsg = "Text characters are not allowed. Mobile number must contain digits only.";
-      } else if (val.includes("+") && !val.trim().startsWith("+")) {
-        errorMsg = "Country code '+' is only allowed at the beginning of the mobile number.";
-      } else if ((val.match(/\+/g) || []).length > 1) {
-        errorMsg = "Only one '+' is allowed at the beginning of the mobile number.";
+      if (/[^0-9]/.test(val)) {
+        errorMsg = "Mobile number must contain digits only.";
       }
+      cleanVal = val.replace(/[^0-9]/g, "").slice(0, 10);
 
-      const startsWithPlus = val.trim().startsWith("+");
-      const digitsAndSymbols = val.replace(/[^0-9\-\s()]/g, "");
-      cleanVal = startsWithPlus ? "+" + digitsAndSymbols : digitsAndSymbols;
-
-      const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-      if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
-        errorMsg = "Contact number cannot consist of only zeros.";
-      } else if (digitsOnly.length > 15) {
-        errorMsg = "Mobile number cannot exceed 15 digits.";
+      if (cleanVal.length > 0) {
+        if (/^0+$/.test(cleanVal)) {
+          errorMsg = "Contact number cannot consist of only zeros.";
+        } else if (!/^[6-9]/.test(cleanVal)) {
+          errorMsg = "Mobile number must start with 6, 7, 8, or 9.";
+        } else if (cleanVal.length === 10 && /^(\d)\1{9}$/.test(cleanVal)) {
+          errorMsg = "Please enter a valid 10-digit mobile number.";
+        }
       }
     }
 
@@ -262,8 +317,16 @@ const EditPersonPage: React.FC = () => {
   };
 
   const checkDuplicateEmail = async (val: string, currentIndex?: number) => {
-    if (!val || !val.trim().includes("@")) return;
-    const cleanVal = val.trim().toLowerCase();
+    if (!val || !val.trim()) return;
+    const trimmed = val.trim();
+    if (!STRICT_EMAIL_REGEX.test(trimmed)) {
+      setErrors((prev) => ({
+        ...prev,
+        emails: "Please enter a valid email address without trailing dots (e.g. name@domain.com).",
+      }));
+      return;
+    }
+    const cleanVal = trimmed.toLowerCase();
 
     // Check intra-form duplicates
     const isLocalDuplicate = formData.emails.some(
@@ -291,24 +354,31 @@ const EditPersonPage: React.FC = () => {
     if (!val || val.trim() === "") return;
     const cleanVal = val.trim();
     const digitsOnly = cleanVal.replace(/[^0-9]/g, "");
-    if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
+    if (/[^0-9]/.test(cleanVal)) {
+      setErrors((prev) => ({
+        ...prev,
+        contact_numbers: "Mobile number must contain digits only.",
+      }));
+      return;
+    }
+    if (/^0+$/.test(digitsOnly)) {
       setErrors((prev) => ({
         ...prev,
         contact_numbers: "Contact number cannot consist of only zeros.",
       }));
       return;
     }
-    if (digitsOnly.length < 7) {
+    if (!/^[6-9]/.test(digitsOnly)) {
       setErrors((prev) => ({
         ...prev,
-        contact_numbers: "Please enter a valid mobile number (at least 7 digits).",
+        contact_numbers: "Mobile number must start with 6, 7, 8, or 9.",
       }));
       return;
     }
-    if (digitsOnly.length > 15) {
+    if (!INDIAN_MOBILE_REGEX.test(digitsOnly) || /^(\d)\1{9}$/.test(digitsOnly)) {
       setErrors((prev) => ({
         ...prev,
-        contact_numbers: "Mobile number cannot exceed 15 digits.",
+        contact_numbers: "Please enter a valid 10-digit mobile number.",
       }));
       return;
     }
@@ -636,12 +706,14 @@ const EditPersonPage: React.FC = () => {
                       </select>
                       <input
                         type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
                         value={contactItem.value}
                         onChange={(e) =>
                           handleContactChange(index, "value", e.target.value)
                         }
                         onBlur={() => checkDuplicateContact(contactItem.value, index)}
-                        placeholder="+91 98765 43210"
+                        placeholder="9876543210"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />
                     </div>

@@ -158,17 +158,43 @@ const publicSmtp = (row: any) => ({
   password_configured: Boolean(row.password_encrypted),
   updated_at: row.updated_at,
 });
-const amountSchema = z.number().int().safe().min(0).max(100_000_000_000);
+const amountSchema = z.coerce.number().finite().min(0).max(100_000_000_000).transform((v) => Math.round(v));
+const featuresSchema = z.union([
+  z.array(z.unknown()).max(100),
+  z.string().transform((val) => {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.slice(0, 100);
+    } catch {
+      // fall back to comma/newline delimited items
+    }
+    return trimmed.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean).slice(0, 100);
+  }),
+]).nullable().optional().transform((val) => val ?? []);
+const limitsSchema = z.union([
+  z.record(z.string(), z.unknown()),
+  z.string().transform((val) => {
+    const trimmed = val.trim();
+    if (!trimmed) return {};
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    throw new Error('Limits must be a JSON object');
+  }),
+]).nullable().optional().transform((val) => val ?? {});
 const tierSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(5000).nullable().optional(),
   amount_cents: amountSchema,
-  currency: z.string().trim().length(3).transform((value) => value.toUpperCase()).default('USD'),
+  currency: z.string().trim().length(3).transform((value) => value.toUpperCase()).default('INR'),
   billing_interval: z.enum(['monthly', 'yearly', 'one_time']).default('yearly'),
-  trial_days: z.number().int().min(0).max(365).default(14),
-  features: z.array(z.unknown()).max(100).default([]),
-  limits: z.record(z.string(), z.unknown()).default({}),
-  active: z.boolean().default(true),
+  trial_days: z.coerce.number().int().min(0).max(365).default(14),
+  features: featuresSchema,
+  limits: limitsSchema,
+  active: z.coerce.boolean().default(true),
 });
 const subscriptionSchema = z.object({
   pricing_tier_id: z.number().int().positive().nullable().optional(),
@@ -589,7 +615,13 @@ router.get('/subscriptions', handler(async (req, res) => {
             st.name AS tenant_name,
             st.slug AS tenant_slug,
             COALESCE(s.pricing_tier_id, 0) AS pricing_tier_id,
-            COALESCE(s.status, CASE WHEN st.status = 'suspended' THEN 'suspended' ELSE 'trialing' END) AS status,
+            CASE
+              WHEN LOWER(COALESCE(s.status, '')) IN ('suspended', 'cancelled') OR st.status = 'suspended'
+                THEN COALESCE(NULLIF(LOWER(s.status), ''), 'suspended')
+              WHEN COALESCE(s.ends_at, (st.settings->>'subscription_expiry_date')::timestamptz, st.created_at + INTERVAL '14 days') < NOW()
+                THEN 'expired'
+              ELSE COALESCE(s.status, 'trialing')
+            END AS status,
             COALESCE(s.starts_at, st.created_at) AS starts_at,
             COALESCE(s.ends_at, (st.settings->>'subscription_expiry_date')::timestamptz, st.created_at + INTERVAL '14 days') AS ends_at,
             s.auto_renew,
@@ -601,21 +633,25 @@ router.get('/subscriptions', handler(async (req, res) => {
             'yearly' AS billing_interval,
             COALESCE(t.trial_days, 14) AS trial_days,
             COALESCE(
-              CASE 
-                WHEN (COALESCE((st.settings->>'pay_later')::boolean, FALSE) = TRUE) 
-                     OR LOWER(COALESCE(payment.method, '')) IN ('pay_later', 'pay later') 
-                     OR COALESCE(s.notes, '') ILIKE '%pay later%' 
+              CASE
+                WHEN LOWER(COALESCE(payment.status, '')) = 'paid' THEN 'paid'
+                WHEN COALESCE((st.settings->>'pay_later')::boolean, FALSE) = TRUE
+                     OR LOWER(COALESCE(payment.method, '')) IN ('pay_later', 'pay later')
+                     OR COALESCE(s.notes, '') ILIKE '%pay later%'
                      OR COALESCE(payment.notes, '') ILIKE '%pay later%'
-                THEN 'pay_later' 
-                ELSE payment.status 
-              END, 
+                THEN 'pay_later'
+                ELSE payment.status
+              END,
               'unpaid'
             ) AS payment_status,
             (
-              COALESCE((st.settings->>'pay_later')::boolean, FALSE) = TRUE 
-              OR LOWER(COALESCE(payment.method, '')) IN ('pay_later', 'pay later') 
-              OR COALESCE(s.notes, '') ILIKE '%pay later%' 
-              OR COALESCE(payment.notes, '') ILIKE '%pay later%'
+              LOWER(COALESCE(payment.status, '')) != 'paid'
+              AND (
+                COALESCE((st.settings->>'pay_later')::boolean, FALSE) = TRUE
+                OR LOWER(COALESCE(payment.method, '')) IN ('pay_later', 'pay later')
+                OR COALESCE(s.notes, '') ILIKE '%pay later%'
+                OR COALESCE(payment.notes, '') ILIKE '%pay later%'
+              )
             ) AS is_pay_later,
             st.settings->>'expected_payment_date' AS expected_payment_date,
             st.settings AS tenant_settings,
@@ -629,13 +665,13 @@ router.get('/subscriptions', handler(async (req, res) => {
          SELECT p.status, p.provider_payment_link_url, p.provider_payment_link_id, p.method, p.notes
            FROM public.platform_payments p
           WHERE p.tenant_id = st.id
-          ORDER BY p.created_at DESC
+          ORDER BY p.created_at DESC, p.id DESC
           LIMIT 1
        ) payment ON TRUE
       WHERE ($1::bigint IS NULL OR st.id = $1)
-      ORDER BY COALESCE(s.tenant_id, st.id), s.id DESC NULLS LAST
+      ORDER BY COALESCE(s.tenant_id, st.id), s.created_at DESC NULLS LAST, s.id DESC NULLS LAST
      ) sub_data
-     ORDER BY sub_data.tenant_id DESC, sub_data.id DESC
+     ORDER BY sub_data.created_at DESC NULLS LAST, sub_data.tenant_id DESC, sub_data.id DESC
      LIMIT $2 OFFSET $3`,
     [tenantId, limit, offset]
   );
@@ -737,6 +773,21 @@ router.post('/tenants/:tenantId/subscriptions/payment-link', handler(async (req,
     );
     const tenant = tenantRows[0];
     if (!tenant) throw new ApiError(409, 'An organization administrator email is required before sending a payment link');
+
+    const activePaidResult = await client.query(
+      `SELECT s.id
+         FROM public.platform_subscriptions s
+         JOIN public.platform_payments p ON p.subscription_id = s.id
+        WHERE s.tenant_id = $1
+          AND s.status = 'active'
+          AND LOWER(p.status) IN ('paid', 'captured', 'succeeded')
+          AND (s.ends_at IS NULL OR s.ends_at > NOW())
+        LIMIT 1`,
+      [tenantId]
+    );
+    if (activePaidResult.rows[0]) {
+      throw new ApiError(409, 'This organization already has an active paid subscription. A new payment link cannot be created.');
+    }
 
     const pendingResult = await client.query(
       `SELECT s.id, p.amount_cents, p.currency, p.provider_payment_link_url, tier.name AS tier_name

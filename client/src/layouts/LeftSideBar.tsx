@@ -206,32 +206,32 @@ const LeftSideBar = ({ isCondensed, hideLogo }: LeftSideBarProps) => {
       <div className="app-menu">
         <Link
           to="/"
-          className={`logo-box flex items-center ${
-            isCondensed ? "justify-center px-2" : "justify-start pl-[3rem] pr-4"
+          className={`logo-box flex items-center justify-center ${
+            isCondensed ? "px-2" : "px-4"
           } h-[70px] sm:h-[70px] border-b ${
             isDarkMode ? "border-gray-700" : "border-[#03075e]"
           }`}
           style={{
             background: isDarkMode ? "#1f2937" : "#040975",
             height: "70px",
-            justifyContent: isCondensed ? "center" : "flex-start",
-            paddingLeft: isCondensed ? "0.5rem" : "3rem",
-            paddingRight: isCondensed ? "0.5rem" : undefined,
+            justifyContent: "center",
           }}
         >
-          <div className="flex items-center">
+          <div className="flex items-center justify-center w-full overflow-hidden">
             <img
               src={activeLogoUrl || "/logo-2.png"}
               alt="Logo"
               className={
                 isCondensed
                   ? "h-10 w-10 max-h-[42px] max-w-[42px] object-contain drop-shadow-sm"
-                  : "h-full max-h-[70px] max-w-[200px] w-auto object-contain object-left transition-all drop-shadow-sm py-1"
+                  : "max-h-[50px] max-w-[185px] w-auto object-contain object-center transition-all drop-shadow-sm"
               }
-              style={{ maxHeight: isCondensed ? "42px" : "70px" }}
+              style={{ maxHeight: isCondensed ? "42px" : "50px" }}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                if (!target.src.endsWith("/logonew.png")) {
+                if (!target.src.endsWith("/logo-2.png")) {
+                  target.src = "/logo-2.png";
+                } else if (!target.src.endsWith("/logonew.png")) {
                   target.src = "/logonew.png";
                 }
               }}

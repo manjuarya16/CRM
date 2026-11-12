@@ -402,7 +402,7 @@ const PublicPayment: React.FC = () => {
         : `₹${Number(upgrade_amount || plan.price_inr).toLocaleString()}`;
 
       // Handle Mock / Sandbox mode fallback
-      if (!key_id || key_id === "rzp_test_placeholder" || order_id.startsWith("order_mock_")) {
+      if (!key_id || key_id === "rzp_test_placeholder" || String(order_id).startsWith("order_mock_") || String(order_id).startsWith("order_crm_")) {
         const mockConfirm = await Swal.fire({
           title: is_upgrade ? "Confirm Plan Upgrade" : "Razorpay Sandbox / Direct Pay",
           html: `
@@ -524,7 +524,7 @@ const PublicPayment: React.FC = () => {
               currency,
               discount_code: appliedCoupon?.code,
               discount_amount: pricing.discountAmount,
-              razorpay_order_id: response.razorpay_order_id,
+              razorpay_order_id: response.razorpay_order_id || order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             });

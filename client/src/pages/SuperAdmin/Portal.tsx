@@ -64,6 +64,7 @@ const SuperAdminPortal: React.FC = () => {
   const [profileError, setProfileError] = useState("");
   const [moduleRefreshKey, setModuleRefreshKey] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const permissions = useMemo(() => admin?.permissions || [], [admin?.permissions]);
 
@@ -252,7 +253,9 @@ const SuperAdminPortal: React.FC = () => {
 
       {/* Sidebar: Fixed on Desktop (xl+), Off-canvas Slide-over on Mobile (< xl) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 xl:w-64 flex-col border-r border-gray-200 bg-white shadow-xl xl:shadow-sm transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 ${
+          sidebarCollapsed ? "xl:w-20" : "xl:w-64"
+        } flex-col border-r border-gray-200 bg-white shadow-xl xl:shadow-sm transition-all duration-300 ease-in-out ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
         }`}
       >
@@ -263,7 +266,7 @@ const SuperAdminPortal: React.FC = () => {
         >
           <Link to="/" className="flex items-center justify-center w-full overflow-hidden hover:opacity-95 transition-opacity" aria-label="Home">
             <img
-              src="/logo-2.png"
+              src={logoLight || "/logo-2.png"}
               alt={orgName || "MORSE CRM"}
               className="h-14 max-h-[60px] w-auto max-w-[210px] object-contain object-center drop-shadow-sm"
               onError={(e) => {
@@ -286,7 +289,7 @@ const SuperAdminPortal: React.FC = () => {
         </div>
 
         <nav aria-label="Super admin menu" className="flex-1 flex-col overflow-y-auto p-3 space-y-1">
-          <p className="px-3 pb-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+          <p className={`px-3 pb-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 ${sidebarCollapsed ? "xl:hidden" : ""}`}>
             Super Admin Suite
           </p>
           {accessibleMenuItems.map((item) => {
@@ -295,21 +298,24 @@ const SuperAdminPortal: React.FC = () => {
               <Link
                 key={item.key}
                 to={getMenuItemPath(item.key)}
+                title={item.label}
                 onClick={() => {
                   setMobileMenuOpen(false);
                   if (active) setModuleRefreshKey((current) => current + 1);
                 }}
                 aria-current={active ? "page" : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium transition-all w-full ${
+                  sidebarCollapsed ? "xl:justify-center xl:px-2" : ""
+                } ${
                   active
                     ? "bg-[#040975] text-white shadow-sm font-semibold"
                     : "text-gray-600 hover:bg-gray-100 hover:text-[#040975]"
                 }`}
               >
-                <item.icon aria-hidden="true" size={18} strokeWidth={active ? 2.4 : 2} className={active ? "text-white" : "text-gray-400 group-hover:text-[#040975]"} />
-                <span className="whitespace-nowrap">{item.label}</span>
+                <item.icon aria-hidden="true" size={18} strokeWidth={active ? 2.4 : 2} className={active ? "text-white shrink-0" : "text-gray-400 group-hover:text-[#040975] shrink-0"} />
+                <span className={`whitespace-nowrap ${sidebarCollapsed ? "xl:hidden" : ""}`}>{item.label}</span>
                 {counts[item.key] !== undefined && counts[item.key] > 0 && (
-                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${sidebarCollapsed ? "xl:hidden" : ""} ${
                     active ? "bg-white/20 text-white" : "bg-blue-50 text-[#040975] border border-blue-100"
                   }`}>
                     {counts[item.key]}
@@ -324,13 +330,13 @@ const SuperAdminPortal: React.FC = () => {
         <div className="border-t border-gray-200 bg-gray-50/70 p-4 shrink-0">
           <Link
             to={getMenuItemPath("profile")}
-            className="flex items-center gap-2.5 p-2 -mx-1 -mt-1 rounded-xl hover:bg-white/80 transition-colors group"
+            className={`flex items-center gap-2.5 p-2 -mx-1 -mt-1 rounded-xl hover:bg-white/80 transition-colors group ${sidebarCollapsed ? "xl:justify-center xl:mx-0" : ""}`}
             title="View & Edit Profile"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-xs font-bold text-white shadow-xs">
               {String(admin?.name || "A").charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className={`min-w-0 flex-1 ${sidebarCollapsed ? "xl:hidden" : ""}`}>
               <p className="truncate text-xs font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">{admin?.name || "Super Admin"}</p>
               <p className="truncate text-[11px] text-gray-500">{admin?.email}</p>
             </div>
@@ -338,15 +344,16 @@ const SuperAdminPortal: React.FC = () => {
           <button
             type="button"
             onClick={logout}
+            title="Sign out"
             className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600"
           >
             <LogOut aria-hidden="true" size={15} />
-            <span>Sign out</span>
+            <span className={sidebarCollapsed ? "xl:hidden" : ""}>Sign out</span>
           </button>
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 xl:pl-64 bg-[#f3f4f7]">
+      <main className={`min-w-0 flex-1 ${sidebarCollapsed ? "xl:pl-20" : "xl:pl-64"} bg-[#f3f4f7] transition-all duration-300`}>
         {/* Topbar matching domain theme style */}
         <div
           className="sticky top-0 z-30 flex h-[70px] items-center justify-between border-b border-gray-200 bg-white/95 px-3 sm:px-6 backdrop-blur shadow-sm"
@@ -359,6 +366,16 @@ const SuperAdminPortal: React.FC = () => {
               onClick={() => setMobileMenuOpen(true)}
               className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 xl:hidden shrink-0"
               aria-label="Open navigation menu"
+            >
+              <Menu size={20} />
+            </button>
+            {/* Sidebar collapse toggle for desktop */}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((prev) => !prev)}
+              className="hidden xl:flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 shrink-0"
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <Menu size={20} />
             </button>

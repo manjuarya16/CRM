@@ -26,7 +26,7 @@ router.get('/tenant/:slug', async (req, res, next) => {
   try {
     const slug = rawSlug;
     const { rows } = await pool.query(
-      'SELECT id, name, slug, domain, status, plan, logo_url FROM public.saas_tenants WHERE slug = $1 LIMIT 1',
+      "SELECT id, name, slug, domain, status, plan, COALESCE(NULLIF(logo_url, ''), settings->>'logo_url') AS logo_url FROM public.saas_tenants WHERE slug = $1 LIMIT 1",
       [slug]
     );
 

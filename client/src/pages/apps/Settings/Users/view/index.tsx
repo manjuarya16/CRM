@@ -856,7 +856,7 @@ const ViewUserPage: React.FC = () => {
                   </div>
 
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                    <label className="cursor-pointer text-gray-500 hover:text-gray-700 p-1 text-lg">
+                    <label className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 text-lg">
                       <i className="mgc_attachment_line"></i>
                       <input
                         type="file"

@@ -13,6 +13,7 @@ const PublicFormPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!form_id) return;
@@ -31,7 +32,29 @@ const PublicFormPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form_id || !form) return;
+
+    for (let idx = 0; idx < (form.attributes || []).length; idx++) {
+      const attr = form.attributes![idx];
+      if (attr.is_hidden) continue;
+      const key = attr.attribute_code || `field_${idx}`;
+      const rawVal = formData[key];
+      const strVal = Array.isArray(rawVal) ? rawVal.join(",").trim() : String(rawVal ?? "").trim();
+      const label = attr.name || attr.attribute_name || key;
+      if (attr.is_required && !strVal) {
+        setSubmitError(`${label} is required.`);
+        return;
+      }
+      const isEmailField =
+        String(attr.attribute_type || "").toLowerCase() === "email" ||
+        String(key).toLowerCase().includes("email");
+      if (isEmailField && strVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal)) {
+        setSubmitError(`Please enter a valid email address for ${label}.`);
+        return;
+      }
+    }
+
     try {
+      setSubmitError(null);
       setSubmitting(true);
       const res = await API.post(`/web-forms/submit/${form_id}`, formData);
       const data = res.data?.data;
@@ -42,7 +65,7 @@ const PublicFormPage: React.FC = () => {
       setSuccessMessage(form.submit_success_content || "Thank you for your submission.");
       setSubmitted(true);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Submission failed");
+      setSubmitError(err?.response?.data?.message || err?.message || "Failed to submit form. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -108,6 +131,13 @@ const PublicFormPage: React.FC = () => {
                 );
               })}
             </div>
+
+            {submitError && (
+              <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-medium flex items-center gap-2">
+                <i className="mgc_close_circle_line text-base shrink-0"></i>
+                <span>{submitError}</span>
+              </div>
+            )}
 
             <div className="pt-3">
               <button

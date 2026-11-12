@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)*\.[a-zA-Z]{2,}$/;
 
 export const personSchema = z.object({
   name: z
@@ -42,12 +42,14 @@ export const personSchema = z.object({
       for (const it of items) {
         const numStr = typeof it === 'object' && it !== null ? (it.value || it.phone || it.number) : String(it);
         if (typeof numStr === 'string' && numStr.trim()) {
-          const digits = numStr.replace(/[^0-9]/g, '');
-          if (digits.length > 0 && /^0+$/.test(digits)) return false;
+          const clean = numStr.trim();
+          if (/[^0-9]/.test(clean)) return false;
+          if (/^0+$/.test(clean) || /^(\d)\1{9}$/.test(clean)) return false;
+          if (!/^[6-9]\d{9}$/.test(clean)) return false;
         }
       }
       return true;
-    }, { message: 'Contact number cannot consist of only zeros' }),
+    }, { message: 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.' }),
   organization_id: z.coerce.number().optional().nullable(),
   job_title: z.string().max(191).optional().nullable(),
   user_id: z.coerce.number().optional().nullable(),

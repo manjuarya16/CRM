@@ -7,6 +7,14 @@ import { DynamicAttributeFields } from "@/components/DynamicAttributeFields";
 import { SearchableLeadSelect } from "@/components/SearchableLeadSelect";
 import { quoteSchema } from "@/schemas";
 
+const getLocalTodayString = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 const fmtCurrency = (n: number) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -221,12 +229,22 @@ const CreateQuotePage: React.FC = () => {
       setErrors((prev) => ({ ...prev, item_product: "Please select a product" }));
       return;
     }
+    const qty = Number(newItem.quantity);
+    if (!Number.isFinite(qty) || qty < 1) {
+      setErrors((prev) => ({ ...prev, item_product: "Quantity must be at least 1" }));
+      Swal.fire("Validation Error", "Product quantity must be at least 1.", "warning");
+      return;
+    }
+    const disc = Number(newItem.discount_percent) || 0;
+    if (disc < 0 || disc > 100) {
+      setErrors((prev) => ({ ...prev, item_product: "Item discount must be between 0% and 100%" }));
+      Swal.fire("Validation Error", "Item discount cannot exceed 100%.", "warning");
+      return;
+    }
     setErrors((prev) => ({ ...prev, item_product: "" }));
     const prod = products.find((p) => p.id === Number(newItem.product_id));
-    const qty = Number(newItem.quantity) || 1;
     const price = Number(newItem.price) || 0;
-    const disc = Number(newItem.discount_percent) || 0;
-    const tax = Number(newItem.tax_percent) || 0;
+    const tax = Math.max(0, Number(newItem.tax_percent) || 0);
 
     const sub = qty * price;
     const discAmt = sub * (disc / 100);
@@ -249,6 +267,20 @@ const CreateQuotePage: React.FC = () => {
     setErrors((prev) => ({ ...prev, items: "", item_product: "" }));
   };
 
+  const handleUpdateItemQuantity = (index: number, rawQty: string) => {
+    const qty = rawQty === "" ? 0 : Number(rawQty);
+    setItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const safeQty = Number.isFinite(qty) && qty >= 0 ? qty : 0;
+        const sub = safeQty * item.price;
+        const discAmt = sub * (item.discount_percent / 100);
+        const taxAmt = (sub - discAmt) * (item.tax_percent / 100);
+        return { ...item, quantity: safeQty, total: sub - discAmt + taxAmt };
+      })
+    );
+  };
+
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
   };
@@ -260,11 +292,19 @@ const CreateQuotePage: React.FC = () => {
     return acc + sub * (i.discount_percent / 100);
   }, 0);
 
-  const globalDiscountPercent = Number(formData.discount_percent) || 0;
+  const rawGlobalDiscount = Number(formData.discount_percent) || 0;
+  const globalDiscountPercent = Math.min(100, Math.max(0, rawGlobalDiscount));
   const globalDiscountAmt = (rawSubTotal - totalItemDiscounts) * (globalDiscountPercent / 100);
   const totalDiscount = totalItemDiscounts + globalDiscountAmt;
 
-  const taxAmount = Number(formData.tax_amount) || 0;
+  const totalItemTaxes = items.reduce((acc, i) => {
+    const sub = i.quantity * i.price;
+    const afterItemDisc = sub * (1 - i.discount_percent / 100);
+    const afterGlobalDisc = afterItemDisc * (1 - globalDiscountPercent / 100);
+    return acc + afterGlobalDisc * (i.tax_percent / 100);
+  }, 0);
+  const manualTaxAmount = Number(formData.tax_amount) || 0;
+  const taxAmount = Number((totalItemTaxes + manualTaxAmount).toFixed(2));
   const adjustmentAmount = Number(formData.adjustment_amount) || 0;
   const grandTotal = Math.max(0, rawSubTotal - totalDiscount + taxAmount + adjustmentAmount);
 
@@ -286,12 +326,13 @@ const CreateQuotePage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const errMap: Record<string, string> = {};
     const validation = quoteSchema.safeParse({
       subject: formData.subject.trim(),
       description: formData.description || undefined,
       person_id: formData.person_id ? Number(formData.person_id) : undefined,
       user_id: formData.user_id ? Number(formData.user_id) : undefined,
-      discount_percent: globalDiscountPercent,
+      discount_percent: rawGlobalDiscount,
       discount_amount: totalDiscount,
       tax_amount: taxAmount,
       adjustment_amount: adjustmentAmount,
@@ -300,18 +341,37 @@ const CreateQuotePage: React.FC = () => {
     });
 
     if (!validation.success) {
-      const errMap: Record<string, string> = {};
       validation.error.issues.forEach((issue) => {
         if (issue.path[0]) {
           errMap[issue.path[0].toString()] = issue.message;
         }
       });
-      setErrors(errMap);
-      return;
     }
 
+    if (!formData.person_id) {
+      errMap.person_id = "Contact Person / Customer is required";
+    }
+    if (rawGlobalDiscount < 0 || rawGlobalDiscount > 100) {
+      errMap.discount_percent = "Global discount must be between 0% and 100%";
+    }
+    if (formData.expired_at && formData.expired_at < getLocalTodayString()) {
+      errMap.expired_at = `Expiry date cannot be in the past (must be on or after ${getLocalTodayString()})`;
+    }
     if (items.length === 0) {
-      setErrors({ items: "Please add at least one line item to the quote" });
+      errMap.items = "Please add at least one line item to the quote";
+    } else if (items.some((i) => !Number.isFinite(i.quantity) || i.quantity < 1)) {
+      errMap.items = "Every product item must have a Quantity of at least 1";
+    }
+
+    if (Object.keys(errMap).length > 0) {
+      setErrors(errMap);
+      const messages = Object.values(errMap);
+      await Swal.fire({
+        icon: "warning",
+        title: "Validation Error",
+        html: `<ul class="text-left text-xs list-disc pl-5 space-y-1">${messages.map((m) => `<li>${m}</li>`).join("")}</ul>`,
+        confirmButtonColor: "#0088cc",
+      });
       return;
     }
 
@@ -344,12 +404,19 @@ const CreateQuotePage: React.FC = () => {
           discount_percent: i.discount_percent,
           discount_amount: i.quantity * i.price * (i.discount_percent / 100),
           tax_percent: i.tax_percent,
-          tax_amount: i.quantity * i.price * (i.tax_percent / 100),
+          tax_amount: i.quantity * i.price * (1 - i.discount_percent / 100) * (i.tax_percent / 100),
           total: i.total,
         })),
         custom_attributes: customAttributes,
       });
 
+      await Swal.fire({
+        icon: "success",
+        title: "Quote Created!",
+        text: "Your quote has been saved successfully.",
+        timer: 1600,
+        showConfirmButton: false,
+      });
       navigate("/quotes");
     } catch (error: any) {
       Swal.fire("Error", error.message || "Failed to create quote", "error");
@@ -537,10 +604,15 @@ const CreateQuotePage: React.FC = () => {
               <label className={labelCls}>Expiry Date</label>
               <input
                 type="date"
+                min={getLocalTodayString()}
                 value={formData.expired_at}
-                onChange={(e) => setFormData({ ...formData, expired_at: e.target.value })}
-                className={inputCls}
+                onChange={(e) => {
+                  setFormData({ ...formData, expired_at: e.target.value });
+                  if (errors.expired_at) setErrors((prev) => ({ ...prev, expired_at: "" }));
+                }}
+                className={`${inputCls} ${errors.expired_at ? "border-red-500 ring-1 ring-red-500/20" : ""}`}
               />
+              {errors.expired_at && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.expired_at}</p>}
             </div>
 
             {/* Description */}
@@ -863,7 +935,15 @@ const CreateQuotePage: React.FC = () => {
                           <p className="font-semibold text-gray-800 dark:text-gray-200">{item.name}</p>
                           <span className="font-mono text-[11px] text-gray-400">{item.sku || "No SKU"}</span>
                         </td>
-                        <td className="py-3 px-4 text-right font-semibold">{item.quantity}</td>
+                        <td className="py-3 px-4 text-right font-semibold">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateItemQuantity(index, e.target.value)}
+                            className="w-20 text-right px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-semibold focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                          />
+                        </td>
                         <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">{fmtCurrency(item.price)}</td>
                         <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">
                           {item.discount_percent > 0 ? `${item.discount_percent}%` : "-"}
@@ -972,8 +1052,11 @@ const CreateQuotePage: React.FC = () => {
                       min="0"
                       max="100"
                       value={formData.discount_percent}
-                      onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
-                      className={`${inputCls} pr-8`}
+                      onChange={(e) => {
+                        setFormData({ ...formData, discount_percent: e.target.value });
+                        if (errors.discount_percent) setErrors((prev) => ({ ...prev, discount_percent: "" }));
+                      }}
+                      className={`${inputCls} pr-8 ${errors.discount_percent ? "border-red-500" : ""}`}
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-bold">%</span>
                   </div>
@@ -998,9 +1081,16 @@ const CreateQuotePage: React.FC = () => {
                 </div>
               )}
 
+              {totalItemTaxes > 0 && (
+                <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                  <span>Item Taxes (Auto)</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">+{fmtCurrency(totalItemTaxes)}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-200/60 dark:border-gray-700/60">
                 <span className="flex items-center gap-1.5">
-                  Tax Amount <span className="text-[10px] text-gray-400">(₹)</span>
+                  Additional Tax <span className="text-[10px] text-gray-400">(₹)</span>
                 </span>
                 <div className="w-32">
                   <input

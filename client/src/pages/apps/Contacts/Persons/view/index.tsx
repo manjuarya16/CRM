@@ -91,7 +91,18 @@ const ViewPersonPage: React.FC = () => {
   ];
 
   const emailsList = Array.isArray(selectedPerson.emails) ? selectedPerson.emails : [];
-  const contactNumbersList = Array.isArray(selectedPerson.contact_numbers) ? selectedPerson.contact_numbers : [];
+  const contactNumbersList = (() => {
+    const raw = selectedPerson.contact_numbers ?? (selectedPerson as any).contactNumbers ?? (selectedPerson as any).phone ?? (selectedPerson as any).mobile;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+      return [{ label: "work", value: raw.trim() }];
+    }
+    return [];
+  })();
 
   const handleQuickActionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,7 +311,17 @@ const ViewPersonPage: React.FC = () => {
                   <span className="text-gray-500">Contact Numbers</span>
                   <span className="font-medium text-gray-800 dark:text-gray-200">
                     {contactNumbersList.length > 0
-                      ? (typeof contactNumbersList[0] === "string" ? contactNumbersList[0] : (contactNumbersList[0] as any).value) + "(work)"
+                      ? contactNumbersList
+                          .map((c: any) => {
+                            const val =
+                              typeof c === "string"
+                                ? c
+                                : c?.value ?? c?.number ?? c?.phone ?? c?.contact ?? c?.mobile ?? "";
+                            const lbl = typeof c === "object" && c?.label ? c.label : "work";
+                            return val ? `${val} (${lbl})` : "";
+                          })
+                          .filter(Boolean)
+                          .join(", ") || "--"
                       : "--"}
                   </span>
                 </div>
@@ -897,7 +918,7 @@ const ViewPersonPage: React.FC = () => {
                   </div>
 
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                    <label className="cursor-pointer text-gray-500 hover:text-gray-700 p-1 text-lg">
+                    <label className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 text-lg">
                       <i className="mgc_attachment_line"></i>
                       <input
                         type="file"

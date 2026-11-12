@@ -16,13 +16,21 @@ export const quoteSchema = z.object({
   description: z.string().trim().optional().or(z.literal("")),
   billing_address: z.any().optional(),
   shipping_address: z.any().optional(),
-  discount_percent: z.coerce.number().min(0).max(100).optional().nullable(),
+  discount_percent: z.coerce
+    .number()
+    .min(0, "Discount cannot be negative")
+    .max(100, "Discount cannot exceed 100%")
+    .optional()
+    .nullable(),
   discount_amount: z.coerce.number().min(0).optional().nullable(),
   tax_amount: z.coerce.number().min(0).optional().nullable(),
   adjustment_amount: z.coerce.number().optional().nullable(),
   sub_total: z.coerce.number().min(0).optional().nullable(),
   grand_total: z.coerce.number().min(0).optional().nullable(),
-  person_id: z.coerce.number().optional().nullable(),
+  person_id: z.coerce
+    .number("Contact Person is required")
+    .int("Contact Person is required")
+    .positive("Contact Person is required"),
   user_id: z.coerce.number().optional().nullable(),
 });
 

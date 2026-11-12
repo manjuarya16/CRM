@@ -12,7 +12,7 @@
     .apexcharts-text.apexcharts-xaxis-label,
     .apexcharts-text.apexcharts-yaxis-label,
     .apexcharts-title-text {
-        @apply fill-gray-500 bg-gray-500/10;
+        @apply fill-gray-600 dark:fill-gray-300 bg-gray-500/10;
     }
 
     .apexcharts-tooltip.apexcharts-theme-light,
@@ -39,7 +39,7 @@
 }
 
 .apexcharts-legend-text {
-    @apply text-gray-300;
+    @apply text-gray-700 dark:text-gray-300;
     font-size: 13px !important;
     vertical-align: middle;
 }

@@ -1,5 +1,7 @@
 import { API_URL } from "@/config";
 import type { LeadEventCallback, NotificationEventCallback } from "@/interface";
+import { getToken } from "@/lib/auth-utils";
+import { getSubdomain } from "@/utils/subdomain";
 
 class RealtimeService {
   private eventSource: EventSource | null = null;
@@ -7,15 +9,43 @@ class RealtimeService {
   private notificationListeners: Set<NotificationEventCallback> = new Set();
   private reconnectTimer: any = null;
   private isConnecting = false;
+  private currentToken: string | null = null;
+  private currentSlug: string | null = null;
 
   public start(): void {
+    const token = getToken() || "";
+    const { slug } = getSubdomain();
+    const savedSlug =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem("active_tenant_slug") || localStorage.getItem("active_tenant_slug")
+        : null;
+    const effectiveSlug = slug || savedSlug || "";
+
+    if (!token) {
+      if (this.eventSource) {
+        this.close();
+      }
+      return;
+    }
+
+    if (
+      this.eventSource &&
+      (this.currentToken !== token || this.currentSlug !== effectiveSlug)
+    ) {
+      this.close();
+    }
+
     if (this.eventSource || this.isConnecting) return;
 
-    const token = sessionStorage.getItem("token") || "";
-    if (!token) return;
-
     this.isConnecting = true;
-    const url = `${API_URL}/realtime/stream?token=${encodeURIComponent(token)}`;
+    this.currentToken = token;
+    this.currentSlug = effectiveSlug;
+
+    const params = new URLSearchParams({ token });
+    if (effectiveSlug) {
+      params.set("slug", effectiveSlug);
+    }
+    const url = `${API_URL}/realtime/stream?${params.toString()}`;
 
     try {
       this.eventSource = new EventSource(url);
@@ -73,6 +103,8 @@ class RealtimeService {
       this.reconnectTimer = null;
     }
     this.isConnecting = false;
+    this.currentToken = null;
+    this.currentSlug = null;
   }
 
   public onLeadChange(callback: LeadEventCallback): () => void {

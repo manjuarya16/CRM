@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { zodResolver } from "@/utils/zodResolver";
 
-export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
+export const STRICT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)*\.[a-zA-Z]{2,}$/;
+export const INDIAN_MOBILE_REGEX = /^[6-9]\d{9}$/;
 
 export const emailItemSchema = z.object({
   label: z.string().optional().default("work"),
@@ -26,53 +27,31 @@ export const contactItemSchema = z.object({
     .trim()
     .superRefine((val, ctx) => {
       if (!val) return;
-      if (/[a-zA-Z]/.test(val)) {
+      if (/[^0-9]/.test(val)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Text characters are not allowed. Mobile number must contain digits only.",
+          message: "Mobile number must contain digits only.",
         });
         return;
       }
-      if (val.includes("+") && !val.startsWith("+")) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Country code '+' is only allowed at the beginning of the mobile number.",
-        });
-        return;
-      }
-      if ((val.match(/\+/g) || []).length > 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Only one '+' is allowed at the beginning of the mobile number.",
-        });
-        return;
-      }
-      if (!/^\+?[0-9\-\s()]+$/.test(val)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Mobile number can only contain numbers and standard phone symbols (+, -, ()).",
-        });
-        return;
-      }
-      const digitsOnly = val.replace(/[^0-9]/g, "");
-      if (digitsOnly.length > 0 && /^0+$/.test(digitsOnly)) {
+      if (/^0+$/.test(val)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Contact number cannot consist of only zeros.",
         });
         return;
       }
-      if (digitsOnly.length < 7) {
+      if (!/^[6-9]/.test(val)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Please enter a valid mobile number (at least 7 digits).",
+          message: "Mobile number must start with 6, 7, 8, or 9.",
         });
         return;
       }
-      if (digitsOnly.length > 15) {
+      if (val.length !== 10 || /^(\d)\1{9}$/.test(val)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Mobile number cannot exceed 15 digits.",
+          message: "Please enter a valid 10-digit mobile number.",
         });
         return;
       }

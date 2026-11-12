@@ -269,19 +269,24 @@ const QuotesPage: React.FC = () => {
   const handleSendEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailTo.trim()) {
-      Swal.fire("Warning", "Recipient email is required", "warning");
+    const recipients = emailTo
+      .split(/[,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (recipients.length === 0) {
+      Swal.fire("Warning", "At least one recipient email is required", "warning");
       return;
     }
-    if (!emailRegex.test(emailTo.trim())) {
-      Swal.fire("Warning", "Please enter a valid recipient email address (e.g. name@domain.com)", "warning");
+    const invalidEmail = recipients.find((addr) => !emailRegex.test(addr));
+    if (invalidEmail) {
+      Swal.fire("Warning", `Please enter a valid email address: ${invalidEmail}`, "warning");
       return;
     }
     setSendingEmail(true);
     try {
       const formData = new FormData();
-      formData.append("to", JSON.stringify([emailTo.trim()]));
-      formData.append("reply_to", JSON.stringify([emailTo.trim()]));
+      formData.append("to", JSON.stringify(recipients));
+      formData.append("reply_to", JSON.stringify(recipients));
       formData.append("subject", emailSubject);
       formData.append("reply", emailBody);
       if (selectedQuoteForEmail?.id) {
@@ -1176,13 +1181,14 @@ const QuotesPage: React.FC = () => {
                   Recipient Email *
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   value={emailTo}
                   onChange={(e) => setEmailTo(e.target.value)}
-                  placeholder="customer@example.com"
+                  placeholder="customer@example.com, team@example.com"
                   required
                   className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
                 />
+                <p className="mt-1 text-[11px] text-gray-400">Separate multiple email addresses with commas.</p>
               </div>
 
               <div>

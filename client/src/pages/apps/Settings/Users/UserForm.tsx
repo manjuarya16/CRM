@@ -6,6 +6,7 @@ import { IRole, IGroup, IUserData } from "@/interface";
 import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
 import { buildHierarchicalRoleList } from "@/utils/roleHierarchy";
+import { Eye, EyeOff } from "lucide-react";
 
 export interface UserFormProps {
   mode: "create" | "edit";
@@ -265,7 +266,7 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
             type="button"
             onClick={handleSubmit}
             disabled={saving}
-            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-98"
+            className="px-5 py-2 bg-[#0e90d9] hover:bg-[#0c7ab8] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2 active:scale-95"
           >
             {saving ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -359,10 +360,11 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                    tabIndex={-1}
+                    className="absolute inset-y-0 right-0 z-10 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
                   >
-                    <i className={showPassword ? "mgc_eye_close_line text-base" : "mgc_eye_line text-base"}></i>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 {errors.password && (
@@ -394,10 +396,11 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                    tabIndex={-1}
+                    className="absolute inset-y-0 right-0 z-10 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    title={showConfirmPassword ? "Hide password" : "Show password"}
                   >
-                    <i className={showConfirmPassword ? "mgc_eye_close_line text-base" : "mgc_eye_line text-base"}></i>
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 {errors.confirm_password && (
@@ -411,22 +414,27 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
               <label className={labelCls}>
                 Role <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.role_id}
-                onChange={(e) => {
-                  setFormData({ ...formData, role_id: Number(e.target.value) });
-                  if (errors.role_id) setErrors({ ...errors, role_id: "" });
-                }}
-                className={`${inputCls} cursor-pointer appearance-none ${errors.role_id ? "!border-red-500 !ring-red-500/20" : ""}`}
-              >
-                {hierarchicalRoles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {"\u00A0\u00A0\u00A0\u00A0".repeat(r.__depth || 0)}
-                    {r.__depth ? "└── " : ""}
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={formData.role_id}
+                  onChange={(e) => {
+                    setFormData({ ...formData, role_id: Number(e.target.value) });
+                    if (errors.role_id) setErrors({ ...errors, role_id: "" });
+                  }}
+                  className={`${inputCls} pr-8 cursor-pointer appearance-none ${errors.role_id ? "!border-red-500 !ring-red-500/20" : ""}`}
+                >
+                  {hierarchicalRoles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {"\u00A0\u00A0\u00A0\u00A0".repeat(r.__depth || 0)}
+                      {r.__depth ? "└── " : ""}
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
+                  <i className="mgc_down_line text-sm"></i>
+                </span>
+              </div>
               {errors.role_id && (
                 <p className="text-red-500 text-xs mt-1.5 font-medium">{errors.role_id}</p>
               )}

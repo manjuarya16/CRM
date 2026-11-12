@@ -27,7 +27,7 @@ interface NotificationDropdownProps {
 const NotificationDropdown = ({ canEdit, canDelete }: NotificationDropdownProps) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState("");
