@@ -3,6 +3,7 @@ import path from 'path';
 import zlib from 'zlib';
 import sharp from 'sharp';
 import Tesseract from 'tesseract.js';
+import * as XLSX from 'xlsx';
 import { logger } from '@/utils/logger';
 import { ExtractedProduct, ExtractedContactPerson, ExtractedLeadData } from '@/interfaces';
 export type { ExtractedProduct, ExtractedContactPerson, ExtractedLeadData };
@@ -109,6 +110,34 @@ export function extractTextFromBuffer(buffer: Buffer, originalFilename: string):
 
   if (ext === '.txt' || ext === '.csv' || ext === '.json' || ext === '.md' || ext === '.html') {
     return buffer.toString('utf8');
+  }
+
+  if (ext === '.xlsx' || ext === '.xls') {
+    try {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const chunks: string[] = [];
+      for (const name of workbook.SheetNames) {
+        const sheet = workbook.Sheets[name];
+        if (sheet) {
+          chunks.push(XLSX.utils.sheet_to_csv(sheet));
+        }
+      }
+      return chunks.join('\n');
+    } catch (err: any) {
+      logger.warn(`[extractTextFromBuffer] Error parsing Excel: ${err.message}`);
+    }
+  }
+
+  if (ext === '.docx') {
+    try {
+      const raw = buffer.toString('latin1');
+      const matches = raw.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+      if (matches && matches.length > 0) {
+        return matches.map((m) => m.replace(/<[^>]+>/g, '')).join(' ');
+      }
+    } catch (err: any) {
+      logger.warn(`[extractTextFromBuffer] Error parsing Word docx: ${err.message}`);
+    }
   }
 
   const raw = buffer.toString('latin1');
@@ -962,6 +991,21 @@ export function parseLeadDocumentText(text: string, fallbackFilename?: string): 
   result.description = summaryParts.length > 0 
     ? `Extracted from uploaded document:\n${summaryParts.join('\n')}`
     : `Created from uploaded file: ${fallbackFilename || 'document'}`;
+
+  // Populate custom_attributes dictionary for auto-linking in CRM
+  result.custom_attributes = result.custom_attributes || {};
+  if (result.phone && !result.custom_attributes.phone_number) {
+    result.custom_attributes.phone_number = result.phone;
+  }
+  if (result.email && !result.custom_attributes.email_id) {
+    result.custom_attributes.email_id = result.email;
+  }
+  if (result.address && !result.custom_attributes.address) {
+    result.custom_attributes.address = result.address;
+  }
+  if (result.website && !result.custom_attributes.website) {
+    result.custom_attributes.website = result.website;
+  }
 
   return result;
 }

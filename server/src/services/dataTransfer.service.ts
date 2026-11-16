@@ -16,19 +16,33 @@ const BUILT_IN_FIELD_CODES = new Set([
   'phone',
   'contact_numbers',
   'contact_name',
+  'contact_person',
+  'person',
   'contact_email',
+  'contact_phone',
   'contact_number',
+  'organization',
   'organization_id',
   'organization_name',
+  'company',
+  'institute',
   'person_id',
   'person_name',
   'user_id',
   'user_name',
   'sales_owner',
   'sales_owner_id',
+  'lead_source',
+  'source',
   'lead_source_id',
+  'lead_type',
+  'type',
   'lead_type_id',
+  'pipeline',
+  'lead_pipeline',
   'lead_pipeline_id',
+  'stage',
+  'lead_pipeline_stage',
   'lead_pipeline_stage_id',
   'expected_close_date',
   'expired_at',
@@ -100,7 +114,7 @@ const parseField = (val: any, defaultLabel = 'work'): Array<{ label: string; val
 };
 
 // Safe Foreign Key Resolvers to prevent FK Constraint Violations
-const resolveOrgId = async (client: any, rawVal: any, nameVal?: any): Promise<number | null> => {
+const resolveOrgId = async (client: any, rawVal: any, nameVal?: any, userId?: number | null): Promise<number | null> => {
   const num = toNumberParam(rawVal);
   const n = String(nameVal || rawVal || '').trim();
 
@@ -112,14 +126,27 @@ const resolveOrgId = async (client: any, rawVal: any, nameVal?: any): Promise<nu
     if (existing.rows.length > 0) return existing.rows[0].id;
   }
 
-  // Auto-create organization if a non-numeric name was specified
+  // Also query directly by name case-insensitively
   if (n && isNaN(Number(n))) {
+    const directOrg = await client.query('SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1', [n]);
+    if (directOrg.rows.length > 0) return directOrg.rows[0].id;
+
+    // Auto-create organization if a non-numeric name was specified
     try {
       const created = await client.query(
-        'SELECT save_organization($1, null, 1, \'{}\') as result',
-        [n]
+        'SELECT save_organization($1, null, $2, \'{}\'::jsonb) as result',
+        [n, userId || null]
       );
-      return created.rows[0]?.result?.id || null;
+      const resId = created.rows[0]?.result?.id || created.rows[0]?.id;
+      if (resId) return resId;
+    } catch {}
+
+    try {
+      const insOrg = await client.query(
+        'INSERT INTO organizations (name, user_id, custom_attributes, created_at, updated_at) VALUES ($1, $2, \'{}\'::jsonb, NOW(), NOW()) RETURNING id',
+        [n, userId || null]
+      );
+      return insOrg.rows[0]?.id || null;
     } catch {}
   }
   return null;
@@ -138,10 +165,24 @@ const resolveUserId = async (client: any, rawVal: any, nameVal?: any): Promise<n
     const match = users.find((u) => (u.name || '').trim().toLowerCase() === n.toLowerCase() || (u.email || '').trim().toLowerCase() === n.toLowerCase());
     if (match) return match.id;
   }
-  return null;
+  // Default to active tenant user if available
+  try {
+    const defaultUser = await client.query('SELECT id FROM users LIMIT 1');
+    return defaultUser.rows[0]?.id || null;
+  } catch {
+    return null;
+  }
 };
 
-const resolvePersonId = async (client: any, rawVal: any, nameVal?: any): Promise<number | null> => {
+const resolvePersonId = async (
+  client: any,
+  rawVal: any,
+  nameVal?: any,
+  emailVal?: any,
+  phoneVal?: any,
+  orgId?: number | null,
+  userId?: number | null
+): Promise<number | null> => {
   const num = toNumberParam(rawVal);
   const n = String(nameVal || rawVal || '').trim();
   if (num || n) {
@@ -150,6 +191,23 @@ const resolvePersonId = async (client: any, rawVal: any, nameVal?: any): Promise
       ['persons', num || null, n && isNaN(Number(n)) ? n : null]
     );
     if (existing.rows.length > 0) return existing.rows[0].id;
+  }
+
+  // Also query directly by name case-insensitively
+  if (n && isNaN(Number(n))) {
+    const directPerson = await client.query('SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1', [n]);
+    if (directPerson.rows.length > 0) return directPerson.rows[0].id;
+
+    // Auto-create person with email and contact numbers if provided
+    try {
+      const newEmails = emailVal ? [{ label: 'work', value: String(emailVal).trim() }] : [];
+      const newNumbers = phoneVal ? [{ label: 'work', value: String(phoneVal).trim() }] : [];
+      const insPerson = await client.query(
+        'SELECT public.fn_import_upsert_person($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb) AS id',
+        [null, n, JSON.stringify(newEmails), JSON.stringify(newNumbers), null, orgId || null, userId || null, '{}']
+      );
+      return insPerson.rows[0]?.id || null;
+    } catch {}
   }
   return null;
 };
@@ -518,76 +576,101 @@ export class DataTransferService {
     const sampleStageId1 = stagesList[0]?.id ?? null;
     const sampleStageId2 = stagesList[1]?.id ?? sampleStageId1;
 
+    const sampleOrgName1 = organizationsList[0]?.name || 'Acme Global Corp';
+    const sampleOrgName2 = organizationsList[1]?.name || 'Global Logistics Ltd';
+
+    const samplePersonName1 = personsList[0]?.name || 'John Doe';
+    const samplePersonName2 = personsList[1]?.name || 'Sarah Connor';
+
+    const sampleUserName1 = usersList[0]?.name || 'Admin User';
+    const sampleUserName2 = usersList[1]?.name || sampleUserName1;
+
+    const sampleSourceName1 = sourcesList[0]?.name || 'Website';
+    const sampleSourceName2 = sourcesList[1]?.name || 'Referral';
+
+    const sampleTypeName1 = typesList[0]?.name || 'New Business';
+    const sampleTypeName2 = typesList[1]?.name || 'Existing Customer';
+
+    const samplePipelineName1 = defaultPipeline?.name || 'Sales Pipeline';
+    const sampleStageName1 = stagesList[0]?.name || 'New';
+    const sampleStageName2 = stagesList[1]?.name || sampleStageName1;
+
     let standardHeaders: string[] = [];
     let baseRows: Record<string, any>[] = [];
 
     if (normType === 'persons') {
-      standardHeaders = ['name', 'emails', 'contact_numbers', 'job_title', 'organization_id', 'user_id'];
+      standardHeaders = ['name', 'organization', 'emails', 'contact_numbers', 'job_title', 'sales_owner'];
       baseRows = [
         {
           name: 'Wilson Fisk',
+          organization: sampleOrgName1,
           emails: 'wilson.fisk@example.com',
           contact_numbers: '+1-555-0101',
           job_title: 'Chief Executive Officer',
-          organization_id: sampleOrgId1,
-          user_id: sampleUserId1,
+          sales_owner: sampleUserName1,
         },
         {
           name: 'Sasha Calle',
+          organization: sampleOrgName2,
           emails: 'sasha.calle@example.com',
           contact_numbers: '+1-555-0102',
           job_title: 'Sales Director',
-          organization_id: sampleOrgId2,
-          user_id: sampleUserId2,
+          sales_owner: sampleUserName2,
         },
       ];
     } else if (normType === 'leads') {
       standardHeaders = [
         'title',
+        'organization',
+        'contact_person',
+        'contact_email',
+        'contact_phone',
         'description',
         'lead_value',
         'status',
-        'person_id',
-        'organization_id',
-        'user_id',
-        'lead_source_id',
-        'lead_type_id',
-        'lead_pipeline_id',
-        'lead_pipeline_stage_id',
+        'sales_owner',
+        'lead_source',
+        'lead_type',
+        'pipeline',
+        'stage',
         'expected_close_date',
       ];
       baseRows = [
         {
           title: 'Enterprise Cloud Migration Deal',
+          organization: sampleOrgName1,
+          contact_person: samplePersonName1,
+          contact_email: 'john.doe@example.com',
+          contact_phone: '+91 98765 43210',
           description: 'Interested in CRM migration and integrations',
           lead_value: 50000,
           status: 'Open',
-          person_id: samplePersonId1,
-          organization_id: sampleOrgId1,
-          user_id: sampleUserId1,
-          lead_source_id: sampleSourceId1,
-          lead_type_id: sampleTypeId1,
-          lead_pipeline_id: samplePipelineId1,
-          lead_pipeline_stage_id: sampleStageId1,
+          sales_owner: sampleUserName1,
+          lead_source: sampleSourceName1,
+          lead_type: sampleTypeName1,
+          pipeline: samplePipelineName1,
+          stage: sampleStageName1,
           expected_close_date: '2026-12-31',
         },
         {
           title: 'Annual Support & Maintenance Renewal',
+          organization: sampleOrgName2,
+          contact_person: samplePersonName2,
+          contact_email: 'sarah.connor@example.com',
+          contact_phone: '+91 98765 43211',
           description: 'Renewal contract for 200 software seats',
           lead_value: 25000,
           status: 'Open',
-          person_id: samplePersonId2,
-          organization_id: sampleOrgId2,
-          user_id: sampleUserId2,
-          lead_source_id: sampleSourceId2,
-          lead_type_id: sampleTypeId2,
-          lead_pipeline_id: samplePipelineId2,
-          lead_pipeline_stage_id: sampleStageId2,
+          sales_owner: sampleUserName2,
+          lead_source: sampleSourceName2,
+          lead_type: sampleTypeName2,
+          pipeline: samplePipelineName1,
+          stage: sampleStageName2,
           expected_close_date: '2026-11-15',
         },
       ];
     } else if (normType === 'organizations') {
-      standardHeaders = ['name', 'address', 'city', 'state', 'country', 'postcode', 'user_id'];
+      standardHeaders = ['name', 'address', 'city', 'state', 'country', 'postcode', 'sales_owner'];
       baseRows = [
         {
           name: 'Acme Corporation',
@@ -596,7 +679,7 @@ export class DataTransferService {
           state: 'California',
           country: 'USA',
           postcode: '94105',
-          user_id: sampleUserId1,
+          sales_owner: sampleUserName1,
         },
         {
           name: 'Global Logistics Ltd',
@@ -605,7 +688,7 @@ export class DataTransferService {
           state: 'Greater London',
           country: 'UK',
           postcode: 'EC1A 1BB',
-          user_id: sampleUserId2,
+          sales_owner: sampleUserName2,
         },
       ];
     } else if (normType === 'products') {
@@ -875,7 +958,20 @@ export class DataTransferService {
 
           if (type === 'leads') {
             const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
-            const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
+            const titleVal =
+              row.title ||
+              row.Title ||
+              row['Lead Title'] ||
+              row['Subject'] ||
+              row['Deal Name'] ||
+              row.name ||
+              row.Name ||
+              row.NAME ||
+              row['Lead Name'] ||
+              row.lead_name ||
+              row['Company'] ||
+              row['Institute'] ||
+              row['Organization Name'];
             if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
             const titleStr = titleVal ? String(titleVal).trim() : '';
 
@@ -886,30 +982,128 @@ export class DataTransferService {
             if (fileKey) seenInFile.set(fileKey, i + 1);
 
             // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
-            const finalPersonId = await resolvePersonId(
-              client,
-              row.person_id || row.personId || row['Person ID'],
-              row.person_name || row.person || row['Person Name'] || row.Person
-            );
-
-            const finalOrgId = await resolveOrgId(
-              client,
-              row.organization_id || row.organizationId || row['Organization ID'],
-              row.organization_name || row.organization || row['Organization Name'] || row.Organization
-            );
-
             const finalUserId = await resolveUserId(
               client,
               row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
-              row.user_name || row.sales_owner || row['Sales Owner'] || row.User
+              row.sales_owner || row.user_name || row['Sales Owner'] || row['User Name'] || row.User || row.Owner
             );
 
-            const leadSourceId = await resolveLeadSourceId(client, row.lead_source_id || row.source_id);
-            const leadTypeId = await resolveLeadTypeId(client, row.lead_type_id || row.type_id);
-            const leadPipelineId = await resolveLeadPipelineId(client, row.lead_pipeline_id || row.pipeline_id);
+            // Determine organization candidates
+            const orgCandidate =
+              row.organization ||
+              row.organization_name ||
+              row['Organization Name'] ||
+              row.Organization ||
+              row.company ||
+              row['Company Name'] ||
+              row.Company ||
+              row.institute ||
+              row['Institute Name'] ||
+              row.Institute;
+
+            let finalOrgId = await resolveOrgId(
+              client,
+              row.organization_id || row.organizationId || row['Organization ID'],
+              orgCandidate,
+              finalUserId
+            );
+
+            // If no organization column was provided, but title represents an institute or company
+            if (!finalOrgId && !idVal && titleStr && titleStr.length > 2) {
+              const lowerT = titleStr.toLowerCase();
+              if (
+                lowerT.includes('institute') ||
+                lowerT.includes('college') ||
+                lowerT.includes('academy') ||
+                lowerT.includes('classes') ||
+                lowerT.includes('ltd') ||
+                lowerT.includes('pvt') ||
+                lowerT.includes('corp') ||
+                lowerT.includes('center') ||
+                lowerT.includes('centre') ||
+                lowerT.includes('school') ||
+                lowerT.includes('tutorials')
+              ) {
+                const cleanOrgTitle = titleStr.split(',')[0].trim();
+                finalOrgId = await resolveOrgId(client, null, cleanOrgTitle, finalUserId);
+              }
+            }
+
+            const contactPersonName =
+              row.contact_person ||
+              row['Contact Person'] ||
+              row.contact_name ||
+              row.person ||
+              row.person_name ||
+              row['Person Name'] ||
+              row.Person;
+
+            const contactEmail =
+              row.contact_email ||
+              row.email ||
+              row.emails ||
+              row.EMAILID ||
+              row.email_id ||
+              row['Email ID'] ||
+              row['Email'];
+
+            const contactPhone =
+              row.contact_phone ||
+              row.phone ||
+              row.contact_numbers ||
+              row['PHONE NUMBER'] ||
+              row.phone_number ||
+              row['Phone Number'] ||
+              row['Phone'];
+
+            let finalPersonId = await resolvePersonId(
+              client,
+              row.person_id || row.personId || row['Person ID'],
+              contactPersonName,
+              contactEmail,
+              contactPhone,
+              finalOrgId,
+              finalUserId
+            );
+
+            // If contact phone or email was provided without a separate person column, auto-create contact person
+            if (!finalPersonId && (contactEmail || contactPhone)) {
+              let personNameFromTitle = contactPersonName;
+              if (!personNameFromTitle && titleStr.includes('-')) {
+                const parts = titleStr.split('-');
+                if (parts.length > 1 && parts[parts.length - 1].trim().length < 40) {
+                  personNameFromTitle = parts[parts.length - 1].trim();
+                }
+              }
+              if (!personNameFromTitle) {
+                personNameFromTitle = `${titleStr.split(',')[0].trim().slice(0, 30)} Contact`;
+              }
+              finalPersonId = await resolvePersonId(
+                client,
+                null,
+                personNameFromTitle,
+                contactEmail,
+                contactPhone,
+                finalOrgId,
+                finalUserId
+              );
+            }
+
+            const leadSourceId = await resolveLeadSourceId(
+              client,
+              row.lead_source_id || row.source_id || row.lead_source || row.source || row['Lead Source'] || row['Source']
+            );
+            const leadTypeId = await resolveLeadTypeId(
+              client,
+              row.lead_type_id || row.type_id || row.lead_type || row.type || row['Lead Type'] || row['Type']
+            );
+            const leadPipelineId = await resolveLeadPipelineId(
+              client,
+              row.lead_pipeline_id || row.pipeline_id || row.lead_pipeline || row.pipeline || row['Lead Pipeline'] || row['Pipeline']
+            );
             const leadPipelineStageId = await resolveLeadPipelineStageId(
               client,
-              row.lead_pipeline_stage_id || row.stage_id,
+              row.lead_pipeline_stage_id || row.stage_id || row.lead_pipeline_stage || row.stage || row['Pipeline Stage'] || row['Stage'],
               leadPipelineId
             );
 
@@ -948,7 +1142,7 @@ export class DataTransferService {
             if (exists) {
               const mergedAttrs = { ...(existingLead.rows[0].custom_attributes || {}), ...rowCustomAttrs };
               await client.query(
-                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb)',
+                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8::boolean, $9, $10, $11, $12, $13::date, $14::jsonb)',
                 [
                   existingLead.rows[0].id,
                   titleStr,
@@ -969,7 +1163,7 @@ export class DataTransferService {
               await saveEntityAttributeValues(client, 'leads', existingLead.rows[0].id, mergedAttrs);
             } else {
               const ins = await client.query(
-                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14::jsonb) AS id',
+                'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8::boolean, $9, $10, $11, $12, $13::date, $14::jsonb) AS id',
                 [
                   null,
                   titleStr,
@@ -1013,17 +1207,18 @@ export class DataTransferService {
             const newEmails = parseField(row.emails || row.email || row.Emails || row.Email, 'work');
             const newNumbers = parseField(row.contact_numbers || row.phone || row.Phone || row.Contact, 'work');
 
-            // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
-            const finalOrgId = await resolveOrgId(
-              client,
-              row.organization_id || row.organizationId || row['Organization ID'],
-              row.organization_name || row.organization || row['Organization Name'] || row.Organization
-            );
-
             const finalUserId = await resolveUserId(
               client,
               row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
               row.user_name || row.sales_owner || row['Sales Owner'] || row.User
+            );
+
+            // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
+            const finalOrgId = await resolveOrgId(
+              client,
+              row.organization_id || row.organizationId || row['Organization ID'],
+              row.organization_name || row.organization || row['Organization Name'] || row.Organization,
+              finalUserId
             );
 
             // Duplicate entry check by id or name via procedural function
@@ -1436,7 +1631,23 @@ export class DataTransferService {
         };
       }
     } else if (type === 'leads') {
-      const hasLeadCol = hasColumn('title', 'lead title', 'deal name', 'subject', 'id', 'lead id');
+      const hasLeadCol = hasColumn(
+        'title',
+        'lead title',
+        'deal name',
+        'subject',
+        'id',
+        'lead id',
+        'name',
+        'lead name',
+        'lead_name',
+        'organization name',
+        'organization',
+        'company',
+        'institute',
+        'contact_person',
+        'person'
+      );
       if (!hasLeadCol) {
         return {
           isValid: false,
@@ -1513,7 +1724,20 @@ export class DataTransferService {
         if (!rowError) {
           if (type === 'leads') {
             const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
-            const titleVal = row.title || row.Title || row['Lead Title'] || row['Subject'] || row['Deal Name'];
+            const titleVal =
+              row.title ||
+              row.Title ||
+              row['Lead Title'] ||
+              row['Subject'] ||
+              row['Deal Name'] ||
+              row.name ||
+              row.Name ||
+              row.NAME ||
+              row['Lead Name'] ||
+              row.lead_name ||
+              row['Company'] ||
+              row['Institute'] ||
+              row['Organization Name'];
             if (!idVal && !titleVal) {
               rowError = 'Field "title" or "id" is required';
             } else {

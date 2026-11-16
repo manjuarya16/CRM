@@ -389,7 +389,19 @@ const EditQuotePage: React.FC = () => {
       errMap.expired_at = `Expiry date cannot be in the past (must be on or after ${getLocalTodayString()})`;
     }
     if (items.length === 0) {
-      errMap.items = "Please add at least one line item to the quote";
+      setErrors((prev) => ({ ...prev, items: "Please add at least one product line item to the quote before saving." }));
+      await Swal.fire({
+        icon: "warning",
+        title: "Product Line Items Required",
+        text: "Please add at least one product line item to the quote before saving.",
+        confirmButtonText: "Add Line Items",
+        confirmButtonColor: "#0088cc",
+      });
+      const section = document.getElementById("quote-line-items-section");
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
     } else if (items.some((i) => !Number.isFinite(i.quantity) || i.quantity < 1)) {
       errMap.items = "Every product item must have a Quantity of at least 1";
     }
@@ -840,7 +852,7 @@ const EditQuotePage: React.FC = () => {
         />
 
         {/* 📦 CARD 4: LINE ITEMS */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-sm p-5 sm:p-6 space-y-6">
+        <div id="quote-line-items-section" className={`bg-white dark:bg-gray-800 rounded-2xl border ${errors.items ? "border-red-400 ring-2 ring-red-500/20" : "border-gray-200/80 dark:border-gray-700"} shadow-sm p-5 sm:p-6 space-y-6 transition-all duration-200`}>
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center font-bold">

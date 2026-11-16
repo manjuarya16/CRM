@@ -21,6 +21,9 @@ const fmtCurrency = (n: number) =>
 const validateContactPhoneValue = (raw: string): string | null => {
   const cleaned = raw.trim();
   if (!cleaned) return null;
+  if (/^0+$/.test(cleaned)) {
+    return "Contact number cannot consist of only zeros";
+  }
   let coreDigits = cleaned;
   if (cleaned.startsWith("+")) {
     const match10 = cleaned.match(/^\+\d{1,3}(\d{10})$/);
@@ -38,13 +41,13 @@ const validateContactPhoneValue = (raw: string): string | null => {
     if (cleaned.length !== 10) {
       return "Contact number must be exactly 10 digits";
     }
+    if (/^[0-5]/.test(cleaned)) {
+      return "Contact number must start with 6, 7, 8, or 9";
+    }
     coreDigits = cleaned;
   }
   if (/^(\d)\1+$/.test(coreDigits)) {
     return "Contact number cannot consist of all identical digits";
-  }
-  if (coreDigits.length === 10 && coreDigits.startsWith("0")) {
-    return "Contact number cannot start with 0";
   }
   return null;
 };
@@ -374,36 +377,38 @@ const EditLeadPage: React.FC = () => {
           if (lead.organization_id) {
             setOrganizationId(String(lead.organization_id));
           }
+          if (lead.person_name) {
+            setPersonName(lead.person_name);
+            setPersonSearch(lead.person_name);
+          }
+          const leadPersonObj = (lead as any).person;
+          const initialEmails = parseContactItems(
+            leadPersonObj?.emails || (lead as any).person_emails || (lead as any).emails,
+            "Work",
+            leadPersonObj?.email || (lead as any).person_email || (lead as any).email
+          );
+          const initialPhones = parseContactItems(
+            leadPersonObj?.contact_numbers || (lead as any).person_contact_numbers || (lead as any).person_phones || (lead as any).contact_numbers,
+            "Work",
+            leadPersonObj?.phone || (lead as any).person_phone || (lead as any).phone
+          );
+          if (initialEmails.some((e) => e.value.trim())) {
+            setContactEmails(initialEmails);
+          }
+          if (initialPhones.some((p) => p.value.trim())) {
+            setContactPhones(initialPhones);
+          }
           if (lead.person_id) {
             const pid = String(lead.person_id);
             setPersonId(pid);
-            if (lead.person_name) {
-              setPersonName(lead.person_name);
-              setPersonSearch(lead.person_name);
-            }
-            const leadPersonObj = (lead as any).person;
-            const initialEmails = parseContactItems(
-              leadPersonObj?.emails || (lead as any).person_emails,
-              "Work",
-              leadPersonObj?.email || (lead as any).person_email
-            );
-            const initialPhones = parseContactItems(
-              leadPersonObj?.contact_numbers || (lead as any).person_contact_numbers || (lead as any).person_phones,
-              "Work",
-              leadPersonObj?.phone || (lead as any).person_phone
-            );
             if (initialEmails.some((e) => e.value.trim())) {
-              setContactEmails(initialEmails);
               hydratedPersonIdRef.current = pid;
-            }
-            if (initialPhones.some((p) => p.value.trim())) {
-              setContactPhones(initialPhones);
             }
             usePersonStore
               .getState()
               .getPersonById(Number(lead.person_id))
               .then((fullPerson: any) => {
-                if (!fullPerson || contactsEditedRef.current) return;
+                if (!fullPerson) return;
                 if (fullPerson.name) {
                   setPersonName((prev) => prev || fullPerson.name);
                   setPersonSearch((prev) => prev || fullPerson.name);
@@ -1568,6 +1573,12 @@ const EditLeadPage: React.FC = () => {
                       maxLength={15}
                       value={pn.value}
                       onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                      onBlur={() => {
+                        const err = validateContactPhoneValue(pn.value);
+                        if (err) {
+                          setErrors((prev) => ({ ...prev, contactPhone: err }));
+                        }
+                      }}
                       placeholder="e.g. 9876543210 or +919876543210"
                       className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                     />

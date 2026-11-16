@@ -364,7 +364,7 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     title={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                   </button>
                 </div>
                 {errors.password && (
@@ -400,7 +400,7 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                     aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                     title={showConfirmPassword ? "Hide password" : "Show password"}
                   >
-                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showConfirmPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                   </button>
                 </div>
                 {errors.confirm_password && (

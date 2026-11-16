@@ -48,54 +48,58 @@ const CreateImportPage: React.FC = () => {
 
 const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<string, any>[] }> = {
   persons: {
-    headers: ["name", "emails", "contact_numbers", "job_title", "organization_id", "user_id"],
+    headers: ["name", "emails", "contact_numbers", "job_title", "organization", "sales_owner"],
     sampleRows: [
       {
         name: "Wilson Fisk",
         emails: "wilson.fisk@example.com",
         contact_numbers: "+1-555-0101",
         job_title: "Chief Executive Officer",
-        organization_id: 1,
-        user_id: 1,
+        organization: "Apex Global Dynamics",
+        sales_owner: "Admin User",
       },
       {
         name: "Sasha Calle",
         emails: "sasha.calle@example.com",
         contact_numbers: "+1-555-0102",
         job_title: "Sales Director",
-        organization_id: 1,
-        user_id: 1,
+        organization: "Quantum Solutions LLC",
+        sales_owner: "Admin User",
       },
     ],
   },
   leads: {
-    headers: ["title", "description", "lead_value", "user_id", "person_id", "organization_id", "lead_pipeline_id", "lead_pipeline_stage_id", "expected_close_date"],
+    headers: ["title", "description", "lead_value", "organization", "contact_person", "contact_email", "contact_phone", "sales_owner", "lead_source", "lead_type", "pipeline", "stage", "expected_close_date"],
     sampleRows: [
       {
         title: "Enterprise Cloud Migration",
         description: "Migration to dedicated cloud instance",
         lead_value: 20000,
-        user_id: 1,
-        person_id: 1,
-        organization_id: 1,
-        lead_pipeline_id: 1,
-        lead_pipeline_stage_id: 1,
+        organization: "Apex Global Dynamics",
+        contact_person: "Wilson Fisk",
+        contact_email: "wilson.fisk@example.com",
+        contact_phone: "+1-555-0101",
+        sales_owner: "Admin User",
+        lead_source: "Website",
+        lead_type: "New Business",
+        pipeline: "Default Pipeline",
+        stage: "New",
         expected_close_date: "2026-11-30",
       },
     ],
   },
   organizations: {
-    headers: ["name", "address", "user_id"],
+    headers: ["name", "address", "sales_owner"],
     sampleRows: [
       {
         name: "Apex Global Dynamics",
         address: "123 Market St, San Francisco, CA",
-        user_id: 1,
+        sales_owner: "Admin User",
       },
       {
         name: "Quantum Solutions LLC",
         address: "456 Tech Blvd, Austin, TX",
-        user_id: 1,
+        sales_owner: "Admin User",
       },
     ],
   },
@@ -173,7 +177,41 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
         throw new Error("No sheet found in file");
       }
       const worksheet = workbook.Sheets[firstSheetName];
-      const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+      let headerRowIndex = -1;
+      for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
+        const row = rawRows[r];
+        if (!Array.isArray(row)) continue;
+        const nonEmptyCells = row.map((c) => String(c ?? "").trim()).filter(Boolean);
+        if (nonEmptyCells.length >= 2) {
+          headerRowIndex = r;
+          break;
+        }
+      }
+
+      let rows: any[] = [];
+      if (headerRowIndex > 0) {
+        const headers = (rawRows[headerRowIndex] || []).map((h: any, colIdx: number) => {
+          const val = String(h ?? "").trim();
+          return val || `__col_${colIdx}`;
+        });
+        for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
+          const rowData = rawRows[r];
+          if (!Array.isArray(rowData)) continue;
+          const hasContent = rowData.some((cell) => cell !== undefined && cell !== null && String(cell).trim() !== "");
+          if (!hasContent) continue;
+          const rowObj: Record<string, any> = {};
+          headers.forEach((h: string, colIdx: number) => {
+            if (!h.startsWith("__col_") || rowData[colIdx]) {
+              rowObj[h] = rowData[colIdx] !== undefined ? rowData[colIdx] : "";
+            }
+          });
+          rows.push(rowObj);
+        }
+      } else {
+        rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      }
 
       if (!rows || rows.length === 0) {
         Swal.fire({

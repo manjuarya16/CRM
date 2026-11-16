@@ -56,7 +56,17 @@ const Login = () => {
     ? `Workspace: ${subdomain.slug} • Enter your credentials to access your CRM.`
     : "Enter your credentials to access your workspace.";
 
-  if (userLoggedIn || user || (getToken() && !isTokenExpired(getToken()))) {
+  const isOrgExpired = Boolean(
+    tenantInfo?.status === "expired" ||
+    tenantInfo?.is_expired ||
+    (tenantInfo?.subscription_expiry_date && new Date(tenantInfo.subscription_expiry_date).getTime() <= Date.now())
+  );
+
+  if (isOrgExpired) {
+    if (userLoggedIn || user || getToken()) {
+      reset();
+    }
+  } else if (userLoggedIn || user || (getToken() && !isTokenExpired(getToken()))) {
     return <Navigate to={redirectUrl} replace />;
   }
 
@@ -81,7 +91,28 @@ const Login = () => {
           ) : undefined
         }
       >
-
+        {isOrgExpired ? (
+          <div className="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xl font-bold">
+              <i className="mgc_time_line text-2xl"></i>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-rose-800 dark:text-rose-200">Subscription Expired</h3>
+              <p className="text-xs text-rose-600 dark:text-rose-300 mt-1">
+                Access to <strong>{tenantInfo?.name || subdomain.slug}</strong> has expired. Logins are disabled until the subscription is renewed.
+              </p>
+            </div>
+            <div className="pt-2">
+              <a
+                href={`/subscription/${tenantInfo?.slug || subdomain.slug}`}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-md transition-all w-full"
+              >
+                <span>Renew Subscription / Pay Online</span>
+                <i className="mgc_external_link_line text-sm"></i>
+              </a>
+            </div>
+          </div>
+        ) : (
         <VerticalForm<loginData>
           onSubmit={onSubmit}
           resolver={loginSchemaResolver}
@@ -144,6 +175,7 @@ const Login = () => {
             )}
           </button>
         </VerticalForm>
+        )}
       </AuthLayout>
     </>
   );

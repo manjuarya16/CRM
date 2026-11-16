@@ -388,9 +388,9 @@ html[data-sidenav-view="sm"] {
                     .sub-menu {
                         display: block;
                         inset-inline-start: 100%;
-                        overflow-y: auto;
-                        overflow-x: hidden;
-                        max-height: calc(100vh - 90px);
+                        overflow-y: auto !important;
+                        overflow-x: hidden !important;
+                        max-height: min(400px, 65vh) !important;
                         position: absolute;
                         z-index: 60;
                         height: auto !important;
@@ -400,7 +400,17 @@ html[data-sidenav-view="sm"] {
                         width: calc($sidenav-width - $sidenav-width-sm);
                         border-radius: 0.5rem;
                         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+                        scrollbar-width: thin;
                         @apply border border-solid border-gray-500/20;
+
+                        &::-webkit-scrollbar {
+                            width: 5px;
+                        }
+
+                        &::-webkit-scrollbar-thumb {
+                            background-color: rgba(156, 163, 175, 0.5);
+                            border-radius: 4px;
+                        }
 
                         >.menu-item {
                             >.menu-link {

@@ -412,12 +412,12 @@ const LeadsPage: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append("file", uploadFile);
-
       const response = await API.post("/leads/create-by-ai", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      Swal.fire("Success", "Lead successfully saved", "success");
+      const successMsg = response.data?.message || "Lead successfully saved";
+      Swal.fire("Success", successMsg, "success");
       setShowUploadModal(false);
       setUploadFile(null);
       if (viewMode === "kanban") {
@@ -1226,6 +1226,12 @@ const LeadsPage: React.FC = () => {
                               </span>
                             )}
                           </div>
+                          {((lead as any).organization_name || (lead as any).company_name) && (
+                            <span className="block text-[11px] text-gray-500 dark:text-gray-400 font-normal truncate mt-0.5">
+                              <i className="mgc_building_1_line text-[11px] mr-1 text-[#0088cc]"></i>
+                              {(lead as any).organization_name || (lead as any).company_name}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`px-2 py-0.5 text-xs rounded font-medium ${lead.status ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
@@ -1322,11 +1328,11 @@ const LeadsPage: React.FC = () => {
                 <input
                   type="file"
                   required
-                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.xls,.csv"
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                   className="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#e0f2fe] file:text-[#0284c7] hover:file:bg-[#bae6fd]"
                 />
-                <p className="text-[11px] text-gray-400 mt-2">Only pdf, doc, bmp, jpeg, jpg, png format files are accepted.</p>
+                <p className="text-[11px] text-gray-400 mt-2">Accepted formats: Excel (.xlsx, .xls, .csv), PDF, Word (.doc, .docx), and Images (png, jpg, jpeg, bmp).</p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">

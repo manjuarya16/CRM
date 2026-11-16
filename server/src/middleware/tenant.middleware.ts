@@ -115,6 +115,26 @@ export async function resolveTenant(req: Request, res: Response, next: NextFunct
       return;
     }
 
+    const rawExpiry = (tenant.settings as any)?.subscription_expiry_date;
+    const isExpiredDate = rawExpiry ? new Date(rawExpiry as string | number | Date).getTime() <= Date.now() : false;
+    const isExpired = (tenant as any).status === 'expired' || isExpiredDate;
+
+    const requestPath = (req.originalUrl || req.path || '').toLowerCase();
+    const isExemptPath = requestPath.includes('/subscription') ||
+                         requestPath.includes('/payment') ||
+                         requestPath.includes('/public') ||
+                         requestPath.includes('/super-admin') ||
+                         requestPath.includes('/admin');
+
+    if (isExpired && !isExemptPath) {
+      res.status(403).json({
+        success: false,
+        code: 'ORGANIZATION_EXPIRED',
+        message: "Your organization subscription has expired. Please renew your subscription to access your workspace.",
+      });
+      return;
+    }
+
     req.tenant = tenant;
     runWithTenantContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => {
       next();

@@ -7,16 +7,47 @@ import { requireAuth } from "@/middleware/auth";
 
 const router = Router();
 
-// Configure multer for file uploads (max 10MB, pdf/images)
+// Configure multer for file uploads (max 25MB, pdf/images/excel/word/csv)
 const upload = multer({
   dest: path.join(process.cwd(), "uploads", "leads"),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
   fileFilter: (_req: Request, file: Express.Multer.File, cb: any) => {
-    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/bmp"];
-    if (allowed.includes(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedExts = [
+      ".pdf",
+      ".jpeg",
+      ".jpg",
+      ".png",
+      ".webp",
+      ".bmp",
+      ".xlsx",
+      ".xls",
+      ".csv",
+      ".docx",
+      ".doc",
+      ".txt",
+    ];
+    const allowedMimes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/bmp",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "application/csv",
+      "text/comma-separated-values",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+      "text/plain",
+      "application/octet-stream",
+    ];
+
+    if (allowedExts.includes(ext) || allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Only PDF and image files are allowed (pdf, jpeg, jpg, png, webp, bmp)"));
+      cb(new Error("Only Excel (.xlsx, .xls, .csv), PDF, Word (.doc, .docx), and Image files are allowed"));
     }
   },
 });

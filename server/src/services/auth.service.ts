@@ -64,6 +64,26 @@ export class AuthService {
         throw new ApiError(403, 'Your account has been deactivated. Please contact administrator.');
       }
 
+      // Check organization tenant expiration
+      const effectiveTenantId = user.tenant_id || tenantId;
+      if (effectiveTenantId) {
+        const tenantRes = await pool.query(
+          `SELECT id, name, slug, status, settings FROM public.saas_tenants WHERE id = $1 LIMIT 1`,
+          [effectiveTenantId]
+        );
+        const org = tenantRes.rows[0];
+        if (org) {
+          const rawExpiry = org.settings?.subscription_expiry_date;
+          const isExpiredDate = rawExpiry ? new Date(rawExpiry).getTime() <= Date.now() : false;
+          if (org.status === 'expired' || isExpiredDate) {
+            throw new ApiError(403, `Your organization subscription has expired. Please renew your subscription to access your account.`);
+          }
+          if (org.status === 'suspended') {
+            throw new ApiError(403, `Your organization account is suspended. Please contact support.`);
+          }
+        }
+      }
+
       const rawHash = user.password_hash || user.password;
       if (!rawHash) {
         logger.warn({ identifier }, 'AuthService.login failed: no password stored');

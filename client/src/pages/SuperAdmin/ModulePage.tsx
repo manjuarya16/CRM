@@ -715,9 +715,26 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
         setSaving(false);
         return;
       } else if (moduleKey === "subscriptions") {
+        const tenant = tenantOptions.find((t) => String(t.id) === String(tenantId));
+        const isPaid = (String((tenant as any)?.payment_status || "").toLowerCase() === "paid" || String((tenant as any)?.status || "").toLowerCase() === "active") &&
+          !String((tenant as any)?.plan || "").toLowerCase().includes("trial");
+        const expiry = (tenant as any)?.subscription_expiry_date ? new Date((tenant as any).subscription_expiry_date) : null;
+        const isAlreadyPaid = isPaid && expiry && expiry > new Date();
+
+        if (isAlreadyPaid) {
+          await Swal.fire({
+            icon: "info",
+            title: "Already Paid",
+            text: `${tenant?.name || "This organization"} already has an active paid subscription until ${expiry?.toLocaleDateString("en-IN")}. Sending a new payment link is not permitted while already paid.`,
+            confirmButtonColor: "#040975",
+          });
+          setSaving(false);
+          return;
+        }
+
         const confirmSend = await Swal.fire({
           title: "Send Payment Link?",
-          text: "Create and email a subscription payment link for the selected organization?",
+          text: `Create and email a subscription payment link for ${tenant?.name || "the selected organization"}?`,
           icon: "question",
           showCancelButton: true,
           confirmButtonText: "Yes, Send Link",
@@ -1926,19 +1943,22 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
     return displayedRecords.slice(startIndex, endIndex);
   }, [displayedRecords, startIndex, endIndex]);
 
-  const createLabel = moduleKey === "organizations"
+  const normalizedKey = moduleKey.toLowerCase();
+  const createLabel = normalizedKey === "organizations"
     ? "Create Organization"
-    : moduleKey === "users"
+    : normalizedKey === "users"
     ? "Add User"
-    : moduleKey === "roles"
+    : (normalizedKey === "roles" || normalizedKey.includes("role") || title.toLowerCase().includes("role"))
     ? "Add Role"
-    : moduleKey === "payments"
+    : normalizedKey === "payments"
       ? "Create manual payment"
-      : moduleKey === "subscriptions"
+      : normalizedKey === "subscriptions"
         ? "Send payment link"
-      : moduleKey === "smtp"
+      : normalizedKey === "smtp"
         ? "Edit SMTP settings"
-        : "Add record";
+        : normalizedKey.includes("pricing")
+        ? "Add Pricing Tier"
+        : "Add Role";
   const userDetails: Array<[string, unknown]> = viewing
     ? moduleKey === "organizations"
       ? [
@@ -2270,10 +2290,10 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
                         type="button"
                         onClick={() => setShowPasswordMap((prev) => ({ ...prev, [field.name]: !prev[field.name] }))}
                         className="absolute inset-y-0 right-0 z-10 flex items-center pr-3 cursor-pointer text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                        aria-label={showPasswordMap[field.name] ? "Hide password" : "Show password"}
-                        title={showPasswordMap[field.name] ? "Hide password" : "Show password"}
+                        aria-label={showPasswordMap[field.name] ? "Password is shown" : "Password is hidden"}
+                        title={showPasswordMap[field.name] ? "Click to hide password" : "Click to show password"}
                       >
-                        {showPasswordMap[field.name] ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showPasswordMap[field.name] ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
                     </div>
                   ) : (

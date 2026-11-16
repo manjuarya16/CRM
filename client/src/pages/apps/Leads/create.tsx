@@ -23,6 +23,9 @@ const fmtCurrency = (n: number) =>
 const validateContactPhoneValue = (raw: string): string | null => {
   const cleaned = raw.trim();
   if (!cleaned) return null;
+  if (/^0+$/.test(cleaned)) {
+    return "Contact number cannot consist of only zeros";
+  }
   let coreDigits = cleaned;
   if (cleaned.startsWith("+")) {
     const match10 = cleaned.match(/^\+\d{1,3}(\d{10})$/);
@@ -40,13 +43,13 @@ const validateContactPhoneValue = (raw: string): string | null => {
     if (cleaned.length !== 10) {
       return "Contact number must be exactly 10 digits";
     }
+    if (/^[0-5]/.test(cleaned)) {
+      return "Contact number must start with 6, 7, 8, or 9";
+    }
     coreDigits = cleaned;
   }
   if (/^(\d)\1+$/.test(coreDigits)) {
     return "Contact number cannot consist of all identical digits";
-  }
-  if (coreDigits.length === 10 && coreDigits.startsWith("0")) {
-    return "Contact number cannot start with 0";
   }
   return null;
 };
@@ -1359,6 +1362,12 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                         maxLength={15}
                         value={pn.value}
                         onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
+                        onBlur={() => {
+                          const err = validateContactPhoneValue(pn.value);
+                          if (err) {
+                            setErrors((prev) => ({ ...prev, contactPhone: err }));
+                          }
+                        }}
                         placeholder="e.g. 9876543210 or +919876543210"
                         className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                       />
