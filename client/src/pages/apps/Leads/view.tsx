@@ -952,7 +952,7 @@ const getPersonEmail = (person: any): string => {
           {/* Stage Stepper Bar (Chevron Ribbon style matching Krayin view/stages.blade.php) */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 p-2 overflow-hidden">
             <div
-              className="flex items-center w-full overflow-x-auto no-scrollbar scroll-smooth rounded-lg py-1 px-1"
+              className="flex items-center w-full overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scroll-smooth rounded-lg py-1 px-1 pb-1.5"
               onWheel={(e) => {
                 if (e.deltaY !== 0) {
                   e.currentTarget.scrollLeft += e.deltaY;
@@ -972,17 +972,17 @@ const getPersonEmail = (person: any): string => {
                     onClick={() => handleStageClick(stage)}
                     style={{
                       clipPath: isFirst
-                        ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
-                        : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)"
+                        ? "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)"
+                        : "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)"
                     }}
-                    className={`px-5 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[120px] shrink-0 ${isLost
+                    className={`px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[85px] sm:min-w-[95px] flex-1 shrink-0 ${isLost
                         ? "bg-red-500 text-white"
                         : isPassed
                           ? "bg-[#10b981] text-white"
                           : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
                       }`}
                   >
-                    {stage.name}
+                    <span className="truncate">{stage.name}</span>
                   </button>
                 );
               })}
@@ -993,16 +993,16 @@ const getPersonEmail = (person: any): string => {
                   setActiveModal("won_lost");
                 }}
                 style={{
-                  clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
+                  clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%)"
                 }}
-                className={`px-5 py-2.5 text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[110px] shrink-0 rounded-r-lg ${!selectedLead.status
+                className={`px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-bold transition-all relative flex items-center justify-center -mr-2 min-w-[85px] sm:min-w-[95px] shrink-0 rounded-r-lg ${!selectedLead.status
                     ? "bg-red-500 text-white"
                     : selectedLead.status && selectedLead.stage_name?.toLowerCase() === "won"
                       ? "bg-[#10b981] text-white"
                       : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
                   }`}
               >
-                Won/Lost ▾
+                <span>Won/Lost ▾</span>
               </button>
             </div>
           </div>
@@ -1010,7 +1010,7 @@ const getPersonEmail = (person: any): string => {
           {/* Sub-Tabs Filter Navigation Bar */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-300 dark:border-gray-800 overflow-hidden">
             <div
-              className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar scroll-smooth px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300"
+              className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scroll-smooth px-4 py-2 bg-gray-50/50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-300"
               onWheel={(e) => {
                 if (e.deltaY !== 0) {
                   e.currentTarget.scrollLeft += e.deltaY;

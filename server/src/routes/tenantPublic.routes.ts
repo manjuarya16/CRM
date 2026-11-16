@@ -26,7 +26,7 @@ router.get('/tenant/:slug', async (req, res, next) => {
   try {
     const slug = rawSlug;
     const { rows } = await pool.query(
-      "SELECT id, name, slug, domain, status, plan, COALESCE(NULLIF(logo_url, ''), settings->>'logo_url') AS logo_url FROM public.saas_tenants WHERE slug = $1 LIMIT 1",
+      "SELECT id, name, slug, domain, status, plan, settings, COALESCE(NULLIF(logo_url, ''), settings->>'logo_url') AS logo_url FROM public.saas_tenants WHERE slug = $1 LIMIT 1",
       [slug]
     );
 
@@ -36,15 +36,21 @@ router.get('/tenant/:slug', async (req, res, next) => {
     }
 
     const tenant = rows[0];
+    const rawExpiry = tenant.settings?.subscription_expiry_date;
+    const isExpiredDate = rawExpiry ? new Date(rawExpiry).getTime() <= Date.now() : false;
+    const isExpired = tenant.status === 'expired' || isExpiredDate;
+
     res.json({
       success: true,
       data: {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        status: tenant.status,
+        status: isExpired ? 'expired' : tenant.status,
+        is_expired: isExpired,
         logo_url: tenant.logo_url,
         plan: tenant.plan,
+        subscription_expiry_date: rawExpiry,
       },
     });
   } catch (err) {

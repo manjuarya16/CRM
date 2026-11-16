@@ -91,6 +91,7 @@ const SuperAdminPayments: React.FC = () => {
     amount: 9999,
     discount_amount: 0,
     payment_method: "Cash",
+    payment_status: "Paid",
     reference: "",
     notes: "",
     paid_at: new Date().toISOString().split("T")[0],
@@ -143,6 +144,7 @@ const SuperAdminPayments: React.FC = () => {
         discount_amount: Number(recordForm.discount_amount),
         currency: recordForm.currency,
         payment_method: recordForm.payment_method,
+        payment_status: recordForm.payment_status,
         reference: recordForm.reference || undefined,
         notes: recordForm.notes || undefined,
         paid_at: recordForm.paid_at || undefined,
@@ -1617,16 +1619,32 @@ const SuperAdminPayments: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Payment Date
-                </label>
-                <input
-                  type="date"
-                  value={recordForm.paid_at}
-                  onChange={(e) => setRecordForm({ ...recordForm, paid_at: e.target.value })}
-                  className="form-input text-xs w-full rounded-xl py-2"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Payment Status <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={recordForm.payment_status}
+                    onChange={(e) => setRecordForm({ ...recordForm, payment_status: e.target.value })}
+                    className="form-select text-xs w-full rounded-xl py-2"
+                  >
+                    <option value="Paid">Paid (Confirmed / Completed)</option>
+                    <option value="Pending">Pending (Pay Later / Unpaid)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={recordForm.paid_at}
+                    onChange={(e) => setRecordForm({ ...recordForm, paid_at: e.target.value })}
+                    className="form-input text-xs w-full rounded-xl py-2"
+                  />
+                </div>
               </div>
 
               <div>

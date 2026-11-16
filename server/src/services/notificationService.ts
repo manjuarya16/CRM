@@ -8,7 +8,7 @@ import { SseService } from "@/services/sse.service";
 import { getTenantContext, runWithTenantContext } from "@/context/tenantContext";
 
 const resolveRequestTenantId = (req: Request): number | null => {
-  const raw = req.tenant?.id ?? (req as any).user?.tenant_id ?? getTenantContext()?.tenantId;
+  const raw = (req as any).tenant?.id ?? (req as any).user?.tenant_id ?? getTenantContext()?.tenantId;
   return raw !== undefined && raw !== null && raw !== "" ? Number(raw) : null;
 };
 
@@ -19,7 +19,7 @@ const connectTenantScoped = async (req: Request): Promise<PoolClient> => {
     return runWithTenantContext(
       {
         tenantId,
-        tenantSlug: req.tenant?.slug ?? ctx?.tenantSlug,
+        tenantSlug: (req as any).tenant?.slug ?? ctx?.tenantSlug,
         isSuperAdmin: false,
       },
       () => pool.connect()

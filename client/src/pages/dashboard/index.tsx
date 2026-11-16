@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTenantStore } from "@/store";
 import ReactApexChart from "react-apexcharts";
+import Swal from "sweetalert2";
 import API from "@/config";
 import type {
   IPipeline,
@@ -215,6 +216,26 @@ export const DashboardPage: React.FC = () => {
     fetchDashboardStats();
   }, [startDate, endDate, selectedPipelineId]);
 
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    if (endDate && val > endDate) {
+      setEndDate(val);
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    if (startDate && val < startDate) {
+      Swal.fire({
+        icon: "warning",
+        title: "Invalid Date Range",
+        text: "The 'To' date cannot be earlier than the 'From' date.",
+        confirmButtonColor: "#0088cc",
+      });
+      return;
+    }
+    setEndDate(val);
+  };
+
   const handleExportPDF = async () => {
     try {
       const { default: jsPDF } = await import("jspdf");
@@ -225,8 +246,10 @@ export const DashboardPage: React.FC = () => {
       doc.setFontSize(18);
       doc.text("CRM Analytics Dashboard Report", 14, 20);
 
+      const periodFrom = startDate || data.start_date;
+      const periodTo = endDate || data.end_date;
       doc.setFontSize(10);
-      doc.text(`Period: ${data.start_date} to ${data.end_date}`, 14, 28);
+      doc.text(`Period: ${periodFrom} to ${periodTo}`, 14, 28);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 34);
 
       autoTable(doc, {
@@ -254,7 +277,7 @@ export const DashboardPage: React.FC = () => {
         body: (data.funnel || []).map((f) => [f.stage_name, String(f.count), formatCurrency(f.total_value)]),
       });
 
-      doc.save(`CRM_Dashboard_Report_${data.start_date}_to_${data.end_date}.pdf`);
+      doc.save(`CRM_Dashboard_Report_${periodFrom}_to_${periodTo}.pdf`);
     } catch (err) {
       console.error("PDF export fallback to print", err);
       window.print();
@@ -491,17 +514,19 @@ export const DashboardPage: React.FC = () => {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              max={endDate || undefined}
+              onChange={(e) => handleStartDateChange(e.target.value)}
               className="flex-1 sm:flex-none h-10 px-3 py-2 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-200 cursor-pointer"
-              title="Start Date"
+              title="Start Date (From)"
             />
             <span className="text-xs font-bold text-gray-400">to</span>
             <input
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate || undefined}
+              onChange={(e) => handleEndDateChange(e.target.value)}
               className="flex-1 sm:flex-none h-10 px-3 py-2 text-xs font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-200 cursor-pointer"
-              title="End Date"
+              title="End Date (To)"
             />
           </div>
 

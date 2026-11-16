@@ -182,16 +182,21 @@ const SuperAdminOrganizations = () => {
     }
     const { value: formValues } = await Swal.fire({
       title: "Send Payment Link Email",
+      width: "480px",
+      customClass: {
+        htmlContainer: "!overflow-hidden !m-0 !px-6 !py-2",
+        popup: "!rounded-2xl !p-6 !overflow-hidden",
+      },
       html: `
-        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300">
-          <p>Send an official subscription upgrade & online payment checkout link for <strong>${org.name}</strong> (${org.slug}).</p>
+        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300 overflow-hidden">
+          <p class="text-slate-600 dark:text-slate-400">Send an official subscription upgrade & online payment checkout link for <strong class="text-slate-900 dark:text-slate-100">${org.name}</strong> (${org.slug}).</p>
           <div>
-            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300">Recipient Email Address:</label>
-            <input id="swal-input-email" class="swal2-input !mt-0 !w-full !text-xs !h-9 !py-1 !px-3" value="${defaultEmail}" placeholder="admin@example.com" />
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Recipient Email Address:</label>
+            <input id="swal-input-email" type="email" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all box-border" value="${defaultEmail}" placeholder="admin@example.com" />
           </div>
           <div>
-            <label class="block font-semibold mb-1 text-slate-600 dark:text-slate-300">Optional Custom Note:</label>
-            <textarea id="swal-input-note" class="swal2-textarea !mt-0 !w-full !text-xs !h-16 !p-2" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Optional Custom Note:</label>
+            <textarea id="swal-input-note" rows="2" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all resize-none box-border" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
           </div>
         </div>
       `,

@@ -5,10 +5,12 @@ import { pool } from "@/config/db";
 import HttpStatusCodes from "@/common/constants/HttpStatusCodes";
 import path from "path";
 import fs from "fs";
+import * as XLSX from "xlsx";
 import { notifyCRMActivity } from "@/utils/notificationHelper";
 import { processWorkflowsForEvent } from "@/services/workflowEngine";
 import { WorkflowService } from "@/services/workflow.service";
-import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData } from "@/utils/documentParser";
+import { saveEntityAttributeValues } from "@/services/dataTransfer.service";
+import { extractTextFromBuffer, parseLeadDocumentText, ExtractedLeadData, ExtractedProduct } from "@/utils/documentParser";
 import { parseVoiceTranscript, transcribeAudioWithWhisper, translateToEnglish, IVoiceLeadExtractedData } from "@/utils/voiceLeadParser";
 import { configService } from "@/services/configService";
 
@@ -40,6 +42,33 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
     );
 
     const total = result.rows.length > 0 ? Number(result.rows[0].total_count || result.rows.length) : 0;
+
+    if (result.rows.length > 0) {
+      const leadIds = result.rows.map((r: any) => r.id);
+      try {
+        const enrichRes = await connection.query(
+          `SELECT l.id, l.organization_id, org.name AS organization_name, l.custom_attributes 
+           FROM leads l 
+           LEFT JOIN organizations org ON org.id = l.organization_id 
+           WHERE l.id = ANY($1::int[])`,
+          [leadIds]
+        );
+        const enrichMap = new Map<number, any>();
+        for (const row of enrichRes.rows) {
+          enrichMap.set(row.id, row);
+        }
+        for (const row of result.rows) {
+          const enriched = enrichMap.get(row.id);
+          if (enriched) {
+            row.organization_id = enriched.organization_id ?? row.organization_id ?? null;
+            row.organization_name = enriched.organization_name ?? row.organization_name ?? null;
+            row.custom_attributes = enriched.custom_attributes ?? row.custom_attributes ?? {};
+          }
+        }
+      } catch (enrichErr) {
+        logger.warn({ enrichErr }, "Failed to enrich leads list with custom attributes");
+      }
+    }
 
     res.status(HttpStatusCodes.OK).json({
       success: true,
@@ -78,6 +107,45 @@ const getLeadById = async (req: Request, res: Response): Promise<void> => {
     }
 
     const leadData = result.rows[0];
+
+    try {
+      const extraRes = await connection.query(
+        `SELECT l.custom_attributes, l.organization_id, org.name AS organization_name,
+                l.person_id, p.name AS person_name, p.emails AS person_emails, p.contact_numbers AS person_contact_numbers
+         FROM leads l 
+         LEFT JOIN organizations org ON org.id = l.organization_id 
+         LEFT JOIN persons p ON p.id = l.person_id
+         WHERE l.id = $1`,
+        [id]
+      );
+      if (extraRes.rows[0]) {
+        const row = extraRes.rows[0];
+        leadData.custom_attributes = row.custom_attributes || {};
+        if (!leadData.organization_id && row.organization_id) {
+          leadData.organization_id = row.organization_id;
+        }
+        if (!leadData.organization_name && row.organization_name) {
+          leadData.organization_name = row.organization_name;
+        }
+        if (!leadData.person_id && row.person_id) {
+          leadData.person_id = row.person_id;
+        }
+        if (!leadData.person_name && row.person_name) {
+          leadData.person_name = row.person_name;
+        }
+        leadData.person_emails = row.person_emails;
+        leadData.person_contact_numbers = row.person_contact_numbers;
+        leadData.person = {
+          id: row.person_id || leadData.person_id,
+          name: row.person_name || leadData.person_name,
+          emails: row.person_emails,
+          contact_numbers: row.person_contact_numbers,
+        };
+      }
+    } catch (enrichErr) {
+      logger.warn({ enrichErr, id }, "Failed to enrich getLeadById with custom attributes");
+    }
+
     if (leadData && (leadData.custom_attributes === undefined || leadData.custom_attributes === null)) {
       leadData.custom_attributes = {};
     }
@@ -798,6 +866,33 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
       [pipelineId, search, id, lead_value, user_id, person_id, lead_type_id, lead_source_id, expected_close_date, created_at, lead_pipeline_stage_id, tag]
     );
 
+    if (result.rows.length > 0) {
+      const leadIds = result.rows.map((r: any) => r.id);
+      try {
+        const enrichRes = await connection.query(
+          `SELECT l.id, l.organization_id, org.name AS organization_name, l.custom_attributes 
+           FROM leads l 
+           LEFT JOIN organizations org ON org.id = l.organization_id 
+           WHERE l.id = ANY($1::int[])`,
+          [leadIds]
+        );
+        const enrichMap = new Map<number, any>();
+        for (const row of enrichRes.rows) {
+          enrichMap.set(row.id, row);
+        }
+        for (const row of result.rows) {
+          const enriched = enrichMap.get(row.id);
+          if (enriched) {
+            row.organization_id = enriched.organization_id ?? row.organization_id ?? null;
+            row.organization_name = enriched.organization_name ?? row.organization_name ?? null;
+            row.custom_attributes = enriched.custom_attributes ?? row.custom_attributes ?? {};
+          }
+        }
+      } catch (enrichErr) {
+        logger.warn({ enrichErr }, "Failed to enrich kanban leads with organization and custom attributes");
+      }
+    }
+
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
     logger.error(error);
@@ -806,6 +901,493 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
     connection?.release();
   }
 };
+
+function mapRowToExtractedLead(
+  row: Record<string, any>,
+  rowIdx: number,
+  originalFilename: string,
+  dbAttributes: any[] = []
+): ExtractedLeadData | null {
+  if (!row || typeof row !== "object") return null;
+
+  let title = "";
+  let contactPerson = "";
+  let email = "";
+  let phone = "";
+  let organization = "";
+  let addressVal = "";
+  let websiteVal = "";
+  let leadValue: number | null = null;
+  let description = "";
+  let source = "";
+  let type = "";
+  let jobTitle = "";
+  let expectedCloseDate = "";
+  const products: ExtractedProduct[] = [];
+  const customAttrs: Record<string, any> = {};
+
+  for (const [key, val] of Object.entries(row)) {
+    if (val === null || val === undefined) continue;
+    const strVal = String(val).trim();
+    if (!strVal) continue;
+    const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Ignore serial number or sequence row indicators
+    if (["srno", "sno", "serialno", "no", "id", "leadid"].includes(k)) continue;
+
+    // Title / Lead Title / Subject / Deal
+    if (["leadtitle", "title", "subject", "leadname", "opportunity", "deal", "dealname", "project"].includes(k)) {
+      title = strVal;
+    }
+    // Contact Person / Full Name / Person / Name
+    else if (["contactperson", "contactname", "personname", "customername", "clientname", "fullname", "contact", "person"].includes(k)) {
+      contactPerson = strVal;
+    }
+    else if (k === "name") {
+      if (!contactPerson) contactPerson = strVal;
+      else if (!title) title = strVal;
+    }
+    // Email
+    else if (["email", "emailaddress", "workemail", "contactemail", "mail", "primaryemail", "emailid"].includes(k)) {
+      email = strVal;
+    }
+    // Phone / Mobile
+    else if (["phone", "phonenumber", "mobile", "mobilenumber", "contactno", "tel", "cell", "telephone", "whatsapp", "primaryphone"].includes(k)) {
+      phone = strVal;
+    }
+    // Organization / Company / Institute
+    else if (["organization", "organizationname", "company", "companyname", "org", "business", "firm", "account", "client", "institute"].includes(k)) {
+      organization = strVal;
+    }
+    // Address / Location
+    else if (["address", "location", "city", "street", "addr"].includes(k)) {
+      addressVal = strVal;
+    }
+    // Website / URL
+    else if (["website", "web", "url", "site", "portal"].includes(k)) {
+      websiteVal = strVal;
+    }
+    // Lead Value / Amount / Deal Value
+    else if (["leadvalue", "value", "amount", "dealvalue", "price", "budget", "revenue"].includes(k)) {
+      const num = parseFloat(strVal.replace(/[^0-9.-]/g, ""));
+      if (!isNaN(num)) leadValue = num;
+    }
+    // Description / Notes / Requirements / Message
+    else if (["description", "notes", "note", "requirement", "requirements", "details", "message", "comments", "remark", "remarks"].includes(k)) {
+      description = strVal;
+    }
+    // Source
+    else if (["source", "leadsource"].includes(k)) {
+      source = strVal;
+    }
+    // Type
+    else if (["type", "leadtype"].includes(k)) {
+      type = strVal;
+    }
+    // Designation / Job Title
+    else if (["jobtitle", "designation", "position", "role"].includes(k)) {
+      jobTitle = strVal;
+    }
+    // Expected Close Date
+    else if (["expectedclosedate", "closedate", "expecteddate", "duedate"].includes(k)) {
+      expectedCloseDate = strVal;
+    }
+    // Products / Item
+    else if (["product", "products", "item", "items", "sku"].includes(k)) {
+      products.push({ name: strVal, quantity: 1 });
+    }
+
+    // Match against database custom attributes
+    const matchedAttr = dbAttributes.find((attr: any) => {
+      const c = (attr.code || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const n = (attr.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      return k === c || k === n;
+    });
+
+    if (matchedAttr) {
+      customAttrs[matchedAttr.code] = strVal;
+    } else {
+      const standardCols = [
+        "leadtitle", "title", "subject", "leadname", "opportunity", "deal", "dealname", "project",
+        "contactperson", "contactname", "personname", "customername", "clientname", "fullname", "contact", "person", "name",
+        "email", "emailaddress", "workemail", "contactemail", "mail", "primaryemail",
+        "phone", "phonenumber", "mobile", "mobilenumber", "contactno", "tel", "cell", "telephone", "whatsapp", "primaryphone",
+        "organization", "organizationname", "company", "companyname", "org", "business", "firm", "account", "client", "institute",
+        "leadvalue", "value", "amount", "dealvalue", "price", "budget", "revenue",
+        "description", "notes", "note", "requirement", "requirements", "details", "message", "comments", "remark", "remarks",
+        "source", "leadsource", "type", "leadtype", "jobtitle", "designation", "position", "role",
+        "expectedclosedate", "closedate", "expecteddate", "duedate",
+        "product", "products", "item", "items", "sku"
+      ];
+      if (!standardCols.includes(k)) {
+        const normCode = key.trim().toLowerCase().replace(/[\s\/-]+/g, "_").replace(/[^a-z0-9_]/g, "");
+        if (normCode) {
+          customAttrs[normCode] = strVal;
+        }
+      }
+    }
+  }
+
+  // Ensure extracted standard fields that correspond to tenant custom attributes are also saved
+  if (phone) {
+    if (!customAttrs.phone_number) customAttrs.phone_number = phone;
+    if (!customAttrs.phone) customAttrs.phone = phone;
+  }
+  if (email) {
+    if (!customAttrs.email_id) customAttrs.email_id = email;
+    if (!customAttrs.email) customAttrs.email = email;
+  }
+  if (addressVal) {
+    if (!customAttrs.address) customAttrs.address = addressVal;
+  }
+  if (websiteVal) {
+    if (!customAttrs.website) customAttrs.website = websiteVal;
+  }
+
+  // If the row has no identifying information at all, skip it
+  if (!title && !contactPerson && !email && !phone && !organization && !description && Object.keys(customAttrs).length === 0) {
+    return null;
+  }
+
+  if (!title) {
+    title = organization || contactPerson || `Lead #${rowIdx + 1} from ${path.basename(originalFilename, path.extname(originalFilename))}`;
+  }
+
+  return {
+    title,
+    contactPerson,
+    email,
+    phone,
+    organization,
+    address: addressVal,
+    website: websiteVal,
+    leadValue,
+    description: description || `Imported from Excel file ${originalFilename} (row ${rowIdx + 1})`,
+    source,
+    type,
+    jobTitle,
+    expectedCloseDate,
+    products,
+    custom_attributes: customAttrs,
+  };
+}
+
+async function saveExtractedLeadRecord(
+  connection: PoolClient,
+  parsed: ExtractedLeadData,
+  file: any,
+  fileUrl: string,
+  currentUserId: number | null
+): Promise<{
+  lead: any;
+  personId: number | null;
+  organizationId: number | null;
+  personCreated: boolean;
+  orgCreated: boolean;
+  resolvedPersonName: string | null;
+  leadTitle: string;
+  createdProductsCount: number;
+  attachedProductsCount: number;
+}> {
+  // 1. Check or create Organization
+  let organizationId: number | null = null;
+  let orgCreated = false;
+  let orgCandidate = (parsed.organization && parsed.organization.trim())
+    ? parsed.organization.trim()
+    : (parsed.custom_attributes?.organization && String(parsed.custom_attributes.organization).trim())
+    ? String(parsed.custom_attributes.organization).trim()
+    : (parsed.custom_attributes?.company && String(parsed.custom_attributes.company).trim())
+    ? String(parsed.custom_attributes.company).trim()
+    : (parsed.custom_attributes?.institute && String(parsed.custom_attributes.institute).trim())
+    ? String(parsed.custom_attributes.institute).trim()
+    : "";
+
+  if (!orgCandidate && parsed.title && !parsed.title.toLowerCase().startsWith("lead #")) {
+    const titleParts = parsed.title.split(/[|–—]/);
+    const candidate = titleParts[0].trim();
+    if (candidate.length >= 2 && candidate.length <= 120) {
+      orgCandidate = candidate;
+    }
+  }
+
+  if (orgCandidate) {
+    const existingOrgRes = await connection.query(
+      "SELECT * FROM public.fn_find_organization_by_name($1)",
+      [orgCandidate]
+    );
+    if (existingOrgRes.rows.length > 0) {
+      organizationId = existingOrgRes.rows[0].id;
+    } else {
+      const addrJson = parsed.address ? JSON.stringify({ street: parsed.address }) : null;
+      try {
+        const newOrgRes = await connection.query(
+          "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
+          [orgCandidate, addrJson, currentUserId, "{}"]
+        );
+        const newOrg = newOrgRes.rows[0]?.result;
+        if (newOrg && newOrg.id) {
+          organizationId = newOrg.id;
+          orgCreated = true;
+          WorkflowService.triggerWorkflows("organizations", "create", newOrg).catch((e) => logger.error(e));
+        }
+      } catch (orgErr) {
+        // Fallback direct insert
+        try {
+          const directOrg = await connection.query(
+            "INSERT INTO organizations (name, address, user_id, created_at, updated_at) VALUES ($1, $2::jsonb, $3, NOW(), NOW()) RETURNING id",
+            [orgCandidate, addrJson, currentUserId]
+          );
+          if (directOrg.rows[0]?.id) {
+            organizationId = directOrg.rows[0].id;
+            orgCreated = true;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Check or create Person (Contact)
+  let personId: number | null = null;
+  let personCreated = false;
+  let resolvedPersonName = parsed.contactPerson || null;
+
+  if (parsed.email || parsed.phone || parsed.contactPerson) {
+    const pFindRes = await connection.query(
+      "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
+      [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
+    );
+    if (pFindRes.rows.length > 0) {
+      personId = pFindRes.rows[0].id;
+      resolvedPersonName = pFindRes.rows[0].name;
+    }
+
+    if (!personId && (parsed.contactPerson || parsed.email || parsed.phone)) {
+      const newPersonName = parsed.contactPerson || (parsed.email ? parsed.email.split("@")[0] : (orgCandidate ? `${orgCandidate} Contact` : "New Contact"));
+      const emailArr = parsed.email ? [{ label: "work", value: parsed.email }] : [];
+      const phoneArr = parsed.phone ? [{ label: "work", value: parsed.phone }] : [];
+
+      try {
+        const newPersonRes = await connection.query(
+          "SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result",
+          [
+            newPersonName,
+            JSON.stringify(emailArr),
+            JSON.stringify(phoneArr),
+            organizationId || null,
+            parsed.jobTitle || null,
+            currentUserId,
+            "{}",
+          ]
+        );
+        const newPerson = newPersonRes.rows[0]?.result;
+        if (newPerson && newPerson.id) {
+          personId = newPerson.id;
+          resolvedPersonName = newPerson.name;
+          personCreated = true;
+          WorkflowService.triggerWorkflows("persons", "create", newPerson).catch((e) => logger.error(e));
+        }
+      } catch (pErr) {
+        // Fallback direct insert
+        try {
+          const directP = await connection.query(
+            "INSERT INTO persons (name, emails, contact_numbers, organization_id, job_title, user_id, created_at, updated_at) VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, NOW(), NOW()) RETURNING id",
+            [newPersonName, JSON.stringify(emailArr), JSON.stringify(phoneArr), organizationId || null, parsed.jobTitle || null, currentUserId]
+          );
+          if (directP.rows[0]?.id) {
+            personId = directP.rows[0].id;
+            resolvedPersonName = newPersonName;
+            personCreated = true;
+          }
+        } catch {}
+      }
+    } else if (personId && organizationId) {
+      await connection.query(
+        "UPDATE persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL",
+        [organizationId, personId]
+      );
+    }
+  }
+
+  // 3. Resolve Lead Source & Lead Type
+  let sourceId: number | null = null;
+  if (parsed.source && parsed.source.trim()) {
+    const sRes = await connection.query(
+      "SELECT * FROM public.fn_find_lead_source_by_name($1)",
+      [parsed.source.trim()]
+    );
+    if (sRes.rows.length > 0) sourceId = sRes.rows[0].id;
+  }
+
+  let typeId: number | null = null;
+  if (parsed.type && parsed.type.trim()) {
+    const tRes = await connection.query(
+      "SELECT * FROM public.fn_find_lead_type_by_name($1)",
+      [parsed.type.trim()]
+    );
+    if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
+  }
+
+  // 4. Resolve default pipeline and first stage
+  const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
+  let pipelineId: number | null = null;
+  let stageId: number | null = null;
+
+  const defaultPipeline = pipelineRes.rows.find((p: any) => p.is_default) || pipelineRes.rows[0];
+  if (defaultPipeline) {
+    pipelineId = defaultPipeline.id;
+    const stageRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
+    if (stageRes.rows.length > 0) {
+      stageId = stageRes.rows[0].id;
+    }
+  }
+
+  const leadTitle = parsed.title || `Lead from ${path.basename(file.originalname, path.extname(file.originalname))}`;
+
+  let validExpectedCloseDate: string | null = null;
+  if (parsed.expectedCloseDate) {
+    const parsedDate = new Date(parsed.expectedCloseDate);
+    if (!isNaN(parsedDate.getTime())) {
+      validExpectedCloseDate = parsedDate.toISOString().split("T")[0];
+    }
+  }
+
+  // 5. Create Lead
+  const leadResult = await connection.query(
+    "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+    [
+      leadTitle,
+      parsed.description || `Created from uploaded file: ${file.originalname}`,
+      parsed.leadValue || null,
+      currentUserId,
+      personId,
+      sourceId,
+      typeId,
+      pipelineId,
+      validExpectedCloseDate,
+      organizationId,
+    ]
+  );
+
+  const lead = leadResult.rows[0];
+  let createdProductsCount = 0;
+  let attachedProductsCount = 0;
+
+  if (lead) {
+    if (stageId) {
+      await connection.query(
+        "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
+        [lead.id, stageId]
+      );
+    }
+
+    // 5a. Save custom attributes to leads table and attribute_values table
+    const finalCustomAttrs = { ...(parsed.custom_attributes || {}) };
+    if (parsed.phone && !finalCustomAttrs.phone_number) finalCustomAttrs.phone_number = parsed.phone;
+    if (parsed.email && !finalCustomAttrs.email_id) finalCustomAttrs.email_id = parsed.email;
+    if (parsed.address && !finalCustomAttrs.address) finalCustomAttrs.address = parsed.address;
+    if (parsed.website && !finalCustomAttrs.website) finalCustomAttrs.website = parsed.website;
+
+    if (Object.keys(finalCustomAttrs).length > 0) {
+      await connection.query(
+        "UPDATE leads SET custom_attributes = $1::jsonb, updated_at = NOW() WHERE id = $2",
+        [JSON.stringify(finalCustomAttrs), lead.id]
+      );
+      lead.custom_attributes = finalCustomAttrs;
+
+      try {
+        await saveEntityAttributeValues(connection, "leads", lead.id, finalCustomAttrs);
+      } catch (attrValErr) {
+        logger.warn({ attrValErr }, "Failed to save attribute_values records for lead");
+      }
+    } else {
+      lead.custom_attributes = {};
+    }
+
+    // Enrich lead return with organization_name and person_name
+    lead.organization_id = organizationId;
+    lead.person_id = personId;
+    if (organizationId) {
+      const orgLookup = await connection.query("SELECT name FROM organizations WHERE id = $1", [organizationId]);
+      lead.organization_name = orgLookup.rows[0]?.name || orgCandidate || null;
+    } else {
+      lead.organization_name = null;
+    }
+    lead.person_name = resolvedPersonName || parsed.contactPerson || null;
+
+    if (Array.isArray(parsed.products) && parsed.products.length > 0) {
+      for (const prod of parsed.products) {
+        if (!prod.name || !prod.name.trim()) continue;
+        const pName = prod.name.trim();
+        const pSku = prod.sku?.trim() || `SKU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const pQty = Number(prod.quantity) || 1;
+        const pPrice = prod.price !== undefined && prod.price !== null ? Number(prod.price) : null;
+
+        let prodId: number | null = null;
+        const pCheck = await connection.query(
+          "SELECT * FROM public.fn_find_product_by_name_or_sku($1, $2)",
+          [pName, pSku]
+        );
+
+        if (pCheck.rows.length > 0) {
+          prodId = pCheck.rows[0].id;
+        } else {
+          const newProdRes = await connection.query(
+            "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
+            [pSku, pName, prod.description || `Extracted from ${file.originalname}`, pQty, pPrice]
+          );
+          const createdProduct = newProdRes.rows[0];
+          if (createdProduct && createdProduct.id) {
+            prodId = createdProduct.id;
+            createdProductsCount++;
+            WorkflowService.triggerWorkflows("products", "create", createdProduct).catch((e) => logger.error(e));
+          }
+        }
+
+        if (prodId && lead.id) {
+          await connection.query(
+            "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
+            [lead.id, prodId, pQty, pPrice]
+          );
+          attachedProductsCount++;
+        }
+      }
+    }
+
+    await connection.query(
+      "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [
+        file.originalname,
+        "file",
+        fileUrl,
+        null,
+        null,
+        true,
+        currentUserId,
+        null,
+        lead.id,
+        personId,
+      ]
+    );
+
+    WorkflowService.triggerWorkflows("leads", "create", {
+      ...lead,
+      person_id: personId,
+      organization_id: organizationId,
+    }).catch((e) => logger.error(e));
+  }
+
+  return {
+    lead,
+    personId,
+    organizationId,
+    personCreated,
+    orgCreated,
+    resolvedPersonName,
+    leadTitle,
+    createdProductsCount,
+    attachedProductsCount,
+  };
+}
 
 const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
@@ -817,7 +1399,7 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     if (!file) {
       res.status(HttpStatusCodes.BAD_REQUEST).json({
         success: false,
-        message: "No file uploaded. Please provide a PDF or document file.",
+        message: "No file uploaded. Please provide an Excel (.xlsx, .xls, .csv), PDF, Word, or image file.",
       });
       return;
     }
@@ -843,269 +1425,143 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
     }
 
     const fileUrl = `/uploads/leads/${uniqueName}`;
-
-    // 1. Extract text and parse structured data from the document
-    let parsed: ExtractedLeadData = {};
-    if (fileBuffer) {
-      const extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
-      parsed = parseLeadDocumentText(extractedText, file.originalname);
-    }
-
     const currentUserId = (req as any).user?.id || null;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isExcelOrCsv = ext === ".xlsx" || ext === ".xls" || ext === ".csv";
 
-    // 2. Check or create Organization
-    let organizationId: number | null = null;
-    let orgCreated = false;
-    if (parsed.organization && parsed.organization.trim()) {
-      const orgName = parsed.organization.trim();
-      const existingOrgRes = await connection.query(
-        "SELECT * FROM public.fn_find_organization_by_name($1)",
-        [orgName]
-      );
-      if (existingOrgRes.rows.length > 0) {
-        organizationId = existingOrgRes.rows[0].id;
-      } else {
-        const newOrgRes = await connection.query(
-          "SELECT save_organization($1, $2::jsonb, $3, $4::jsonb) as result",
-          [orgName, null, currentUserId, "{}"]
-        );
-        const newOrg = newOrgRes.rows[0]?.result;
-        if (newOrg && newOrg.id) {
-          organizationId = newOrg.id;
-          orgCreated = true;
-          WorkflowService.triggerWorkflows("organizations", "create", newOrg).catch((e) => logger.error(e));
-        }
-      }
-    }
-
-    // 3. Check or create Person (Contact)
-    let personId: number | null = null;
-    let personCreated = false;
-    let resolvedPersonName = parsed.contactPerson || null;
-
-    if (parsed.email || parsed.phone || parsed.contactPerson) {
-      const pFindRes = await connection.query(
-        "SELECT * FROM public.fn_find_person_by_contact($1, $2, $3)",
-        [parsed.email || null, parsed.phone || null, parsed.contactPerson || null]
-      );
-      if (pFindRes.rows.length > 0) {
-        personId = pFindRes.rows[0].id;
-        resolvedPersonName = pFindRes.rows[0].name;
-      }
-
-      // If person not found, create new person
-      if (!personId && (parsed.contactPerson || parsed.email || parsed.phone)) {
-        const newPersonName = parsed.contactPerson || (parsed.email ? parsed.email.split("@")[0] : "New Contact");
-        const emailArr = parsed.email ? [{ label: "work", value: parsed.email }] : [];
-        const phoneArr = parsed.phone ? [{ label: "work", value: parsed.phone }] : [];
-
-        const newPersonRes = await connection.query(
-          "SELECT save_person($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7::jsonb) as result",
-          [
-            newPersonName,
-            JSON.stringify(emailArr),
-            JSON.stringify(phoneArr),
-            organizationId || null,
-            parsed.jobTitle || null,
-            currentUserId,
-            "{}",
-          ]
-        );
-        const newPerson = newPersonRes.rows[0]?.result;
-        if (newPerson && newPerson.id) {
-          personId = newPerson.id;
-          resolvedPersonName = newPerson.name;
-          personCreated = true;
-          WorkflowService.triggerWorkflows("persons", "create", newPerson).catch((e) => logger.error(e));
-        }
-      } else if (personId && organizationId) {
-        // If person already exists without organization, link the organization
-        await connection.query(
-          "SELECT save_person(null, null, null, $1, null, null, null, $2) as result",
-          [organizationId, personId]
-        );
-      }
-    }
-
-    // 4. Resolve Lead Source & Lead Type
-    let sourceId: number | null = null;
-    if (parsed.source && parsed.source.trim()) {
-      const sRes = await connection.query(
-        "SELECT * FROM public.fn_find_lead_source_by_name($1)",
-        [parsed.source.trim()]
-      );
-      if (sRes.rows.length > 0) sourceId = sRes.rows[0].id;
-    }
-
-    let typeId: number | null = null;
-    if (parsed.type && parsed.type.trim()) {
-      const tRes = await connection.query(
-        "SELECT * FROM public.fn_find_lead_type_by_name($1)",
-        [parsed.type.trim()]
-      );
-      if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
-    }
-
-    // 5. Resolve default pipeline and first stage
-    const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
-    let pipelineId: number | null = null;
-    let stageId: number | null = null;
-
-    const defaultPipeline = pipelineRes.rows.find((p: any) => p.is_default) || pipelineRes.rows[0];
-    if (defaultPipeline) {
-      pipelineId = defaultPipeline.id;
-      const stageRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
-      if (stageRes.rows.length > 0) {
-        stageId = stageRes.rows[0].id;
-      }
-    }
-
-    const leadTitle = parsed.title || `Lead from ${path.basename(file.originalname, path.extname(file.originalname))}`;
-
-    // Parse / sanitize expected close date
-    let validExpectedCloseDate: string | null = null;
-    if (parsed.expectedCloseDate) {
-      const parsedDate = new Date(parsed.expectedCloseDate);
-      if (!isNaN(parsedDate.getTime())) {
-        validExpectedCloseDate = parsedDate.toISOString().split('T')[0];
-      }
-    }
-
-    // 6. Create Lead
-    const leadResult = await connection.query(
-      "SELECT * FROM public.fn_create_lead($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-      [
-        leadTitle,
-        parsed.description || `Created from uploaded file: ${file.originalname}`,
-        parsed.leadValue || null,
-        currentUserId,
-        personId,
-        sourceId,
-        typeId,
-        pipelineId,
-        validExpectedCloseDate,
-        organizationId,
-      ]
+    // Query active lead attributes from DB for matching
+    const { rows: dbAttributes } = await connection.query(
+      "SELECT id, code, name, type FROM attributes WHERE entity_type = 'leads'"
     );
 
-    const lead = leadResult.rows[0];
+    const leadItems: ExtractedLeadData[] = [];
 
-    let createdProductsCount = 0;
-    let attachedProductsCount = 0;
+    // 1. Process Excel / CSV files
+    if (isExcelOrCsv && fileBuffer) {
+      try {
+        const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = sheetName ? workbook.Sheets[sheetName] : null;
 
-    if (lead) {
-      // Set stage on lead
-      if (stageId) {
-        await connection.query(
-          "SELECT * FROM public.fn_update_lead_stage($1, $2, true, null)",
-          [lead.id, stageId]
-        );
-      }
+        if (worksheet) {
+          const sheet2d: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+          let headerRowIndex = 0;
+          let maxCols = 0;
 
-      // 7. Process & Attach Products from document
-      if (Array.isArray(parsed.products) && parsed.products.length > 0) {
-        for (const prod of parsed.products) {
-          if (!prod.name || !prod.name.trim()) continue;
-          const pName = prod.name.trim();
-          const pSku = prod.sku?.trim() || `SKU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          const pQty = Number(prod.quantity) || 1;
-          const pPrice = prod.price !== undefined && prod.price !== null ? Number(prod.price) : null;
-
-          let prodId: number | null = null;
-          const pCheck = await connection.query(
-            "SELECT * FROM public.fn_find_product_by_name_or_sku($1, $2)",
-            [pName, pSku]
-          );
-
-          if (pCheck.rows.length > 0) {
-            prodId = pCheck.rows[0].id;
-          } else {
-            // Create new product
-            const newProdRes = await connection.query(
-              "SELECT * FROM public.fn_create_product($1, $2, $3, $4, $5)",
-              [
-                pSku,
-                pName,
-                prod.description || `Extracted from ${file.originalname}`,
-                pQty,
-                pPrice,
-              ]
-            );
-            const createdProduct = newProdRes.rows[0];
-            if (createdProduct && createdProduct.id) {
-              prodId = createdProduct.id;
-              createdProductsCount++;
-              WorkflowService.triggerWorkflows("products", "create", createdProduct).catch((e) => logger.error(e));
+          // Scan the first 10 rows to detect the true header row with maximum column names
+          for (let r = 0; r < Math.min(sheet2d.length, 10); r++) {
+            const rowVals = sheet2d[r] || [];
+            const nonBlankCount = rowVals.filter((c: any) => c !== undefined && c !== null && String(c).trim() !== "").length;
+            if (nonBlankCount > maxCols) {
+              maxCols = nonBlankCount;
+              headerRowIndex = r;
             }
           }
 
-          if (prodId && lead.id) {
-            await connection.query(
-              "SELECT * FROM public.fn_add_lead_product($1, $2, $3, $4)",
-              [lead.id, prodId, pQty, pPrice]
-            );
-            attachedProductsCount++;
+          let rawRows: any[] = [];
+          if (maxCols >= 2 && headerRowIndex < sheet2d.length) {
+            const headerRow = sheet2d[headerRowIndex].map((h: any, colIdx: number) => {
+              const str = String(h || "").trim();
+              return str || `col_${colIdx + 1}`;
+            });
+
+            for (let r = headerRowIndex + 1; r < sheet2d.length; r++) {
+              const rowData = sheet2d[r] || [];
+              const isAllBlank = rowData.every((c: any) => c === undefined || c === null || String(c).trim() === "");
+              if (isAllBlank) continue;
+
+              const rowObj: Record<string, any> = {};
+              headerRow.forEach((colName: string, cIdx: number) => {
+                rowObj[colName] = rowData[cIdx] !== undefined ? rowData[cIdx] : "";
+              });
+              rawRows.push(rowObj);
+            }
+          } else {
+            rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          }
+
+          if (Array.isArray(rawRows) && rawRows.length > 0) {
+            for (let i = 0; i < rawRows.length; i++) {
+              const mapped = mapRowToExtractedLead(rawRows[i], i, file.originalname, dbAttributes);
+              if (mapped) {
+                leadItems.push(mapped);
+              }
+            }
+          }
+
+          // If no tabular rows were extracted, fallback to converting entire sheet to CSV text
+          if (leadItems.length === 0) {
+            const sheetCsv = XLSX.utils.sheet_to_csv(worksheet);
+            const parsed = parseLeadDocumentText(sheetCsv, file.originalname);
+            if (parsed && (parsed.title || parsed.contactPerson || parsed.email || parsed.phone || parsed.organization)) {
+              leadItems.push(parsed);
+            }
           }
         }
+      } catch (excelErr: any) {
+        logger.warn(`[createLeadByAI] Excel parsing warning: ${excelErr.message}`);
       }
-
-      // 8. Attach file activity to the newly created lead using fn_create_activity
-      await connection.query(
-        "SELECT * FROM public.fn_create_activity($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-        [
-          file.originalname,
-          "file",
-          fileUrl,
-          null,
-          null,
-          true,
-          currentUserId,
-          null,
-          lead.id,
-          personId,
-        ]
-      );
-
-      // Trigger lead create workflows
-      WorkflowService.triggerWorkflows("leads", "create", {
-        ...lead,
-        person_id: personId,
-        organization_id: organizationId,
-      }).catch((e) => logger.error(e));
     }
 
-    // Build friendly success message
-    const msgParts: string[] = [`Lead "${leadTitle}" created successfully`];
-    if (personCreated && resolvedPersonName) {
-      msgParts.push(`new contact "${resolvedPersonName}" created`);
-    } else if (personId && resolvedPersonName) {
-      msgParts.push(`linked to contact "${resolvedPersonName}"`);
+    // 2. Process PDF, Word, Image, or fallback documents
+    if (leadItems.length === 0 && fileBuffer) {
+      const extractedText = extractTextFromBuffer(fileBuffer, file.originalname);
+      const parsed = parseLeadDocumentText(extractedText, file.originalname);
+      leadItems.push(parsed);
     }
-    if (orgCreated && parsed.organization) {
-      msgParts.push(`new organization "${parsed.organization}" created`);
-    } else if (organizationId && parsed.organization) {
-      msgParts.push(`linked to organization "${parsed.organization}"`);
+
+    if (leadItems.length === 0) {
+      res.status(HttpStatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "No lead details could be extracted from the file. Please ensure it contains data such as contact person, email, phone, or company name.",
+      });
+      return;
     }
-    if (attachedProductsCount > 0) {
-      msgParts.push(`${attachedProductsCount} product(s) added (${createdProductsCount} new)`);
+
+    // 3. Create leads in database
+    const createdResults: any[] = [];
+    for (const item of leadItems) {
+      try {
+        const result = await saveExtractedLeadRecord(connection, item, file, fileUrl, currentUserId);
+        if (result.lead) {
+          createdResults.push(result);
+        }
+      } catch (leadSaveErr: any) {
+        logger.error({ leadSaveErr, item }, "[createLeadByAI] Failed to save lead item");
+      }
     }
+
+    if (createdResults.length === 0) {
+      res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: "Failed to create lead from file data.",
+      });
+      return;
+    }
+
+    const firstResult = createdResults[0];
+    const msg = createdResults.length > 1
+      ? `${createdResults.length} leads successfully created from ${file.originalname}`
+      : `Lead "${firstResult.leadTitle}" created successfully`;
 
     res.status(HttpStatusCodes.CREATED).json({
       success: true,
-      message: "Lead successfully saved",
+      message: msg,
       data: {
-        ...lead,
-        person_id: personId,
-        organization_id: organizationId,
-        productsCount: attachedProductsCount,
-        extracted: parsed,
+        ...firstResult.lead,
+        person_id: firstResult.personId,
+        organization_id: firstResult.organizationId,
+        productsCount: firstResult.attachedProductsCount,
+        createdCount: createdResults.length,
+        leads: createdResults.map((r) => r.lead),
+        extracted: leadItems[0],
       },
     });
   } catch (error: any) {
     logger.error(error);
     res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message,
+      message: error.message || "Failed to process lead file upload",
     });
   } finally {
     connection?.release();

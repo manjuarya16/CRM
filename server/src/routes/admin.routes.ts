@@ -994,7 +994,8 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
       paid_at,
     } = req.body;
 
-    const isPayLater = String(payment_method).toLowerCase().includes('pay later') || payment_status === 'pending';
+    const statusLower = String(payment_status || '').toLowerCase();
+    const isPayLater = String(payment_method).toLowerCase().includes('pay later') || statusLower === 'pending' || statusLower === 'unpaid';
     const payStatus = isPayLater ? 'pending' : 'paid';
     const actualPaidAt = isPayLater ? null : (paid_at ? new Date(paid_at) : new Date());
 
@@ -1018,7 +1019,12 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
     const existingSub = subCheck.rows[0];
     const rawExpiry = existingSub?.ends_at || org.settings?.subscription_expiry_date;
     const existingExpiry = rawExpiry ? new Date(rawExpiry) : null;
-    const hasActivePaidPlan = (org.status === 'active' || existingSub?.status === 'active' || existingSub?.status === 'paid')
+    const isTrial = (String(org.plan || '').toLowerCase().includes('trial'))
+      || (String(existingSub?.tier_name || '').toLowerCase().includes('trial'))
+      || (existingSub?.is_trial === true)
+      || (String(existingSub?.status || '').toLowerCase() === 'trial')
+      || (org.status === 'trial');
+    const hasActivePaidPlan = !isTrial && (org.status === 'active' || existingSub?.status === 'active' || existingSub?.status === 'paid')
       && (!existingExpiry || existingExpiry.getTime() > Date.now());
 
     const isUsd = String(currency).toUpperCase() === 'USD';
@@ -1046,6 +1052,9 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
 
     const findPlanMeta = (rawName: string) => {
       const normalized = rawName.trim().toLowerCase();
+      if (normalized.includes('trial')) {
+        return { id: null as number | null, name: 'Trial Plan', rank: 0, inr: 0, usd: 0 };
+      }
       const exact = catalog.find((item) => item.name.toLowerCase() === normalized);
       if (exact) return exact;
       const partial = catalog.find((item) => normalized.includes(item.name.toLowerCase()) || item.name.toLowerCase().includes(normalized));
@@ -1061,7 +1070,7 @@ router.post('/payments/record', async (req: Request, res: Response, next: NextFu
     let basePayAmount = isUsd ? targetMeta.usd : targetMeta.inr;
     let targetExpiry: Date;
 
-    if (hasActivePaidPlan) {
+    if (hasActivePaidPlan && !isTrial) {
       if (targetMeta.rank < currentMeta.rank) {
         throw new ApiError(400, `Organization already has an active ${currentMeta.name} Plan. Downgrading to a lower package is not permitted during an active subscription.`);
       }

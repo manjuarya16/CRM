@@ -343,4 +343,6 @@ export interface ExtractedLeadData {
   notes?: string;
   description?: string;
   rawText?: string;
+  custom_attributes?: Record<string, any>;
+  [key: string]: any;
 }
