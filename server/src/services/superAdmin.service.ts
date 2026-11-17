@@ -351,7 +351,7 @@ export class SuperAdminService {
    */
   public async impersonateTenant(tenantId: number) {
     const { rows: tenantRows } = await pool.query(
-      `SELECT id, name, slug, domain, status, subscription_expiry_date FROM public.saas_tenants WHERE id = $1`,
+      `SELECT * FROM public.fn_get_saas_tenant_for_impersonation($1)`,
       [tenantId]
     );
     if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
@@ -373,14 +373,7 @@ export class SuperAdminService {
     }
 
     const { rows: users } = await pool.query(
-      `SELECT u.id, u.name, u.email, u.tenant_id, u.role_id, r.name as role_name
-         FROM public.users u
-         LEFT JOIN public.roles r ON r.id = u.role_id
-        WHERE u.tenant_id = $1
-        ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END,
-                 CASE WHEN u.status = true THEN 0 ELSE 1 END,
-                 u.id ASC
-        LIMIT 1`,
+      `SELECT * FROM public.fn_get_tenant_admin_user_for_impersonation($1)`,
       [tenantId]
     );
 
@@ -623,11 +616,7 @@ export class SuperAdminService {
    */
   public async impersonateUser(userId: number) {
     const { rows } = await pool.query(
-      `SELECT u.id, u.name, u.email, u.tenant_id, t.slug as tenant_slug, t.name as tenant_name, t.status as tenant_status, t.subscription_expiry_date, r.name as role_name
-         FROM public.users u
-         LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
-         LEFT JOIN public.roles r ON r.id = u.role_id
-        WHERE u.id = $1`,
+      `SELECT * FROM public.fn_get_user_for_impersonation($1)`,
       [userId]
     );
     if (!rows[0]) throw new ApiError(404, 'User not found');

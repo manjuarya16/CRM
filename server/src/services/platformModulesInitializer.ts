@@ -301,6 +301,97 @@ export async function initializePlatformModuleTables(): Promise<void> {
              (SELECT COUNT(*)::INTEGER FROM public.leads);
     $function$;
 
+    CREATE OR REPLACE FUNCTION public.fn_get_saas_tenant_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      slug TEXT,
+      domain TEXT,
+      status TEXT,
+      settings JSONB,
+      subscription_expiry_date TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT t.id,
+             t.name::TEXT,
+             t.slug::TEXT,
+             t.domain::TEXT,
+             t.status::TEXT,
+             t.settings,
+             COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date
+        FROM public.saas_tenants t
+        LEFT JOIN (
+          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
+            FROM public.platform_subscriptions
+           ORDER BY tenant_id, id DESC
+        ) sub ON sub.tenant_id = t.id
+       WHERE t.id = p_tenant_id;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.fn_get_user_for_impersonation(p_user_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      tenant_slug TEXT,
+      tenant_name TEXT,
+      tenant_status TEXT,
+      subscription_expiry_date TIMESTAMPTZ,
+      role_name TEXT
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT u.id::BIGINT,
+             u.name::TEXT,
+             u.email::TEXT,
+             u.tenant_id::BIGINT,
+             t.slug::TEXT AS tenant_slug,
+             t.name::TEXT AS tenant_name,
+             t.status::TEXT AS tenant_status,
+             COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date,
+             r.name::TEXT AS role_name
+        FROM public.users u
+        LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
+        LEFT JOIN (
+          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
+            FROM public.platform_subscriptions
+           ORDER BY tenant_id, id DESC
+        ) sub ON sub.tenant_id = t.id
+        LEFT JOIN public.roles r ON r.id = u.role_id
+       WHERE u.id = p_user_id;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.fn_get_tenant_admin_user_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      role_id BIGINT,
+      role_name TEXT
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT u.id::BIGINT,
+             u.name::TEXT,
+             u.email::TEXT,
+             u.tenant_id::BIGINT,
+             u.role_id::BIGINT,
+             r.name::TEXT AS role_name
+        FROM public.users u
+        LEFT JOIN public.roles r ON r.id = u.role_id
+       WHERE u.tenant_id = p_tenant_id
+       ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END,
+                CASE WHEN u.status = true THEN 0 ELSE 1 END,
+                u.id ASC
+       LIMIT 1;
+    $function$;
+
     CREATE TABLE IF NOT EXISTS public.platform_pricing_tiers (
       id BIGSERIAL PRIMARY KEY,
       name VARCHAR(120) NOT NULL UNIQUE,
@@ -407,6 +498,9 @@ export async function initializePlatformModuleTables(): Promise<void> {
       WHERE provider_payment_link_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS platform_payments_tenant_idx
       ON public.platform_payments (tenant_id, created_at DESC);
+
+    ALTER TABLE public.saas_tenants
+      ADD COLUMN IF NOT EXISTS subscription_expiry_date TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS public.platform_demo_requests (
       id BIGSERIAL PRIMARY KEY,
