@@ -337,9 +337,10 @@ export async function initializePlatformModuleTables(): Promise<void> {
       settings JSONB,
       subscription_expiry_date TIMESTAMPTZ
     )
-    LANGUAGE SQL
-    STABLE
+    LANGUAGE plpgsql
     AS $function$
+    BEGIN
+      RETURN QUERY
       SELECT t.id,
              t.name::TEXT,
              t.slug::TEXT,
@@ -354,22 +355,7 @@ export async function initializePlatformModuleTables(): Promise<void> {
            ORDER BY tenant_id, id DESC
         ) sub ON sub.tenant_id = t.id
        WHERE t.id = p_tenant_id;
-    $function$;
-
-    CREATE OR REPLACE FUNCTION public.fn_get_saas_tenant_for_impersonation(p_tenant_id BIGINT)
-    RETURNS TABLE(
-      id BIGINT,
-      name TEXT,
-      slug TEXT,
-      domain TEXT,
-      status TEXT,
-      settings JSONB,
-      subscription_expiry_date TIMESTAMPTZ
-    )
-    LANGUAGE SQL
-    STABLE
-    AS $function$
-      SELECT * FROM public.get_saas_tenant_for_impersonation(p_tenant_id);
+    END;
     $function$;
 
     CREATE OR REPLACE FUNCTION public.get_user_for_impersonation(p_user_id BIGINT)
@@ -385,9 +371,10 @@ export async function initializePlatformModuleTables(): Promise<void> {
       role_id BIGINT,
       role_name TEXT
     )
-    LANGUAGE SQL
-    STABLE
+    LANGUAGE plpgsql
     AS $function$
+    BEGIN
+      RETURN QUERY
       SELECT u.id::BIGINT,
              u.name::TEXT,
              u.email::TEXT,
@@ -407,25 +394,7 @@ export async function initializePlatformModuleTables(): Promise<void> {
         ) sub ON sub.tenant_id = t.id
         LEFT JOIN public.roles r ON r.id = u.role_id
        WHERE u.id = p_user_id;
-    $function$;
-
-    CREATE OR REPLACE FUNCTION public.fn_get_user_for_impersonation(p_user_id BIGINT)
-    RETURNS TABLE(
-      id BIGINT,
-      name TEXT,
-      email TEXT,
-      tenant_id BIGINT,
-      tenant_slug TEXT,
-      tenant_name TEXT,
-      tenant_status TEXT,
-      subscription_expiry_date TIMESTAMPTZ,
-      role_id BIGINT,
-      role_name TEXT
-    )
-    LANGUAGE SQL
-    STABLE
-    AS $function$
-      SELECT * FROM public.get_user_for_impersonation(p_user_id);
+    END;
     $function$;
 
     CREATE OR REPLACE FUNCTION public.get_or_create_tenant_admin_user_for_impersonation(p_tenant_id BIGINT)
@@ -502,20 +471,6 @@ export async function initializePlatformModuleTables(): Promise<void> {
     END;
     $function$;
 
-    CREATE OR REPLACE FUNCTION public.fn_get_tenant_admin_user_for_impersonation(p_tenant_id BIGINT)
-    RETURNS TABLE(
-      id BIGINT,
-      name TEXT,
-      email TEXT,
-      tenant_id BIGINT,
-      role_id BIGINT,
-      role_name TEXT
-    )
-    LANGUAGE SQL
-    AS $function$
-      SELECT * FROM public.get_or_create_tenant_admin_user_for_impersonation(p_tenant_id);
-    $function$;
-
     CREATE OR REPLACE FUNCTION public.get_platform_sidebar_counts()
     RETURNS TABLE(
       organizations INTEGER,
@@ -524,15 +479,17 @@ export async function initializePlatformModuleTables(): Promise<void> {
       demos INTEGER,
       notifications INTEGER
     )
-    LANGUAGE SQL
-    STABLE
+    LANGUAGE plpgsql
     AS $function$
+    BEGIN
+      RETURN QUERY
       SELECT
         (SELECT COUNT(*)::INTEGER FROM public.saas_tenants),
         (SELECT COUNT(*)::INTEGER FROM public.platform_subscriptions WHERE status IN ('pending', 'trialing')),
         (SELECT COUNT(*)::INTEGER FROM public.platform_payments WHERE status = 'pending'),
         (SELECT COUNT(*)::INTEGER FROM public.platform_demo_requests WHERE status = 'new'),
         (SELECT COUNT(*)::INTEGER FROM public.platform_notifications WHERE is_read = FALSE);
+    END;
     $function$;
 
     CREATE OR REPLACE FUNCTION public.get_expiring_subscriptions(p_days_ahead INTEGER DEFAULT 7)
@@ -545,9 +502,10 @@ export async function initializePlatformModuleTables(): Promise<void> {
       ends_at TIMESTAMPTZ,
       days_left INTEGER
     )
-    LANGUAGE SQL
-    STABLE
+    LANGUAGE plpgsql
     AS $function$
+    BEGIN
+      RETURN QUERY
       SELECT t.id::BIGINT,
              t.name::TEXT,
              t.slug::TEXT,
@@ -565,6 +523,7 @@ export async function initializePlatformModuleTables(): Promise<void> {
        WHERE s.ends_at IS NOT NULL
          AND s.ends_at <= NOW() + (p_days_ahead || ' days')::INTERVAL
        ORDER BY s.ends_at ASC;
+    END;
     $function$;
 
     CREATE OR REPLACE FUNCTION public.create_platform_notification(
@@ -574,11 +533,16 @@ export async function initializePlatformModuleTables(): Promise<void> {
       p_metadata JSONB DEFAULT '{}'::jsonb
     )
     RETURNS BIGINT
-    LANGUAGE SQL
+    LANGUAGE plpgsql
     AS $function$
+    DECLARE
+      v_id BIGINT;
+    BEGIN
       INSERT INTO public.platform_notifications (title, message, type, is_read, metadata, created_at)
       VALUES (p_title, p_message, COALESCE(p_type, 'info'), FALSE, COALESCE(p_metadata, '{}'::jsonb), NOW())
-      RETURNING id;
+      RETURNING id INTO v_id;
+      RETURN v_id;
+    END;
     $function$;
 
     CREATE OR REPLACE FUNCTION public.update_user_password(
