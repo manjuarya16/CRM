@@ -55,6 +55,55 @@ const VerticalLayout = ({ children }: VerticalLayoutProps) => {
       })
     : null;
 
+  const isExpired = Boolean(
+    profile?.status === "expired" ||
+    profile?.computed_status === "Expired" ||
+    (profile?.subscription_expiry_date && new Date(profile.subscription_expiry_date).getTime() <= Date.now())
+  );
+
+  if (isExpired) {
+    try {
+      sessionStorage.clear();
+      localStorage.removeItem("auth-store");
+      localStorage.removeItem("token");
+      document.cookie = "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    } catch {}
+
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-rose-200 dark:border-rose-900 p-8 text-center space-y-6">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-3xl font-bold shadow-inner">
+            <i className="mgc_time_line"></i>
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">Organization Subscription Expired</h2>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
+              Access to workspace <strong>{profile?.name || "your organization"}</strong> is disabled because your subscription has expired.
+            </p>
+          </div>
+          <div className="space-y-3 pt-2">
+            <a
+              href={`/subscription/${profile?.slug || ""}`}
+              className="inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-xl bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-bold shadow-md transition-all active:scale-98"
+            >
+              <span>Renew Subscription / Pay Online</span>
+              <i className="mgc_external_link_line text-base"></i>
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/auth/login";
+              }}
+              className="w-full px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+            >
+              Back to Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Fetch roles once on mount so isAdmin resolves correctly everywhere
   useEffect(() => {
     if (user?.role_id && roles.length === 0) {

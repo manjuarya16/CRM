@@ -58,7 +58,37 @@ const BUILT_IN_FIELD_CODES = new Set([
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
   const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * Case-insensitive, whitespace-tolerant, and separator-tolerant key-value extractor.
+ * Matches Excel headers like "ORGANIZATION", "Phone Number", "contact_email", "PHONE NUMBER", etc.
+ */
+const getRowField = (row: Record<string, any>, ...candidateKeys: string[]): any => {
+  if (!row || typeof row !== 'object') return undefined;
+
+  // 1. Direct match first (fastest)
+  for (const k of candidateKeys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+      return row[k];
+    }
+  }
+
+  // 2. Normalized match (ignores case, spaces, underscores, hyphens, and '#')
+  const rowEntries = Object.entries(row);
+  for (const candidate of candidateKeys) {
+    const candNorm = candidate.toLowerCase().replace(/[\s_\-#]+/g, '');
+    for (const [rk, val] of rowEntries) {
+      if (val === undefined || val === null || String(val).trim() === '') continue;
+      const rkNorm = rk.toLowerCase().replace(/[\s_\-#]+/g, '');
+      if (rkNorm === candNorm) {
+        return val;
+      }
+    }
+  }
+
+  return undefined;
 };
 
 const parseField = (val: any, defaultLabel = 'work'): Array<{ label: string; value: string }> => {
@@ -957,53 +987,67 @@ export class DataTransferService {
           const rowCustomAttrs = extractCustomAttributes(row);
 
           if (type === 'leads') {
-            const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
+            const idVal = toNumberParam(getRowField(row, 'id', 'lead_id', 'deal_id'));
+            const orgCandidate = getRowField(
+              row,
+              'organization',
+              'organization_name',
+              'company',
+              'company_name',
+              'institute',
+              'institute_name',
+              'college',
+              'academy'
+            );
             const titleVal =
-              row.title ||
-              row.Title ||
-              row['Lead Title'] ||
-              row['Subject'] ||
-              row['Deal Name'] ||
-              row.name ||
-              row.Name ||
-              row.NAME ||
-              row['Lead Name'] ||
-              row.lead_name ||
-              row['Company'] ||
-              row['Institute'] ||
-              row['Organization Name'];
+              getRowField(
+                row,
+                'title',
+                'lead_title',
+                'deal_name',
+                'subject',
+                'name',
+                'lead_name'
+              ) || orgCandidate;
             if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
             const titleStr = titleVal ? String(titleVal).trim() : '';
 
-            const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
-            if (fileKey && seenInFile.has(fileKey)) {
+            const contactPhone = getRowField(
+              row,
+              'contact_phone',
+              'phone',
+              'phone_number',
+              'contact_numbers',
+              'mobile'
+            );
+            const contactEmail = getRowField(
+              row,
+              'contact_email',
+              'email',
+              'emails',
+              'email_id'
+            );
+
+            const fileKey = idVal
+              ? `id:${idVal}`
+              : action === 'append'
+              ? `title:${titleStr.toLowerCase()}:${contactEmail || contactPhone || i + 1}`
+              : `title:${titleStr.toLowerCase()}`;
+            if (titleStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
-            if (fileKey) seenInFile.set(fileKey, i + 1);
+            if (titleStr && fileKey) seenInFile.set(fileKey, i + 1);
 
             // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
             const finalUserId = await resolveUserId(
               client,
-              row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
-              row.sales_owner || row.user_name || row['Sales Owner'] || row['User Name'] || row.User || row.Owner
+              getRowField(row, 'user_id', 'sales_owner_id'),
+              getRowField(row, 'sales_owner', 'user_name', 'user', 'owner')
             );
-
-            // Determine organization candidates
-            const orgCandidate =
-              row.organization ||
-              row.organization_name ||
-              row['Organization Name'] ||
-              row.Organization ||
-              row.company ||
-              row['Company Name'] ||
-              row.Company ||
-              row.institute ||
-              row['Institute Name'] ||
-              row.Institute;
 
             let finalOrgId = await resolveOrgId(
               client,
-              row.organization_id || row.organizationId || row['Organization ID'],
+              getRowField(row, 'organization_id'),
               orgCandidate,
               finalUserId
             );
@@ -1029,36 +1073,17 @@ export class DataTransferService {
               }
             }
 
-            const contactPersonName =
-              row.contact_person ||
-              row['Contact Person'] ||
-              row.contact_name ||
-              row.person ||
-              row.person_name ||
-              row['Person Name'] ||
-              row.Person;
-
-            const contactEmail =
-              row.contact_email ||
-              row.email ||
-              row.emails ||
-              row.EMAILID ||
-              row.email_id ||
-              row['Email ID'] ||
-              row['Email'];
-
-            const contactPhone =
-              row.contact_phone ||
-              row.phone ||
-              row.contact_numbers ||
-              row['PHONE NUMBER'] ||
-              row.phone_number ||
-              row['Phone Number'] ||
-              row['Phone'];
+            const contactPersonName = getRowField(
+              row,
+              'contact_person',
+              'contact_name',
+              'person',
+              'person_name'
+            );
 
             let finalPersonId = await resolvePersonId(
               client,
-              row.person_id || row.personId || row['Person ID'],
+              getRowField(row, 'person_id'),
               contactPersonName,
               contactEmail,
               contactPhone,
@@ -1091,27 +1116,28 @@ export class DataTransferService {
 
             const leadSourceId = await resolveLeadSourceId(
               client,
-              row.lead_source_id || row.source_id || row.lead_source || row.source || row['Lead Source'] || row['Source']
+              getRowField(row, 'lead_source_id', 'source_id', 'lead_source', 'source')
             );
             const leadTypeId = await resolveLeadTypeId(
               client,
-              row.lead_type_id || row.type_id || row.lead_type || row.type || row['Lead Type'] || row['Type']
+              getRowField(row, 'lead_type_id', 'type_id', 'lead_type', 'type')
             );
             const leadPipelineId = await resolveLeadPipelineId(
               client,
-              row.lead_pipeline_id || row.pipeline_id || row.lead_pipeline || row.pipeline || row['Lead Pipeline'] || row['Pipeline']
+              getRowField(row, 'lead_pipeline_id', 'pipeline_id', 'lead_pipeline', 'pipeline')
             );
             const leadPipelineStageId = await resolveLeadPipelineStageId(
               client,
-              row.lead_pipeline_stage_id || row.stage_id || row.lead_pipeline_stage || row.stage || row['Pipeline Stage'] || row['Stage'],
+              getRowField(row, 'lead_pipeline_stage_id', 'stage_id', 'lead_pipeline_stage', 'stage'),
               leadPipelineId
             );
 
-            const leadValue = row.lead_value || row.leadValue || row.Value ? Number(row.lead_value || row.leadValue || row.Value) : 0;
-            const description = row.description || row.Description || null;
-            const statusRaw = row.status !== undefined ? row.status : true;
+            const rawLeadVal = getRowField(row, 'lead_value', 'value', 'amount', 'price');
+            const leadValue = rawLeadVal ? Number(rawLeadVal) : 0;
+            const description = getRowField(row, 'description', 'desc', 'address', 'location', 'street') || null;
+            const statusRaw = getRowField(row, 'status') !== undefined ? getRowField(row, 'status') : true;
             const status = typeof statusRaw === 'boolean' ? statusRaw : String(statusRaw).toLowerCase() !== 'false' && String(statusRaw) !== '0' && String(statusRaw).toLowerCase() !== 'lost';
-            const expectedCloseDate = row.expected_close_date || null;
+            const expectedCloseDate = getRowField(row, 'expected_close_date', 'close_date', 'due_date') || null;
 
             // Existing record check by id or title via procedural function
             const existingLead = await client.query(
@@ -1187,16 +1213,23 @@ export class DataTransferService {
               }
             }
           } else if (type === 'persons') {
-            const idVal = toNumberParam(row.id || row.Id || row['Person ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Person Name'];
+            const idVal = toNumberParam(getRowField(row, 'id', 'person_id', 'person id'));
+            const nameVal = getRowField(row, 'name', 'person_name', 'person name', 'full_name', 'full name', 'contact_name', 'contact name');
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
 
-            const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-            if (fileKey && seenInFile.has(fileKey)) {
+            const emailVal = getRowField(row, 'emails', 'email', 'contact_email', 'email_id', 'emails');
+            const phoneVal = getRowField(row, 'contact_numbers', 'contact numbers', 'phone', 'phone_number', 'mobile', 'contact');
+
+            const fileKey = idVal
+              ? `id:${idVal}`
+              : action === 'append'
+              ? `name:${nameStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
+              : `name:${nameStr.toLowerCase()}`;
+            if (nameStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
-            if (fileKey) seenInFile.set(fileKey, i + 1);
+            if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
 
             const cleanJobTitle = (title: any) => {
               if (!title || typeof title !== 'string') return null;
@@ -1204,20 +1237,20 @@ export class DataTransferService {
               return title.trim();
             };
 
-            const newEmails = parseField(row.emails || row.email || row.Emails || row.Email, 'work');
-            const newNumbers = parseField(row.contact_numbers || row.phone || row.Phone || row.Contact, 'work');
+            const newEmails = parseField(emailVal, 'work');
+            const newNumbers = parseField(phoneVal, 'work');
 
             const finalUserId = await resolveUserId(
               client,
-              row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
-              row.user_name || row.sales_owner || row['Sales Owner'] || row.User
+              getRowField(row, 'user_id', 'sales_owner_id'),
+              getRowField(row, 'user_name', 'sales_owner', 'user', 'owner')
             );
 
             // Safe Foreign Key Resolutions: verify existence to prevent FK constraint errors
             const finalOrgId = await resolveOrgId(
               client,
-              row.organization_id || row.organizationId || row['Organization ID'],
-              row.organization_name || row.organization || row['Organization Name'] || row.Organization,
+              getRowField(row, 'organization_id'),
+              getRowField(row, 'organization_name', 'organization', 'company', 'company_name', 'institute'),
               finalUserId
             );
 
@@ -1277,7 +1310,7 @@ export class DataTransferService {
                   nameStr,
                   JSON.stringify(mergedEmails),
                   JSON.stringify(mergedNumbers),
-                  cleanJobTitle(row.job_title || row.JobTitle),
+                  cleanJobTitle(getRowField(row, 'job_title', 'designation', 'role')),
                   finalOrgId,
                   finalUserId,
                   JSON.stringify(mergedAttrs),
@@ -1308,7 +1341,7 @@ export class DataTransferService {
                   nameStr,
                   JSON.stringify(uniqueEmails),
                   JSON.stringify(uniqueNumbers),
-                  cleanJobTitle(row.job_title || row.JobTitle),
+                  cleanJobTitle(getRowField(row, 'job_title', 'designation', 'role')),
                   finalOrgId,
                   finalUserId,
                   JSON.stringify(rowCustomAttrs),
@@ -1320,29 +1353,29 @@ export class DataTransferService {
               }
             }
           } else if (type === 'organizations') {
-            const idVal = toNumberParam(row.id || row.Id || row['Organization ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Organization Name'];
+            const idVal = toNumberParam(getRowField(row, 'id', 'organization_id', 'organization id'));
+            const nameVal = getRowField(row, 'name', 'organization_name', 'organization name', 'company', 'company_name', 'institute', 'organization');
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
 
             const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-            if (fileKey && seenInFile.has(fileKey)) {
+            if (nameStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
-            if (fileKey) seenInFile.set(fileKey, i + 1);
+            if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
 
             const finalUserId = await resolveUserId(
               client,
-              row.user_id || row.userId || row['User ID'] || row.sales_owner_id,
-              row.user_name || row.sales_owner || row['Sales Owner'] || row.User
+              getRowField(row, 'user_id', 'sales_owner_id'),
+              getRowField(row, 'user_name', 'sales_owner', 'user', 'owner')
             );
 
             const addressObj = {
-              address: row.address || row.Address || '',
-              city: row.city || row.City || '',
-              state: row.state || row.State || '',
-              country: row.country || row.Country || '',
-              postcode: row.postcode || row.zip || row.Postcode || '',
+              address: getRowField(row, 'address', 'street_address', 'street address', 'street', 'location') || '',
+              city: getRowField(row, 'city', 'town') || '',
+              state: getRowField(row, 'state', 'province', 'region') || '',
+              country: getRowField(row, 'country', 'nation') || '',
+              postcode: getRowField(row, 'postcode', 'postal_code', 'postal code', 'zip', 'zip_code', 'pincode', 'pin_code') || '',
             };
 
             const existingOrg = await client.query(
@@ -1391,21 +1424,21 @@ export class DataTransferService {
               }
             }
           } else if (type === 'products') {
-            const idVal = toNumberParam(row.id || row.Id || row['Product ID'] || row['ID']);
-            const skuVal = row.sku || row.SKU || row.code || row['Product Code'] || row['Item Code'];
+            const idVal = toNumberParam(getRowField(row, 'id', 'product_id', 'product id'));
+            const skuVal = getRowField(row, 'sku', 'code', 'product_code', 'product code', 'item_code', 'item code');
             if (!idVal && !skuVal) throw new Error(`Row ${i + 1}: sku or id is required`);
             const skuStr = skuVal ? String(skuVal).trim() : '';
-            const prodName = row.name || row.Name || row['Product Name'] || skuStr;
+            const prodName = getRowField(row, 'name', 'product_name', 'product name', 'item_name', 'item name') || skuStr;
 
             const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
-            if (fileKey && seenInFile.has(fileKey)) {
+            if (skuStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
-            if (fileKey) seenInFile.set(fileKey, i + 1);
+            if (skuStr && fileKey) seenInFile.set(fileKey, i + 1);
 
-            const description = row.description || row.Description || null;
-            const quantity = Number(row.quantity || row.Quantity || 0);
-            const price = Number(row.price || row.Price || 0);
+            const description = getRowField(row, 'description', 'product_description', 'product description', 'desc') || null;
+            const quantity = Number(getRowField(row, 'quantity', 'qty', 'stock', 'units') || 0);
+            const price = Number(getRowField(row, 'price', 'unit_price', 'unit price', 'cost', 'rate') || 0);
 
             const existingProd = await client.query(
               'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',
@@ -1578,9 +1611,9 @@ export class DataTransferService {
 
     // 1. Header schema compatibility check against selected module type
     const firstRow = rows[0] || {};
-    const firstRowKeys = Object.keys(firstRow).map((k) => k.trim().toLowerCase());
+    const firstRowKeys = Object.keys(firstRow).map((k) => k.trim().toLowerCase().replace(/[\s_\-#]+/g, ''));
     const hasColumn = (...candidates: string[]) =>
-      candidates.some((c) => firstRowKeys.includes(c.toLowerCase()));
+      candidates.some((c) => firstRowKeys.includes(c.toLowerCase().replace(/[\s_\-#]+/g, '')));
 
     if (type === 'products') {
       const hasSkuCol = hasColumn('sku', 'code', 'product code', 'item code', 'id', 'product id');
@@ -1671,7 +1704,7 @@ export class DataTransferService {
         };
       }
     } else if (type === 'organizations') {
-      const hasOrgCol = hasColumn('name', 'organization name', 'company', 'company name', 'id', 'organization id');
+      const hasOrgCol = hasColumn('name', 'organization name', 'organization', 'company', 'company name', 'id', 'organization id');
       if (!hasOrgCol) {
         return {
           isValid: false,
@@ -1713,8 +1746,8 @@ export class DataTransferService {
         // Check required custom attributes only when action !== 'delete'
         if (action !== 'delete') {
           for (const reqAttr of reqAttrs) {
-            const val = row[reqAttr.code] ?? row[reqAttr.name];
-            if (val === undefined || val === null || val === '') {
+            const val = getRowField(row, reqAttr.code, reqAttr.name);
+            if (val === undefined || val === null || String(val).trim() === '') {
               rowError = `Required custom attribute "${reqAttr.name || reqAttr.code}" is missing`;
               break;
             }
@@ -1723,30 +1756,46 @@ export class DataTransferService {
 
         if (!rowError) {
           if (type === 'leads') {
-            const idVal = toNumberParam(row.id || row.Id || row['Lead ID'] || row['ID']);
+            const idVal = toNumberParam(getRowField(row, 'id', 'lead_id', 'deal_id'));
+            const orgVal = getRowField(
+              row,
+              'organization',
+              'organization_name',
+              'company',
+              'company_name',
+              'institute',
+              'institute_name',
+              'college',
+              'academy'
+            );
             const titleVal =
-              row.title ||
-              row.Title ||
-              row['Lead Title'] ||
-              row['Subject'] ||
-              row['Deal Name'] ||
-              row.name ||
-              row.Name ||
-              row.NAME ||
-              row['Lead Name'] ||
-              row.lead_name ||
-              row['Company'] ||
-              row['Institute'] ||
-              row['Organization Name'];
+              getRowField(
+                row,
+                'title',
+                'lead_title',
+                'deal_name',
+                'subject',
+                'name',
+                'lead_name'
+              ) || orgVal;
+
             if (!idVal && !titleVal) {
               rowError = 'Field "title" or "id" is required';
             } else {
               const titleStr = titleVal ? String(titleVal).trim() : '';
-              const fileKey = idVal ? `id:${idVal}` : `title:${titleStr.toLowerCase()}`;
-              if (fileKey && seenInFile.has(fileKey)) {
+              const phoneVal = getRowField(row, 'contact_phone', 'phone', 'phone_number', 'contact_numbers', 'mobile');
+              const emailVal = getRowField(row, 'contact_email', 'email', 'emails', 'email_id');
+
+              const fileKey = idVal
+                ? `id:${idVal}`
+                : action === 'append'
+                ? `title:${titleStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
+                : `title:${titleStr.toLowerCase()}`;
+
+              if (titleStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'title'} matching row ${seenInFile.get(fileKey)}`;
               } else {
-                if (fileKey) seenInFile.set(fileKey, i + 1);
+                if (titleStr && fileKey) seenInFile.set(fileKey, i + 1);
                 const existingLead = await client.query(
                   'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
                   ['leads', idVal || null, titleStr || null]
@@ -1762,17 +1811,25 @@ export class DataTransferService {
               }
             }
           } else if (type === 'persons') {
-            const idVal = toNumberParam(row.id || row.Id || row['Person ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Person Name'] || row['Full Name'];
+            const idVal = toNumberParam(getRowField(row, 'id', 'person_id'));
+            const nameVal = getRowField(row, 'name', 'person_name', 'full_name', 'contact_name');
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
-              const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-              if (fileKey && seenInFile.has(fileKey)) {
+              const emailVal = getRowField(row, 'emails', 'email', 'contact_email', 'email_id');
+              const phoneVal = getRowField(row, 'contact_numbers', 'phone', 'phone_number', 'mobile');
+
+              const fileKey = idVal
+                ? `id:${idVal}`
+                : action === 'append'
+                ? `name:${nameStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
+                : `name:${nameStr.toLowerCase()}`;
+
+              if (nameStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
               } else {
-                if (fileKey) seenInFile.set(fileKey, i + 1);
+                if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
                 const existing = await client.query(
                   'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
                   ['persons', idVal || null, nameStr || null]
@@ -1788,17 +1845,17 @@ export class DataTransferService {
               }
             }
           } else if (type === 'organizations') {
-            const idVal = toNumberParam(row.id || row.Id || row['Organization ID'] || row['ID']);
-            const nameVal = row.name || row.Name || row['Organization Name'] || row['Company Name'] || row.Company;
+            const idVal = toNumberParam(getRowField(row, 'id', 'organization_id'));
+            const nameVal = getRowField(row, 'name', 'organization_name', 'company', 'company_name', 'institute', 'organization');
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
               const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-              if (fileKey && seenInFile.has(fileKey)) {
+              if (nameStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
               } else {
-                if (fileKey) seenInFile.set(fileKey, i + 1);
+                if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
                 const existingOrg = await client.query(
                   'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
                   ['organizations', idVal || null, nameStr || null]
@@ -1814,18 +1871,18 @@ export class DataTransferService {
               }
             }
           } else if (type === 'products') {
-            const idVal = toNumberParam(row.id || row.Id || row['Product ID'] || row['ID']);
-            const skuVal = row.sku || row.SKU || row.code || row['Product Code'] || row['Item Code'];
-            const nameVal = row.name || row.Name || row['Product Name'] || row['Item Name'];
+            const idVal = toNumberParam(getRowField(row, 'id', 'product_id'));
+            const skuVal = getRowField(row, 'sku', 'code', 'product_code', 'item_code');
+            const nameVal = getRowField(row, 'name', 'product_name', 'item_name');
             if (!idVal && !skuVal) {
               rowError = 'Field "sku" is required for products';
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
               const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
-              if (fileKey && seenInFile.has(fileKey)) {
+              if (skuStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate SKU matching row ${seenInFile.get(fileKey)}`;
               } else {
-                if (fileKey) seenInFile.set(fileKey, i + 1);
+                if (skuStr && fileKey) seenInFile.set(fileKey, i + 1);
                 const prodName = nameVal ? String(nameVal).trim() : skuStr;
                 const existingProd = await client.query(
                   'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3, $4)',

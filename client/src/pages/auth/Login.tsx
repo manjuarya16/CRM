@@ -21,19 +21,36 @@ const Login = () => {
   const subdomain = getSubdomain();
 
   useEffect(() => {
-    const token = getToken();
-    if (token && !isTokenExpired(token)) {
-      return;
-    }
-    reset();
     if (subdomain.slug) {
-      superAdminApi.getPublicTenant(subdomain.slug)
+      superAdminApi
+        .getPublicTenant(subdomain.slug)
         .then((res) => {
           if (res.data?.success) {
-            setTenantInfo(res.data.data);
+            const data = res.data.data;
+            setTenantInfo(data);
+            const expired = Boolean(
+              data?.status === "expired" ||
+              data?.is_expired ||
+              (data?.subscription_expiry_date && new Date(data.subscription_expiry_date).getTime() <= Date.now())
+            );
+            if (expired) {
+              reset();
+              try {
+                sessionStorage.clear();
+                localStorage.removeItem("auth-store");
+                localStorage.removeItem("token");
+                localStorage.removeItem("active_tenant_slug");
+                document.cookie = "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+              } catch {}
+            }
           }
         })
         .catch(() => {});
+    } else {
+      const token = getToken();
+      if (!token || isTokenExpired(token)) {
+        reset();
+      }
     }
   }, [reset, subdomain.slug]);
 
@@ -65,7 +82,15 @@ const Login = () => {
   if (isOrgExpired) {
     if (userLoggedIn || user || getToken()) {
       reset();
+      try {
+        sessionStorage.clear();
+        localStorage.removeItem("auth-store");
+        localStorage.removeItem("token");
+        document.cookie = "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      } catch {}
     }
+  } else if (!tenantInfo && subdomain.slug) {
+    return null;
   } else if (userLoggedIn || user || (getToken() && !isTokenExpired(getToken()))) {
     return <Navigate to={redirectUrl} replace />;
   }

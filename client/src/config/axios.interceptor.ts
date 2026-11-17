@@ -229,6 +229,26 @@ export default function setupAxiosInterceptors(apiInstance?: any) {
     // 403 FORBIDDEN - User Not Authorized
     if (status === 403) {
       console.warn("403 Forbidden - User not authorized for this resource");
+
+      const isOrgExpired =
+        error.response?.data?.code === "ORGANIZATION_EXPIRED" ||
+        (error.response?.data?.message &&
+          error.response.data.message.toLowerCase().includes("subscription has expired"));
+
+      if (isOrgExpired) {
+        try {
+          sessionStorage.clear();
+          localStorage.removeItem("auth-store");
+          localStorage.removeItem("token");
+          document.cookie = "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        } catch {}
+
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/subscription")) {
+          window.location.href = "/auth/login";
+        }
+        return Promise.reject(error);
+      }
+
       const errUrl = (error.config?.url || "").toLowerCase();
       const isSuperAdminRoute =
         errUrl.includes("/super-admin") || errUrl.startsWith("/admin") || errUrl.includes("/api/admin");

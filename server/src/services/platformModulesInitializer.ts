@@ -285,6 +285,32 @@ export async function initializePlatformModuleTables(): Promise<void> {
        RETURNING to_jsonb(tenant);
     $function$;
 
+    CREATE OR REPLACE FUNCTION public.delete_saas_tenant(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      slug TEXT
+    )
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      v_tenant RECORD;
+    BEGIN
+      DELETE FROM public.platform_payments WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.platform_subscriptions WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.leads WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.persons WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.users WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.roles WHERE tenant_id = p_tenant_id;
+      DELETE FROM public.saas_tenants WHERE saas_tenants.id = p_tenant_id
+        RETURNING saas_tenants.id::BIGINT, saas_tenants.name::TEXT, saas_tenants.slug::TEXT INTO v_tenant;
+
+      IF v_tenant.id IS NOT NULL THEN
+        RETURN QUERY SELECT v_tenant.id, v_tenant.name, v_tenant.slug;
+      END IF;
+    END;
+    $function$;
+
     CREATE OR REPLACE FUNCTION public.get_super_admin_metrics()
     RETURNS TABLE(
       total_tenants INTEGER,
@@ -299,6 +325,276 @@ export async function initializePlatformModuleTables(): Promise<void> {
              (SELECT COUNT(*)::INTEGER FROM public.saas_tenants WHERE status = 'active'),
              (SELECT COUNT(*)::INTEGER FROM public.users),
              (SELECT COUNT(*)::INTEGER FROM public.leads);
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.get_saas_tenant_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      slug TEXT,
+      domain TEXT,
+      status TEXT,
+      settings JSONB,
+      subscription_expiry_date TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT t.id,
+             t.name::TEXT,
+             t.slug::TEXT,
+             t.domain::TEXT,
+             t.status::TEXT,
+             t.settings,
+             COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date
+        FROM public.saas_tenants t
+        LEFT JOIN (
+          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
+            FROM public.platform_subscriptions
+           ORDER BY tenant_id, id DESC
+        ) sub ON sub.tenant_id = t.id
+       WHERE t.id = p_tenant_id;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.fn_get_saas_tenant_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      slug TEXT,
+      domain TEXT,
+      status TEXT,
+      settings JSONB,
+      subscription_expiry_date TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT * FROM public.get_saas_tenant_for_impersonation(p_tenant_id);
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.get_user_for_impersonation(p_user_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      tenant_slug TEXT,
+      tenant_name TEXT,
+      tenant_status TEXT,
+      subscription_expiry_date TIMESTAMPTZ,
+      role_id BIGINT,
+      role_name TEXT
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT u.id::BIGINT,
+             u.name::TEXT,
+             u.email::TEXT,
+             u.tenant_id::BIGINT,
+             t.slug::TEXT AS tenant_slug,
+             t.name::TEXT AS tenant_name,
+             t.status::TEXT AS tenant_status,
+             COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date,
+             u.role_id::BIGINT,
+             r.name::TEXT AS role_name
+        FROM public.users u
+        LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
+        LEFT JOIN (
+          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
+            FROM public.platform_subscriptions
+           ORDER BY tenant_id, id DESC
+        ) sub ON sub.tenant_id = t.id
+        LEFT JOIN public.roles r ON r.id = u.role_id
+       WHERE u.id = p_user_id;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.fn_get_user_for_impersonation(p_user_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      tenant_slug TEXT,
+      tenant_name TEXT,
+      tenant_status TEXT,
+      subscription_expiry_date TIMESTAMPTZ,
+      role_id BIGINT,
+      role_name TEXT
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT * FROM public.get_user_for_impersonation(p_user_id);
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.get_or_create_tenant_admin_user_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      role_id BIGINT,
+      role_name TEXT
+    )
+    LANGUAGE plpgsql
+    AS $function$
+    DECLARE
+      v_user RECORD;
+      v_tenant RECORD;
+      v_role_id BIGINT;
+    BEGIN
+      -- 1. Try to find existing admin or active user for the tenant
+      SELECT u.id::BIGINT,
+             u.name::TEXT,
+             u.email::TEXT,
+             u.tenant_id::BIGINT,
+             u.role_id::BIGINT,
+             r.name::TEXT AS role_name
+        INTO v_user
+        FROM public.users u
+        LEFT JOIN public.roles r ON r.id = u.role_id
+       WHERE u.tenant_id = p_tenant_id
+       ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END,
+                CASE WHEN u.status = true THEN 0 ELSE 1 END,
+                u.id ASC
+       LIMIT 1;
+
+      IF v_user.id IS NOT NULL THEN
+        RETURN QUERY SELECT v_user.id, v_user.name, v_user.email, v_user.tenant_id, v_user.role_id, v_user.role_name;
+        RETURN;
+      END IF;
+
+      -- 2. If no user exists, fetch tenant details to generate a fallback admin
+      SELECT t.id, t.name, t.slug INTO v_tenant
+        FROM public.saas_tenants t
+       WHERE t.id = p_tenant_id;
+
+      IF NOT FOUND THEN
+        RETURN;
+      END IF;
+
+      -- 3. Check or create Administrator role
+      SELECT r.id INTO v_role_id
+        FROM public.roles r
+       WHERE r.tenant_id = p_tenant_id
+         AND LOWER(r.name) IN ('admin', 'administrator')
+       LIMIT 1;
+
+      IF v_role_id IS NULL THEN
+        INSERT INTO public.roles (name, description, permission_type, tenant_id)
+        VALUES ('Administrator', 'Full system access', 'all', p_tenant_id)
+        RETURNING roles.id INTO v_role_id;
+      END IF;
+
+      -- 4. Create fallback administrator user
+      RETURN QUERY
+      INSERT INTO public.users (name, email, password, tenant_id, role_id, status)
+      VALUES (
+        COALESCE(v_tenant.name, 'Tenant') || ' Administrator',
+        'admin@' || COALESCE(v_tenant.slug, 'crm') || '.localhost',
+        'managed_tenant_sso',
+        p_tenant_id,
+        v_role_id,
+        true
+      )
+      RETURNING users.id::BIGINT, users.name::TEXT, users.email::TEXT, users.tenant_id::BIGINT, users.role_id::BIGINT, 'admin'::TEXT AS role_name;
+    END;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.fn_get_tenant_admin_user_for_impersonation(p_tenant_id BIGINT)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      email TEXT,
+      tenant_id BIGINT,
+      role_id BIGINT,
+      role_name TEXT
+    )
+    LANGUAGE SQL
+    AS $function$
+      SELECT * FROM public.get_or_create_tenant_admin_user_for_impersonation(p_tenant_id);
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.get_platform_sidebar_counts()
+    RETURNS TABLE(
+      organizations INTEGER,
+      subscriptions INTEGER,
+      payments INTEGER,
+      demos INTEGER,
+      notifications INTEGER
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT
+        (SELECT COUNT(*)::INTEGER FROM public.saas_tenants),
+        (SELECT COUNT(*)::INTEGER FROM public.platform_subscriptions WHERE status IN ('pending', 'trialing')),
+        (SELECT COUNT(*)::INTEGER FROM public.platform_payments WHERE status = 'pending'),
+        (SELECT COUNT(*)::INTEGER FROM public.platform_demo_requests WHERE status = 'new'),
+        (SELECT COUNT(*)::INTEGER FROM public.platform_notifications WHERE is_read = FALSE);
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.get_expiring_subscriptions(p_days_ahead INTEGER DEFAULT 7)
+    RETURNS TABLE(
+      id BIGINT,
+      name TEXT,
+      slug TEXT,
+      admin_email TEXT,
+      admin_name TEXT,
+      ends_at TIMESTAMPTZ,
+      days_left INTEGER
+    )
+    LANGUAGE SQL
+    STABLE
+    AS $function$
+      SELECT t.id::BIGINT,
+             t.name::TEXT,
+             t.slug::TEXT,
+             u.email::TEXT AS admin_email,
+             u.name::TEXT AS admin_name,
+             s.ends_at::TIMESTAMPTZ,
+             EXTRACT(DAY FROM (s.ends_at - NOW()))::INTEGER AS days_left
+        FROM public.saas_tenants t
+        JOIN public.platform_subscriptions s ON s.tenant_id = t.id AND s.status = 'active'
+        JOIN LATERAL (
+          SELECT email, name FROM public.users
+           WHERE tenant_id = t.id AND status = true
+           ORDER BY id ASC LIMIT 1
+        ) u ON TRUE
+       WHERE s.ends_at IS NOT NULL
+         AND s.ends_at <= NOW() + (p_days_ahead || ' days')::INTERVAL
+       ORDER BY s.ends_at ASC;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.create_platform_notification(
+      p_title TEXT,
+      p_message TEXT,
+      p_type TEXT DEFAULT 'info',
+      p_metadata JSONB DEFAULT '{}'::jsonb
+    )
+    RETURNS BIGINT
+    LANGUAGE SQL
+    AS $function$
+      INSERT INTO public.platform_notifications (title, message, type, is_read, metadata, created_at)
+      VALUES (p_title, p_message, COALESCE(p_type, 'info'), FALSE, COALESCE(p_metadata, '{}'::jsonb), NOW())
+      RETURNING id;
+    $function$;
+
+    CREATE OR REPLACE FUNCTION public.update_user_password(
+      p_user_id BIGINT,
+      p_password_hash TEXT
+    )
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    AS $function$
+    BEGIN
+      UPDATE public.users
+         SET password = p_password_hash,
+             updated_at = NOW()
+       WHERE id = p_user_id;
+      RETURN FOUND;
+    END;
     $function$;
 
     CREATE TABLE IF NOT EXISTS public.platform_pricing_tiers (

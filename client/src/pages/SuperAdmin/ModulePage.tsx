@@ -866,6 +866,22 @@ const SuperAdminModulePage: React.FC<{ moduleKey: string; title: string }> = ({ 
   };
 
   const impersonateTenant = async (record: RecordValue) => {
+    const isExpired =
+      String(record.computed_status || "").toLowerCase() === "expired" ||
+      String(record.status || "").toLowerCase() === "expired" ||
+      record.is_expired === true ||
+      (record.subscription_expiry_date && new Date(String(record.subscription_expiry_date)).getTime() <= Date.now());
+
+    if (isExpired) {
+      await Swal.fire({
+        icon: "error",
+        title: "Cannot Impersonate Expired Organization",
+        text: `Cannot impersonate "${record.name || record.slug}". This organization subscription has expired.`,
+        confirmButtonColor: "#d33",
+      });
+      return;
+    }
+
     try {
       const res = await request("post", `/super-admin/tenants/${record.id}/impersonate`);
       const payload = res as any;
