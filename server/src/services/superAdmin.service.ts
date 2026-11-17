@@ -351,11 +351,26 @@ export class SuperAdminService {
    */
   public async impersonateTenant(tenantId: number) {
     const { rows: tenantRows } = await pool.query(
-      `SELECT id, name, slug, domain FROM public.saas_tenants WHERE id = $1`,
+      `SELECT id, name, slug, domain, status, subscription_expiry_date FROM public.saas_tenants WHERE id = $1`,
       [tenantId]
     );
     if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
     const tenant = tenantRows[0];
+
+    const isExpired =
+      tenant.status === 'expired' ||
+      (tenant.subscription_expiry_date && new Date(tenant.subscription_expiry_date).getTime() <= Date.now());
+
+    if (isExpired) {
+      throw new ApiError(
+        403,
+        `Cannot impersonate "${tenant.name}". This organization subscription has expired. Please renew or upgrade the subscription first.`
+      );
+    }
+
+    if (tenant.status === 'suspended') {
+      throw new ApiError(403, `Cannot impersonate "${tenant.name}". This organization account is suspended.`);
+    }
 
     const { rows: users } = await pool.query(
       `SELECT u.id, u.name, u.email, u.tenant_id, u.role_id, r.name as role_name
@@ -608,7 +623,7 @@ export class SuperAdminService {
    */
   public async impersonateUser(userId: number) {
     const { rows } = await pool.query(
-      `SELECT u.id, u.name, u.email, u.tenant_id, t.slug as tenant_slug, r.name as role_name
+      `SELECT u.id, u.name, u.email, u.tenant_id, t.slug as tenant_slug, t.name as tenant_name, t.status as tenant_status, t.subscription_expiry_date, r.name as role_name
          FROM public.users u
          LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
          LEFT JOIN public.roles r ON r.id = u.role_id
@@ -617,6 +632,23 @@ export class SuperAdminService {
     );
     if (!rows[0]) throw new ApiError(404, 'User not found');
     const user = rows[0];
+
+    if (user.tenant_id) {
+      const isExpired =
+        user.tenant_status === 'expired' ||
+        (user.subscription_expiry_date && new Date(user.subscription_expiry_date).getTime() <= Date.now());
+
+      if (isExpired) {
+        throw new ApiError(
+          403,
+          `Cannot impersonate user. Organization "${user.tenant_name || user.tenant_slug}" subscription has expired.`
+        );
+      }
+
+      if (user.tenant_status === 'suspended') {
+        throw new ApiError(403, `Cannot impersonate user. Organization is currently suspended.`);
+      }
+    }
 
     const token = jwt.sign(
       { sub: String(user.id), tenant_id: user.tenant_id, email: user.email, name: user.name },

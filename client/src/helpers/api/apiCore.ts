@@ -19,7 +19,25 @@ axios.interceptors.response.use(
     if (error && error.response && error.response.status === 404) {
       // window.location.href = '/not-found';
     } else if (error && error.response && error.response.status === 403) {
-      window.location.href = "/access-denied";
+      const isOrgExpired =
+        error.response?.data?.code === "ORGANIZATION_EXPIRED" ||
+        (error.response?.data?.message &&
+          error.response.data.message.toLowerCase().includes("subscription has expired"));
+
+      if (isOrgExpired) {
+        try {
+          sessionStorage.clear();
+          localStorage.removeItem("auth-store");
+          localStorage.removeItem("token");
+          document.cookie = "authToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        } catch {}
+
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/subscription")) {
+          window.location.href = "/auth/login";
+        }
+      } else {
+        window.location.href = "/access-denied";
+      }
     } else {
       switch (error.response.status) {
         case 401:

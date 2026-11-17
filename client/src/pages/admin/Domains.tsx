@@ -237,6 +237,32 @@ const SuperAdminDomains = () => {
 
   // Impersonate Login
   const handleImpersonateLogin = async (org: OrganizationDomain) => {
+    const isExpired =
+      (org as any).computed_status === "Expired" ||
+      (org as any).is_expired ||
+      (org as any).status === "expired" ||
+      org.status === false ||
+      (org.subscription_expiry_date && new Date(org.subscription_expiry_date).getTime() <= Date.now());
+
+    if (isExpired) {
+      await Swal.fire({
+        icon: "error",
+        title: "Cannot Impersonate Expired Organization",
+        html: `
+          <div class="text-left text-xs space-y-2 text-slate-700 dark:text-slate-200">
+            <p>Cannot impersonate <strong>${org.name}</strong> (${org.slug}).</p>
+            <p class="text-rose-600 dark:text-rose-400 font-semibold">
+              This organization subscription expired on ${org.subscription_expiry_date ? new Date(org.subscription_expiry_date).toLocaleDateString("en-IN") : "a past date"}.
+            </p>
+            <p class="text-slate-500">Workspace access and logins are blocked until the subscription is renewed.</p>
+          </div>
+        `,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Close",
+      });
+      return;
+    }
+
     try {
       const response = await adminApi.post(`/admin/organizations/${org.id}/impersonate`);
       if (response.data && response.data.success) {
