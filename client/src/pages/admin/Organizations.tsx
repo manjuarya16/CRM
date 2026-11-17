@@ -182,13 +182,13 @@ const SuperAdminOrganizations = () => {
     }
     const { value: formValues } = await Swal.fire({
       title: "Send Payment Link Email",
-      width: "480px",
+      width: "500px",
       customClass: {
-        htmlContainer: "!overflow-hidden !m-0 !px-6 !py-2",
-        popup: "!rounded-2xl !p-6 !overflow-hidden",
+        htmlContainer: "!overflow-visible !m-0 !px-6 !py-2 !max-h-none",
+        popup: "!rounded-2xl !p-6 !overflow-visible",
       },
       html: `
-        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300 overflow-hidden">
+        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300">
           <p class="text-slate-600 dark:text-slate-400">Send an official subscription upgrade & online payment checkout link for <strong class="text-slate-900 dark:text-slate-100">${org.name}</strong> (${org.slug}).</p>
           <div>
             <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Recipient Email Address:</label>
@@ -196,7 +196,7 @@ const SuperAdminOrganizations = () => {
           </div>
           <div>
             <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Optional Custom Note:</label>
-            <textarea id="swal-input-note" rows="2" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all resize-none box-border" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
+            <textarea id="swal-input-note" rows="3" style="min-height: 72px;" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all resize-y box-border min-h-[72px]" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
           </div>
         </div>
       `,

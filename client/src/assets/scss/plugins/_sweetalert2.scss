@@ -48,7 +48,7 @@
 
 	// Content
 	.swal2-html-container {
-		max-height: 200px;
+		max-height: min(600px, 80vh);
 		overflow: auto;
 	}
 }

@@ -80,13 +80,13 @@ const SuperAdminDomains = () => {
 
     const { value: formValues } = await Swal.fire({
       title: "Send Payment Link Email",
-      width: "480px",
+      width: "500px",
       customClass: {
-        htmlContainer: "!overflow-hidden !m-0 !px-6 !py-2",
-        popup: "!rounded-2xl !p-6 !overflow-hidden",
+        htmlContainer: "!overflow-visible !m-0 !px-6 !py-2 !max-h-none",
+        popup: "!rounded-2xl !p-6 !overflow-visible",
       },
       html: `
-        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300 overflow-hidden">
+        <div class="text-left text-xs space-y-3 text-slate-700 dark:text-slate-300">
           ${isAlreadyPaid ? `
             <div class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
               <strong>⚠️ Active Paid Subscription:</strong> This organization already has an active ${org.plan_name || "paid"} subscription until <strong>${new Date(org.subscription_expiry_date!).toLocaleDateString("en-IN")}</strong>. Sending this link will allow them to upgrade or renew.
@@ -99,7 +99,7 @@ const SuperAdminDomains = () => {
           </div>
           <div>
             <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Optional Custom Note:</label>
-            <textarea id="swal-input-note" rows="2" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all resize-none box-border" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
+            <textarea id="swal-input-note" rows="3" style="min-height: 72px;" class="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#040975] focus:border-transparent transition-all resize-y box-border min-h-[72px]" placeholder="e.g. Please find the direct subscription link for your account..."></textarea>
           </div>
         </div>
       `,
