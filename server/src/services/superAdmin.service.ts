@@ -351,7 +351,7 @@ export class SuperAdminService {
    */
   public async impersonateTenant(tenantId: number) {
     const { rows: tenantRows } = await pool.query(
-      `SELECT * FROM public.fn_get_saas_tenant_for_impersonation($1)`,
+      `SELECT * FROM public.get_saas_tenant_for_impersonation($1::bigint)`,
       [tenantId]
     );
     if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
@@ -373,37 +373,13 @@ export class SuperAdminService {
     }
 
     const { rows: users } = await pool.query(
-      `SELECT * FROM public.fn_get_tenant_admin_user_for_impersonation($1)`,
+      `SELECT * FROM public.get_or_create_tenant_admin_user_for_impersonation($1::bigint)`,
       [tenantId]
     );
 
-    let user = users[0];
+    const user = users[0];
     if (!user) {
-      // Find or create admin role
-      const { rows: roleRows } = await pool.query(
-        `SELECT id FROM public.roles WHERE tenant_id = $1 AND LOWER(name) IN ('admin', 'administrator') LIMIT 1`,
-        [tenantId]
-      );
-      let roleId = roleRows[0]?.id;
-      if (!roleId) {
-        const insertRole = await pool.query(
-          `INSERT INTO public.roles (name, description, permission_type, tenant_id)
-           VALUES ('Administrator', 'Full system access', 'all', $1)
-           RETURNING id`,
-          [tenantId]
-        );
-        roleId = insertRole.rows[0]?.id;
-      }
-
-      const fallbackEmail = `admin@${tenant.slug}.localhost`;
-      const fallbackName = `${tenant.name} Administrator`;
-      const insertRes = await pool.query(
-        `INSERT INTO public.users (name, email, password, tenant_id, role_id, status)
-         VALUES ($1, $2, 'managed_tenant_sso', $3, $4, true)
-         RETURNING id, name, email, tenant_id, role_id, 'admin' as role_name`,
-        [fallbackName, fallbackEmail, tenantId, roleId]
-      );
-      user = insertRes.rows[0];
+      throw new ApiError(500, `Unable to find or provision an administrator user for "${tenant.name}".`);
     }
 
     const token = jwt.sign(
@@ -517,45 +493,32 @@ export class SuperAdminService {
    * Delete an Organization and associated data
    */
   public async deleteTenant(tenantId: number) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`DELETE FROM public.platform_payments WHERE tenant_id = $1`, [tenantId]);
-      await client.query(`DELETE FROM public.platform_subscriptions WHERE tenant_id = $1`, [tenantId]);
-      await client.query(`DELETE FROM public.leads WHERE tenant_id = $1`, [tenantId]);
-      await client.query(`DELETE FROM public.persons WHERE tenant_id = $1`, [tenantId]);
-      await client.query(`DELETE FROM public.users WHERE tenant_id = $1`, [tenantId]);
-      await client.query(`DELETE FROM public.roles WHERE tenant_id = $1`, [tenantId]);
-      const { rows } = await client.query(`DELETE FROM public.saas_tenants WHERE id = $1 RETURNING id, name, slug`, [tenantId]);
-      if (!rows[0]) throw new ApiError(404, 'Organization not found');
-      await client.query('COMMIT');
-      return rows[0];
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    const { rows } = await pool.query<{ id: number; name: string; slug: string }>(
+      'SELECT * FROM public.delete_saas_tenant($1::bigint)',
+      [tenantId]
+    );
+    if (!rows[0]) throw new ApiError(404, 'Organization not found');
+    return rows[0];
   }
 
   /**
    * Get Super Admin sidebar live badge counts
    */
   public async getSidebarCounts() {
-    const [tenantsRes, subsRes, paymentsRes, demosRes, notifsRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int as count FROM public.saas_tenants`),
-      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_subscriptions WHERE status IN ('pending', 'trialing')`),
-      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_payments WHERE status = 'pending'`),
-      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_demo_requests WHERE status = 'new'`),
-      pool.query(`SELECT COUNT(*)::int as count FROM public.platform_notifications WHERE is_read = FALSE`),
-    ]);
+    const { rows } = await pool.query<{
+      organizations: number;
+      subscriptions: number;
+      payments: number;
+      demos: number;
+      notifications: number;
+    }>('SELECT * FROM public.get_platform_sidebar_counts()');
 
-    return {
-      organizations: tenantsRes.rows[0]?.count || 0,
-      subscriptions: subsRes.rows[0]?.count || 0,
-      payments: paymentsRes.rows[0]?.count || 0,
-      demos: demosRes.rows[0]?.count || 0,
-      notifications: notifsRes.rows[0]?.count || 0,
+    return rows[0] || {
+      organizations: 0,
+      subscriptions: 0,
+      payments: 0,
+      demos: 0,
+      notifications: 0,
     };
   }
 
@@ -571,34 +534,18 @@ export class SuperAdminService {
       admin_name: string;
       ends_at: string;
       days_left: number;
-    }>(
-      `SELECT t.id, t.name, t.slug,
-              u.email AS admin_email, u.name AS admin_name,
-              s.ends_at,
-              EXTRACT(DAY FROM (s.ends_at - NOW()))::int AS days_left
-         FROM public.saas_tenants t
-         JOIN public.platform_subscriptions s ON s.tenant_id = t.id AND s.status = 'active'
-         JOIN LATERAL (
-           SELECT email, name FROM public.users
-            WHERE tenant_id = t.id AND status = true
-            ORDER BY id ASC LIMIT 1
-         ) u ON TRUE
-        WHERE s.ends_at IS NOT NULL
-          AND s.ends_at <= NOW() + INTERVAL '7 days'
-        ORDER BY s.ends_at ASC`
-    );
+    }>('SELECT * FROM public.get_expiring_subscriptions(7)');
 
     let sent = 0;
     for (const item of expiring) {
       try {
         const isExpired = item.days_left <= 0;
         await pool.query(
-          `INSERT INTO public.platform_notifications
-             (title, message, type, is_read, metadata, created_at)
-           VALUES ($1, $2, 'warning', FALSE, $3, NOW())`,
+          'SELECT public.create_platform_notification($1::text, $2::text, $3::text, $4::jsonb)',
           [
             isExpired ? 'Subscription Expired' : 'Subscription Expiring Soon',
             `Organization "${item.name}" subscription ${isExpired ? 'has expired' : `expires in ${item.days_left} day(s)`}.`,
+            'warning',
             JSON.stringify(item),
           ]
         );
@@ -616,7 +563,7 @@ export class SuperAdminService {
    */
   public async impersonateUser(userId: number) {
     const { rows } = await pool.query(
-      `SELECT * FROM public.fn_get_user_for_impersonation($1)`,
+      `SELECT * FROM public.get_user_for_impersonation($1::bigint)`,
       [userId]
     );
     if (!rows[0]) throw new ApiError(404, 'User not found');
@@ -658,11 +605,11 @@ export class SuperAdminService {
   public async changeUserPassword(userId: number, newPass: string) {
     if (!newPass || newPass.length < 6) throw new ApiError(400, 'Password must be at least 6 characters');
     const hash = await bcrypt.hash(newPass, 10);
-    const { rowCount } = await pool.query(
-      `UPDATE public.users SET password = $2, updated_at = NOW() WHERE id = $1`,
+    const { rows } = await pool.query<{ updated: boolean }>(
+      'SELECT public.update_user_password($1::bigint, $2::text) AS updated',
       [userId, hash]
     );
-    if (!rowCount) throw new ApiError(404, 'User not found');
+    if (!rows[0]?.updated) throw new ApiError(404, 'User not found');
     return { success: true, message: 'Password updated successfully' };
   }
 }
