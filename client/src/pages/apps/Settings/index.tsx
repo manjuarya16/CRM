@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { SettingItem, SettingCategory } from "@/interface";
+import { Collapse } from "@/components/FrostUI";
 
 const SETTINGS_SECTIONS: SettingCategory[] = [
   {
