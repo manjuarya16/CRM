@@ -55,10 +55,20 @@ const GoogleContactsPage: React.FC = () => {
 
   const handleConnectAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    const token = accessToken.trim();
+    if (!token) {
+      Swal.fire({
+        icon: "error",
+        title: "Access token required",
+        text: "Enter a valid Google OAuth access token to connect this account.",
+      });
+      return;
+    }
+
     try {
       await useGoogleContactStore.getState().createAccount({
         google_email: googleEmail,
-        access_token: accessToken || "mock_oauth_token_" + Date.now(),
+        access_token: token,
       });
       Swal.fire({
         icon: "success",
@@ -795,17 +805,18 @@ const GoogleContactsPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                  OAuth Token <span className="text-gray-400 font-normal">(Optional)</span>
+                  Google OAuth Access Token <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Optional custom access token"
+                  required
+                  placeholder="Paste a valid Google OAuth access token"
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0088cc]/20 focus:border-[#0088cc] dark:bg-gray-700 dark:text-gray-100 transition-colors"
                 />
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  Leave blank to auto-generate a secure session token.
+                  Use the Google OAuth access token, not the authorization code. This form does not generate tokens.
                 </p>
               </div>
 
@@ -822,7 +833,7 @@ const GoogleContactsPage: React.FC = () => {
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold text-white bg-[#0088cc] hover:bg-[#0077b3] rounded-lg shadow-sm transition-colors"
                 >
                   <i className="mgc_check_line text-base"></i>
-                  <span>Authorize & Connect</span>
+                  <span>Connect Account</span>
                 </button>
               </div>
             </form>

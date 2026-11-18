@@ -390,7 +390,7 @@ html[data-sidenav-view="sm"] {
                         inset-inline-start: 100%;
                         overflow-y: auto !important;
                         overflow-x: hidden !important;
-                        max-height: min(400px, 65vh) !important;
+                        max-height: calc(100vh - 16px) !important;
                         position: absolute;
                         z-index: 60;
                         height: auto !important;

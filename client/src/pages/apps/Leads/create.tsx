@@ -374,7 +374,7 @@ const CreateLeadPage: React.FC = () => {
   };
 
   const handlePhoneChange = (index: number, field: "label" | "value", val: string) => {
-    const cleanVal = field === "value" ? val.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "").slice(0, 15) : val;
+    const cleanVal = field === "value" ? val.replace(/\D/g, "").slice(0, 10) : val;
     setContactPhones((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: cleanVal };
@@ -1358,8 +1358,8 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                     <div className={`flex-1 flex border rounded-lg overflow-hidden bg-white dark:bg-gray-900 focus-within:ring-1 ${errors.contactPhone ? "border-red-500 focus-within:ring-red-500" : "border-gray-300 dark:border-gray-600 focus-within:ring-[#0088cc]"}`}>
                       <input
                         type="tel"
-                        inputMode="tel"
-                        maxLength={15}
+                        inputMode="numeric"
+                        maxLength={10}
                         value={pn.value}
                         onChange={(e) => handlePhoneChange(idx, "value", e.target.value)}
                         onBlur={() => {
@@ -1368,7 +1368,7 @@ const computeContractEndDate = (startDateStr?: string, durationMonthsStr?: strin
                             setErrors((prev) => ({ ...prev, contactPhone: err }));
                           }
                         }}
-                        placeholder="e.g. 9876543210 or +919876543210"
+                        placeholder="e.g. 9876543210"
                         className="w-full px-3 py-2 bg-transparent text-sm focus:outline-none dark:text-gray-200"
                       />
                       <select

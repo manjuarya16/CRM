@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useWarehouseStore } from "@/store";
-import { IWarehouse, IWarehouseProduct } from "@/interface";
+import { IWarehouse } from "@/interface";
 import { usePermission } from "@/hooks/usePermission";
 import { useResponsiveViewMode } from "@/hooks/useResponsiveViewMode";
 import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
@@ -27,6 +27,7 @@ const getInitials = (name?: string, fallback = "WH") => {
 
 const WarehousesPage: React.FC = () => {
   const { hasPermission } = usePermission();
+  const navigate = useNavigate();
   const canCreate = hasPermission("settings.warehouses.create");
   const canEdit = hasPermission("settings.warehouses.edit");
   const canDelete = hasPermission("settings.warehouses.delete");
@@ -39,12 +40,6 @@ const WarehousesPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const { viewMode, setViewMode, setHasUserToggled } = useResponsiveViewMode();
-
-  // View Modal
-  const [viewingWarehouse, setViewingWarehouse] = useState<IWarehouse | null>(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
-  const [viewingProducts, setViewingProducts] = useState<IWarehouseProduct[]>([]);
-  const [viewingProductsLoading, setViewingProductsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     fetchWarehouses();
@@ -62,19 +57,8 @@ const WarehousesPage: React.FC = () => {
     }
   };
 
-  const openViewModal = async (item: IWarehouse) => {
-    setViewingWarehouse(item);
-    setIsViewModalOpen(true);
-    setViewingProducts([]);
-    setViewingProductsLoading(true);
-    try {
-      const prods = await useWarehouseStore.getState().fetchWarehouseProducts(item.id);
-      setViewingProducts(prods || []);
-    } catch {
-      setViewingProducts([]);
-    } finally {
-      setViewingProductsLoading(false);
-    }
+  const openViewPage = (item: IWarehouse) => {
+    navigate(`/settings/warehouses/${item.id}/view`);
   };
 
   const handleDelete = async (item: IWarehouse) => {
@@ -253,7 +237,7 @@ const WarehousesPage: React.FC = () => {
               className="rounded border-gray-300 dark:border-gray-600 text-[#0088cc] focus:ring-[#0088cc] mt-1 shrink-0"
             />
             <div
-              onClick={() => openViewModal(warehouse)}
+              onClick={() => openViewPage(warehouse)}
               className="flex items-start gap-2.5 min-w-0 flex-1 cursor-pointer group"
             >
               <span className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-2xs ${avatarColor}`}>
@@ -323,7 +307,7 @@ const WarehousesPage: React.FC = () => {
             {canView && (
               <button
                 type="button"
-                onClick={() => openViewModal(warehouse)}
+                onClick={() => openViewPage(warehouse)}
                 className="p-1 hover:text-[#0088cc] hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
                 title="View Warehouse Details"
               >
@@ -563,7 +547,7 @@ const WarehousesPage: React.FC = () => {
                             </span>
                             <button
                               type="button"
-                              onClick={() => openViewModal(warehouse)}
+                              onClick={() => openViewPage(warehouse)}
                               className="font-semibold text-gray-900 dark:text-gray-100 hover:text-[#0088cc] dark:hover:text-[#38bdf8] hover:underline text-left"
                             >
                               {warehouse.name}
@@ -591,7 +575,7 @@ const WarehousesPage: React.FC = () => {
                           {canView && (
                             <button
                               type="button"
-                              onClick={() => openViewModal(warehouse)}
+                              onClick={() => openViewPage(warehouse)}
                               className="text-gray-500 hover:text-[#0088cc] p-1 inline-block transition-colors"
                               title="View Warehouse Details"
                             >
@@ -657,144 +641,7 @@ const WarehousesPage: React.FC = () => {
         )}
       </div>
 
-      {/* 🔍 VIEW WAREHOUSE MODAL (Fully Mobile Responsive) */}
-      {isViewModalOpen && viewingWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-2 sm:p-2.5 rounded-xl bg-[#0088cc]/10 text-[#0088cc] shrink-0">
-                  <i className="mgc_store_2_line text-xl sm:text-2xl"></i>
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
-                    {viewingWarehouse.name}
-                  </h2>
-                  <p className="text-xs font-mono text-gray-500">
-                    ID: #{viewingWarehouse.id}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg transition"
-              >
-                <i className="mgc_close_line text-2xl"></i>
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-sm">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="text-[11px] text-gray-500 uppercase font-semibold">Contact</div>
-                  <div className="text-xs font-bold text-gray-800 dark:text-gray-200 mt-1 truncate">
-                    {viewingWarehouse.contact_name || "-"}
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="text-[11px] text-gray-500 uppercase font-semibold">Phone</div>
-                  <div className="text-xs font-bold text-[#0088cc] mt-1 truncate">
-                    {formatPhone(viewingWarehouse.contact_numbers)}
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="text-[11px] text-gray-500 uppercase font-semibold">Locations</div>
-                  <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                    {Array.isArray(viewingWarehouse.locations) ? viewingWarehouse.locations.length : 0} defined
-                  </div>
-                </div>
-              </div>
-
-              {/* Address & Email */}
-              <div className="space-y-2 text-xs">
-                <div className="p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 space-y-1.5">
-                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                    <i className="mgc_mail_line text-sm text-gray-400"></i>
-                    <span>Email: <strong>{formatEmail(viewingWarehouse.contact_emails)}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                    <i className="mgc_location_line text-sm text-gray-400"></i>
-                    <span>Address: <strong>{formatCityState(viewingWarehouse.contact_address || (viewingWarehouse as any).address)}</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stored Products Inventory Breakdown */}
-              <div className="space-y-2.5">
-                <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center justify-between">
-                  <span>Current Inventory in Warehouse</span>
-                  <span className="text-[11px] text-[#0088cc] font-medium lowercase">
-                    {viewingProducts.length} item(s)
-                  </span>
-                </h3>
-
-                {viewingProductsLoading ? (
-                  <div className="py-8 text-center text-gray-400 text-xs">
-                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-[#0088cc] border-t-transparent mb-1.5"></div>
-                    <p>Loading inventory...</p>
-                  </div>
-                ) : viewingProducts.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700">
-                    No products currently in stock at this warehouse.
-                  </div>
-                ) : (
-                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse min-w-[320px]">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                          <th className="py-2.5 px-3.5 font-semibold">Product</th>
-                          <th className="py-2.5 px-3.5 font-semibold">Location</th>
-                          <th className="py-2.5 px-3.5 font-semibold text-center">In Stock</th>
-                          <th className="py-2.5 px-3.5 font-semibold text-center">Allocated</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
-                        {viewingProducts.map((p, pIdx) => (
-                          <tr key={pIdx} className="hover:bg-gray-50/50">
-                            <td className="py-2 px-3.5 font-medium text-gray-800 dark:text-gray-200">
-                              {p.name || (p as any).product_name || `Product #${p.id || (p as any).product_id}`}
-                            </td>
-                            <td className="py-2 px-3.5 font-mono text-gray-500 text-[11px]">
-                              {p.warehouse_location_name || "Default"}
-                            </td>
-                            <td className="py-2 px-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
-                              {p.in_stock || 0}
-                            </td>
-                            <td className="py-2 px-3.5 text-center font-bold text-amber-600 dark:text-amber-400">
-                              {p.allocated || 0}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2 bg-gray-50/50 dark:bg-gray-900/50">
-              {canEdit && (
-                <Link
-                  to={`/settings/warehouses/edit/${viewingWarehouse.id}`}
-                  className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
-                >
-                  <i className="mgc_edit_line text-sm"></i>
-                  Edit Warehouse
-                </Link>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-medium rounded-xl transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
