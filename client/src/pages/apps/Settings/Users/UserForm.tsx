@@ -445,24 +445,13 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
             {/* Groups Selection */}
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                <div>
-                <PasswordInput
-                  label="Password"
-                  value={formData.password}
-                  onChange={(val) => {
-                    setFormData({ ...formData, password: val });
-                    if (errors.password) setErrors({ ...errors, password: '' });
-                  }}
-                  required={isCreate}
-                  error={errors.password}
-                  inputClass={`${inputCls} pr-10`}
-                />
-                    Assigned Groups ({formData.group_ids.length} selected)
-                  </label>
+                <label className={labelCls}>
+                  Assigned Groups ({formData.group_ids.length} selected)
+                </label>
+
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     Grant access to shared leads, deals, and records within these groups
                   </p>
-                </div>
                 {groups.length > 0 && (
                   <div className="flex items-center gap-2">
                     <button
