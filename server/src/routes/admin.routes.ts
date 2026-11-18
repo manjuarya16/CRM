@@ -199,18 +199,6 @@ router.get('/organizations/:id', async (req: Request, res: Response, next: NextF
       return;
     }
 
-    const expiryVal = profile.settings?.subscription_expiry_date || profile.subscription_expiry_date;
-    const isUnexpired = !expiryVal || new Date(expiryVal) > new Date();
-    const isTrialPlan = String(profile.plan || '').toLowerCase().includes('trial');
-    const isPaidStatus = String((profile as any).payment_status || '').toLowerCase() === 'paid';
-    if (profile.status !== false && isUnexpired && (isPaidStatus || (!isTrialPlan && String(profile.plan || '').trim() !== ''))) {
-      res.status(409).json({
-        success: false,
-        message: 'This organization already has an active paid subscription. A payment link cannot be sent while already paid.',
-      });
-      return;
-    }
-
     const settings = profile.settings || {};
     const addr = profile.address || {};
     const now = new Date();
@@ -686,6 +674,18 @@ router.post('/organizations/:id/send-payment-link', async (req: Request, res: Re
     const profile = await getTenantProfile(id);
     if (!profile) {
       res.status(404).json({ success: false, message: 'Organization not found' });
+      return;
+    }
+
+    const expiryVal = profile.settings?.subscription_expiry_date || profile.subscription_expiry_date;
+    const isUnexpired = !expiryVal || new Date(expiryVal) > new Date();
+    const isTrialPlan = String(profile.plan || '').toLowerCase().includes('trial');
+    const isPaidStatus = String((profile as any).payment_status || '').toLowerCase() === 'paid';
+    if (profile.status !== false && isUnexpired && (isPaidStatus || (!isTrialPlan && String(profile.plan || '').trim() !== ''))) {
+      res.status(409).json({
+        success: false,
+        message: 'This organization already has an active paid subscription. A payment link cannot be sent while already paid.',
+      });
       return;
     }
 

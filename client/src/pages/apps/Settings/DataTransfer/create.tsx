@@ -5,46 +5,204 @@ import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 import { useDataTransferStore } from "@/store";
 
-const CreateImportPage: React.FC = () => {
-  const navigate = useNavigate();
+export interface HeaderMatchReport {
+  fileHeader: string;
+  matchedField: string | null;
+  matchType: "exact" | "alias" | "custom" | "unmatched";
+  message: string;
+}
 
-  // General Form State
-  const [type, setType] = useState<"Persons" | "Leads" | "Organizations" | "Products">("Persons");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [parsedRows, setParsedRows] = useState<any[]>([]);
-  const [sampleMeta, setSampleMeta] = useState<{
-    headers: string[];
-    sampleRows: any[];
-    customAttributes: any[];
-  }>({
-    headers: [],
-    sampleRows: [],
-    customAttributes: [],
-  });
-  const [loadingSample, setLoadingSample] = useState<boolean>(false);
-  const [showSamplePreview, setShowSamplePreview] = useState<boolean>(true);
+export interface HeaderAnalysis {
+  isValid: boolean;
+  requiredField: string;
+  hasRequiredField: boolean;
+  expectedHeaders: string[];
+  fileHeaders: string[];
+  matchedColumns: HeaderMatchReport[];
+  unmatchedColumns: HeaderMatchReport[];
+  aliasColumns: HeaderMatchReport[];
+  missingRequiredMessage?: string;
+  mismatchMessages: string[];
+}
 
-  // Settings Panel State
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(true);
-  const [action, setAction] = useState<string>("Create/Update");
-  const [validationStrategy, setValidationStrategy] = useState<string>("Stop on Errors");
-  const [allowedErrors, setAllowedErrors] = useState<number>(10);
-  const [fieldSeparator, setFieldSeparator] = useState<string>(",");
-  const [processInQueue, setProcessInQueue] = useState<boolean>(false);
+const MODULE_FIELD_DEFINITIONS: Record<
+  string,
+  {
+    required: string;
+    standardFields: Record<string, string[]>;
+  }
+> = {
+  leads: {
+    required: "title",
+    standardFields: {
+      title: ["title", "lead_title", "deal_name", "deal", "subject", "name", "lead_name", "lead", "heading", "id", "lead_id"],
+      organization: ["organization", "organization_name", "company", "company_name", "institute", "institute_name", "organization_id", "org"],
+      contact_person: ["contact_person", "person", "contact_name", "person_name", "contact_person_name", "contact", "person_id"],
+      contact_email: ["contact_email", "email", "emails", "email_address", "email_id", "contact_mail", "mail"],
+      contact_phone: ["contact_phone", "phone", "phone_number", "mobile", "mobile_number", "contact_numbers", "contact_number", "cell"],
+      description: ["description", "desc", "notes", "details", "summary", "comment", "lead_description"],
+      lead_value: ["lead_value", "value", "amount", "deal_value", "price", "lead_amount", "total_value", "total_amount"],
+      status: ["status", "lead_status", "state"],
+      sales_owner: ["sales_owner", "user", "owner", "assigned_to", "sales_rep", "sales_owner_name", "user_name", "sales_owner_id", "user_id", "agent"],
+      lead_source: ["lead_source", "source", "lead_source_name", "source_name", "lead_source_id", "source_id"],
+      lead_type: ["lead_type", "type", "lead_type_name", "type_name", "lead_type_id", "type_id"],
+      pipeline: ["pipeline", "lead_pipeline", "pipeline_name", "lead_pipeline_id", "pipeline_id"],
+      stage: ["stage", "lead_stage", "pipeline_stage", "stage_name", "lead_pipeline_stage", "stage_id"],
+      expected_close_date: ["expected_close_date", "close_date", "expected_date", "due_date", "expected_close", "target_date"],
+    },
+  },
+  persons: {
+    required: "name",
+    standardFields: {
+      name: ["name", "person_name", "full_name", "contact_name", "person", "customer_name", "client_name", "id", "person_id"],
+      emails: ["emails", "email", "contact_email", "email_address", "email_id", "work_email", "mail"],
+      contact_numbers: ["contact_numbers", "phone", "contact_phone", "phone_number", "mobile", "mobile_number", "contact_number", "contact", "cell"],
+      job_title: ["job_title", "title", "designation", "role", "position", "occupation"],
+      organization: ["organization", "company", "institute", "organization_name", "company_name", "organization_id", "org"],
+      sales_owner: ["sales_owner", "user", "owner", "assigned_to", "sales_rep", "user_name", "sales_owner_id", "user_id", "agent"],
+    },
+  },
+  organizations: {
+    required: "name",
+    standardFields: {
+      name: ["name", "organization_name", "company", "company_name", "institute", "org_name", "business_name", "account_name", "id", "organization_id"],
+      address: ["address", "street", "street_address", "office_address", "location"],
+      city: ["city", "city_name", "town"],
+      state: ["state", "state_name", "province", "region"],
+      country: ["country", "country_name", "nation"],
+      postcode: ["postcode", "postal_code", "pincode", "pin_code", "zip", "zipcode", "zip_code"],
+      sales_owner: ["sales_owner", "user", "owner", "assigned_to", "sales_rep", "user_name", "sales_owner_id", "user_id", "agent"],
+    },
+  },
+  products: {
+    required: "sku",
+    standardFields: {
+      sku: ["sku", "product_code", "item_code", "code", "sku_code", "part_number", "id", "product_id"],
+      name: ["name", "product_name", "item_name", "title", "product"],
+      description: ["description", "desc", "product_description", "details"],
+      price: ["price", "unit_price", "rate", "cost", "amount", "mrp"],
+      quantity: ["quantity", "qty", "stock", "stock_quantity", "units", "count"],
+    },
+  },
+};
 
-  const [saving, setSaving] = useState<boolean>(false);
+const analyzeImportHeaders = (
+  typeRaw: string,
+  fileHeaders: string[],
+  customAttributes: any[] = []
+): HeaderAnalysis => {
+  const normType = typeRaw.toLowerCase();
+  const def = MODULE_FIELD_DEFINITIONS[normType];
+  const requiredField = def?.required || "name";
+  const standardFields = def?.standardFields || {};
+  const expectedHeaders = Object.keys(standardFields);
 
-  // Validation State
-  const [validating, setValidating] = useState<boolean>(false);
-  const [validationResult, setValidationResult] = useState<{
-    isValid: boolean;
-    total: number;
-    validCount: number;
-    invalidCount: number;
-    errorsCount: number;
-    errors: string[];
-    sampleErrors: Array<{ row: number; error: string }>;
-  } | null>(null);
+  const clean = (s: string) => (s || "").toLowerCase().trim().replace(/[\s_\-#]+/g, "");
+
+  const customCodes = new Set(
+    (customAttributes || []).map((ca: any) => clean(ca?.code || ca?.name || ""))
+  );
+  const customNames = new Map(
+    (customAttributes || []).map((ca: any) => [clean(ca?.code || ca?.name || ""), ca?.name || ca?.code])
+  );
+
+  let hasRequiredField = false;
+  const matchedColumns: HeaderMatchReport[] = [];
+  const unmatchedColumns: HeaderMatchReport[] = [];
+  const aliasColumns: HeaderMatchReport[] = [];
+  const mismatchMessages: string[] = [];
+
+  for (const rawHeader of fileHeaders) {
+    const trimmed = String(rawHeader ?? "").trim();
+    if (!trimmed || trimmed.startsWith("__col_")) continue;
+    const cHeader = clean(trimmed);
+
+    // 1. Exact match with canonical standard field
+    const exactStandard = expectedHeaders.find((eh) => clean(eh) === cHeader);
+    if (exactStandard) {
+      if (exactStandard === requiredField) hasRequiredField = true;
+      matchedColumns.push({
+        fileHeader: trimmed,
+        matchedField: exactStandard,
+        matchType: "exact",
+        message: `Column "${trimmed}" matches expected field "${exactStandard}".`,
+      });
+      continue;
+    }
+
+    // 2. Exact match with custom attribute
+    if (customCodes.has(cHeader)) {
+      matchedColumns.push({
+        fileHeader: trimmed,
+        matchedField: customNames.get(cHeader) || trimmed,
+        matchType: "custom",
+        message: `Column "${trimmed}" matches custom attribute "${customNames.get(cHeader) || trimmed}".`,
+      });
+      continue;
+    }
+
+    // 3. Alias match with standard fields
+    let matchedAliasField: string | null = null;
+    for (const [canonical, aliases] of Object.entries(standardFields)) {
+      if (aliases.some((a) => clean(a) === cHeader)) {
+        matchedAliasField = canonical;
+        break;
+      }
+    }
+
+    if (matchedAliasField) {
+      if (matchedAliasField === requiredField) hasRequiredField = true;
+      const report: HeaderMatchReport = {
+        fileHeader: trimmed,
+        matchedField: matchedAliasField,
+        matchType: "alias",
+        message: `Column "${trimmed}" matched to field "${matchedAliasField}". For this column, the name should be "${matchedAliasField}".`,
+      };
+      matchedColumns.push(report);
+      aliasColumns.push(report);
+      continue;
+    }
+
+    // 4. Unmatched column
+    const report: HeaderMatchReport = {
+      fileHeader: trimmed,
+      matchedField: null,
+      matchType: "unmatched",
+      message: `Column "${trimmed}" does not match any field in ${typeRaw}. For this column, the name should match an expected field (e.g. ${expectedHeaders.slice(0, 5).join(", ")}) or a registered custom attribute.`,
+    };
+    unmatchedColumns.push(report);
+    mismatchMessages.push(
+      `Column "${trimmed}" does not match any field for ${typeRaw}. For this column, the name should be one of: ${expectedHeaders.join(", ")}.`
+    );
+  }
+
+  // Also check if id column is present as alternate required identifier
+  if (!hasRequiredField) {
+    const hasId = fileHeaders.some((h) => ["id", `${normType}_id`, `${normType.slice(0, -1)}_id`].includes(clean(h)));
+    if (hasId) hasRequiredField = true;
+  }
+
+  let missingRequiredMessage: string | undefined;
+  if (!hasRequiredField) {
+    missingRequiredMessage = `Column name mismatch: Required column "${requiredField}" is missing or does not match. For this column, the name should be "${requiredField}". (Found columns in file: ${fileHeaders.filter((h) => !h.startsWith("__col_")).join(", ") || "none"}).`;
+    mismatchMessages.unshift(missingRequiredMessage);
+  }
+
+  const isValid = hasRequiredField;
+
+  return {
+    isValid,
+    requiredField,
+    hasRequiredField,
+    expectedHeaders,
+    fileHeaders,
+    matchedColumns,
+    unmatchedColumns,
+    aliasColumns,
+    missingRequiredMessage,
+    mismatchMessages,
+  };
+};
 
 const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<string, any>[] }> = {
   persons: {
@@ -123,6 +281,64 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
     ],
   },
 };
+
+const CreateImportPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  // General Form State
+  const [type, setType] = useState<"Persons" | "Leads" | "Organizations" | "Products">("Persons");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<any[]>([]);
+  const [sampleMeta, setSampleMeta] = useState<{
+    headers: string[];
+    sampleRows: any[];
+    customAttributes: any[];
+  }>({
+    headers: [],
+    sampleRows: [],
+    customAttributes: [],
+  });
+  const [loadingSample, setLoadingSample] = useState<boolean>(false);
+  const [showSamplePreview, setShowSamplePreview] = useState<boolean>(true);
+
+  // Settings Panel State
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(true);
+  const [action, setAction] = useState<string>("Create/Update");
+  const [validationStrategy, setValidationStrategy] = useState<string>("Stop on Errors");
+  const [allowedErrors, setAllowedErrors] = useState<number>(10);
+  const [fieldSeparator, setFieldSeparator] = useState<string>(",");
+  const [processInQueue, setProcessInQueue] = useState<boolean>(false);
+
+  const [saving, setSaving] = useState<boolean>(false);
+
+  // Validation State
+  const [validating, setValidating] = useState<boolean>(false);
+  const [validationResult, setValidationResult] = useState<{
+    isValid: boolean;
+    total: number;
+    validCount: number;
+    invalidCount: number;
+    errorsCount: number;
+    errors: string[];
+    sampleErrors: Array<{ row: number; error: string }>;
+  } | null>(null);
+
+  // Column Heading Verification State
+  const [headerAnalysis, setHeaderAnalysis] = useState<HeaderAnalysis | null>(null);
+  const [showColumnBreakdown, setShowColumnBreakdown] = useState<boolean>(false);
+
+  // Recalculate header analysis whenever parsedRows, type, or custom attributes change
+  useEffect(() => {
+    if (parsedRows.length > 0) {
+      const headers = Object.keys(parsedRows[0] || {});
+      const analysis = analyzeImportHeaders(type, headers, sampleMeta.customAttributes);
+      setHeaderAnalysis(analysis);
+    } else {
+      setHeaderAnalysis(null);
+    }
+  }, [type, parsedRows, sampleMeta.customAttributes]);
+
+
 
   // Fetch sample metadata (standard fields + custom attributes) whenever module type changes
   useEffect(() => {
@@ -224,6 +440,31 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
       }
 
       setParsedRows(rows);
+      if (rows && rows.length > 0) {
+        const fileCols = Object.keys(rows[0] || {});
+        const analysis = analyzeImportHeaders(type, fileCols, sampleMeta.customAttributes);
+        setHeaderAnalysis(analysis);
+        if (!analysis.hasRequiredField) {
+          Swal.fire({
+            icon: "warning",
+            title: "Column Name Mismatch",
+            html: `
+              <div class="text-left text-sm space-y-2">
+                <p class="font-semibold text-red-600">
+                  Required column missing or misspelled: For this column, the header name should be <u>${analysis.requiredField}</u>.
+                </p>
+                <p class="text-xs text-gray-600 dark:text-gray-300">
+                  The uploaded file must have a column matching the required field (<code>${analysis.requiredField}</code> or <code>id</code>) so records can be uniquely identified.
+                </p>
+                <div class="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700">
+                  <b>Columns found in file:</b> ${fileCols.filter((h) => !h.startsWith("__col_")).join(", ") || "none"}
+                </div>
+              </div>
+            `,
+            confirmButtonColor: "#0088cc",
+          });
+        }
+      }
     } catch (err: any) {
       Swal.fire({
         icon: "error",
@@ -236,6 +477,25 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
   };
 
   const handleValidateData = async () => {
+    if (headerAnalysis && !headerAnalysis.hasRequiredField) {
+      Swal.fire({
+        icon: "error",
+        title: "Required Column Missing",
+        html: `
+          <div class="text-left text-sm space-y-2">
+            <p class="font-semibold text-red-600">
+              For this column, the header name should be "${headerAnalysis.requiredField}".
+            </p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">
+              Your file cannot be validated because the required column "<code>${headerAnalysis.requiredField}</code>" is missing or does not match. Please rename the column header to match.
+            </p>
+          </div>
+        `,
+        confirmButtonColor: "#ef4444",
+      });
+      return;
+    }
+
     if (!parsedRows || parsedRows.length === 0) {
       Swal.fire({
         icon: "warning",
@@ -329,6 +589,25 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
 
   const handleSaveImport = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (headerAnalysis && !headerAnalysis.hasRequiredField) {
+      Swal.fire({
+        icon: "error",
+        title: "Required Column Missing",
+        html: `
+          <div class="text-left text-sm space-y-2">
+            <p class="font-semibold text-red-600">
+              For this column, the header name should be "${headerAnalysis.requiredField}".
+            </p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">
+              Import cannot proceed without the required column "<code>${headerAnalysis.requiredField}</code>". Please rename the column header and try again.
+            </p>
+          </div>
+        `,
+        confirmButtonColor: "#ef4444",
+      });
+      return;
+    }
+
     if (!selectedFile || parsedRows.length === 0) {
       Swal.fire({
         icon: "warning",
@@ -647,6 +926,188 @@ const DEFAULT_SAMPLES: Record<string, { headers: string[]; sampleRows: Record<st
                 Upload your completed Excel or CSV file. All columns corresponding to custom attributes will be imported.
               </p>
             </div>
+
+            {/* Column Heading Verification & Match Status */}
+            {headerAnalysis && parsedRows.length > 0 && (
+              <div className="space-y-3">
+                {/* 1. Missing Required Field Alert */}
+                {!headerAnalysis.hasRequiredField && (
+                  <div className="p-4 bg-red-50/90 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl space-y-2">
+                    <div className="flex items-start gap-2.5">
+                      <i className="mgc_close_circle_line text-lg text-red-600 flex-shrink-0 mt-0.5"></i>
+                      <div className="text-xs space-y-1">
+                        <div className="font-bold text-red-800 dark:text-red-300">
+                          Column Name Mismatch: Required Column Missing
+                        </div>
+                        <div className="text-red-700 dark:text-red-400">
+                          For this column, the header name should be <span className="font-bold underline text-red-900 dark:text-red-200">"{headerAnalysis.requiredField}"</span> (or "id").
+                        </div>
+                        <div className="text-[11px] text-gray-600 dark:text-gray-400">
+                          Your file's header row does not have a column named "{headerAnalysis.requiredField}". Please rename your column header in the file or download the sample template.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Unmatched Columns Warning */}
+                {headerAnalysis.unmatchedColumns.length > 0 && (
+                  <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
+                    <div className="flex items-start gap-2.5">
+                      <i className="mgc_alert_line text-lg text-amber-600 flex-shrink-0 mt-0.5"></i>
+                      <div className="text-xs space-y-1.5 flex-1">
+                        <div className="font-bold text-amber-900 dark:text-amber-200">
+                          Unmatched Column Names Detected ({headerAnalysis.unmatchedColumns.length})
+                        </div>
+                        <p className="text-amber-800 dark:text-amber-300 text-[11px]">
+                          The following column(s) in your file do not match standard fields or registered custom attributes:
+                        </p>
+                        <div className="space-y-1 mt-1">
+                          {headerAnalysis.unmatchedColumns.map((col, idx) => (
+                            <div key={idx} className="flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+                              <span className="font-mono bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded text-amber-900 dark:text-amber-200 font-semibold flex-shrink-0">
+                                {col.fileHeader}
+                              </span>
+                              <span>
+                                — For this column, the name should be same as standard fields (<span className="font-medium">{headerAnalysis.expectedHeaders.slice(0, 5).join(", ")}</span>) or a custom attribute.
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Auto-matched Aliases Notice */}
+                {headerAnalysis.aliasColumns.length > 0 && (
+                  <div className="p-3 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
+                    <div className="flex items-start gap-2 text-xs text-blue-900 dark:text-blue-200">
+                      <i className="mgc_check_line text-base text-blue-600 flex-shrink-0 mt-0.5"></i>
+                      <div className="space-y-1 text-[11px]">
+                        <span className="font-semibold text-blue-900 dark:text-blue-100">
+                          Columns Automatically Mapped via Alias ({headerAnalysis.aliasColumns.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {headerAnalysis.aliasColumns.map((col, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 rounded text-[11px]"
+                            >
+                              <code>{col.fileHeader}</code>
+                              <span>→</span>
+                              <strong className="font-semibold">{col.matchedField}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Perfect Match Banner */}
+                {headerAnalysis.isValid && headerAnalysis.unmatchedColumns.length === 0 && (
+                  <div className="p-3 bg-green-50/90 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl flex items-center gap-2.5 text-xs text-green-800 dark:text-green-300">
+                    <i className="mgc_check_circle_line text-base text-green-600 flex-shrink-0"></i>
+                    <span>
+                      <b>All Column Headings Matched:</b> Every column in your file matches the expected {type} fields.
+                    </span>
+                  </div>
+                )}
+
+                {/* Column Mapping Breakdown Toggle */}
+                <div className="flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnBreakdown(!showColumnBreakdown)}
+                    className="text-xs text-[#0088cc] hover:underline font-medium flex items-center gap-1"
+                  >
+                    <i className={`mgc_down_line transition-transform ${showColumnBreakdown ? "rotate-180" : ""}`}></i>
+                    <span>
+                      {showColumnBreakdown ? "Hide" : "Show"} Column Heading Match Breakdown ({headerAnalysis.matchedColumns.length}/{headerAnalysis.fileHeaders.filter(h => !h.startsWith("__col_")).length} matched)
+                    </span>
+                  </button>
+                </div>
+
+                {/* Column Breakdown Table */}
+                {showColumnBreakdown && (
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-xs">
+                      <thead className="bg-gray-50 dark:bg-gray-800/60">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
+                            File Column Header
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
+                            Match Status
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
+                            Expected CRM Field
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-300">
+                            Guidance / Recommendation
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {headerAnalysis.fileHeaders
+                          .filter((h) => !h.startsWith("__col_"))
+                          .map((headerName, idx) => {
+                            const match = headerAnalysis.matchedColumns.find((m) => m.fileHeader === headerName);
+                            const isUnmatched = !match;
+                            return (
+                              <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
+                                <td className="px-3 py-2 font-mono font-medium text-gray-900 dark:text-gray-100">
+                                  {headerName}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {match?.matchType === "exact" && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300">
+                                      Exact Match
+                                    </span>
+                                  )}
+                                  {match?.matchType === "alias" && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                                      Alias Match
+                                    </span>
+                                  )}
+                                  {match?.matchType === "custom" && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                                      Custom Attribute
+                                    </span>
+                                  )}
+                                  {isUnmatched && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+                                      Unmatched
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-gray-700 dark:text-gray-300 font-medium">
+                                  {match ? match.matchedField : <span className="text-gray-400 italic">None</span>}
+                                </td>
+                                <td className="px-3 py-2 text-[11px] text-gray-600 dark:text-gray-400">
+                                  {match?.matchType === "exact" && "Matches expected field name perfectly."}
+                                  {match?.matchType === "alias" && (
+                                    <span>
+                                      Mapped to <strong className="text-gray-800 dark:text-gray-200">{match.matchedField}</strong>. For this column, name should ideally be <code className="text-blue-600 dark:text-blue-400 font-semibold">{match.matchedField}</code>.
+                                    </span>
+                                  )}
+                                  {match?.matchType === "custom" && "Matches a registered custom attribute."}
+                                  {isUnmatched && (
+                                    <span className="text-amber-700 dark:text-amber-400">
+                                      For this column, name should be same as standard fields ({headerAnalysis.expectedHeaders.slice(0, 4).join(", ")}) or custom attributes.
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Parsed Rows Preview & Validation Status */}
             {parsedRows.length > 0 && (

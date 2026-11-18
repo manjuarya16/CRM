@@ -350,12 +350,40 @@ export class SuperAdminService {
    * Impersonate organization admin login
    */
   public async impersonateTenant(tenantId: number) {
-    const { rows: tenantRows } = await pool.query(
-      `SELECT * FROM public.get_saas_tenant_for_impersonation($1::bigint)`,
-      [tenantId]
-    );
-    if (!tenantRows[0]) throw new ApiError(404, 'Organization not found');
-    const tenant = tenantRows[0];
+    let tenant: any = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT t.id,
+                t.name,
+                t.slug,
+                t.domain,
+                t.status,
+                t.settings,
+                COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date
+           FROM public.saas_tenants t
+           LEFT JOIN (
+             SELECT DISTINCT ON (ps.tenant_id) ps.tenant_id, ps.ends_at
+               FROM public.platform_subscriptions ps
+              ORDER BY ps.tenant_id, ps.id DESC
+           ) sub ON sub.tenant_id = t.id
+          WHERE t.id = $1::bigint`,
+        [tenantId]
+      );
+      tenant = rows[0];
+    } catch (dbErr: any) {
+      logger.warn({ err: dbErr?.message }, 'Direct query for tenant failed, attempting stored function');
+      try {
+        const { rows } = await pool.query(
+          `SELECT * FROM public.get_saas_tenant_for_impersonation($1::bigint)`,
+          [tenantId]
+        );
+        tenant = rows[0];
+      } catch (fnErr: any) {
+        logger.error({ err: fnErr?.message }, 'get_saas_tenant_for_impersonation also failed');
+      }
+    }
+
+    if (!tenant) throw new ApiError(404, 'Organization not found');
 
     const isExpired =
       tenant.status === 'expired' ||
@@ -372,12 +400,70 @@ export class SuperAdminService {
       throw new ApiError(403, `Cannot impersonate "${tenant.name}". This organization account is suspended.`);
     }
 
-    const { rows: users } = await pool.query(
-      `SELECT * FROM public.get_or_create_tenant_admin_user_for_impersonation($1::bigint)`,
-      [tenantId]
-    );
+    let user: any = null;
+    try {
+      const { rows: users } = await pool.query(
+        `SELECT u.id, u.name, u.email, u.tenant_id, u.role_id, r.name AS role_name
+           FROM public.users u
+           LEFT JOIN public.roles r ON r.id = u.role_id
+          WHERE u.tenant_id = $1
+          ORDER BY CASE WHEN LOWER(COALESCE(r.name, '')) IN ('admin', 'administrator') THEN 0 ELSE 1 END,
+                   CASE WHEN u.status = true THEN 0 ELSE 1 END,
+                   u.id ASC
+          LIMIT 1`,
+        [tenantId]
+      );
+      user = users[0];
+    } catch (userQueryErr: any) {
+      logger.warn({ err: userQueryErr?.message }, 'Direct query for tenant admin user failed, attempting stored function');
+    }
 
-    const user = users[0];
+    if (!user) {
+      try {
+        const { rows: users } = await pool.query(
+          `SELECT * FROM public.get_or_create_tenant_admin_user_for_impersonation($1::bigint)`,
+          [tenantId]
+        );
+        user = users[0];
+      } catch (fnErr: any) {
+        logger.warn({ err: fnErr?.message }, 'get_or_create_tenant_admin_user_for_impersonation failed');
+      }
+    }
+
+    if (!user) {
+      // Provision fallback administrator user if not existing
+      try {
+        const roleRes = await pool.query(
+          `SELECT id FROM public.roles WHERE tenant_id = $1 AND LOWER(name) IN ('admin', 'administrator') LIMIT 1`,
+          [tenantId]
+        );
+        let roleId = roleRes.rows[0]?.id;
+        if (!roleId) {
+          const insRole = await pool.query(
+            `INSERT INTO public.roles (name, description, permission_type, tenant_id)
+             VALUES ('Administrator', 'Full system access', 'all', $1)
+             RETURNING id`,
+            [tenantId]
+          );
+          roleId = insRole.rows[0]?.id;
+        }
+        const insUser = await pool.query(
+          `INSERT INTO public.users (name, email, password, tenant_id, role_id, status)
+           VALUES ($1, $2, 'managed_tenant_sso', $3, $4, true)
+           RETURNING id, name, email, tenant_id, role_id`,
+          [
+            `${tenant.name || 'Tenant'} Administrator`,
+            `admin@${tenant.slug || 'crm'}.localhost`,
+            tenantId,
+            roleId,
+          ]
+        );
+        user = { ...insUser.rows[0], role_name: 'admin' };
+      } catch (createErr: any) {
+        logger.error({ err: createErr?.message }, 'Failed to create fallback admin user for impersonation');
+      }
+    }
+
     if (!user) {
       throw new ApiError(500, `Unable to find or provision an administrator user for "${tenant.name}".`);
     }
@@ -430,6 +516,12 @@ export class SuperAdminService {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
+      },
+      organization: {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        domain: tenant.domain,
       },
       redirectUrl,
     };
@@ -562,12 +654,44 @@ export class SuperAdminService {
    * Impersonate a specific user
    */
   public async impersonateUser(userId: number) {
-    const { rows } = await pool.query(
-      `SELECT * FROM public.get_user_for_impersonation($1::bigint)`,
-      [userId]
-    );
-    if (!rows[0]) throw new ApiError(404, 'User not found');
-    const user = rows[0];
+    let user: any = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT u.id,
+                u.name,
+                u.email,
+                u.tenant_id,
+                t.slug AS tenant_slug,
+                t.name AS tenant_name,
+                t.status AS tenant_status,
+                COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date,
+                u.role_id,
+                r.name AS role_name
+           FROM public.users u
+           LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
+           LEFT JOIN (
+             SELECT DISTINCT ON (ps.tenant_id) ps.tenant_id, ps.ends_at
+               FROM public.platform_subscriptions ps
+              ORDER BY ps.tenant_id, ps.id DESC
+           ) sub ON sub.tenant_id = t.id
+           LEFT JOIN public.roles r ON r.id = u.role_id
+          WHERE u.id = $1::bigint`,
+        [userId]
+      );
+      user = rows[0];
+    } catch (e: any) {
+      logger.warn({ err: e?.message }, 'Direct query for user failed, attempting stored function');
+      try {
+        const { rows } = await pool.query(
+          `SELECT * FROM public.get_user_for_impersonation($1::bigint)`,
+          [userId]
+        );
+        user = rows[0];
+      } catch (fnErr: any) {
+        logger.error({ err: fnErr?.message }, 'get_user_for_impersonation also failed');
+      }
+    }
+    if (!user) throw new ApiError(404, 'User not found');
 
     if (user.tenant_id) {
       const isExpired =
