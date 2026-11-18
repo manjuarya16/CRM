@@ -192,19 +192,17 @@ const SettingsPage: React.FC = () => {
       {/* Settings Sections */}
       <div className="space-y-8">
         {SETTINGS_SECTIONS.map((section) => (
-          <div key={section.id} className="space-y-3">
+          <Collapse key={section.id}>
             {/* Section Header */}
-            <div>
-              <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                {section.title}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {section.subtitle}
-              </p>
-            </div>
+            <Collapse.Toggle as="h2" className="text-sm font-bold text-gray-800 dark:text-gray-100 cursor-pointer">
+              {section.title}
+            </Collapse.Toggle>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {section.subtitle}
+            </p>
 
             {/* Cards Grid */}
-            <div
+            <Collapse.Menu
               className={`grid gap-4 ${
                 section.gridCols
                   ? section.gridCols
@@ -230,8 +228,8 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </Link>
               ))}
-            </div>
-          </div>
+            </Collapse.Menu>
+          </Collapse>
         ))}
       </div>
     </div>

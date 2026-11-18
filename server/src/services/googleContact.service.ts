@@ -32,6 +32,10 @@ export class GoogleContactService {
       const cleanedToken = data.access_token
         ? data.access_token.trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '')
         : '';
+      if (!cleanedToken || cleanedToken.toLowerCase().startsWith('mock_')) {
+        throw new Error('A valid Google OAuth Access Token is required to connect this account.');
+      }
+
       const expiresIn = data.expires_in || 3600;
       const tokenType = data.token_type || 'Bearer';
 
@@ -59,7 +63,10 @@ export class GoogleContactService {
       );
       return rows[0];
     } catch (error: any) {
-      logger.error({ error, userId, data }, 'GoogleContactService.saveAccount failed');
+      logger.error(
+        { error, userId, google_email: data.google_email },
+        'GoogleContactService.saveAccount failed'
+      );
       throw error;
     }
   }

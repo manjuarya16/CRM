@@ -31,17 +31,51 @@ const MenuItemWithChildren = ({
 }: SubMenus) => {
   const isItemActive = activeMenuItems ? activeMenuItems.includes(item.key) : false;
   const isItemOpen = openMenuItems ? openMenuItems.includes(item.key) : false;
-  const open = isItemOpen || isItemActive;
+  const open = isItemOpen;
+
+  const resetSubMenuScroll = (menuItem: HTMLElement | null) => {
+    const subMenu = menuItem?.querySelector<HTMLElement>(":scope > .sub-menu");
+    if (subMenu) subMenu.scrollTop = 0;
+  };
+
+  const positionSubMenu = (menuItem: HTMLElement) => {
+    const subMenu = menuItem.querySelector<HTMLElement>(":scope > .sub-menu");
+    if (!subMenu) return;
+
+    subMenu.scrollTop = 0;
+    const bounds = menuItem.getBoundingClientRect();
+    const viewportPadding = 8;
+    const availableHeight = window.innerHeight - viewportPadding * 2;
+    const menuHeight = Math.min(subMenu.scrollHeight, availableHeight);
+    const top = Math.min(
+      Math.max(bounds.bottom, viewportPadding),
+      window.innerHeight - viewportPadding - menuHeight
+    );
+    subMenu.style.top = `${top - bounds.top}px`;
+  };
 
   const toggleMenuItem = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const status = !open;
+    if (status) resetSubMenuScroll(e.currentTarget.parentElement);
     if (toggleMenu) toggleMenu(item, status);
   };
 
   return (
-    <li className="menu-item">
+    <li
+      className="menu-item"
+      onMouseEnter={(e) => {
+        if (document.documentElement.getAttribute("data-sidenav-view") === "sm") {
+          positionSubMenu(e.currentTarget);
+        } else {
+          const subMenu = e.currentTarget.querySelector<HTMLElement>(
+            ":scope > .sub-menu"
+          );
+          if (subMenu) subMenu.style.top = "";
+        }
+      }}
+    >
       <button
         type="button"
         className={`${linkClassName} ${open ? "open" : ""}`}

@@ -79,6 +79,7 @@ const UsersPage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
   useEffect(() => {
     fetchUsers();
@@ -791,16 +792,16 @@ const UsersPage: React.FC = () => {
                 <i className="mgc_edit_line text-sm"></i>
               </button>
             )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => handleDelete(user)}
-                className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
-                title="Delete User"
-              >
-                <i className="mgc_delete_line text-sm"></i>
-              </button>
-            )}
+{canDelete && String(user.role_name).toLowerCase() !== 'administrator' && (
+    <button
+      type="button"
+      onClick={() => handleDelete(user)}
+      className="p-1 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition"
+      title="Delete User"
+    >
+      <i className="mgc_delete_line text-sm"></i>
+    </button>
+)}
           </div>
         </div>
       </div>
@@ -1321,7 +1322,7 @@ const UsersPage: React.FC = () => {
                   </label>
                   <div className="relative">
                     <input
-                      type={showPassword ? "text" : "password"}
+                      type={showConfirmPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={formData.confirm_password}
                       onChange={(e) =>
@@ -1339,11 +1340,11 @@ const UsersPage: React.FC = () => {
                     <button
                       type="button"
                       tabIndex={-1}
-                      onClick={() => setShowPassword((prev) => !prev)}
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
                       className="absolute inset-y-0 right-0 z-10 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                      title={showPassword ? "Hide password" : "Show password"}
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+                      {showConfirmPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                     </button>
                   </div>
                   {errors.confirm_password && (

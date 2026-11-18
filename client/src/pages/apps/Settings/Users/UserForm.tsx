@@ -7,6 +7,7 @@ import { userFormSchema } from "@/schemas";
 import { ZodError } from "zod";
 import { buildHierarchicalRoleList } from "@/utils/roleHierarchy";
 import { Eye, EyeOff } from "lucide-react";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export interface UserFormProps {
   mode: "create" | "edit";
@@ -349,7 +350,7 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder={isCreate ? "Minimum 6 characters" : "••••••••"}
+                    placeholder={""}
                     value={formData.password}
                     onChange={(e) => {
                       setFormData({ ...formData, password: e.target.value });
@@ -385,7 +386,7 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? "text" : "password"}
-                    placeholder={isCreate ? "Re-enter password" : "••••••••"}
+                    placeholder={""}
                     value={formData.confirm_password}
                     onChange={(e) => {
                       setFormData({ ...formData, confirm_password: e.target.value });
@@ -445,7 +446,17 @@ export const UserForm: React.FC<UserFormProps> = ({ mode }) => {
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                 <div>
-                  <label className={labelCls}>
+                <PasswordInput
+                  label="Password"
+                  value={formData.password}
+                  onChange={(val) => {
+                    setFormData({ ...formData, password: val });
+                    if (errors.password) setErrors({ ...errors, password: '' });
+                  }}
+                  required={isCreate}
+                  error={errors.password}
+                  inputClass={`${inputCls} pr-10`}
+                />
                     Assigned Groups ({formData.group_ids.length} selected)
                   </label>
                   <p className="text-xs text-gray-500 dark:text-gray-400">

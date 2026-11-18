@@ -113,7 +113,7 @@ export const useRoleStore = create<RoleStore>((set, get) => ({
   deleteRole: async (id: number) => {
     try {
       set({ loading: true });
-      const response = await API.delete(`/roles/delete/${id}`);
+      const response = await API.delete(`/roles/${id}`);
       if (response.data?.success) {
         set((state) => ({
           roles: state.roles.filter((r) => r.id !== id),

@@ -605,7 +605,7 @@ const RolesPage: React.FC = () => {
                 <i className="mgc_edit_line text-sm"></i>
               </Link>
             )}
-            {canDelete && (
+            {canDelete && String(role.name).toLowerCase() !== 'administrator' && (
               <button
                 type="button"
                 onClick={() => handleDelete(role)}

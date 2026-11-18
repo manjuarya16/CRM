@@ -133,6 +133,9 @@ const CreateWarehousePage = React.lazy(
 const EditWarehousePage = React.lazy(
   () => import("../pages/apps/Settings/Warehouses/edit"),
 );
+const ViewWarehousePage = React.lazy(
+  () => import("../pages/apps/Settings/Warehouses/view"),
+);
 const AttributesPage = React.lazy(
   () => import("../pages/apps/Settings/Attributes"),
 );
@@ -774,6 +777,16 @@ const authProtectedRoutes: RoutesProps[] = [
     path: "/settings/warehouses/edit/:id",
     name: "Edit Warehouse",
     element: <EditWarehousePage />,
+  },
+  {
+    path: "/settings/warehouses/:id/view",
+    name: "View Warehouse",
+    element: <ViewWarehousePage />,
+  },
+  {
+    path: "/settings/warehouses/view/:id",
+    name: "View Warehouse",
+    element: <ViewWarehousePage />,
   },
   {
     path: "/settings/attributes",
