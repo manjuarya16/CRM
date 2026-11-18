@@ -1,6 +1,7 @@
 import { pool } from '@/config/db';
 import { IImport } from '@/interfaces/crm.interface';
 import { logger } from '@/utils/logger';
+import { ApiError } from '@/middleware/errorHandler';
 
 const BUILT_IN_FIELD_CODES = new Set([
   'title',
@@ -54,6 +55,205 @@ const BUILT_IN_FIELD_CODES = new Set([
   'postcode',
   'status',
 ]);
+
+export interface HeaderMatchReport {
+  fileHeader: string;
+  matchedField: string | null;
+  matchType: 'exact' | 'alias' | 'custom' | 'unmatched';
+  message: string;
+}
+
+export interface HeaderAnalysis {
+  isValid: boolean;
+  requiredField: string;
+  hasRequiredField: boolean;
+  expectedHeaders: string[];
+  fileHeaders: string[];
+  matchedColumns: HeaderMatchReport[];
+  unmatchedColumns: HeaderMatchReport[];
+  aliasColumns: HeaderMatchReport[];
+  missingRequiredMessage?: string;
+  mismatchMessages: string[];
+}
+
+export const MODULE_FIELD_DEFINITIONS: Record<
+  string,
+  {
+    required: string;
+    standardFields: Record<string, string[]>;
+  }
+> = {
+  leads: {
+    required: 'title',
+    standardFields: {
+      title: ['title', 'lead_title', 'deal_name', 'deal', 'subject', 'name', 'lead_name', 'lead', 'heading', 'id', 'lead_id'],
+      organization: ['organization', 'organization_name', 'company', 'company_name', 'institute', 'institute_name', 'organization_id', 'org'],
+      contact_person: ['contact_person', 'person', 'contact_name', 'person_name', 'contact_person_name', 'contact', 'person_id'],
+      contact_email: ['contact_email', 'email', 'emails', 'email_address', 'email_id', 'contact_mail', 'mail'],
+      contact_phone: ['contact_phone', 'phone', 'phone_number', 'mobile', 'mobile_number', 'contact_numbers', 'contact_number', 'cell'],
+      description: ['description', 'desc', 'notes', 'details', 'summary', 'comment', 'lead_description'],
+      lead_value: ['lead_value', 'value', 'amount', 'deal_value', 'price', 'lead_amount', 'total_value', 'total_amount'],
+      status: ['status', 'lead_status', 'state'],
+      sales_owner: ['sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'sales_owner_name', 'user_name', 'sales_owner_id', 'user_id', 'agent'],
+      lead_source: ['lead_source', 'source', 'lead_source_name', 'source_name', 'lead_source_id', 'source_id'],
+      lead_type: ['lead_type', 'type', 'lead_type_name', 'type_name', 'lead_type_id', 'type_id'],
+      pipeline: ['pipeline', 'lead_pipeline', 'pipeline_name', 'lead_pipeline_id', 'pipeline_id'],
+      stage: ['stage', 'lead_stage', 'pipeline_stage', 'stage_name', 'lead_pipeline_stage', 'stage_id'],
+      expected_close_date: ['expected_close_date', 'close_date', 'expected_date', 'due_date', 'expected_close', 'target_date'],
+    },
+  },
+  persons: {
+    required: 'name',
+    standardFields: {
+      name: ['name', 'person_name', 'full_name', 'contact_name', 'person', 'customer_name', 'client_name', 'id', 'person_id'],
+      emails: ['emails', 'email', 'contact_email', 'email_address', 'email_id', 'work_email', 'mail'],
+      contact_numbers: ['contact_numbers', 'phone', 'contact_phone', 'phone_number', 'mobile', 'mobile_number', 'contact_number', 'contact', 'cell'],
+      job_title: ['job_title', 'title', 'designation', 'role', 'position', 'occupation'],
+      organization: ['organization', 'company', 'institute', 'organization_name', 'company_name', 'organization_id', 'org'],
+      sales_owner: ['sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'user_name', 'sales_owner_id', 'user_id', 'agent'],
+    },
+  },
+  organizations: {
+    required: 'name',
+    standardFields: {
+      name: ['name', 'organization_name', 'company', 'company_name', 'institute', 'org_name', 'business_name', 'account_name', 'id', 'organization_id'],
+      address: ['address', 'street', 'street_address', 'office_address', 'location'],
+      city: ['city', 'city_name', 'town'],
+      state: ['state', 'state_name', 'province', 'region'],
+      country: ['country', 'country_name', 'nation'],
+      postcode: ['postcode', 'postal_code', 'pincode', 'pin_code', 'zip', 'zipcode', 'zip_code'],
+      sales_owner: ['sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'user_name', 'sales_owner_id', 'user_id', 'agent'],
+    },
+  },
+  products: {
+    required: 'sku',
+    standardFields: {
+      sku: ['sku', 'product_code', 'item_code', 'code', 'sku_code', 'part_number', 'id', 'product_id'],
+      name: ['name', 'product_name', 'item_name', 'title', 'product'],
+      description: ['description', 'desc', 'product_description', 'details'],
+      price: ['price', 'unit_price', 'rate', 'cost', 'amount', 'mrp'],
+      quantity: ['quantity', 'qty', 'stock', 'stock_quantity', 'units', 'count'],
+    },
+  },
+};
+
+export function analyzeImportHeaders(
+  typeRaw: string,
+  fileHeaders: string[],
+  customAttributes: any[] = []
+): HeaderAnalysis {
+  const normType = typeRaw.toLowerCase();
+  const def = MODULE_FIELD_DEFINITIONS[normType];
+  const requiredField = def?.required || 'name';
+  const standardFields = def?.standardFields || {};
+  const expectedHeaders = Object.keys(standardFields);
+
+  const clean = (s: string) => (s || '').toLowerCase().trim().replace(/[\s_\-#]+/g, '');
+
+  const customCodes = new Set(
+    (customAttributes || []).map((ca: any) => clean(ca?.code || ca?.name || ''))
+  );
+  const customNames = new Map(
+    (customAttributes || []).map((ca: any) => [clean(ca?.code || ca?.name || ''), ca?.name || ca?.code])
+  );
+
+  let hasRequiredField = false;
+  const matchedColumns: HeaderMatchReport[] = [];
+  const unmatchedColumns: HeaderMatchReport[] = [];
+  const aliasColumns: HeaderMatchReport[] = [];
+  const mismatchMessages: string[] = [];
+
+  for (const rawHeader of fileHeaders) {
+    const trimmed = String(rawHeader ?? '').trim();
+    if (!trimmed || trimmed.startsWith('__col_')) continue;
+    const cHeader = clean(trimmed);
+
+    // 1. Check exact match with canonical standard field
+    const exactStandard = expectedHeaders.find((eh) => clean(eh) === cHeader);
+    if (exactStandard) {
+      if (exactStandard === requiredField) hasRequiredField = true;
+      matchedColumns.push({
+        fileHeader: trimmed,
+        matchedField: exactStandard,
+        matchType: 'exact',
+        message: `Column "${trimmed}" matches expected field "${exactStandard}".`,
+      });
+      continue;
+    }
+
+    // 2. Check exact match with custom attribute
+    if (customCodes.has(cHeader)) {
+      matchedColumns.push({
+        fileHeader: trimmed,
+        matchedField: customNames.get(cHeader) || trimmed,
+        matchType: 'custom',
+        message: `Column "${trimmed}" matches custom attribute "${customNames.get(cHeader) || trimmed}".`,
+      });
+      continue;
+    }
+
+    // 3. Check alias match with standard fields
+    let matchedAliasField: string | null = null;
+    for (const [canonical, aliases] of Object.entries(standardFields)) {
+      if (aliases.some((a) => clean(a) === cHeader)) {
+        matchedAliasField = canonical;
+        break;
+      }
+    }
+
+    if (matchedAliasField) {
+      if (matchedAliasField === requiredField) hasRequiredField = true;
+      const report: HeaderMatchReport = {
+        fileHeader: trimmed,
+        matchedField: matchedAliasField,
+        matchType: 'alias',
+        message: `Column "${trimmed}" matched to field "${matchedAliasField}". For this column, the name should be "${matchedAliasField}".`,
+      };
+      matchedColumns.push(report);
+      aliasColumns.push(report);
+      continue;
+    }
+
+    // 4. Unmatched column
+    const report: HeaderMatchReport = {
+      fileHeader: trimmed,
+      matchedField: null,
+      matchType: 'unmatched',
+      message: `Column "${trimmed}" does not match any field in ${typeRaw}. For this column, the name should match an expected field name (e.g. ${expectedHeaders.slice(0, 5).join(', ')}) or a registered custom attribute.`,
+    };
+    unmatchedColumns.push(report);
+    mismatchMessages.push(
+      `Column "${trimmed}" does not match any field for ${typeRaw}. For this column, the name should be one of: ${expectedHeaders.join(', ')}.`
+    );
+  }
+
+  // Also check if an id column is present as alternate required identifier
+  if (!hasRequiredField) {
+    const hasId = fileHeaders.some((h) => ['id', `${normType}_id`, `${normType.slice(0, -1)}_id`].includes(clean(h)));
+    if (hasId) hasRequiredField = true;
+  }
+
+  let missingRequiredMessage: string | undefined;
+  if (!hasRequiredField) {
+    missingRequiredMessage = `Column name mismatch: Required column "${requiredField}" is missing or does not match. For this column, the name should be "${requiredField}". (Found columns in file: ${fileHeaders.filter((h) => !h.startsWith('__col_')).join(', ') || 'none'}).`;
+    mismatchMessages.unshift(missingRequiredMessage);
+  }
+
+  const isValid = hasRequiredField;
+
+  return {
+    isValid,
+    requiredField,
+    hasRequiredField,
+    expectedHeaders,
+    fileHeaders,
+    matchedColumns,
+    unmatchedColumns,
+    aliasColumns,
+    missingRequiredMessage,
+    mismatchMessages,
+  };
+}
 
 const toNumberParam = (v: any): number | null => {
   if (v === undefined || v === null || v === '') return null;
@@ -905,6 +1105,21 @@ export class DataTransferService {
         (a: any) => a.is_user_defined || !BUILT_IN_FIELD_CODES.has(a.code.toLowerCase())
       );
 
+      // Header validation check upfront
+      if (Array.isArray(rows) && rows.length > 0) {
+        const firstRow = rows[0] || {};
+        const fileHeaders = Object.keys(firstRow);
+        const headerAnalysis = analyzeImportHeaders(type, fileHeaders, customAttrs);
+        if (!headerAnalysis.hasRequiredField) {
+          await client.query('ROLLBACK');
+          throw new ApiError(
+            400,
+            headerAnalysis.missingRequiredMessage ||
+              `Column name mismatch: Required column "${headerAnalysis.requiredField}" is missing or does not match. For this column, the name should be "${headerAnalysis.requiredField}".`
+          );
+        }
+      }
+
       // Helper to extract and cast custom attributes from a row
       const extractCustomAttributes = (row: any): Record<string, any> => {
         const custom: Record<string, any> = {};
@@ -1584,6 +1799,7 @@ export class DataTransferService {
     errorsCount: number;
     errors: string[];
     sampleErrors: Array<{ row: number; error: string }>;
+    headerAnalysis?: HeaderAnalysis;
   }> {
     const type = typeRaw.toLowerCase() as 'leads' | 'persons' | 'organizations' | 'products';
     let action = 'append';
@@ -1596,6 +1812,7 @@ export class DataTransferService {
     const sampleErrors: Array<{ row: number; error: string }> = [];
     let validCount = 0;
     let invalidCount = 0;
+    let headerAnalysis: HeaderAnalysis | undefined;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return {
@@ -1609,126 +1826,6 @@ export class DataTransferService {
       };
     }
 
-    // 1. Header schema compatibility check against selected module type
-    const firstRow = rows[0] || {};
-    const firstRowKeys = Object.keys(firstRow).map((k) => k.trim().toLowerCase().replace(/[\s_\-#]+/g, ''));
-    const hasColumn = (...candidates: string[]) =>
-      candidates.some((c) => firstRowKeys.includes(c.toLowerCase().replace(/[\s_\-#]+/g, '')));
-
-    if (type === 'products') {
-      const hasSkuCol = hasColumn('sku', 'code', 'product code', 'item code', 'id', 'product id');
-      if (!hasSkuCol) {
-        return {
-          isValid: false,
-          total: rows.length,
-          validCount: 0,
-          invalidCount: rows.length,
-          errorsCount: 1,
-          errors: [
-            "Header Mismatch: Column 'sku' is required for Products import. The uploaded file appears to be formatted for another module (found: " +
-              Object.keys(firstRow).join(', ') +
-              ').'
-          ],
-          sampleErrors: [
-            {
-              row: 1,
-              error:
-                "Header Mismatch: Missing required 'sku' column for Products import. Found columns: " +
-                Object.keys(firstRow).join(', ')
-            }
-          ],
-        };
-      }
-    } else if (type === 'persons') {
-      const hasPersonCol = hasColumn('name', 'person name', 'full name', 'id', 'person id');
-      if (!hasPersonCol) {
-        return {
-          isValid: false,
-          total: rows.length,
-          validCount: 0,
-          invalidCount: rows.length,
-          errorsCount: 1,
-          errors: [
-            "Header Mismatch: Column 'name' is required for Persons import. The uploaded file appears to be formatted for another module (found: " +
-              Object.keys(firstRow).join(', ') +
-              ').'
-          ],
-          sampleErrors: [
-            {
-              row: 1,
-              error:
-                "Header Mismatch: Missing required 'name' column for Persons import. Found columns: " +
-                Object.keys(firstRow).join(', ')
-            }
-          ],
-        };
-      }
-    } else if (type === 'leads') {
-      const hasLeadCol = hasColumn(
-        'title',
-        'lead title',
-        'deal name',
-        'subject',
-        'id',
-        'lead id',
-        'name',
-        'lead name',
-        'lead_name',
-        'organization name',
-        'organization',
-        'company',
-        'institute',
-        'contact_person',
-        'person'
-      );
-      if (!hasLeadCol) {
-        return {
-          isValid: false,
-          total: rows.length,
-          validCount: 0,
-          invalidCount: rows.length,
-          errorsCount: 1,
-          errors: [
-            "Header Mismatch: Column 'title' is required for Leads import. The uploaded file appears to be formatted for another module (found: " +
-              Object.keys(firstRow).join(', ') +
-              ').'
-          ],
-          sampleErrors: [
-            {
-              row: 1,
-              error:
-                "Header Mismatch: Missing required 'title' column for Leads import. Found columns: " +
-                Object.keys(firstRow).join(', ')
-            }
-          ],
-        };
-      }
-    } else if (type === 'organizations') {
-      const hasOrgCol = hasColumn('name', 'organization name', 'organization', 'company', 'company name', 'id', 'organization id');
-      if (!hasOrgCol) {
-        return {
-          isValid: false,
-          total: rows.length,
-          validCount: 0,
-          invalidCount: rows.length,
-          errorsCount: 1,
-          errors: [
-            "Header Mismatch: Column 'name' is required for Organizations import. The uploaded file appears to be formatted for another module (found: " +
-              Object.keys(firstRow).join(', ') +
-              ').'
-          ],
-          sampleErrors: [
-            {
-              row: 1,
-              error:
-                "Header Mismatch: Missing required 'name' column for Organizations import. Found columns: " +
-                Object.keys(firstRow).join(', ')
-            }
-          ],
-        };
-      }
-    }
-
     const client = await pool.connect();
     try {
       // Fetch required custom attributes for this entity type
@@ -1736,6 +1833,32 @@ export class DataTransferService {
         'SELECT * FROM public.fn_get_required_attributes($1)',
         [type]
       );
+
+      // 1. Header schema compatibility check against selected module type
+      const firstRow = rows[0] || {};
+      const fileHeaders = Object.keys(firstRow);
+      headerAnalysis = analyzeImportHeaders(type, fileHeaders, reqAttrs);
+
+      if (!headerAnalysis.hasRequiredField) {
+        return {
+          isValid: false,
+          total: rows.length,
+          validCount: 0,
+          invalidCount: rows.length,
+          errorsCount: headerAnalysis.mismatchMessages.length,
+          errors: headerAnalysis.mismatchMessages,
+          sampleErrors: headerAnalysis.mismatchMessages.map((msg) => ({ row: 1, error: msg })),
+          headerAnalysis,
+        } as any;
+      }
+
+      // Record any warnings for unmatched columns
+      for (const unmatched of headerAnalysis.unmatchedColumns) {
+        errors.push(unmatched.message);
+        if (sampleErrors.length < 20) {
+          sampleErrors.push({ row: 1, error: unmatched.message });
+        }
+      }
 
       const seenInFile = new Map<string, number>();
 
@@ -1928,6 +2051,7 @@ export class DataTransferService {
       errorsCount: invalidCount,
       errors,
       sampleErrors,
+      headerAnalysis,
     };
   }
 

@@ -350,9 +350,9 @@ export async function initializePlatformModuleTables(): Promise<void> {
              COALESCE(sub.ends_at, (t.settings->>'subscription_expiry_date')::timestamptz) AS subscription_expiry_date
         FROM public.saas_tenants t
         LEFT JOIN (
-          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
-            FROM public.platform_subscriptions
-           ORDER BY tenant_id, id DESC
+          SELECT DISTINCT ON (ps.tenant_id) ps.tenant_id, ps.ends_at
+            FROM public.platform_subscriptions ps
+           ORDER BY ps.tenant_id, ps.id DESC
         ) sub ON sub.tenant_id = t.id
        WHERE t.id = p_tenant_id;
     END;
@@ -388,9 +388,9 @@ export async function initializePlatformModuleTables(): Promise<void> {
         FROM public.users u
         LEFT JOIN public.saas_tenants t ON t.id = u.tenant_id
         LEFT JOIN (
-          SELECT DISTINCT ON (tenant_id) tenant_id, ends_at
-            FROM public.platform_subscriptions
-           ORDER BY tenant_id, id DESC
+          SELECT DISTINCT ON (ps.tenant_id) ps.tenant_id, ps.ends_at
+            FROM public.platform_subscriptions ps
+           ORDER BY ps.tenant_id, ps.id DESC
         ) sub ON sub.tenant_id = t.id
         LEFT JOIN public.roles r ON r.id = u.role_id
        WHERE u.id = p_user_id;
@@ -516,9 +516,9 @@ export async function initializePlatformModuleTables(): Promise<void> {
         FROM public.saas_tenants t
         JOIN public.platform_subscriptions s ON s.tenant_id = t.id AND s.status = 'active'
         JOIN LATERAL (
-          SELECT email, name FROM public.users
-           WHERE tenant_id = t.id AND status = true
-           ORDER BY id ASC LIMIT 1
+          SELECT u_sub.email, u_sub.name FROM public.users u_sub
+           WHERE u_sub.tenant_id = t.id AND u_sub.status = true
+           ORDER BY u_sub.id ASC LIMIT 1
         ) u ON TRUE
        WHERE s.ends_at IS NOT NULL
          AND s.ends_at <= NOW() + (p_days_ahead || ' days')::INTERVAL
