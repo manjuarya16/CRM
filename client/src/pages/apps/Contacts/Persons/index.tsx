@@ -316,8 +316,14 @@ const PersonsPage: React.FC = () => {
 
   const renderPersonCard = (person: IPerson, idx: number) => {
     const isSelected = selectedIds.includes(person.id);
-    const emailList = parseItems(person.emails);
-    const contactList = parseItems(person.contact_numbers);
+    const emailList = parseItems(person.emails ?? (person as any).email);
+    const contactList = parseItems(
+      person.contact_numbers ??
+      (person as any).contactNumbers ??
+      (person as any).phone ??
+      (person as any).phone_number ??
+      (person as any).mobile
+    );
     const avatarColor = AVATAR_COLORS[(person.id || idx) % AVATAR_COLORS.length];
 
     return (
@@ -704,10 +710,16 @@ const PersonsPage: React.FC = () => {
                           </Link>
                         </td>
                         <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
-                          {formatEmails(person.emails)}
+                          {formatEmails(person.emails ?? (person as any).email)}
                         </td>
                         <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
-                          {formatContacts(person.contact_numbers)}
+                          {formatContacts(
+                            person.contact_numbers ??
+                            (person as any).contactNumbers ??
+                            (person as any).phone ??
+                            (person as any).phone_number ??
+                            (person as any).mobile
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-gray-700 dark:text-gray-300">
                           {person.organization_name || "-"}

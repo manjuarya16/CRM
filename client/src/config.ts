@@ -12,8 +12,9 @@ const getApiUrl = (): string => {
     if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1") {
       return "http://localhost:3040/api";
     }
+    return `${window.location.origin}/api`;
   }
-  return "http://localhost:3040/api";
+  return "/api";
 };
 
 // Reads VITE_API_URL from .env file (defaults to /api if undefined)
