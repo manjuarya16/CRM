@@ -137,10 +137,14 @@ const CreatePersonPage: React.FC = () => {
     let errorMsg = "";
     let cleanVal = val;
     if (field === "value") {
-      if (/[^0-9]/.test(val)) {
-        errorMsg = "Mobile number must contain digits only.";
+      let digits = val.replace(/[^0-9]/g, "");
+      if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) {
+        digits = digits.slice(2);
       }
-      cleanVal = val.replace(/[^0-9]/g, "").slice(0, 10);
+      if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) {
+        digits = digits.slice(1);
+      }
+      cleanVal = digits.slice(0, 10);
 
       if (cleanVal.length > 0) {
         if (/^0+$/.test(cleanVal)) {

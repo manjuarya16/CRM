@@ -165,7 +165,22 @@ const EditPersonPage: React.FC = () => {
         const rawContacts = contactNumberCandidates.find((candidate) =>
           unpackItems(candidate, "work").some((contact) => contact.value.trim() !== "")
         );
-        let parsedContacts = unpackItems(rawContacts, "work");
+        const normalizeContactNumber = (val: string): string => {
+          if (!val) return "";
+          let digits = String(val).replace(/[^0-9]/g, "");
+          if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) {
+            digits = digits.slice(2);
+          }
+          if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) {
+            digits = digits.slice(1);
+          }
+          return digits || val.trim();
+        };
+
+        let parsedContacts = unpackItems(rawContacts, "work").map((c) => ({
+          ...c,
+          value: normalizeContactNumber(c.value),
+        }));
         if (parsedContacts.length === 0) parsedContacts = [{ label: "work", value: "" }];
 
         let cleanTitle = person.job_title || "";
@@ -287,10 +302,14 @@ const EditPersonPage: React.FC = () => {
     let errorMsg = "";
     let cleanVal = val;
     if (field === "value") {
-      if (/[^0-9]/.test(val)) {
-        errorMsg = "Mobile number must contain digits only.";
+      let digits = val.replace(/[^0-9]/g, "");
+      if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) {
+        digits = digits.slice(2);
       }
-      cleanVal = val.replace(/[^0-9]/g, "").slice(0, 10);
+      if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) {
+        digits = digits.slice(1);
+      }
+      cleanVal = digits.slice(0, 10);
 
       if (cleanVal.length > 0) {
         if (/^0+$/.test(cleanVal)) {

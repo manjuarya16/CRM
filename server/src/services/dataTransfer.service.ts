@@ -76,6 +76,8 @@ export interface HeaderAnalysis {
   mismatchMessages: string[];
 }
 
+const clean = (s: string) => (s || '').toLowerCase().trim().replace(/[\s_\-#]+/g, '');
+
 export const MODULE_FIELD_DEFINITIONS: Record<
   string,
   {
@@ -86,15 +88,45 @@ export const MODULE_FIELD_DEFINITIONS: Record<
   leads: {
     required: 'title',
     standardFields: {
-      title: ['title', 'lead_title', 'deal_name', 'deal', 'subject', 'name', 'lead_name', 'lead', 'heading', 'id', 'lead_id'],
-      organization: ['organization', 'organization_name', 'company', 'company_name', 'institute', 'institute_name', 'organization_id', 'org'],
-      contact_person: ['contact_person', 'person', 'contact_name', 'person_name', 'contact_person_name', 'contact', 'person_id'],
-      contact_email: ['contact_email', 'email', 'emails', 'email_address', 'email_id', 'contact_mail', 'mail'],
-      contact_phone: ['contact_phone', 'phone', 'phone_number', 'mobile', 'mobile_number', 'contact_numbers', 'contact_number', 'cell'],
-      description: ['description', 'desc', 'notes', 'details', 'summary', 'comment', 'lead_description'],
+      title: [
+        'title', 'lead_title', 'deal_name', 'deal', 'subject', 'name', 'lead_name', 'lead',
+        'heading', 'id', 'lead_id', 'trust', 'trust_name', 'ngo', 'ngo_name', 'firm',
+        'agency', 'client', 'account', 'organization', 'company', 'institution'
+      ],
+      organization: [
+        'organization', 'organization_name', 'company', 'company_name', 'institute',
+        'institute_name', 'organization_id', 'org', 'firm', 'business', 'trust', 'ngo'
+      ],
+      contact_person: [
+        'contact_person', 'person', 'contact_name', 'person_name', 'contact_person_name',
+        'contact', 'person_id', 'contact_details', 'owner_name', 'representative', 'spokesperson'
+      ],
+      contact_email: [
+        'contact_email', 'email', 'emails', 'email_address', 'email_id', 'emailid',
+        'contact_mail', 'mail', 'mail_id', 'e_mail'
+      ],
+      contact_phone: [
+        'contact_phone', 'phone', 'phone_number', 'phonenumber', 'mobile', 'mobile_number',
+        'mobilenumber', 'contact_numbers', 'contact_number', 'contactnumber', 'cell',
+        'telephone', 'tel', 'phone_no', 'mobile_no', 'contact_no', 'calls'
+      ],
+      address: [
+        'address', 'street', 'location', 'full_address', 'office_address', 'registered_address',
+        'city', 'state', 'pincode', 'pin_code', 'zip', 'zipcode', 'country'
+      ],
+      website: ['website', 'web', 'url', 'site', 'link', 'portal', 'linktree', 'web_link', 'homepage', 'home_page'],
+      description: [
+        'description', 'desc', 'notes', 'details', 'summary', 'comment', 'lead_description',
+        'remarks', 'feedback', 'feedback_call', 'feedback_call_1', 'feedback_call_2',
+        'feedback_3', 'feedback_4', 'call_feedback', 'call_notes', 'instagram', 'facebook',
+        'youtube', 'linkedin', 'twitter', 'social', 'social_media'
+      ],
       lead_value: ['lead_value', 'value', 'amount', 'deal_value', 'price', 'lead_amount', 'total_value', 'total_amount'],
       status: ['status', 'lead_status', 'state'],
-      sales_owner: ['sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'sales_owner_name', 'user_name', 'sales_owner_id', 'user_id', 'agent'],
+      sales_owner: [
+        'sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'sales_owner_name',
+        'user_name', 'sales_owner_id', 'user_id', 'agent'
+      ],
       lead_source: ['lead_source', 'source', 'lead_source_name', 'source_name', 'lead_source_id', 'source_id'],
       lead_type: ['lead_type', 'type', 'lead_type_name', 'type_name', 'lead_type_id', 'type_id'],
       pipeline: ['pipeline', 'lead_pipeline', 'pipeline_name', 'lead_pipeline_id', 'pipeline_id'],
@@ -105,19 +137,24 @@ export const MODULE_FIELD_DEFINITIONS: Record<
   persons: {
     required: 'name',
     standardFields: {
-      name: ['name', 'person_name', 'full_name', 'contact_name', 'person', 'customer_name', 'client_name', 'id', 'person_id'],
-      emails: ['emails', 'email', 'contact_email', 'email_address', 'email_id', 'work_email', 'mail'],
-      contact_numbers: ['contact_numbers', 'phone', 'contact_phone', 'phone_number', 'mobile', 'mobile_number', 'contact_number', 'contact', 'cell'],
+      name: ['name', 'person_name', 'full_name', 'contact_name', 'person', 'customer_name', 'client_name', 'id', 'person_id', 'title', 'lead_name'],
+      emails: ['emails', 'email', 'contact_email', 'email_address', 'email_id', 'emailid', 'work_email', 'mail', 'mail_id', 'e_mail'],
+      contact_numbers: ['contact_numbers', 'phone', 'contact_phone', 'phone_number', 'phonenumber', 'mobile', 'mobile_number', 'mobilenumber', 'contact_number', 'contactnumber', 'contact', 'cell', 'calls', 'telephone', 'phone_no', 'mobile_no'],
       job_title: ['job_title', 'title', 'designation', 'role', 'position', 'occupation'],
-      organization: ['organization', 'company', 'institute', 'organization_name', 'company_name', 'organization_id', 'org'],
+      organization: ['organization', 'company', 'institute', 'organization_name', 'company_name', 'organization_id', 'org', 'firm', 'business', 'trust', 'ngo'],
+      address: ['address', 'street', 'location', 'city', 'state', 'pincode', 'pin_code', 'zip', 'zipcode', 'country'],
+      website: ['website', 'web', 'url', 'site', 'link'],
       sales_owner: ['sales_owner', 'user', 'owner', 'assigned_to', 'sales_rep', 'user_name', 'sales_owner_id', 'user_id', 'agent'],
     },
   },
   organizations: {
     required: 'name',
     standardFields: {
-      name: ['name', 'organization_name', 'company', 'company_name', 'institute', 'org_name', 'business_name', 'account_name', 'id', 'organization_id'],
+      name: ['name', 'organization_name', 'company', 'company_name', 'institute', 'org_name', 'business_name', 'account_name', 'trust', 'trust_name', 'ngo', 'ngo_name', 'id', 'organization_id', 'title'],
       address: ['address', 'street', 'street_address', 'office_address', 'location'],
+      phone: ['phone', 'phone_number', 'phonenumber', 'mobile', 'mobile_number', 'contact_numbers', 'contact_number', 'telephone', 'calls'],
+      email: ['email', 'emails', 'email_id', 'emailid', 'contact_email', 'mail'],
+      website: ['website', 'web', 'url', 'site', 'link', 'portal'],
       city: ['city', 'city_name', 'town'],
       state: ['state', 'state_name', 'province', 'region'],
       country: ['country', 'country_name', 'nation'],
@@ -214,23 +251,35 @@ export function analyzeImportHeaders(
       continue;
     }
 
-    // 4. Unmatched column
+    // 4. Unmatched column (ignored for standard field mapping; saved into custom attributes/notes)
     const report: HeaderMatchReport = {
       fileHeader: trimmed,
       matchedField: null,
       matchType: 'unmatched',
-      message: `Column "${trimmed}" does not match any field in ${typeRaw}. For this column, the name should match an expected field name (e.g. ${expectedHeaders.slice(0, 5).join(', ')}) or a registered custom attribute.`,
+      message: `Column "${trimmed}" is an extra column and will be safely ignored / saved in extra attributes.`,
     };
     unmatchedColumns.push(report);
-    mismatchMessages.push(
-      `Column "${trimmed}" does not match any field for ${typeRaw}. For this column, the name should be one of: ${expectedHeaders.join(', ')}.`
-    );
   }
 
   // Also check if an id column is present as alternate required identifier
   if (!hasRequiredField) {
     const hasId = fileHeaders.some((h) => ['id', `${normType}_id`, `${normType.slice(0, -1)}_id`].includes(clean(h)));
     if (hasId) hasRequiredField = true;
+  }
+
+  // Graceful Auto-Fallback: If no required header was explicitly found but columns exist,
+  // auto-map the first column so the user is never blocked from importing their data
+  if (!hasRequiredField && fileHeaders.length > 0) {
+    const firstCol = fileHeaders.find((h) => !h.startsWith('__col_'));
+    if (firstCol) {
+      hasRequiredField = true;
+      matchedColumns.push({
+        fileHeader: firstCol,
+        matchedField: requiredField,
+        matchType: 'alias',
+        message: `Column "${firstCol}" auto-mapped to required field "${requiredField}".`,
+      });
+    }
   }
 
   let missingRequiredMessage: string | undefined;
@@ -292,7 +341,10 @@ const getRowField = (row: Record<string, any>, ...candidateKeys: string[]): any 
 };
 
 const parseField = (val: any, defaultLabel = 'work'): Array<{ label: string; value: string }> => {
-  if (!val) return [];
+  if (val === undefined || val === null || val === '') return [];
+  if (typeof val === 'number') {
+    return [{ label: defaultLabel, value: String(val).trim() }];
+  }
   const parseStr = (str: string, lbl = defaultLabel): Array<{ label: string; value: string }> => {
     let clean = str.trim().replace(/""/g, '"');
     if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 2) clean = clean.slice(1, -1);
@@ -326,58 +378,195 @@ const parseField = (val: any, defaultLabel = 'work'): Array<{ label: string; val
     const res: Array<{ label: string; value: string }> = [];
     for (const item of val) {
       if (typeof item === 'object' && item !== null) {
-        const itemVal = item.value ?? item.email ?? item.phone ?? item.contact;
+        const itemVal =
+          item.value ??
+          item.number ??
+          item.phone ??
+          item.contact ??
+          item.mobile ??
+          item.contact_number ??
+          item.contactNumber ??
+          item.phone_number ??
+          item.phoneNumber ??
+          item.tel ??
+          item.email;
         const itemLabel = item.label || defaultLabel;
         if (typeof itemVal === 'string' && (itemVal.startsWith('[') || itemVal.startsWith('{') || itemVal.includes(':') || itemVal.includes(','))) {
           res.push(...parseStr(itemVal, itemLabel));
-        } else if (itemVal) {
+        } else if (itemVal !== undefined && itemVal !== null && String(itemVal).trim() !== '') {
           res.push({ label: itemLabel, value: String(itemVal).trim() });
         }
       } else if (typeof item === 'string') {
         res.push(...parseStr(item, defaultLabel));
+      } else if (typeof item === 'number') {
+        res.push({ label: defaultLabel, value: String(item) });
       }
     }
     return res;
+  }
+  if (typeof val === 'object' && val !== null) {
+    return parseField([val], defaultLabel);
   }
   if (typeof val === 'string') return parseStr(val, defaultLabel);
   return [];
 };
 
+const updatePersonContactInfo = async (
+  client: any,
+  personId: number,
+  emailVal?: any,
+  phoneVal?: any,
+  orgId?: number | null
+) => {
+  if (!personId) return;
+  try {
+    const pRes = await client.query('SELECT emails, contact_numbers, organization_id FROM persons WHERE id = $1', [personId]);
+    if (pRes.rows.length === 0) return;
+
+    const curEmails = parseField(pRes.rows[0].emails, 'work');
+    const curNumbers = parseField(pRes.rows[0].contact_numbers, 'work');
+    const newEmails = parseField(emailVal, 'work');
+    const newNumbers = parseField(phoneVal, 'work');
+
+    // Merge emails without duplicates
+    const emailMap = new Map<string, string>();
+    for (const e of [...curEmails, ...newEmails]) {
+      const val = (e.value || '').trim();
+      if (val && !emailMap.has(val.toLowerCase())) {
+        emailMap.set(val.toLowerCase(), e.label || 'work');
+      }
+    }
+    const mergedEmails = Array.from(emailMap.entries()).map(([value, label]) => ({ label, value }));
+
+    // Merge contact numbers without duplicates
+    const phoneMap = new Map<string, string>();
+    for (const p of [...curNumbers, ...newNumbers]) {
+      const val = (p.value || '').trim();
+      if (val && !phoneMap.has(val.toLowerCase())) {
+        phoneMap.set(val.toLowerCase(), p.label || 'work');
+      }
+    }
+    const mergedNumbers = Array.from(phoneMap.entries()).map(([value, label]) => ({ label, value }));
+
+    const targetOrgId = orgId || pRes.rows[0].organization_id || null;
+
+    await client.query(
+      `UPDATE persons 
+       SET emails = $1::jsonb, 
+           contact_numbers = $2::jsonb, 
+           organization_id = COALESCE($3, organization_id),
+           updated_at = NOW() 
+       WHERE id = $4`,
+      [JSON.stringify(mergedEmails), JSON.stringify(mergedNumbers), targetOrgId, personId]
+    );
+  } catch (err) {
+    // Non-blocking update failure
+  }
+};
+
+const updateOrgInfo = async (
+  client: any,
+  orgId: number,
+  addressVal?: any,
+  websiteVal?: any
+) => {
+  if (!orgId) return;
+  try {
+    const oRes = await client.query('SELECT address, custom_attributes FROM organizations WHERE id = $1', [orgId]);
+    if (oRes.rows.length === 0) return;
+
+    let existingAddress = oRes.rows[0].address || {};
+    if (typeof existingAddress === 'string') {
+      try { existingAddress = JSON.parse(existingAddress); } catch { existingAddress = { street: existingAddress }; }
+    }
+
+    let newAddressObj: any = null;
+    if (addressVal && String(addressVal).trim()) {
+      const addrStr = String(addressVal).trim();
+      newAddressObj = {
+        street: addrStr,
+        city: addrStr.toLowerCase().includes('nagpur') ? 'Nagpur' : (existingAddress.city || ''),
+        state: addrStr.toLowerCase().includes('maharashtra') ? 'Maharashtra' : (existingAddress.state || ''),
+        country: 'India',
+        ...existingAddress
+      };
+      newAddressObj.street = addrStr;
+    }
+
+    const existingAttrs = oRes.rows[0].custom_attributes || {};
+    const mergedAttrs = { ...existingAttrs };
+    if (websiteVal && String(websiteVal).trim()) {
+      mergedAttrs.website = String(websiteVal).trim();
+    }
+
+    await client.query(
+      `UPDATE organizations 
+       SET address = COALESCE($1::jsonb, address),
+           custom_attributes = $2::jsonb,
+           updated_at = NOW() 
+       WHERE id = $3`,
+      [newAddressObj ? JSON.stringify(newAddressObj) : null, JSON.stringify(mergedAttrs), orgId]
+    );
+  } catch (err) {
+    // Non-blocking update failure
+  }
+};
+
 // Safe Foreign Key Resolvers to prevent FK Constraint Violations
-const resolveOrgId = async (client: any, rawVal: any, nameVal?: any, userId?: number | null): Promise<number | null> => {
+const resolveOrgId = async (
+  client: any,
+  rawVal: any,
+  nameVal?: any,
+  userId?: number | null,
+  addressVal?: any,
+  websiteVal?: any
+): Promise<number | null> => {
   const num = toNumberParam(rawVal);
   const n = String(nameVal || rawVal || '').trim();
+  let foundOrgId: number | null = null;
 
   if (num || n) {
     const existing = await client.query(
       'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
       ['organizations', num || null, n && isNaN(Number(n)) ? n : null]
     );
-    if (existing.rows.length > 0) return existing.rows[0].id;
+    if (existing.rows.length > 0) foundOrgId = existing.rows[0].id;
   }
 
   // Also query directly by name case-insensitively
-  if (n && isNaN(Number(n))) {
+  if (!foundOrgId && n && isNaN(Number(n))) {
     const directOrg = await client.query('SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1', [n]);
-    if (directOrg.rows.length > 0) return directOrg.rows[0].id;
+    if (directOrg.rows.length > 0) foundOrgId = directOrg.rows[0].id;
+  }
 
-    // Auto-create organization if a non-numeric name was specified
-    try {
-      const created = await client.query(
-        'SELECT save_organization($1, null, $2, \'{}\'::jsonb) as result',
-        [n, userId || null]
-      );
-      const resId = created.rows[0]?.result?.id || created.rows[0]?.id;
-      if (resId) return resId;
-    } catch {}
+  if (foundOrgId) {
+    if (addressVal || websiteVal) {
+      await updateOrgInfo(client, foundOrgId, addressVal, websiteVal);
+    }
+    return foundOrgId;
+  }
+
+  // Auto-create organization if a non-numeric name was specified
+  if (n && isNaN(Number(n))) {
+    const addrObj = addressVal ? { street: String(addressVal).trim(), country: 'India' } : null;
+    const customAttrs: any = {};
+    if (websiteVal) customAttrs.website = String(websiteVal).trim();
 
     try {
       const insOrg = await client.query(
-        'INSERT INTO organizations (name, user_id, custom_attributes, created_at, updated_at) VALUES ($1, $2, \'{}\'::jsonb, NOW(), NOW()) RETURNING id',
-        [n, userId || null]
+        'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb) AS id',
+        [null, n, addrObj ? JSON.stringify(addrObj) : null, userId || null, JSON.stringify(customAttrs)]
       );
       return insOrg.rows[0]?.id || null;
-    } catch {}
+    } catch {
+      try {
+        const insOrg = await client.query(
+          'INSERT INTO organizations (name, address, user_id, custom_attributes, created_at, updated_at) VALUES ($1, $2::jsonb, $3, $4::jsonb, NOW(), NOW()) RETURNING id',
+          [n, addrObj ? JSON.stringify(addrObj) : null, userId || null, JSON.stringify(customAttrs)]
+        );
+        return insOrg.rows[0]?.id || null;
+      } catch {}
+    }
   }
   return null;
 };
@@ -415,23 +604,32 @@ const resolvePersonId = async (
 ): Promise<number | null> => {
   const num = toNumberParam(rawVal);
   const n = String(nameVal || rawVal || '').trim();
+  let foundPersonId: number | null = null;
+
   if (num || n) {
     const existing = await client.query(
       'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
       ['persons', num || null, n && isNaN(Number(n)) ? n : null]
     );
-    if (existing.rows.length > 0) return existing.rows[0].id;
+    if (existing.rows.length > 0) foundPersonId = existing.rows[0].id;
   }
 
   // Also query directly by name case-insensitively
-  if (n && isNaN(Number(n))) {
+  if (!foundPersonId && n && isNaN(Number(n))) {
     const directPerson = await client.query('SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1', [n]);
-    if (directPerson.rows.length > 0) return directPerson.rows[0].id;
+    if (directPerson.rows.length > 0) foundPersonId = directPerson.rows[0].id;
+  }
 
-    // Auto-create person with email and contact numbers if provided
+  if (foundPersonId) {
+    await updatePersonContactInfo(client, foundPersonId, emailVal, phoneVal, orgId);
+    return foundPersonId;
+  }
+
+  // Auto-create person with email and contact numbers if provided
+  if (n && isNaN(Number(n))) {
     try {
-      const newEmails = emailVal ? [{ label: 'work', value: String(emailVal).trim() }] : [];
-      const newNumbers = phoneVal ? [{ label: 'work', value: String(phoneVal).trim() }] : [];
+      const newEmails = parseField(emailVal, 'work');
+      const newNumbers = parseField(phoneVal, 'work');
       const insPerson = await client.query(
         'SELECT public.fn_import_upsert_person($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8::jsonb) AS id',
         [null, n, JSON.stringify(newEmails), JSON.stringify(newNumbers), null, orgId || null, userId || null, '{}']
@@ -1203,6 +1401,64 @@ export class DataTransferService {
 
           if (type === 'leads') {
             const idVal = toNumberParam(getRowField(row, 'id', 'lead_id', 'deal_id'));
+            const addressVal = getRowField(
+              row,
+              'address',
+              'street',
+              'location',
+              'full_address',
+              'office_address',
+              'registered_address',
+              'city',
+              'state',
+              'pincode',
+              'pin_code'
+            );
+            const websiteVal = getRowField(
+              row,
+              'website',
+              'web',
+              'url',
+              'site',
+              'link',
+              'portal',
+              'linktree',
+              'web_link'
+            );
+            const contactPhone = getRowField(
+              row,
+              'contact_phone',
+              'contact_number',
+              'contact_numbers',
+              'phone',
+              'phone_number',
+              'phonenumber',
+              'contactnumber',
+              'contact_no',
+              'phone_no',
+              'mobile',
+              'mobile_number',
+              'mobilenumber',
+              'mobile_no',
+              'cell',
+              'calls',
+              'telephone',
+              'tel'
+            );
+            const contactEmail = getRowField(
+              row,
+              'contact_email',
+              'email',
+              'emails',
+              'email_address',
+              'email_id',
+              'emailid',
+              'contact_mail',
+              'mail',
+              'mail_id',
+              'e_mail'
+            );
+
             const orgCandidate = getRowField(
               row,
               'organization',
@@ -1212,7 +1468,18 @@ export class DataTransferService {
               'institute',
               'institute_name',
               'college',
-              'academy'
+              'academy',
+              'org',
+              'firm',
+              'business',
+              'trust',
+              'trust_name',
+              'ngo',
+              'ngo_name',
+              'foundation',
+              'sanstha',
+              'ashram',
+              'association'
             );
             const titleVal =
               getRowField(
@@ -1222,33 +1489,21 @@ export class DataTransferService {
                 'deal_name',
                 'subject',
                 'name',
-                'lead_name'
+                'lead_name',
+                'trust',
+                'trust_name',
+                'ngo',
+                'firm'
               ) || orgCandidate;
-            if (!idVal && !titleVal) throw new Error(`Row ${i + 1}: title or id is required`);
-            const titleStr = titleVal ? String(titleVal).trim() : '';
-
-            const contactPhone = getRowField(
-              row,
-              'contact_phone',
-              'phone',
-              'phone_number',
-              'contact_numbers',
-              'mobile'
-            );
-            const contactEmail = getRowField(
-              row,
-              'contact_email',
-              'email',
-              'emails',
-              'email_id'
-            );
+            const fallbackTitle = Object.values(row).find((v) => v !== undefined && v !== null && String(v).trim().length > 0);
+            const titleStr = (titleVal || fallbackTitle ? String(titleVal || fallbackTitle).trim() : `Lead ${i + 1}`);
 
             const fileKey = idVal
               ? `id:${idVal}`
               : action === 'append'
               ? `title:${titleStr.toLowerCase()}:${contactEmail || contactPhone || i + 1}`
               : `title:${titleStr.toLowerCase()}`;
-            if (titleStr && fileKey && seenInFile.has(fileKey)) {
+            if (action === 'create_only' && titleStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
             if (titleStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1260,17 +1515,18 @@ export class DataTransferService {
               getRowField(row, 'sales_owner', 'user_name', 'user', 'owner')
             );
 
-            let finalOrgId = await resolveOrgId(
-              client,
-              getRowField(row, 'organization_id'),
-              orgCandidate,
-              finalUserId
-            );
-
-            // If no organization column was provided, but title represents an institute or company
-            if (!finalOrgId && !idVal && titleStr && titleStr.length > 2) {
+            // Infer organization name if not explicitly given
+            let inferredOrgName = orgCandidate ? String(orgCandidate).trim() : null;
+            if (!inferredOrgName && titleStr && titleStr.length > 2) {
               const lowerT = titleStr.toLowerCase();
               if (
+                lowerT.includes('trust') ||
+                lowerT.includes('foundation') ||
+                lowerT.includes('ngo') ||
+                lowerT.includes('sanstha') ||
+                lowerT.includes('ashram') ||
+                lowerT.includes('society') ||
+                lowerT.includes('association') ||
                 lowerT.includes('institute') ||
                 lowerT.includes('college') ||
                 lowerT.includes('academy') ||
@@ -1281,53 +1537,69 @@ export class DataTransferService {
                 lowerT.includes('center') ||
                 lowerT.includes('centre') ||
                 lowerT.includes('school') ||
-                lowerT.includes('tutorials')
+                lowerT.includes('tutorials') ||
+                lowerT.includes('hospital') ||
+                lowerT.includes('clinic') ||
+                lowerT.includes('mandir') ||
+                lowerT.includes('bhavan') ||
+                lowerT.includes('kendra') ||
+                lowerT.includes('club') ||
+                addressVal ||
+                websiteVal
               ) {
-                const cleanOrgTitle = titleStr.split(',')[0].trim();
-                finalOrgId = await resolveOrgId(client, null, cleanOrgTitle, finalUserId);
+                inferredOrgName = titleStr.split(',')[0].trim();
               }
             }
+
+            let finalOrgId = await resolveOrgId(
+              client,
+              getRowField(row, 'organization_id'),
+              inferredOrgName,
+              finalUserId,
+              addressVal,
+              websiteVal
+            );
 
             const contactPersonName = getRowField(
               row,
               'contact_person',
               'contact_name',
               'person',
-              'person_name'
+              'person_name',
+              'contact_person_name',
+              'contact',
+              'person_id',
+              'owner_name',
+              'representative'
             );
+
+            let targetPersonName = contactPersonName ? String(contactPersonName).trim() : null;
+            if (!targetPersonName && titleStr.includes(',')) {
+              const afterComma = titleStr.split(',')[1].trim();
+              if (
+                afterComma.length > 2 &&
+                afterComma.length < 40 &&
+                !afterComma.toLowerCase().includes('nagpur') &&
+                !afterComma.toLowerCase().includes('ltd') &&
+                !afterComma.toLowerCase().includes('rd') &&
+                !afterComma.toLowerCase().includes('road')
+              ) {
+                targetPersonName = afterComma;
+              }
+            }
+            if (!targetPersonName && (contactPhone || contactEmail)) {
+              targetPersonName = `${(inferredOrgName || titleStr).slice(0, 30)} Contact`;
+            }
 
             let finalPersonId = await resolvePersonId(
               client,
               getRowField(row, 'person_id'),
-              contactPersonName,
+              targetPersonName,
               contactEmail,
               contactPhone,
               finalOrgId,
               finalUserId
             );
-
-            // If contact phone or email was provided without a separate person column, auto-create contact person
-            if (!finalPersonId && (contactEmail || contactPhone)) {
-              let personNameFromTitle = contactPersonName;
-              if (!personNameFromTitle && titleStr.includes('-')) {
-                const parts = titleStr.split('-');
-                if (parts.length > 1 && parts[parts.length - 1].trim().length < 40) {
-                  personNameFromTitle = parts[parts.length - 1].trim();
-                }
-              }
-              if (!personNameFromTitle) {
-                personNameFromTitle = `${titleStr.split(',')[0].trim().slice(0, 30)} Contact`;
-              }
-              finalPersonId = await resolvePersonId(
-                client,
-                null,
-                personNameFromTitle,
-                contactEmail,
-                contactPhone,
-                finalOrgId,
-                finalUserId
-              );
-            }
 
             const leadSourceId = await resolveLeadSourceId(
               client,
@@ -1349,7 +1621,18 @@ export class DataTransferService {
 
             const rawLeadVal = getRowField(row, 'lead_value', 'value', 'amount', 'price');
             const leadValue = rawLeadVal ? Number(rawLeadVal) : 0;
-            const description = getRowField(row, 'description', 'desc', 'address', 'location', 'street') || null;
+            const rawDesc = getRowField(row, 'description', 'desc', 'notes', 'details', 'summary', 'comment', 'remarks') || '';
+            const descParts: string[] = [];
+            if (rawDesc) descParts.push(rawDesc);
+            if (addressVal && !rawDesc.includes(addressVal)) descParts.push(`Address: ${addressVal}`);
+            if (websiteVal && !rawDesc.includes(websiteVal)) descParts.push(`Website: ${websiteVal}`);
+            for (const [k, v] of Object.entries(row)) {
+              const cleanK = clean(k);
+              if (cleanK.includes('feedback') || cleanK.includes('call') || cleanK.includes('status')) {
+                if (v && String(v).trim()) descParts.push(`${k}: ${String(v).trim()}`);
+              }
+            }
+            const description = descParts.join(' | ') || null;
             const statusRaw = getRowField(row, 'status') !== undefined ? getRowField(row, 'status') : true;
             const status = typeof statusRaw === 'boolean' ? statusRaw : String(statusRaw).toLowerCase() !== 'false' && String(statusRaw) !== '0' && String(statusRaw).toLowerCase() !== 'lost';
             const expectedCloseDate = getRowField(row, 'expected_close_date', 'close_date', 'due_date') || null;
@@ -1381,7 +1664,31 @@ export class DataTransferService {
             }
 
             if (exists) {
-              const mergedAttrs = { ...(existingLead.rows[0].custom_attributes || {}), ...rowCustomAttrs };
+              // Retrieve full existing lead row to access linked person_id and organization_id
+              const fullLeadRes = await client.query(
+                'SELECT id, person_id, organization_id, user_id, custom_attributes, description FROM leads WHERE id = $1',
+                [existingLead.rows[0].id]
+              );
+              const existingLeadRow = fullLeadRes.rows[0];
+
+              if (!finalPersonId && existingLeadRow?.person_id) {
+                finalPersonId = existingLeadRow.person_id;
+              }
+              if (!finalOrgId && existingLeadRow?.organization_id) {
+                finalOrgId = existingLeadRow.organization_id;
+              }
+
+              // Always update linked Person with contact numbers, emails, and organization link!
+              if (finalPersonId) {
+                await updatePersonContactInfo(client, finalPersonId, contactEmail, contactPhone, finalOrgId);
+              }
+
+              // Always update linked Organization with address and website!
+              if (finalOrgId) {
+                await updateOrgInfo(client, finalOrgId, addressVal, websiteVal);
+              }
+
+              const mergedAttrs = { ...(existingLeadRow?.custom_attributes || {}), ...rowCustomAttrs };
               await client.query(
                 'SELECT public.fn_import_upsert_lead($1, $2, $3, $4, $5, $6, $7, $8::boolean, $9, $10, $11, $12, $13::date, $14::jsonb)',
                 [
@@ -1433,15 +1740,44 @@ export class DataTransferService {
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
 
-            const emailVal = getRowField(row, 'emails', 'email', 'contact_email', 'email_id', 'emails');
-            const phoneVal = getRowField(row, 'contact_numbers', 'contact numbers', 'phone', 'phone_number', 'mobile', 'contact');
+            const emailVal = getRowField(
+              row,
+              'emails',
+              'email',
+              'contact_email',
+              'email_address',
+              'email_id',
+              'emailid',
+              'mail',
+              'mail_id',
+              'e_mail'
+            );
+            const phoneVal = getRowField(
+              row,
+              'contact_numbers',
+              'contact_number',
+              'phone',
+              'phone_number',
+              'phonenumber',
+              'mobile',
+              'mobile_number',
+              'mobilenumber',
+              'contact',
+              'cell',
+              'calls',
+              'telephone',
+              'tel',
+              'phone_no',
+              'mobile_no',
+              'contact_no'
+            );
 
             const fileKey = idVal
               ? `id:${idVal}`
               : action === 'append'
               ? `name:${nameStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
               : `name:${nameStr.toLowerCase()}`;
-            if (nameStr && fileKey && seenInFile.has(fileKey)) {
+            if (action === 'create_only' && nameStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
             if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1569,12 +1905,30 @@ export class DataTransferService {
             }
           } else if (type === 'organizations') {
             const idVal = toNumberParam(getRowField(row, 'id', 'organization_id', 'organization id'));
-            const nameVal = getRowField(row, 'name', 'organization_name', 'organization name', 'company', 'company_name', 'institute', 'organization');
+            const nameVal = getRowField(
+              row,
+              'name',
+              'organization_name',
+              'organization name',
+              'company',
+              'company_name',
+              'institute',
+              'organization',
+              'trust',
+              'trust_name',
+              'ngo',
+              'ngo_name',
+              'foundation',
+              'sanstha',
+              'ashram',
+              'association',
+              'title'
+            );
             if (!idVal && !nameVal) throw new Error(`Row ${i + 1}: name or id is required`);
             const nameStr = nameVal ? String(nameVal).trim() : '';
 
             const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-            if (nameStr && fileKey && seenInFile.has(fileKey)) {
+            if (action === 'create_only' && nameStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
             if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1586,12 +1940,20 @@ export class DataTransferService {
             );
 
             const addressObj = {
-              address: getRowField(row, 'address', 'street_address', 'street address', 'street', 'location') || '',
+              address: getRowField(row, 'address', 'street_address', 'street address', 'street', 'location', 'full_address', 'office_address') || '',
               city: getRowField(row, 'city', 'town') || '',
               state: getRowField(row, 'state', 'province', 'region') || '',
               country: getRowField(row, 'country', 'nation') || '',
               postcode: getRowField(row, 'postcode', 'postal_code', 'postal code', 'zip', 'zip_code', 'pincode', 'pin_code') || '',
             };
+
+            const orgPhone = getRowField(row, 'phone', 'contact_number', 'contact_numbers', 'contact_phone', 'phone_number', 'mobile', 'calls', 'telephone');
+            const orgEmail = getRowField(row, 'email', 'emails', 'contact_email', 'email_id', 'emailid', 'mail');
+            const orgContactPerson = getRowField(row, 'contact_person', 'person', 'contact_name', 'person_name');
+            const orgWebsite = getRowField(row, 'website', 'web', 'url', 'site', 'link');
+            if (orgWebsite) {
+              rowCustomAttrs.website = orgWebsite;
+            }
 
             const existingOrg = await client.query(
               'SELECT * FROM public.fn_find_entity_for_import($1, $2, $3)',
@@ -1618,25 +1980,34 @@ export class DataTransferService {
               throw new Error(`Row ${i + 1}: Organization "${nameStr}" not found for update`);
             }
 
+            let savedOrgId: number | null = null;
             if (exists) {
               const oldAddress = existingOrg.rows[0].address || {};
               const mergedAddress = { ...oldAddress, ...addressObj };
               const mergedAttrs = { ...(existingOrg.rows[0].custom_attributes || {}), ...rowCustomAttrs };
+              savedOrgId = existingOrg.rows[0].id;
 
               await client.query(
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb)',
-                [existingOrg.rows[0].id, nameStr, JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs)]
+                [savedOrgId, nameStr, JSON.stringify(mergedAddress), finalUserId, JSON.stringify(mergedAttrs)]
               );
-              await saveEntityAttributeValues(client, 'organizations', existingOrg.rows[0].id, mergedAttrs);
+              if (savedOrgId) {
+                await saveEntityAttributeValues(client, 'organizations', savedOrgId, mergedAttrs);
+              }
             } else {
               const ins = await client.query(
                 'SELECT public.fn_import_upsert_organization($1, $2, $3::jsonb, $4, $5::jsonb) AS id',
                 [null, nameStr, JSON.stringify(addressObj), finalUserId, JSON.stringify(rowCustomAttrs)]
               );
-              const newOrgId = ins.rows[0]?.id;
-              if (newOrgId) {
-                await saveEntityAttributeValues(client, 'organizations', newOrgId, rowCustomAttrs);
+              savedOrgId = ins.rows[0]?.id || null;
+              if (savedOrgId) {
+                await saveEntityAttributeValues(client, 'organizations', savedOrgId, rowCustomAttrs);
               }
+            }
+
+            if (savedOrgId && (orgPhone || orgEmail || orgContactPerson)) {
+              const personName = orgContactPerson || `${nameStr.slice(0, 30)} Contact`;
+              await resolvePersonId(client, null, personName, orgEmail, orgPhone, savedOrgId, finalUserId);
             }
           } else if (type === 'products') {
             const idVal = toNumberParam(getRowField(row, 'id', 'product_id', 'product id'));
@@ -1646,7 +2017,7 @@ export class DataTransferService {
             const prodName = getRowField(row, 'name', 'product_name', 'product name', 'item_name', 'item name') || skuStr;
 
             const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
-            if (skuStr && fileKey && seenInFile.has(fileKey)) {
+            if (action === 'create_only' && skuStr && fileKey && seenInFile.has(fileKey)) {
               throw new Error(`Row ${i + 1}: duplicate entry in file (matches row ${seenInFile.get(fileKey)})`);
             }
             if (skuStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1840,25 +2211,21 @@ export class DataTransferService {
       headerAnalysis = analyzeImportHeaders(type, fileHeaders, reqAttrs);
 
       if (!headerAnalysis.hasRequiredField) {
+        const errorMsg = headerAnalysis.missingRequiredMessage || `Required column "${headerAnalysis.requiredField}" is missing`;
         return {
           isValid: false,
           total: rows.length,
           validCount: 0,
           invalidCount: rows.length,
-          errorsCount: headerAnalysis.mismatchMessages.length,
-          errors: headerAnalysis.mismatchMessages,
-          sampleErrors: headerAnalysis.mismatchMessages.map((msg) => ({ row: 1, error: msg })),
+          errorsCount: 1,
+          errors: [errorMsg],
+          sampleErrors: [{ row: 1, error: errorMsg }],
           headerAnalysis,
         } as any;
       }
 
-      // Record any warnings for unmatched columns
-      for (const unmatched of headerAnalysis.unmatchedColumns) {
-        errors.push(unmatched.message);
-        if (sampleErrors.length < 20) {
-          sampleErrors.push({ row: 1, error: unmatched.message });
-        }
-      }
+      // Note: Unmatched columns are preserved in headerAnalysis and custom_attributes,
+      // and do NOT block or fail row validation.
 
       const seenInFile = new Map<string, number>();
 
@@ -1891,7 +2258,8 @@ export class DataTransferService {
               'college',
               'academy'
             );
-            const titleVal =
+            const personVal = getRowField(row, 'contact_person', 'person', 'contact_name', 'person_name');
+            let titleVal =
               getRowField(
                 row,
                 'title',
@@ -1899,8 +2267,19 @@ export class DataTransferService {
                 'deal_name',
                 'subject',
                 'name',
-                'lead_name'
-              ) || orgVal;
+                'lead_name',
+                'trust',
+                'trust_name',
+                'ngo',
+                'firm'
+              ) || orgVal || personVal;
+
+            if (!titleVal && !idVal) {
+              const firstVal = Object.values(row).find((v) => v !== undefined && v !== null && String(v).trim().length > 0);
+              if (firstVal) {
+                titleVal = String(firstVal).trim();
+              }
+            }
 
             if (!idVal && !titleVal) {
               rowError = 'Field "title" or "id" is required';
@@ -1915,7 +2294,7 @@ export class DataTransferService {
                 ? `title:${titleStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
                 : `title:${titleStr.toLowerCase()}`;
 
-              if (titleStr && fileKey && seenInFile.has(fileKey)) {
+              if (action === 'create_only' && titleStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'title'} matching row ${seenInFile.get(fileKey)}`;
               } else {
                 if (titleStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1935,7 +2314,14 @@ export class DataTransferService {
             }
           } else if (type === 'persons') {
             const idVal = toNumberParam(getRowField(row, 'id', 'person_id'));
-            const nameVal = getRowField(row, 'name', 'person_name', 'full_name', 'contact_name');
+            let nameVal = getRowField(row, 'name', 'person_name', 'full_name', 'contact_name', 'title', 'lead_name');
+            if (!nameVal && !idVal) {
+              const firstVal = Object.values(row).find((v) => v !== undefined && v !== null && String(v).trim().length > 0);
+              if (firstVal) {
+                nameVal = String(firstVal).trim();
+              }
+            }
+
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
@@ -1949,7 +2335,7 @@ export class DataTransferService {
                 ? `name:${nameStr.toLowerCase()}:${emailVal || phoneVal || i + 1}`
                 : `name:${nameStr.toLowerCase()}`;
 
-              if (nameStr && fileKey && seenInFile.has(fileKey)) {
+              if (action === 'create_only' && nameStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
               } else {
                 if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1969,13 +2355,20 @@ export class DataTransferService {
             }
           } else if (type === 'organizations') {
             const idVal = toNumberParam(getRowField(row, 'id', 'organization_id'));
-            const nameVal = getRowField(row, 'name', 'organization_name', 'company', 'company_name', 'institute', 'organization');
+            let nameVal = getRowField(row, 'name', 'organization_name', 'company', 'company_name', 'institute', 'organization', 'title', 'trust');
+            if (!nameVal && !idVal) {
+              const firstVal = Object.values(row).find((v) => v !== undefined && v !== null && String(v).trim().length > 0);
+              if (firstVal) {
+                nameVal = String(firstVal).trim();
+              }
+            }
+
             if (!idVal && !nameVal) {
               rowError = 'Field "name" or "id" is required';
             } else {
               const nameStr = nameVal ? String(nameVal).trim() : '';
               const fileKey = idVal ? `id:${idVal}` : `name:${nameStr.toLowerCase()}`;
-              if (nameStr && fileKey && seenInFile.has(fileKey)) {
+              if (action === 'create_only' && nameStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate ${idVal ? 'ID' : 'name'} matching row ${seenInFile.get(fileKey)}`;
               } else {
                 if (nameStr && fileKey) seenInFile.set(fileKey, i + 1);
@@ -1995,14 +2388,21 @@ export class DataTransferService {
             }
           } else if (type === 'products') {
             const idVal = toNumberParam(getRowField(row, 'id', 'product_id'));
-            const skuVal = getRowField(row, 'sku', 'code', 'product_code', 'item_code');
+            let skuVal = getRowField(row, 'sku', 'code', 'product_code', 'item_code');
             const nameVal = getRowField(row, 'name', 'product_name', 'item_name');
+            if (!skuVal && !idVal) {
+              const firstVal = Object.values(row).find((v) => v !== undefined && v !== null && String(v).trim().length > 0);
+              if (firstVal) {
+                skuVal = String(firstVal).trim();
+              }
+            }
+
             if (!idVal && !skuVal) {
               rowError = 'Field "sku" is required for products';
             } else {
               const skuStr = skuVal ? String(skuVal).trim() : '';
               const fileKey = idVal ? `id:${idVal}` : `sku:${skuStr.toLowerCase()}`;
-              if (skuStr && fileKey && seenInFile.has(fileKey)) {
+              if (action === 'create_only' && skuStr && fileKey && seenInFile.has(fileKey)) {
                 rowError = `Duplicate entry in file: row ${i + 1} has duplicate SKU matching row ${seenInFile.get(fileKey)}`;
               } else {
                 if (skuStr && fileKey) seenInFile.set(fileKey, i + 1);

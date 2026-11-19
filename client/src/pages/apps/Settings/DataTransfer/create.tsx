@@ -35,15 +35,45 @@ const MODULE_FIELD_DEFINITIONS: Record<
   leads: {
     required: "title",
     standardFields: {
-      title: ["title", "lead_title", "deal_name", "deal", "subject", "name", "lead_name", "lead", "heading", "id", "lead_id"],
-      organization: ["organization", "organization_name", "company", "company_name", "institute", "institute_name", "organization_id", "org"],
-      contact_person: ["contact_person", "person", "contact_name", "person_name", "contact_person_name", "contact", "person_id"],
-      contact_email: ["contact_email", "email", "emails", "email_address", "email_id", "contact_mail", "mail"],
-      contact_phone: ["contact_phone", "phone", "phone_number", "mobile", "mobile_number", "contact_numbers", "contact_number", "cell"],
-      description: ["description", "desc", "notes", "details", "summary", "comment", "lead_description"],
+      title: [
+        "title", "lead_title", "deal_name", "deal", "subject", "name", "lead_name", "lead",
+        "heading", "id", "lead_id", "trust", "trust_name", "ngo", "ngo_name", "firm",
+        "agency", "client", "account", "organization", "company", "institution"
+      ],
+      organization: [
+        "organization", "organization_name", "company", "company_name", "institute",
+        "institute_name", "organization_id", "org", "firm", "business", "trust", "ngo"
+      ],
+      contact_person: [
+        "contact_person", "person", "contact_name", "person_name", "contact_person_name",
+        "contact", "person_id", "contact_details", "owner_name", "representative", "spokesperson"
+      ],
+      contact_email: [
+        "contact_email", "email", "emails", "email_address", "email_id", "emailid",
+        "contact_mail", "mail", "mail_id", "e_mail"
+      ],
+      contact_phone: [
+        "contact_phone", "phone", "phone_number", "phonenumber", "mobile", "mobile_number",
+        "mobilenumber", "contact_numbers", "contact_number", "contactnumber", "cell",
+        "telephone", "tel", "phone_no", "mobile_no", "contact_no", "calls"
+      ],
+      address: [
+        "address", "street", "location", "full_address", "office_address", "registered_address",
+        "city", "state", "pincode", "pin_code", "zip", "zipcode", "country"
+      ],
+      website: ["website", "web", "url", "site", "link", "portal", "linktree", "web_link", "homepage", "home_page"],
+      description: [
+        "description", "desc", "notes", "details", "summary", "comment", "lead_description",
+        "remarks", "feedback", "feedback_call", "feedback_call_1", "feedback_call_2",
+        "feedback_3", "feedback_4", "call_feedback", "call_notes", "instagram", "facebook",
+        "youtube", "linkedin", "twitter", "social", "social_media"
+      ],
       lead_value: ["lead_value", "value", "amount", "deal_value", "price", "lead_amount", "total_value", "total_amount"],
       status: ["status", "lead_status", "state"],
-      sales_owner: ["sales_owner", "user", "owner", "assigned_to", "sales_rep", "sales_owner_name", "user_name", "sales_owner_id", "user_id", "agent"],
+      sales_owner: [
+        "sales_owner", "user", "owner", "assigned_to", "sales_rep", "sales_owner_name",
+        "user_name", "sales_owner_id", "user_id", "agent"
+      ],
       lead_source: ["lead_source", "source", "lead_source_name", "source_name", "lead_source_id", "source_id"],
       lead_type: ["lead_type", "type", "lead_type_name", "type_name", "lead_type_id", "type_id"],
       pipeline: ["pipeline", "lead_pipeline", "pipeline_name", "lead_pipeline_id", "pipeline_id"],
@@ -54,19 +84,24 @@ const MODULE_FIELD_DEFINITIONS: Record<
   persons: {
     required: "name",
     standardFields: {
-      name: ["name", "person_name", "full_name", "contact_name", "person", "customer_name", "client_name", "id", "person_id"],
-      emails: ["emails", "email", "contact_email", "email_address", "email_id", "work_email", "mail"],
-      contact_numbers: ["contact_numbers", "phone", "contact_phone", "phone_number", "mobile", "mobile_number", "contact_number", "contact", "cell"],
+      name: ["name", "person_name", "full_name", "contact_name", "person", "customer_name", "client_name", "id", "person_id", "title", "lead_name"],
+      emails: ["emails", "email", "contact_email", "email_address", "email_id", "emailid", "work_email", "mail", "mail_id", "e_mail"],
+      contact_numbers: ["contact_numbers", "phone", "contact_phone", "phone_number", "phonenumber", "mobile", "mobile_number", "mobilenumber", "contact_number", "contactnumber", "contact", "cell", "calls", "telephone", "phone_no", "mobile_no"],
       job_title: ["job_title", "title", "designation", "role", "position", "occupation"],
-      organization: ["organization", "company", "institute", "organization_name", "company_name", "organization_id", "org"],
+      organization: ["organization", "company", "institute", "organization_name", "company_name", "organization_id", "org", "firm", "business", "trust", "ngo"],
+      address: ["address", "street", "location", "city", "state", "pincode", "pin_code", "zip", "zipcode", "country"],
+      website: ["website", "web", "url", "site", "link"],
       sales_owner: ["sales_owner", "user", "owner", "assigned_to", "sales_rep", "user_name", "sales_owner_id", "user_id", "agent"],
     },
   },
   organizations: {
     required: "name",
     standardFields: {
-      name: ["name", "organization_name", "company", "company_name", "institute", "org_name", "business_name", "account_name", "id", "organization_id"],
+      name: ["name", "organization_name", "company", "company_name", "institute", "org_name", "business_name", "account_name", "trust", "trust_name", "ngo", "ngo_name", "id", "organization_id", "title"],
       address: ["address", "street", "street_address", "office_address", "location"],
+      phone: ["phone", "phone_number", "phonenumber", "mobile", "mobile_number", "contact_numbers", "contact_number", "telephone", "calls"],
+      email: ["email", "emails", "email_id", "emailid", "contact_email", "mail"],
+      website: ["website", "web", "url", "site", "link", "portal"],
       city: ["city", "city_name", "town"],
       state: ["state", "state_name", "province", "region"],
       country: ["country", "country_name", "nation"],
@@ -163,23 +198,35 @@ const analyzeImportHeaders = (
       continue;
     }
 
-    // 4. Unmatched column
+    // 4. Unmatched column (ignored for standard field mapping; saved into custom attributes/notes)
     const report: HeaderMatchReport = {
       fileHeader: trimmed,
       matchedField: null,
       matchType: "unmatched",
-      message: `Column "${trimmed}" does not match any field in ${typeRaw}. For this column, the name should match an expected field (e.g. ${expectedHeaders.slice(0, 5).join(", ")}) or a registered custom attribute.`,
+      message: `Column "${trimmed}" is an extra column and will be safely ignored / saved in extra attributes.`,
     };
     unmatchedColumns.push(report);
-    mismatchMessages.push(
-      `Column "${trimmed}" does not match any field for ${typeRaw}. For this column, the name should be one of: ${expectedHeaders.join(", ")}.`
-    );
   }
 
   // Also check if id column is present as alternate required identifier
   if (!hasRequiredField) {
     const hasId = fileHeaders.some((h) => ["id", `${normType}_id`, `${normType.slice(0, -1)}_id`].includes(clean(h)));
     if (hasId) hasRequiredField = true;
+  }
+
+  // Graceful Auto-Fallback: If no required header was explicitly found but columns exist,
+  // auto-map the first column so the user is never blocked from importing their data
+  if (!hasRequiredField && fileHeaders.length > 0) {
+    const firstCol = fileHeaders.find((h) => !h.startsWith("__col_"));
+    if (firstCol) {
+      hasRequiredField = true;
+      matchedColumns.push({
+        fileHeader: firstCol,
+        matchedField: requiredField,
+        matchType: "alias",
+        message: `Column "${firstCol}" auto-mapped to required field "${requiredField}".`,
+      });
+    }
   }
 
   let missingRequiredMessage: string | undefined;
@@ -407,16 +454,29 @@ const CreateImportPage: React.FC = () => {
       }
 
       let rows: any[] = [];
-      if (headerRowIndex > 0) {
+      if (headerRowIndex >= 0) {
         const headers = (rawRows[headerRowIndex] || []).map((h: any, colIdx: number) => {
           const val = String(h ?? "").trim();
           return val || `__col_${colIdx}`;
         });
+        const headerLowerSet = new Set(headers.map((h: string) => h.toLowerCase().trim()));
+
         for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
           const rowData = rawRows[r];
           if (!Array.isArray(rowData)) continue;
-          const hasContent = rowData.some((cell) => cell !== undefined && cell !== null && String(cell).trim() !== "");
-          if (!hasContent) continue;
+          
+          const nonBlankValues = rowData.filter((cell) => cell !== undefined && cell !== null && String(cell).trim() !== "");
+          if (nonBlankValues.length === 0) continue;
+
+          // Skip if row has only 1 non-empty cell (e.g. section title banner like "Nagpur - Trust")
+          if (nonBlankValues.length <= 1 && headers.length > 2) {
+            continue;
+          }
+
+          // Skip if this row is a duplicate header row in the middle of data
+          const isHeaderRepeat = nonBlankValues.length > 2 && nonBlankValues.every((val) => headerLowerSet.has(String(val).toLowerCase().trim()));
+          if (isHeaderRepeat) continue;
+
           const rowObj: Record<string, any> = {};
           headers.forEach((h: string, colIdx: number) => {
             if (!h.startsWith("__col_") || rowData[colIdx]) {
@@ -426,7 +486,12 @@ const CreateImportPage: React.FC = () => {
           rows.push(rowObj);
         }
       } else {
-        rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        for (const rowObj of rawJson) {
+          const values = Object.values(rowObj).filter((v) => v !== undefined && v !== null && String(v).trim() !== "");
+          if (values.length <= 1 && Object.keys(rowObj).length > 2) continue;
+          rows.push(rowObj);
+        }
       }
 
       if (!rows || rows.length === 0) {
@@ -950,32 +1015,13 @@ const CreateImportPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* 2. Unmatched Columns Warning */}
-                {headerAnalysis.unmatchedColumns.length > 0 && (
-                  <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
-                    <div className="flex items-start gap-2.5">
-                      <i className="mgc_alert_line text-lg text-amber-600 flex-shrink-0 mt-0.5"></i>
-                      <div className="text-xs space-y-1.5 flex-1">
-                        <div className="font-bold text-amber-900 dark:text-amber-200">
-                          Unmatched Column Names Detected ({headerAnalysis.unmatchedColumns.length})
-                        </div>
-                        <p className="text-amber-800 dark:text-amber-300 text-[11px]">
-                          The following column(s) in your file do not match standard fields or registered custom attributes:
-                        </p>
-                        <div className="space-y-1 mt-1">
-                          {headerAnalysis.unmatchedColumns.map((col, idx) => (
-                            <div key={idx} className="flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-amber-300">
-                              <span className="font-mono bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded text-amber-900 dark:text-amber-200 font-semibold flex-shrink-0">
-                                {col.fileHeader}
-                              </span>
-                              <span>
-                                — For this column, the name should be same as standard fields (<span className="font-medium">{headerAnalysis.expectedHeaders.slice(0, 5).join(", ")}</span>) or a custom attribute.
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                {/* 2. Verification Success Banner */}
+                {headerAnalysis.isValid && (
+                  <div className="p-3 bg-green-50/90 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl flex items-center gap-2.5 text-xs text-green-800 dark:text-green-300">
+                    <i className="mgc_check_circle_line text-base text-green-600 flex-shrink-0"></i>
+                    <span>
+                      <b>File Ready for Import:</b> Column headers verified. Standard fields are mapped, and any extra/unmapped columns are safely ignored without errors or blockage.
+                    </span>
                   </div>
                 )}
 
@@ -1005,16 +1051,6 @@ const CreateImportPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* 4. Perfect Match Banner */}
-                {headerAnalysis.isValid && headerAnalysis.unmatchedColumns.length === 0 && (
-                  <div className="p-3 bg-green-50/90 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl flex items-center gap-2.5 text-xs text-green-800 dark:text-green-300">
-                    <i className="mgc_check_circle_line text-base text-green-600 flex-shrink-0"></i>
-                    <span>
-                      <b>All Column Headings Matched:</b> Every column in your file matches the expected {type} fields.
-                    </span>
-                  </div>
-                )}
-
                 {/* Column Mapping Breakdown Toggle */}
                 <div className="flex items-center justify-between px-1">
                   <button
@@ -1024,7 +1060,7 @@ const CreateImportPage: React.FC = () => {
                   >
                     <i className={`mgc_down_line transition-transform ${showColumnBreakdown ? "rotate-180" : ""}`}></i>
                     <span>
-                      {showColumnBreakdown ? "Hide" : "Show"} Column Heading Match Breakdown ({headerAnalysis.matchedColumns.length}/{headerAnalysis.fileHeaders.filter(h => !h.startsWith("__col_")).length} matched)
+                      {showColumnBreakdown ? "Hide" : "Show"} Column Heading Match Breakdown ({headerAnalysis.matchedColumns.length}/{headerAnalysis.fileHeaders.filter(h => !h.startsWith("__col_")).length} mapped)
                     </span>
                   </button>
                 </div>
@@ -1077,8 +1113,8 @@ const CreateImportPage: React.FC = () => {
                                     </span>
                                   )}
                                   {isUnmatched && (
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
-                                      Unmatched
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                      Ignored / Extra
                                     </span>
                                   )}
                                 </td>
@@ -1089,13 +1125,13 @@ const CreateImportPage: React.FC = () => {
                                   {match?.matchType === "exact" && "Matches expected field name perfectly."}
                                   {match?.matchType === "alias" && (
                                     <span>
-                                      Mapped to <strong className="text-gray-800 dark:text-gray-200">{match.matchedField}</strong>. For this column, name should ideally be <code className="text-blue-600 dark:text-blue-400 font-semibold">{match.matchedField}</code>.
+                                      Mapped to <strong className="text-gray-800 dark:text-gray-200">{match.matchedField}</strong>.
                                     </span>
                                   )}
                                   {match?.matchType === "custom" && "Matches a registered custom attribute."}
                                   {isUnmatched && (
-                                    <span className="text-amber-700 dark:text-amber-400">
-                                      For this column, name should be same as standard fields ({headerAnalysis.expectedHeaders.slice(0, 4).join(", ")}) or custom attributes.
+                                    <span className="text-gray-500 dark:text-gray-400">
+                                      Ignored from standard fields (no errors or blockage).
                                     </span>
                                   )}
                                 </td>
