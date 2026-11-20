@@ -468,7 +468,9 @@ const updateOrgInfo = async (
   client: any,
   orgId: number,
   addressVal?: any,
-  websiteVal?: any
+  websiteVal?: any,
+  phoneVal?: any,
+  emailVal?: any
 ) => {
   if (!orgId) return;
   try {
@@ -495,8 +497,14 @@ const updateOrgInfo = async (
 
     const existingAttrs = oRes.rows[0].custom_attributes || {};
     const mergedAttrs = { ...existingAttrs };
-    if (websiteVal && String(websiteVal).trim()) {
+    if (websiteVal && String(websiteVal).trim() && !mergedAttrs.website) {
       mergedAttrs.website = String(websiteVal).trim();
+    }
+    if (phoneVal && String(phoneVal).trim() && !mergedAttrs.phone) {
+      mergedAttrs.phone = String(phoneVal).trim();
+    }
+    if (emailVal && String(emailVal).trim() && !mergedAttrs.email) {
+      mergedAttrs.email = String(emailVal).trim();
     }
 
     await client.query(
@@ -710,6 +718,23 @@ const resolveLeadPipelineStageId = async (
   if (n && isNaN(Number(n))) {
     const match = stages.find((s) => (s.name || '').trim().toLowerCase() === n.toLowerCase());
     if (match) return match.id;
+
+    // Auto-create the stage if provided name does not exist
+    try {
+      const resolvedPipeId = pipelineId || stages[0]?.pipeline_id || 1;
+      const maxOrderRes = await client.query(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM lead_pipeline_stages WHERE pipeline_id = $1',
+        [resolvedPipeId]
+      );
+      const nextOrder = maxOrderRes.rows[0]?.next_order || 1;
+      const insStage = await client.query(
+        'INSERT INTO lead_pipeline_stages (pipeline_id, name, color, sort_order, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id',
+        [resolvedPipeId, n, '#0088cc', nextOrder]
+      );
+      if (insStage.rows[0]?.id) {
+        return insStage.rows[0].id;
+      }
+    } catch {}
   }
 
   // Fallback: Default to first stage of the resolved pipeline
@@ -1683,9 +1708,9 @@ export class DataTransferService {
                 await updatePersonContactInfo(client, finalPersonId, contactEmail, contactPhone, finalOrgId);
               }
 
-              // Always update linked Organization with address and website!
+              // Always update linked Organization with address, website, phone, and email!
               if (finalOrgId) {
-                await updateOrgInfo(client, finalOrgId, addressVal, websiteVal);
+                await updateOrgInfo(client, finalOrgId, addressVal, websiteVal, contactPhone, contactEmail);
               }
 
               const mergedAttrs = { ...(existingLeadRow?.custom_attributes || {}), ...rowCustomAttrs };

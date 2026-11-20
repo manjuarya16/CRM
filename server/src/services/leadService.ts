@@ -20,6 +20,10 @@ const getLeads = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const search = String(req.query.search || "");
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Number(req.query.limit || req.query.per_page) || 10);
@@ -92,6 +96,10 @@ const getLeadById = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const id = Number(req.params.id);
     const result = await connection.query(
       "SELECT * FROM public.fn_get_lead_by_id($1)",
@@ -169,6 +177,10 @@ const createLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const {
       title,
       description,
@@ -402,6 +414,10 @@ const updateLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const id = Number(req.params.id || req.body.id);
     const {
       title,
@@ -569,6 +585,10 @@ const deleteLead = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const id = Number(req.params.id || req.body.id);
     await connection.query(
       "SELECT public.fn_delete_lead($1) AS deleted",
@@ -642,6 +662,10 @@ const getLeadSources = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const result = await connection.query("SELECT * FROM public.fn_get_lead_sources()");
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
@@ -656,6 +680,10 @@ const getLeadTypes = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const result = await connection.query("SELECT * FROM public.fn_get_lead_types()");
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
@@ -670,6 +698,10 @@ const getLeadPipelines = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const result = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
   } catch (error: any) {
@@ -684,6 +716,10 @@ const getPipelineStages = async (req: Request, res: Response): Promise<void> => 
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const pipelineId = req.query.pipeline_id ? Number(req.query.pipeline_id) : null;
     const result = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
     res.status(HttpStatusCodes.OK).json({ success: true, data: result.rows });
@@ -699,6 +735,10 @@ const getLeadProducts = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const leadId = Number(req.params.id);
     const result = await connection.query(
       "SELECT * FROM public.fn_get_lead_products($1)",
@@ -717,6 +757,10 @@ const addLeadProduct = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const leadId = Number(req.params.id);
     const {
       product_id,
@@ -764,6 +808,10 @@ const deleteLeadProduct = async (req: Request, res: Response): Promise<void> => 
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const itemId = Number(req.params.id);
     await connection.query("SELECT public.fn_delete_lead_product($1) AS deleted", [itemId]);
     res.status(HttpStatusCodes.OK).json({ success: true, message: "Product removed from lead" });
@@ -788,6 +836,10 @@ const updateLeadStage = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const leadId = Number(req.params.id);
     const { stage_id, status, lost_reason } = req.body;
 
@@ -846,6 +898,10 @@ const getKanbanLeads = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const rawPipelineId = req.query.lead_pipeline_id || req.query.pipeline_id;
     const pipelineId = rawPipelineId ? Number(rawPipelineId) : null;
     const search = String(req.query.search || "");
@@ -923,6 +979,8 @@ function mapRowToExtractedLead(
   let type = "";
   let jobTitle = "";
   let expectedCloseDate = "";
+  let stageVal = "";
+  let pipelineVal = "";
   const products: ExtractedProduct[] = [];
   const customAttrs: Record<string, any> = {};
 
@@ -951,13 +1009,21 @@ function mapRowToExtractedLead(
     else if (["email", "emailaddress", "workemail", "contactemail", "mail", "primaryemail", "emailid"].includes(k)) {
       email = strVal;
     }
-    // Phone / Mobile
-    else if (["phone", "phonenumber", "mobile", "mobilenumber", "contactno", "tel", "cell", "telephone", "whatsapp", "primaryphone"].includes(k)) {
+    // Phone / Mobile / Contact Phone / Contact Number / Calls
+    else if (["phone", "phonenumber", "mobile", "mobilenumber", "contactno", "contactphone", "contactnumber", "contactnumbers", "tel", "cell", "telephone", "whatsapp", "primaryphone", "calls", "phoneno", "mobileno", "phone_no", "mobile_no", "contact_no"].includes(k)) {
       phone = strVal;
     }
     // Organization / Company / Institute
     else if (["organization", "organizationname", "company", "companyname", "org", "business", "firm", "account", "client", "institute"].includes(k)) {
       organization = strVal;
+    }
+    // Stage / Pipeline Stage / Status
+    else if (["stage", "leadstage", "pipelinestage", "leadpipelinestage", "pipeline_stage", "currentstage", "stagestatus"].includes(k)) {
+      stageVal = strVal;
+    }
+    // Pipeline / Sales Pipeline
+    else if (["pipeline", "leadpipeline", "pipelinename", "salespipeline"].includes(k)) {
+      pipelineVal = strVal;
     }
     // Address / Location
     else if (["address", "location", "city", "street", "addr"].includes(k)) {
@@ -1011,13 +1077,15 @@ function mapRowToExtractedLead(
         "leadtitle", "title", "subject", "leadname", "opportunity", "deal", "dealname", "project",
         "contactperson", "contactname", "personname", "customername", "clientname", "fullname", "contact", "person", "name",
         "email", "emailaddress", "workemail", "contactemail", "mail", "primaryemail",
-        "phone", "phonenumber", "mobile", "mobilenumber", "contactno", "tel", "cell", "telephone", "whatsapp", "primaryphone",
+        "phone", "phonenumber", "mobile", "mobilenumber", "contactno", "contactphone", "contactnumber", "contactnumbers", "tel", "cell", "telephone", "whatsapp", "primaryphone", "calls", "phoneno", "mobileno", "phone_no", "mobile_no", "contact_no",
         "organization", "organizationname", "company", "companyname", "org", "business", "firm", "account", "client", "institute",
         "leadvalue", "value", "amount", "dealvalue", "price", "budget", "revenue",
         "description", "notes", "note", "requirement", "requirements", "details", "message", "comments", "remark", "remarks",
         "source", "leadsource", "type", "leadtype", "jobtitle", "designation", "position", "role",
         "expectedclosedate", "closedate", "expecteddate", "duedate",
-        "product", "products", "item", "items", "sku"
+        "product", "products", "item", "items", "sku",
+        "stage", "leadstage", "pipelinestage", "leadpipelinestage", "pipeline_stage", "currentstage", "stagestatus",
+        "pipeline", "leadpipeline", "pipelinename", "salespipeline"
       ];
       if (!standardCols.includes(k)) {
         const normCode = key.trim().toLowerCase().replace(/[\s\/-]+/g, "_").replace(/[^a-z0-9_]/g, "");
@@ -1068,6 +1136,8 @@ function mapRowToExtractedLead(
     jobTitle,
     expectedCloseDate,
     products,
+    stage: stageVal,
+    pipeline: pipelineVal,
     custom_attributes: customAttrs,
   };
 }
@@ -1161,10 +1231,29 @@ async function saveExtractedLeadRecord(
       resolvedPersonName = pFindRes.rows[0].name;
     }
 
+    // Parse phone numbers (handle multiple numbers separated by comma, semicolon, slash)
+    const phoneArr: Array<{ label: string; value: string }> = [];
+    if (parsed.phone) {
+      const rawPhones = String(parsed.phone).split(/[,;/|]+/).map((p) => p.trim()).filter(Boolean);
+      for (const p of rawPhones) {
+        if (p && !phoneArr.some((x) => x.value === p)) {
+          phoneArr.push({ label: "work", value: p });
+        }
+      }
+    }
+    // Parse emails (handle multiple emails separated by comma, semicolon)
+    const emailArr: Array<{ label: string; value: string }> = [];
+    if (parsed.email) {
+      const rawEmails = String(parsed.email).split(/[,;/|]+/).map((e) => e.trim()).filter(Boolean);
+      for (const e of rawEmails) {
+        if (e && !emailArr.some((x) => x.value.toLowerCase() === e.toLowerCase())) {
+          emailArr.push({ label: "work", value: e });
+        }
+      }
+    }
+
     if (!personId && (parsed.contactPerson || parsed.email || parsed.phone)) {
       const newPersonName = parsed.contactPerson || (parsed.email ? parsed.email.split("@")[0] : (orgCandidate ? `${orgCandidate} Contact` : "New Contact"));
-      const emailArr = parsed.email ? [{ label: "work", value: parsed.email }] : [];
-      const phoneArr = parsed.phone ? [{ label: "work", value: parsed.phone }] : [];
 
       try {
         const newPersonRes = await connection.query(
@@ -1200,11 +1289,72 @@ async function saveExtractedLeadRecord(
           }
         } catch {}
       }
-    } else if (personId && organizationId) {
-      await connection.query(
-        "UPDATE persons SET organization_id = $1 WHERE id = $2 AND organization_id IS NULL",
-        [organizationId, personId]
-      );
+    } else if (personId) {
+      // If person already exists, enrich their contact_numbers, emails, and organization_id
+      try {
+        const pRes = await connection.query(
+          "SELECT emails, contact_numbers, organization_id FROM persons WHERE id = $1",
+          [personId]
+        );
+        if (pRes.rows.length > 0) {
+          const rowP = pRes.rows[0];
+          let curEmails: any[] = [];
+          try {
+            curEmails = Array.isArray(rowP.emails) ? rowP.emails : JSON.parse(rowP.emails || "[]");
+          } catch { curEmails = []; }
+          let curNumbers: any[] = [];
+          try {
+            curNumbers = Array.isArray(rowP.contact_numbers) ? rowP.contact_numbers : JSON.parse(rowP.contact_numbers || "[]");
+          } catch { curNumbers = []; }
+
+          const emailMap = new Map<string, string>();
+          for (const item of [...curEmails, ...emailArr]) {
+            const v = (typeof item === "object" ? item.value || item.email : String(item || "")).trim();
+            if (v && !emailMap.has(v.toLowerCase())) {
+              emailMap.set(v.toLowerCase(), item.label || "work");
+            }
+          }
+          const mergedEmails = Array.from(emailMap.entries()).map(([value, label]) => ({ label, value }));
+
+          const phoneMap = new Map<string, string>();
+          for (const item of [...curNumbers, ...phoneArr]) {
+            const v = (typeof item === "object" ? item.value || item.number || item.phone : String(item || "")).trim();
+            if (v && !phoneMap.has(v.toLowerCase())) {
+              phoneMap.set(v.toLowerCase(), item.label || "work");
+            }
+          }
+          const mergedNumbers = Array.from(phoneMap.entries()).map(([value, label]) => ({ label, value }));
+
+          const targetOrgId = organizationId || rowP.organization_id || null;
+
+          await connection.query(
+            "UPDATE persons SET emails = $1::jsonb, contact_numbers = $2::jsonb, organization_id = COALESCE($3, organization_id), updated_at = NOW() WHERE id = $4",
+            [JSON.stringify(mergedEmails), JSON.stringify(mergedNumbers), targetOrgId, personId]
+          );
+        }
+      } catch (pUpErr) {
+        logger.warn({ pUpErr }, "[saveExtractedLeadRecord] Failed to enrich person contact info");
+      }
+    }
+  }
+
+  // Update organization attributes (website, phone, email) if organization exists
+  if (organizationId && (parsed.website || parsed.phone || parsed.email)) {
+    try {
+      const orgRes = await connection.query("SELECT custom_attributes FROM organizations WHERE id = $1", [organizationId]);
+      if (orgRes.rows.length > 0) {
+        const existingAttrs = orgRes.rows[0].custom_attributes || {};
+        const mergedOrgAttrs = { ...existingAttrs };
+        if (parsed.website && !mergedOrgAttrs.website) mergedOrgAttrs.website = parsed.website;
+        if (parsed.phone && !mergedOrgAttrs.phone) mergedOrgAttrs.phone = parsed.phone;
+        if (parsed.email && !mergedOrgAttrs.email) mergedOrgAttrs.email = parsed.email;
+        await connection.query(
+          "UPDATE organizations SET custom_attributes = $1::jsonb, updated_at = NOW() WHERE id = $2",
+          [JSON.stringify(mergedOrgAttrs), organizationId]
+        );
+      }
+    } catch (orgUpErr) {
+      logger.warn({ orgUpErr }, "[saveExtractedLeadRecord] Failed to update organization attributes");
     }
   }
 
@@ -1227,17 +1377,54 @@ async function saveExtractedLeadRecord(
     if (tRes.rows.length > 0) typeId = tRes.rows[0].id;
   }
 
-  // 4. Resolve default pipeline and first stage
+  // 4. Resolve pipeline and stage
   const pipelineRes = await connection.query("SELECT * FROM public.fn_get_lead_pipelines()");
   let pipelineId: number | null = null;
   let stageId: number | null = null;
 
-  const defaultPipeline = pipelineRes.rows.find((p: any) => p.is_default) || pipelineRes.rows[0];
-  if (defaultPipeline) {
-    pipelineId = defaultPipeline.id;
+  const pipelines: any[] = pipelineRes.rows || [];
+  let targetPipeline = null;
+  if (parsed.pipeline && parsed.pipeline.trim()) {
+    const pTrim = parsed.pipeline.trim().toLowerCase();
+    targetPipeline = pipelines.find((p: any) => (p.name || "").toLowerCase() === pTrim);
+  }
+  if (!targetPipeline) {
+    targetPipeline = pipelines.find((p: any) => p.is_default) || pipelines[0];
+  }
+
+  if (targetPipeline) {
+    pipelineId = targetPipeline.id;
     const stageRes = await connection.query("SELECT * FROM public.fn_get_pipeline_stages($1)", [pipelineId]);
-    if (stageRes.rows.length > 0) {
-      stageId = stageRes.rows[0].id;
+    const stages: any[] = stageRes.rows || [];
+
+    if (parsed.stage && parsed.stage.trim()) {
+      const sTrim = parsed.stage.trim().toLowerCase();
+      const matchedStage = stages.find((s: any) => (s.name || "").toLowerCase() === sTrim);
+      if (matchedStage) {
+        stageId = matchedStage.id;
+      } else {
+        // Auto-create new stage in lead_pipeline_stages
+        try {
+          const maxOrderRes = await connection.query(
+            "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM lead_pipeline_stages WHERE pipeline_id = $1",
+            [pipelineId]
+          );
+          const nextOrder = maxOrderRes.rows[0]?.next_order || 1;
+          const insStageRes = await connection.query(
+            "INSERT INTO lead_pipeline_stages (pipeline_id, name, color, sort_order, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id",
+            [pipelineId, parsed.stage.trim(), "#0088cc", nextOrder]
+          );
+          if (insStageRes.rows[0]?.id) {
+            stageId = insStageRes.rows[0].id;
+          }
+        } catch (stageInsErr) {
+          logger.warn({ stageInsErr }, "[saveExtractedLeadRecord] Failed to create new stage");
+        }
+      }
+    }
+
+    if (!stageId && stages.length > 0) {
+      stageId = stages[0].id;
     }
   }
 
@@ -1393,6 +1580,10 @@ const createLeadByAI = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
 
     const file = (req as any).file;
 
@@ -1572,6 +1763,10 @@ const uploadLeadFile = async (req: Request, res: Response): Promise<void> => {
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const leadId = Number(req.params.id);
     const file = (req as any).file;
 
@@ -1717,6 +1912,10 @@ const createLeadByVoice = async (req: Request, res: Response): Promise<void> => 
   let connection: PoolClient | undefined;
   try {
     connection = await pool.connect();
+    const tenantId = (req as any).user?.tenant_id;
+    if (tenantId) {
+      await connection.query("SELECT set_config('app.current_tenant_id', $1, true)", [String(tenantId)]);
+    }
     const currentUserId = (req as any).user?.id || null;
 
     let transcript = req.body?.transcript || "";

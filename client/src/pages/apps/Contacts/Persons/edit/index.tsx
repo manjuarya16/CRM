@@ -167,14 +167,7 @@ const EditPersonPage: React.FC = () => {
         );
         const normalizeContactNumber = (val: string): string => {
           if (!val) return "";
-          let digits = String(val).replace(/[^0-9]/g, "");
-          if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) {
-            digits = digits.slice(2);
-          }
-          if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) {
-            digits = digits.slice(1);
-          }
-          return digits || val.trim();
+          return String(val).trim();
         };
 
         let parsedContacts = unpackItems(rawContacts, "work").map((c) => ({
@@ -302,22 +295,16 @@ const EditPersonPage: React.FC = () => {
     let errorMsg = "";
     let cleanVal = val;
     if (field === "value") {
-      let digits = val.replace(/[^0-9]/g, "");
-      if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) {
-        digits = digits.slice(2);
-      }
-      if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) {
-        digits = digits.slice(1);
-      }
-      cleanVal = digits.slice(0, 10);
+      cleanVal = val.slice(0, 25);
+      const digits = cleanVal.replace(/[^0-9]/g, "");
 
-      if (cleanVal.length > 0) {
-        if (/^0+$/.test(cleanVal)) {
+      if (digits.length > 0) {
+        if (/^0+$/.test(digits)) {
           errorMsg = "Contact number cannot consist of only zeros.";
-        } else if (!/^[6-9]/.test(cleanVal)) {
-          errorMsg = "Mobile number must start with 6, 7, 8, or 9.";
-        } else if (cleanVal.length === 10 && /^(\d)\1{9}$/.test(cleanVal)) {
-          errorMsg = "Please enter a valid 10-digit mobile number.";
+        } else if (digits.length < 6) {
+          errorMsg = "Please enter a valid contact number (at least 6 digits).";
+        } else if (digits.length > 15) {
+          errorMsg = "Contact number cannot exceed 15 digits.";
         }
       }
     }
@@ -725,14 +712,14 @@ const EditPersonPage: React.FC = () => {
                       </select>
                       <input
                         type="tel"
-                        inputMode="numeric"
-                        maxLength={10}
+                        inputMode="tel"
+                        maxLength={20}
                         value={contactItem.value}
                         onChange={(e) =>
                           handleContactChange(index, "value", e.target.value)
                         }
                         onBlur={() => checkDuplicateContact(contactItem.value, index)}
-                        placeholder="9876543210"
+                        placeholder="e.g. 0712 2558410 or 9876543210"
                         className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none font-medium"
                       />
                     </div>
