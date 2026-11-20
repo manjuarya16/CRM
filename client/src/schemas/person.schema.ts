@@ -27,31 +27,25 @@ export const contactItemSchema = z.object({
     .trim()
     .superRefine((val, ctx) => {
       if (!val) return;
-      if (/[^0-9]/.test(val)) {
+      const digits = val.replace(/[^0-9]/g, "");
+      if (digits.length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Mobile number must contain digits only.",
+          message: "Contact number must contain digits.",
         });
         return;
       }
-      if (/^0+$/.test(val)) {
+      if (/^0+$/.test(digits)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Contact number cannot consist of only zeros.",
         });
         return;
       }
-      if (!/^[6-9]/.test(val)) {
+      if (digits.length < 6 || digits.length > 15) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Mobile number must start with 6, 7, 8, or 9.",
-        });
-        return;
-      }
-      if (val.length !== 10 || /^(\d)\1{9}$/.test(val)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Please enter a valid 10-digit mobile number.",
+          message: "Please enter a valid contact number (6 to 15 digits).",
         });
         return;
       }
